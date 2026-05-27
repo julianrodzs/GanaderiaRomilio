@@ -6,6 +6,8 @@ const usuarioSchema = new Schema ({
     correo: {type: String, required: true},
     contrasena: {type: String, required: true},
     telefono: {type: Number, required: true},
+    recuperacionContrasenaToken: {type: String},
+    recuperacionContrasenaExpira: {type: Date},
 },
 {
     timestamps: true
