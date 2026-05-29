@@ -1,7 +1,7 @@
 import React from 'react';
 
-const Navegacion = ({ vistaActiva = 'Dashboard', onLogout }) => {
-  const items = ['Dashboard', 'Inventario', 'Potreros', 'Costos'];
+const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout }) => {
+  const items = ['Dashboard', 'Importar', 'Inventario', 'Potreros', 'Sanidad', 'Drone', 'Costos'];
 
   return (
     <header className="app-header">
@@ -16,6 +16,7 @@ const Navegacion = ({ vistaActiva = 'Dashboard', onLogout }) => {
             key={item}
             className={item === vistaActiva ? 'nav-item activo' : 'nav-item'}
             type="button"
+            onClick={() => onCambiarVista?.(item)}
           >
             {item}
           </button>

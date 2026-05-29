@@ -32,7 +32,7 @@ const IniciarSesion = ({ onLogin, onCambiarVista }) => {
   return (
     <section className="auth-panel">
       <div className="auth-copy">
-        <span className="brand-mark">GR</span>
+        <img className="login-logo" src="/assests/logo-romilio.png" alt="Logo Ganaderia Romilio" />
         <p className="eyebrow">GanaderiaRomilio</p>
         <h1>Gestion de finca clara desde el primer ingreso</h1>
         <p>

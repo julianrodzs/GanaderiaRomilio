@@ -2,8 +2,8 @@ const { Schema, model } = require('mongoose');
 
 const animalSchema = new Schema(
     {
-        identificadorFinca: { type: String, required: true, trim: true },
-        diio: { type: String, trim: true },
+        identificadorFinca: { type: String, required: true, unique: true, trim: true },
+        diio: { type: String, unique: true, sparse: true, trim: true },
         nombre: { type: String, trim: true },
         sexo: { type: String, enum: ['Macho', 'Hembra'], required: true },
         raza: { type: String, trim: true },

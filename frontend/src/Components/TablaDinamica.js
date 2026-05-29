@@ -1,0 +1,137 @@
+import React, { useMemo, useState } from 'react';
+
+const obtenerValor = (fila, columna) => {
+  const valor = columna.accessor(fila);
+  if (valor === null || valor === undefined || valor === '') return '--';
+  return valor;
+};
+
+const renderizarValor = (fila, columna) => {
+  if (columna.render) {
+    return columna.render(fila);
+  }
+
+  return obtenerValor(fila, columna);
+};
+
+const TablaDinamica = ({
+  titulo,
+  subtitulo,
+  columnas,
+  datos,
+  cargando,
+  error,
+  filtros = [],
+  textoAgregar = 'Nuevo registro',
+  onAgregar
+}) => {
+  const [busqueda, setBusqueda] = useState('');
+  const [filtrosActivos, setFiltrosActivos] = useState({});
+  const [orden, setOrden] = useState({ campo: columnas[0]?.id, direccion: 'asc' });
+
+  const datosFiltrados = useMemo(() => {
+    const texto = busqueda.trim().toLowerCase();
+    const porTexto = texto
+      ? datos.filter((fila) => columnas.some((columna) => String(obtenerValor(fila, columna)).toLowerCase().includes(texto)))
+      : datos;
+    const filtrados = porTexto.filter((fila) => filtros.every((filtro) => {
+      const valorActivo = filtrosActivos[filtro.id];
+      if (!valorActivo || valorActivo === 'Todos') return true;
+      return String(filtro.accessor(fila)) === valorActivo;
+    }));
+
+    const columnaOrden = columnas.find((columna) => columna.id === orden.campo);
+    if (!columnaOrden) return filtrados;
+
+    return [...filtrados].sort((a, b) => {
+      const valorA = obtenerValor(a, columnaOrden);
+      const valorB = obtenerValor(b, columnaOrden);
+      const resultado = String(valorA).localeCompare(String(valorB), 'es', { numeric: true });
+      return orden.direccion === 'asc' ? resultado : -resultado;
+    });
+  }, [busqueda, columnas, datos, filtros, filtrosActivos, orden]);
+
+  const opcionesFiltros = useMemo(() => {
+    return Object.fromEntries(filtros.map((filtro) => [
+      filtro.id,
+      ['Todos', ...Array.from(new Set(datos.map((fila) => filtro.accessor(fila)).filter(Boolean))).sort()]
+    ]));
+  }, [datos, filtros]);
+
+  const cambiarOrden = (campo) => {
+    setOrden((actual) => ({
+      campo,
+      direccion: actual.campo === campo && actual.direccion === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  return (
+    <section className="vista-tabla">
+      <div className="panel-title">
+        <div>
+          <p className="eyebrow">{subtitulo}</p>
+          <h2>{titulo}</h2>
+        </div>
+        <button className="boton-primario compacto" type="button" onClick={onAgregar}>+ {textoAgregar}</button>
+      </div>
+
+      <div className="tabla-toolbar">
+        <input
+          value={busqueda}
+          onChange={(evento) => setBusqueda(evento.target.value)}
+          placeholder="Buscar..."
+        />
+        {filtros.map((filtro) => (
+          <select
+            key={filtro.id}
+            value={filtrosActivos[filtro.id] || 'Todos'}
+            onChange={(evento) => setFiltrosActivos((actual) => ({ ...actual, [filtro.id]: evento.target.value }))}
+          >
+            {opcionesFiltros[filtro.id]?.map((opcion) => (
+              <option key={opcion} value={opcion}>{opcion}</option>
+            ))}
+          </select>
+        ))}
+        <span>{datosFiltrados.length} registros</span>
+      </div>
+
+      {error && <div className="alerta-formulario">{error}</div>}
+      {cargando && <div className="estado-importacion">Cargando datos...</div>}
+
+      <div className="tabla-scroll tabla-dinamica">
+        <table>
+          <thead>
+            <tr>
+              {columnas.map((columna) => (
+                <th key={columna.id}>
+                  <button type="button" onClick={() => cambiarOrden(columna.id)}>
+                    {columna.label}
+                    {orden.campo === columna.id ? (orden.direccion === 'asc' ? ' ↑' : ' ↓') : ''}
+                  </button>
+                </th>
+              ))}
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {datosFiltrados.map((fila) => (
+              <tr key={fila._id || fila.id}>
+                {columnas.map((columna) => (
+                  <td key={columna.id}>{renderizarValor(fila, columna)}</td>
+                ))}
+                <td>
+                  <div className="acciones-tabla">
+                    <button type="button" aria-label="Editar" title="Editar">✎</button>
+                    <button type="button" aria-label="Eliminar" title="Eliminar">⌫</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+};
+
+export default TablaDinamica;

@@ -31,3 +31,18 @@ Thumbs.db
 # Cache
 .cache/
 .vite/
+
+# IA service artifacts
+ia-service/.venv/
+ia-service/uploads/*
+ia-service/outputs/*
+ia-service/models/*.pt
+!ia-service/uploads/.gitkeep
+!ia-service/outputs/.gitkeep
+!ia-service/models/.gitkeep
+
+# Backend uploaded media
+backend/uploads/*
+backend/.env
+backend/.env
+backend/.env

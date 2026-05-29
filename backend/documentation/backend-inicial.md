@@ -13,11 +13,13 @@ Por ahora el backend incluye:
 - CRUD inicial para potreros.
 - CRUD inicial para pesajes.
 - CRUD inicial para sanidad.
+- Modulo central de Plan Sanitario.
 - CRUD inicial para costos.
 - CRUD inicial para rotaciones.
 - Servicio base para recuperacion de contrasena por correo.
 - Middleware inicial para autenticacion con JWT.
-- Modulo reservado para futuro conteo de ganado con drone e IA.
+- Modulo de importacion de Excel con vista previa sin insertar datos.
+- Modulo de Conteo Drone con servicio IA simulado.
 
 ## Stack
 
@@ -46,8 +48,10 @@ Rutas registradas actualmente:
 - `/api/potreros`
 - `/api/pesajes`
 - `/api/sanidad`
+- `/api/plan-sanitario`
 - `/api/costos`
 - `/api/rotaciones`
+- `/api/importar`
 - `/api/conteo-drone`
 
 ### `index.js`
@@ -227,13 +231,41 @@ Base:
 /api/conteo-drone
 ```
 
-Endpoint:
+Endpoints:
 
 | Metodo | Ruta | Descripcion |
 | --- | --- | --- |
-| GET | `/api/conteo-drone` | Muestra el estado del modulo futuro |
+| GET | `/api/conteo-drone` | Lista conteos por drone |
+| POST | `/api/conteo-drone/procesar` | Sube imagen y genera conteo simulado |
+| GET | `/api/conteo-drone/:id` | Obtiene un conteo por ID |
+| DELETE | `/api/conteo-drone/:id` | Elimina un conteo |
 
-Este modulo queda reservado para una fase futura. No contiene logica de IA todavia.
+El `POST /procesar` usa `multipart/form-data`.
+
+Campos:
+
+- `imagen`: archivo de imagen.
+- `potrero`: ID del potrero.
+- `cantidadEsperada`: numero esperado en el potrero.
+- `observaciones`: opcional.
+
+Por ahora la IA esta simulada en:
+
+```txt
+backend/services/iaConteoService.js
+```
+
+La funcion queda lista para reemplazarse por una llamada HTTP a un servicio Python + FastAPI con YOLO.
+
+Riesgos actuales:
+
+- La cantidad detectada es simulada; no debe usarse para decisiones reales.
+- No hay validacion de calidad de imagen, altura de vuelo, escala ni angulo.
+- La imagen procesada usa la misma URL que la original porque aun no hay cajas reales dibujadas.
+- No se borran archivos fisicos al eliminar un registro.
+- Falta autenticacion/autorizacion sobre carga y consulta de imagenes.
+- El rendimiento y almacenamiento pueden crecer rapido si se suben imagenes grandes.
+- El modelo futuro YOLO puede requerir calibracion local para ganado, potreros, sombras y oclusiones.
 
 ### Pesajes
 
@@ -271,6 +303,49 @@ Endpoints:
 | PUT | `/api/sanidad/:id` | Actualiza un registro sanitario |
 | DELETE | `/api/sanidad/:id` | Elimina un registro sanitario |
 
+### Plan Sanitario
+
+Base:
+
+```txt
+/api/plan-sanitario
+```
+
+Endpoints:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/api/plan-sanitario` | Lista planes sanitarios |
+| POST | `/api/plan-sanitario` | Crea un plan sanitario |
+| GET | `/api/plan-sanitario/alertas` | Lista planes vencidos y proximos |
+| PUT | `/api/plan-sanitario/:id` | Actualiza un plan sanitario |
+| DELETE | `/api/plan-sanitario/:id` | Elimina un plan sanitario |
+| PATCH | `/api/plan-sanitario/:id/marcar-aplicado` | Marca un plan como aplicado |
+
+Ejemplo de body:
+
+```json
+{
+  "grupoGanado": "Todo el ganado",
+  "actividad": "Desparasitacion interna",
+  "producto": "Bimectin 3.5%",
+  "marca": "Bimectin",
+  "dosis": "1 cc",
+  "criterioPeso": "Por cada 50 kg",
+  "fechaAplicacion": "2026-05-28",
+  "frecuenciaCantidad": 3,
+  "frecuenciaUnidad": "meses",
+  "responsable": "Administrador",
+  "observaciones": "Plan general de desparasitacion"
+}
+```
+
+Notas:
+
+- `proximaAplicacion` se calcula automaticamente.
+- `estado` se calcula como `Vencido`, `Próximo` o `Vigente`.
+- `RegistroSanitario` queda disponible por compatibilidad, pero el modulo principal es `PlanSanitario`.
+
 ### Costos
 
 Base:
@@ -306,6 +381,75 @@ Endpoints:
 | GET | `/api/rotaciones/:id` | Obtiene una rotacion por ID |
 | PUT | `/api/rotaciones/:id` | Actualiza una rotacion |
 | DELETE | `/api/rotaciones/:id` | Elimina una rotacion |
+
+### Importacion de Excel
+
+Base:
+
+```txt
+/api/importar
+```
+
+Endpoint:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| POST | `/api/importar/excel` | Sube un `.xlsx` y devuelve vista previa sin insertar |
+| POST | `/api/importar/excel/confirmar` | Inserta en MongoDB los registros validados de la vista previa |
+| POST | `/api/importar/excel/importar` | Sube un `.xlsx` e importa directamente los datos validos |
+
+El request debe enviarse como `multipart/form-data`.
+
+Campo del archivo:
+
+```txt
+archivo
+```
+
+Ejemplo en Postman o Insomnia:
+
+- Method: `POST`
+- URL: `http://localhost:4000/api/importar/excel`
+- Body: `form-data`
+- Key: `archivo`
+- Type: `File`
+- Value: archivo `.xlsx`
+
+Respuesta esperada de la vista previa:
+
+```json
+{
+  "mensaje": "Vista previa generada. No se inserto ningun dato en la base de datos.",
+  "resumen": {
+    "Animal": 59,
+    "Potrero": 14,
+    "Pesaje": 22,
+    "RegistroSanitario": 0,
+    "Costo": 0,
+    "RotacionPotrero": 6
+  },
+  "hojasDetectadas": [],
+  "preview": {},
+  "registros": {},
+  "advertencias": []
+}
+```
+
+Mapeo actual del archivo del cliente:
+
+- `CONTROL DE PESO,`: animales con DIIO y pesajes relacionados.
+- `ROTACIÓN POTREROS`: potreros inferidos y rotaciones.
+
+Notas importantes:
+
+- `POST /api/importar/excel` no inserta nada en MongoDB.
+- `POST /api/importar/excel/confirmar` inserta datos enviados en `registros`.
+- `POST /api/importar/excel/importar` procesa el archivo e inserta directamente sin vista previa.
+- Animal evita duplicados por `identificadorFinca`.
+- Potrero evita duplicados por `codigo`.
+- Los pesajes resuelven el animal usando `diio`.
+- Las rotaciones resuelven el potrero usando `codigo`.
+- Por ahora se omiten costos, planillas, inversion, sanidad y la hoja de peso que no trae DIIO.
 
 ## Autenticacion
 
