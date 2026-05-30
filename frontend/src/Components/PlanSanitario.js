@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { crearPlanSanitario, obtenerPlanesSanitarios } from '../services/api';
+import {
+  actualizarPlanSanitario,
+  crearPlanSanitario,
+  eliminarPlanSanitario,
+  obtenerPlanesSanitarios
+} from '../services/api';
 import FormularioPlanSanitario from './FormularioPlanSanitario';
 import TablaDinamica from './TablaDinamica';
 
@@ -52,6 +57,7 @@ const PlanSanitario = () => {
   const [error, setError] = useState('');
   const [errorFormulario, setErrorFormulario] = useState('');
   const [modoFormulario, setModoFormulario] = useState(false);
+  const [planSeleccionado, setPlanSeleccionado] = useState(null);
 
   const cargarPlanes = async () => {
     try {
@@ -73,7 +79,12 @@ const PlanSanitario = () => {
     try {
       setGuardando(true);
       setErrorFormulario('');
-      await crearPlanSanitario(plan);
+      if (planSeleccionado?._id) {
+        await actualizarPlanSanitario(planSeleccionado._id, plan);
+      } else {
+        await crearPlanSanitario(plan);
+      }
+      setPlanSeleccionado(null);
       setModoFormulario(false);
       setCargando(true);
       await cargarPlanes();
@@ -84,10 +95,42 @@ const PlanSanitario = () => {
     }
   };
 
+  const borrarPlan = async (plan) => {
+    const confirmar = window.confirm(`¿Eliminar el plan ${plan.actividad || plan.producto || ''}?`);
+    if (!confirmar) return;
+
+    try {
+      await eliminarPlanSanitario(plan._id);
+      setCargando(true);
+      await cargarPlanes();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const abrirNuevoPlan = () => {
+    setPlanSeleccionado(null);
+    setErrorFormulario('');
+    setModoFormulario(true);
+  };
+
+  const abrirEdicionPlan = (plan) => {
+    setPlanSeleccionado(plan);
+    setErrorFormulario('');
+    setModoFormulario(true);
+  };
+
+  const cancelarFormulario = () => {
+    setPlanSeleccionado(null);
+    setModoFormulario(false);
+  };
+
   if (modoFormulario) {
     return (
       <FormularioPlanSanitario
-        onCancelar={() => setModoFormulario(false)}
+        planInicial={planSeleccionado}
+        modo={planSeleccionado ? 'editar' : 'crear'}
+        onCancelar={cancelarFormulario}
         onGuardar={guardarPlan}
         guardando={guardando}
         error={errorFormulario}
@@ -105,7 +148,9 @@ const PlanSanitario = () => {
       error={error}
       filtros={filtros}
       textoAgregar="Nuevo plan"
-      onAgregar={() => setModoFormulario(true)}
+      onAgregar={abrirNuevoPlan}
+      onEditar={abrirEdicionPlan}
+      onEliminar={borrarPlan}
     />
   );
 };

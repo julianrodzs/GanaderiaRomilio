@@ -23,8 +23,20 @@ const grupos = [
   'Todo el ganado'
 ];
 
-const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error }) => {
-  const [formulario, setFormulario] = useState(estadoInicial);
+const formatearFechaInput = (fecha) => {
+  if (!fecha) return '';
+  return new Date(fecha).toISOString().slice(0, 10);
+};
+
+const normalizarPlan = (plan) => ({
+  ...estadoInicial,
+  ...plan,
+  fechaAplicacion: formatearFechaInput(plan?.fechaAplicacion),
+  frecuenciaCantidad: plan?.frecuenciaCantidad ?? 1
+});
+
+const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error, planInicial, modo = 'crear' }) => {
+  const [formulario, setFormulario] = useState(() => normalizarPlan(planInicial));
 
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
@@ -44,7 +56,7 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error }) =>
       <div className="panel-title">
         <div>
           <p className="eyebrow">Sanidad</p>
-          <h2>Nuevo plan sanitario</h2>
+          <h2>{modo === 'editar' ? 'Editar plan sanitario' : 'Nuevo plan sanitario'}</h2>
         </div>
         <button className="boton-link" type="button" onClick={onCancelar}>Volver</button>
       </div>
@@ -180,7 +192,7 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error }) =>
         <div className="form-actions">
           <button className="boton-link" type="button" onClick={onCancelar}>Cancelar</button>
           <button className="boton-primario compacto" type="submit" disabled={guardando}>
-            {guardando ? 'Guardando...' : 'Guardar plan'}
+            {guardando ? 'Guardando...' : modo === 'editar' ? 'Actualizar plan' : 'Guardar plan'}
           </button>
         </div>
       </form>

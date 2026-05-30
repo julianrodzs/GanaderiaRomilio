@@ -23,7 +23,9 @@ const TablaDinamica = ({
   error,
   filtros = [],
   textoAgregar = 'Nuevo registro',
-  onAgregar
+  onAgregar,
+  onEditar,
+  onEliminar
 }) => {
   const [busqueda, setBusqueda] = useState('');
   const [filtrosActivos, setFiltrosActivos] = useState({});
@@ -121,8 +123,8 @@ const TablaDinamica = ({
                 ))}
                 <td>
                   <div className="acciones-tabla">
-                    <button type="button" aria-label="Editar" title="Editar">✎</button>
-                    <button type="button" aria-label="Eliminar" title="Eliminar">⌫</button>
+                    <button type="button" aria-label="Editar" title="Editar" onClick={() => onEditar?.(fila)}>✎</button>
+                    <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => onEliminar?.(fila)}>⌫</button>
                   </div>
                 </td>
               </tr>

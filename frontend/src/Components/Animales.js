@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { obtenerAnimales } from '../services/api';
+import { actualizarAnimal, crearAnimal, eliminarAnimal, obtenerAnimales } from '../services/api';
+import FormularioAnimal from './FormularioAnimal';
 import TablaDinamica from './TablaDinamica';
 
 const columnas = [
@@ -18,22 +19,90 @@ const filtros = [
 const Animales = () => {
   const [animales, setAnimales] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [errorFormulario, setErrorFormulario] = useState('');
+  const [modoFormulario, setModoFormulario] = useState(false);
+  const [animalSeleccionado, setAnimalSeleccionado] = useState(null);
+
+  const cargarAnimales = async () => {
+    try {
+      setError('');
+      const data = await obtenerAnimales();
+      setAnimales(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCargando(false);
+    }
+  };
 
   useEffect(() => {
-    const cargarAnimales = async () => {
-      try {
-        const data = await obtenerAnimales();
-        setAnimales(data);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setCargando(false);
-      }
-    };
-
     cargarAnimales();
   }, []);
+
+  const guardarAnimal = async (animal) => {
+    try {
+      setGuardando(true);
+      setErrorFormulario('');
+      if (animalSeleccionado?._id) {
+        await actualizarAnimal(animalSeleccionado._id, animal);
+      } else {
+        await crearAnimal(animal);
+      }
+      setAnimalSeleccionado(null);
+      setModoFormulario(false);
+      setCargando(true);
+      await cargarAnimales();
+    } catch (err) {
+      setErrorFormulario(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const borrarAnimal = async (animal) => {
+    const confirmar = window.confirm(`¿Eliminar el animal ${animal.diio || animal.nombre || ''}?`);
+    if (!confirmar) return;
+
+    try {
+      await eliminarAnimal(animal._id);
+      setCargando(true);
+      await cargarAnimales();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const abrirNuevoAnimal = () => {
+    setAnimalSeleccionado(null);
+    setErrorFormulario('');
+    setModoFormulario(true);
+  };
+
+  const abrirEdicionAnimal = (animal) => {
+    setAnimalSeleccionado(animal);
+    setErrorFormulario('');
+    setModoFormulario(true);
+  };
+
+  const cancelarFormulario = () => {
+    setAnimalSeleccionado(null);
+    setModoFormulario(false);
+  };
+
+  if (modoFormulario) {
+    return (
+      <FormularioAnimal
+        animalInicial={animalSeleccionado}
+        modo={animalSeleccionado ? 'editar' : 'crear'}
+        onCancelar={cancelarFormulario}
+        onGuardar={guardarAnimal}
+        guardando={guardando}
+        error={errorFormulario}
+      />
+    );
+  }
 
   return (
     <TablaDinamica
@@ -45,6 +114,9 @@ const Animales = () => {
       error={error}
       filtros={filtros}
       textoAgregar="Nuevo animal"
+      onAgregar={abrirNuevoAnimal}
+      onEditar={abrirEdicionAnimal}
+      onEliminar={borrarAnimal}
     />
   );
 };

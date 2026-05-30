@@ -44,6 +44,4 @@ ia-service/models/*.pt
 # Backend uploaded media
 backend/uploads/*
 backend/.env
-backend/.env
-backend/.env
-backend/.env
+

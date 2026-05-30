@@ -64,7 +64,47 @@ export const confirmarImportacionExcel = (registros) => {
 
 export const obtenerAnimales = () => request('/animales');
 
+export const crearAnimal = (animal) => {
+  return request('/animales', {
+    method: 'POST',
+    body: JSON.stringify(animal)
+  });
+};
+
+export const actualizarAnimal = (id, animal) => {
+  return request(`/animales/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(animal)
+  });
+};
+
+export const eliminarAnimal = (id) => {
+  return request(`/animales/${id}`, {
+    method: 'DELETE'
+  });
+};
+
 export const obtenerPotreros = () => request('/potreros');
+
+export const crearPotrero = (potrero) => {
+  return request('/potreros', {
+    method: 'POST',
+    body: JSON.stringify(potrero)
+  });
+};
+
+export const actualizarPotrero = (id, potrero) => {
+  return request(`/potreros/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(potrero)
+  });
+};
+
+export const eliminarPotrero = (id) => {
+  return request(`/potreros/${id}`, {
+    method: 'DELETE'
+  });
+};
 
 export const obtenerPlanesSanitarios = () => request('/plan-sanitario');
 
@@ -72,6 +112,19 @@ export const crearPlanSanitario = (plan) => {
   return request('/plan-sanitario', {
     method: 'POST',
     body: JSON.stringify(plan)
+  });
+};
+
+export const actualizarPlanSanitario = (id, plan) => {
+  return request(`/plan-sanitario/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(plan)
+  });
+};
+
+export const eliminarPlanSanitario = (id) => {
+  return request(`/plan-sanitario/${id}`, {
+    method: 'DELETE'
   });
 };
 

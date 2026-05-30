@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { obtenerPotreros } from '../services/api';
+import { actualizarPotrero, crearPotrero, eliminarPotrero, obtenerPotreros } from '../services/api';
+import FormularioPotrero from './FormularioPotrero';
 import TablaDinamica from './TablaDinamica';
 
 const columnas = [
@@ -17,22 +18,90 @@ const filtros = [
 const Potreros = () => {
   const [potreros, setPotreros] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [errorFormulario, setErrorFormulario] = useState('');
+  const [modoFormulario, setModoFormulario] = useState(false);
+  const [potreroSeleccionado, setPotreroSeleccionado] = useState(null);
+
+  const cargarPotreros = async () => {
+    try {
+      setError('');
+      const data = await obtenerPotreros();
+      setPotreros(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCargando(false);
+    }
+  };
 
   useEffect(() => {
-    const cargarPotreros = async () => {
-      try {
-        const data = await obtenerPotreros();
-        setPotreros(data);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setCargando(false);
-      }
-    };
-
     cargarPotreros();
   }, []);
+
+  const guardarPotrero = async (potrero) => {
+    try {
+      setGuardando(true);
+      setErrorFormulario('');
+      if (potreroSeleccionado?._id) {
+        await actualizarPotrero(potreroSeleccionado._id, potrero);
+      } else {
+        await crearPotrero(potrero);
+      }
+      setPotreroSeleccionado(null);
+      setModoFormulario(false);
+      setCargando(true);
+      await cargarPotreros();
+    } catch (err) {
+      setErrorFormulario(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const borrarPotrero = async (potrero) => {
+    const confirmar = window.confirm(`¿Eliminar el potrero ${potrero.codigo || potrero.nombre || ''}?`);
+    if (!confirmar) return;
+
+    try {
+      await eliminarPotrero(potrero._id);
+      setCargando(true);
+      await cargarPotreros();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const abrirNuevoPotrero = () => {
+    setPotreroSeleccionado(null);
+    setErrorFormulario('');
+    setModoFormulario(true);
+  };
+
+  const abrirEdicionPotrero = (potrero) => {
+    setPotreroSeleccionado(potrero);
+    setErrorFormulario('');
+    setModoFormulario(true);
+  };
+
+  const cancelarFormulario = () => {
+    setPotreroSeleccionado(null);
+    setModoFormulario(false);
+  };
+
+  if (modoFormulario) {
+    return (
+      <FormularioPotrero
+        potreroInicial={potreroSeleccionado}
+        modo={potreroSeleccionado ? 'editar' : 'crear'}
+        onCancelar={cancelarFormulario}
+        onGuardar={guardarPotrero}
+        guardando={guardando}
+        error={errorFormulario}
+      />
+    );
+  }
 
   return (
     <section className="potreros-page">
@@ -53,6 +122,9 @@ const Potreros = () => {
         error={error}
         filtros={filtros}
         textoAgregar="Nuevo potrero"
+        onAgregar={abrirNuevoPotrero}
+        onEditar={abrirEdicionPotrero}
+        onEliminar={borrarPotrero}
       />
     </section>
   );
