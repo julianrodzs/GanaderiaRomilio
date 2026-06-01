@@ -6,6 +6,11 @@ const usuarioSchema = new Schema ({
     correo: {type: String, required: true},
     contrasena: {type: String, required: true},
     telefono: {type: Number, required: true},
+    rol: {
+        type: String,
+        enum: ['Administrador', 'Encargado', 'Consulta'],
+        default: 'Administrador'
+    },
     recuperacionContrasenaToken: {type: String},
     recuperacionContrasenaExpira: {type: Date},
 },

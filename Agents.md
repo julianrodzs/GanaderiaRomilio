@@ -1,177 +1,44 @@
 # Agente Fullstack - GanaderiaRomilio
 
-Actúa como programador fullstack senior para este proyecto de gestión ganadera.
+Necesito remodelar el módulo de costos/finanzas.
 
-## Proyecto actual
-El proyecto ya existe y tiene esta estructura:
+Actualmente tengo varias hojas de Excel relacionadas con dinero:
+- Pago de planillas
+- Inversión de ganado y fincas
+- Control de compra
 
-- backend/
-  - controllers/
-  - documentation/
-  - middleware/
-  - models/
-  - node_modules/
-  - routes/
-  - server/
-  - services/
-  - .env
-  - app.js
-  - database.js
-  - index.js
-  - package.json
-- frontend/
+Quiero unificarlas en la app bajo un módulo llamado Finanzas o Costos, pero manteniendo filtros y formularios separados para cada tipo.
 
-No recrees el proyecto desde cero. Trabaja sobre esta estructura.
+Crea un modelo Mongoose llamado MovimientoFinanciero con estos campos:
 
-## Stack
-Backend:
-- Node.js
-- Express
-- MongoDB
-- Mongoose
-- dotenv
-- cors
+- fecha: Date, requerido
+- tipoMovimiento: String enum ['Planilla', 'Inversion', 'Compra'], requerido
+- categoria: String, requerido
+- descripcion: String, requerido
+- monto: Number, requerido
+- metodoPago: String
+- proveedor: String
+- empleado: String
+- finca: String
+- potrero: ObjectId ref Potrero
+- animal: ObjectId ref Animal
+- comprobante: String
+- observaciones: String
 
-Frontend:
-- React + Vite
-- CSS modular o Tailwind si ya está configurado
-- Axios para consumir la API
+Crea controlador y rutas:
+- GET /api/finanzas
+- POST /api/finanzas
+- GET /api/finanzas/resumen
+- GET /api/finanzas/tipo/:tipoMovimiento
+- PUT /api/finanzas/:id
+- DELETE /api/finanzas/:id
 
-## Objetivo
-Construir una app para administrar una finca ganadera llamada GanaderiaRomilio.
+El resumen debe devolver:
+- totalGeneral
+- totalPlanillas
+- totalInversiones
+- totalCompras
+- totalPorCategoria
+- totalPorMes
 
-Módulos principales:
-- Dashboard
-- Inventario de ganado
-- Potreros
-- Rotaciones
-- Pesajes
-- Sanidad
-- Costos
-- Futuro conteo de ganado con drone e IA
-
-## Reglas importantes
-- No borres archivos sin preguntar.
-- No cambies toda la arquitectura sin justificarlo.
-- Usa código limpio y modular.
-- Mantén modelos, rutas y controladores separados.
-- Usa nombres consistentes en español.
-- Antes de modificar, explica brevemente el plan.
-- Después de modificar, lista los archivos cambiados.
-- Si algo falta, crea lo mínimo necesario y continúa.
-
-## Backend esperado
-
-Crear o completar estos modelos:
-
-### Animal
-Campos sugeridos:
-- identificadorFinca
-- diio
-- nombre
-- sexo
-- raza
-- fechaNacimiento
-- pesoActual
-- estado
-- potreroActual
-- fotoUrl
-- observaciones
-
-### Potrero
-Campos sugeridos:
-- codigo
-- nombre
-- capacidadMaxima
-- ubicacion
-- estado
-- observaciones
-
-### Pesaje
-Campos sugeridos:
-- animal
-- fecha
-- peso
-- aumentoKg
-- diasDesdeUltimoPesaje
-- observaciones
-
-### RegistroSanitario
-Campos sugeridos:
-- animal
-- fecha
-- tipo
-- producto
-- dosis
-- viaAplicacion
-- responsable
-- proximaAplicacion
-- observaciones
-
-### Costo
-Campos sugeridos:
-- fecha
-- categoria
-- descripcion
-- monto
-- proveedor
-- comprobante
-- observaciones
-
-### RotacionPotrero
-Campos sugeridos:
-- potrero
-- lote
-- fechaEntrada
-- fechaSalida
-- numeroAnimales
-- estado
-- observaciones
-
-## Rutas esperadas
-
-Crear CRUD para:
-- /api/animales
-- /api/potreros
-- /api/pesajes
-- /api/sanidad
-- /api/costos
-- /api/rotaciones
-
-## Frontend esperado
-
-Crear pantallas iniciales:
-- Dashboard
-- Inventario
-- Potreros
-- Costos
-
-Usar una navegación inferior o lateral similar al prototipo:
-- Dashboard
-- Inventario
-- Potreros
-- Costos
-
-## Diseño visual
-Inspirarse en el prototipo Field & Flocks:
-- Verde oscuro como color principal
-- Fondo claro
-- Tarjetas con bordes suaves
-- Tablas limpias
-- Botones verdes
-- Estilo responsive para móvil y escritorio
-
-## Prioridad inmediata
-
-Primero revisa la estructura actual del backend y haz lo siguiente:
-
-1. Verifica app.js, index.js y database.js.
-2. Configura Express correctamente.
-3. Conecta MongoDB usando .env.
-4. Crea modelos principales.
-5. Crea rutas y controladores para animales.
-6. Prueba endpoint GET /api/animales.
-7. Luego continúa con potreros.
-
-No empieces con la IA del drone todavía.
-Solo deja preparado un módulo futuro llamado conteoDrone.
+No borres el modelo Costo todavía. Déjalo por compatibilidad, pero el nuevo módulo principal será MovimientoFinanciero.

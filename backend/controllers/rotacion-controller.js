@@ -15,7 +15,9 @@ rotacionCtrl.createRotacion = async (req, res) => {
     try {
         const nuevaRotacion = new RotacionPotrero(req.body);
         const rotacionGuardada = await nuevaRotacion.save();
-        res.status(201).json(rotacionGuardada);
+        const rotacion = await RotacionPotrero.findById(rotacionGuardada._id).populate('potrero');
+
+        res.status(201).json(rotacion);
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al crear rotacion', error: error.message });
     }
@@ -29,7 +31,9 @@ rotacionCtrl.getRotacion = async (req, res) => {
             return res.status(404).json({ mensaje: 'Rotacion no encontrada' });
         }
 
-        res.json(rotacion);
+        const rotacionConPotrero = await RotacionPotrero.findById(rotacion._id).populate('potrero');
+
+        res.json(rotacionConPotrero);
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener rotacion', error: error.message });
     }

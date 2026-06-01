@@ -1,7 +1,7 @@
 import React from 'react';
 
 const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout }) => {
-  const items = ['Dashboard', 'Importar', 'Inventario', 'Potreros', 'Sanidad', 'Drone', 'Costos'];
+  const items = ['Dashboard', 'Importar', 'Inventario', 'Potreros', 'Sanidad', 'Finanzas', 'Reportes', 'Drone'];
 
   return (
     <header className="app-header">

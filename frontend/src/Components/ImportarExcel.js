@@ -73,7 +73,7 @@ const ImportarExcel = () => {
         />
         <span className="drop-icon">XLSX</span>
         <strong>{archivo ? archivo.name : 'Suelta el archivo Excel aqui'}</strong>
-        <small>Al soltarlo se importa directo. Luego revisa Animales y Potreros en sus tablas.</small>
+        <small>Al soltarlo se importa directo. Luego revisa Animales, Potreros y Finanzas en sus tablas.</small>
       </div>
 
       {error && <div className="alerta-formulario">{error}</div>}
@@ -100,6 +100,14 @@ const ImportarExcel = () => {
             <article>
               <span>Potreros duplicados</span>
               <strong>{resultado.resultado?.Potrero?.duplicados || 0}</strong>
+            </article>
+            <article>
+              <span>Movimientos financieros</span>
+              <strong>{resultado.resultado?.MovimientoFinanciero?.creados || 0}</strong>
+            </article>
+            <article>
+              <span>Finanzas duplicadas</span>
+              <strong>{resultado.resultado?.MovimientoFinanciero?.duplicados || 0}</strong>
             </article>
           </section>
 
@@ -140,7 +148,7 @@ const ImportarExcel = () => {
           <section className="modal-panel">
             <p className="eyebrow">Importacion exitosa</p>
             <h2>Archivo subido correctamente</h2>
-            <p>Ya puedes revisar los datos en Inventario y Potreros.</p>
+            <p>Ya puedes revisar los datos en Inventario, Potreros y Finanzas.</p>
             <div className="modal-actions">
               <button className="boton-primario compacto" type="button" onClick={() => setModal(null)}>
                 Entendido

@@ -2,11 +2,13 @@ import React from 'react';
 import { useEffect, useState } from 'react';
 import Animales from './Animales';
 import ConteoDrone from './ConteoDrone';
+import Finanzas from './Finanzas';
 import ImportarExcel from './ImportarExcel';
 import Navegacion from './Navegacion';
 import PlanSanitario from './PlanSanitario';
 import Potreros from './Potreros';
-import { obtenerAnimales, obtenerPlanesSanitarios, obtenerPotreros } from '../services/api';
+import Reportes from './Reportes';
+import { obtenerAnimales, obtenerPlanesSanitarios, obtenerPotreros, obtenerResumenFinanciero } from '../services/api';
 
 const ListaUsuario = ({ usuario, onLogout }) => {
   const [vistaActiva, setVistaActiva] = useState('Dashboard');
@@ -15,16 +17,18 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     potreros: 0,
     alertasSanidad: 0,
     hembras: 0,
-    machos: 0
+    machos: 0,
+    gastosMes: 0
   });
 
   useEffect(() => {
     const cargarMetricas = async () => {
       try {
-        const [animales, potreros, planes] = await Promise.all([
+        const [animales, potreros, planes, resumenFinanciero] = await Promise.all([
           obtenerAnimales(),
           obtenerPotreros(),
-          obtenerPlanesSanitarios()
+          obtenerPlanesSanitarios(),
+          obtenerResumenFinanciero()
         ]);
 
         setMetricas({
@@ -32,7 +36,8 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           potreros: potreros.length,
           alertasSanidad: planes.filter((plan) => ['Vencido', 'Próximo'].includes(plan.estado)).length,
           hembras: animales.filter((animal) => animal.sexo === 'Hembra').length,
-          machos: animales.filter((animal) => animal.sexo === 'Macho').length
+          machos: animales.filter((animal) => animal.sexo === 'Macho').length,
+          gastosMes: resumenFinanciero?.totalEgresos || 0
         });
       } catch (error) {
         console.error('Error cargando metricas del dashboard', error);
@@ -78,6 +83,24 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     );
   }
 
+  if (vistaActiva === 'Finanzas' || vistaActiva === 'Costos') {
+    return (
+      <main className="dashboard-shell">
+        <Navegacion vistaActiva="Finanzas" onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        <Finanzas />
+      </main>
+    );
+  }
+
+  if (vistaActiva === 'Reportes') {
+    return (
+      <main className="dashboard-shell">
+        <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        <Reportes />
+      </main>
+    );
+  }
+
   if (vistaActiva === 'Drone') {
     return (
       <main className="dashboard-shell">
@@ -111,9 +134,9 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           <small>Potreros registrados en sistema</small>
         </article>
         <article className="metric-card">
-          <span>Gastos del mes</span>
-          <strong>$0.00</strong>
-          <small>Modulo de costos disponible</small>
+          <span>Egresos registrados</span>
+          <strong>{new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(metricas.gastosMes)}</strong>
+          <small>Modulo de finanzas activo</small>
         </article>
         <article className="metric-card">
           <span>Alertas sanidad</span>

@@ -15,7 +15,7 @@ usuarioCtrl.getUsuarios = async (req, res) => {
 
 usuarioCtrl.createUsuario = async (req, res) => {
     try {
-        const {nombre, apellido, correo, contrasena, telefono} = req.body;
+        const {nombre, apellido, correo, contrasena, telefono, rol} = req.body;
 
         const usuarioExistente = await Usuario.findOne({ correo });
 
@@ -28,7 +28,8 @@ usuarioCtrl.createUsuario = async (req, res) => {
             apellido,
             correo,
             contrasena,
-            telefono
+            telefono,
+            rol: rol || 'Administrador'
         });
         const usuarioGuardado = await nuevoUsuario.save();
 
@@ -39,7 +40,8 @@ usuarioCtrl.createUsuario = async (req, res) => {
                 nombre: usuarioGuardado.nombre,
                 apellido: usuarioGuardado.apellido,
                 correo: usuarioGuardado.correo,
-                telefono: usuarioGuardado.telefono
+                telefono: usuarioGuardado.telefono,
+                rol: usuarioGuardado.rol
             }
         });
     } catch (error) {
@@ -64,7 +66,8 @@ usuarioCtrl.loginUsuario = async (req, res) => {
         const token = generarToken({
             id: usuario._id.toString(),
             correo: usuario.correo,
-            nombre: usuario.nombre
+            nombre: usuario.nombre,
+            rol: usuario.rol || 'Administrador'
         });
 
         res.json({
@@ -73,11 +76,35 @@ usuarioCtrl.loginUsuario = async (req, res) => {
                 id: usuario._id,
                 nombre: usuario.nombre,
                 apellido: usuario.apellido,
-                correo: usuario.correo
+                correo: usuario.correo,
+                rol: usuario.rol || 'Administrador'
             }
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al iniciar sesion', error: error.message });
+    }
+};
+
+usuarioCtrl.getPerfil = async (req, res) => {
+    try {
+        const usuario = await Usuario.findById(req.usuario.id).select('-contrasena -recuperacionContrasenaToken -recuperacionContrasenaExpira');
+
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+        }
+
+        res.json({
+            usuario: {
+                id: usuario._id,
+                nombre: usuario.nombre,
+                apellido: usuario.apellido,
+                correo: usuario.correo,
+                telefono: usuario.telefono,
+                rol: usuario.rol || 'Administrador'
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener perfil', error: error.message });
     }
 };
 
@@ -92,13 +119,14 @@ usuarioCtrl.deleteUsuario = async (req, res) => {
 }
 
 usuarioCtrl.updateUsuario = async (req, res) => {
-    const {nombre, apellido, correo, contrasena, telefono} = req.body;
+    const {nombre, apellido, correo, contrasena, telefono, rol} = req.body;
     await Usuario.findByIdAndUpdate(req.params.id, {
         nombre,
         apellido,
         correo,
         contrasena,
-        telefono
+        telefono,
+        rol
     })
     res.json({mensaje: 'Usuario actualizado'});
 };

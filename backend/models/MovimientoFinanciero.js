@@ -1,0 +1,42 @@
+const { Schema, model } = require('mongoose');
+
+const movimientoFinancieroSchema = new Schema(
+    {
+        fecha: { type: Date, required: true },
+        tipoMovimiento: {
+            type: String,
+            enum: ['Planilla', 'Inversion', 'Compra'],
+            required: true,
+            trim: true
+        },
+        naturaleza: {
+            type: String,
+            enum: ['Ingreso', 'Egreso'],
+            default: 'Egreso',
+            required: true,
+            trim: true
+        },
+        categoria: { type: String, required: true, trim: true },
+        descripcion: { type: String, required: true, trim: true },
+        monto: { type: Number, required: true, min: 0 },
+        moneda: {
+            type: String,
+            enum: ['CRC', 'USD'],
+            default: 'CRC',
+            trim: true
+        },
+        metodoPago: { type: String, trim: true },
+        proveedor: { type: String, trim: true },
+        empleado: { type: String, trim: true },
+        finca: { type: String, trim: true },
+        potrero: { type: Schema.Types.ObjectId, ref: 'Potrero' },
+        animal: { type: Schema.Types.ObjectId, ref: 'Animal' },
+        comprobante: { type: String, trim: true },
+        observaciones: { type: String, trim: true }
+    },
+    {
+        timestamps: true
+    }
+);
+
+module.exports = model('MovimientoFinanciero', movimientoFinancieroSchema);

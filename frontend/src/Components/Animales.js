@@ -62,11 +62,12 @@ const Animales = () => {
   };
 
   const borrarAnimal = async (animal) => {
-    const confirmar = window.confirm(`¿Eliminar el animal ${animal.diio || animal.nombre || ''}?`);
+    const confirmar = window.confirm(`¿Eliminar el animal ${animal.diio || animal.nombre || ''}? Esta accion no se puede deshacer.`);
     if (!confirmar) return;
 
     try {
       await eliminarAnimal(animal._id);
+      window.alert('Animal eliminado correctamente.');
       setCargando(true);
       await cargarAnimales();
     } catch (err) {

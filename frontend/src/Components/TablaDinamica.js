@@ -25,7 +25,8 @@ const TablaDinamica = ({
   textoAgregar = 'Nuevo registro',
   onAgregar,
   onEditar,
-  onEliminar
+  onEliminar,
+  mostrarAcciones = true
 }) => {
   const [busqueda, setBusqueda] = useState('');
   const [filtrosActivos, setFiltrosActivos] = useState({});
@@ -74,7 +75,9 @@ const TablaDinamica = ({
           <p className="eyebrow">{subtitulo}</p>
           <h2>{titulo}</h2>
         </div>
-        <button className="boton-primario compacto" type="button" onClick={onAgregar}>+ {textoAgregar}</button>
+        {onAgregar && (
+          <button className="boton-primario compacto" type="button" onClick={onAgregar}>+ {textoAgregar}</button>
+        )}
       </div>
 
       <div className="tabla-toolbar">
@@ -112,7 +115,7 @@ const TablaDinamica = ({
                   </button>
                 </th>
               ))}
-              <th>Acciones</th>
+              {mostrarAcciones && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -121,12 +124,14 @@ const TablaDinamica = ({
                 {columnas.map((columna) => (
                   <td key={columna.id}>{renderizarValor(fila, columna)}</td>
                 ))}
-                <td>
-                  <div className="acciones-tabla">
-                    <button type="button" aria-label="Editar" title="Editar" onClick={() => onEditar?.(fila)}>✎</button>
-                    <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => onEliminar?.(fila)}>⌫</button>
-                  </div>
-                </td>
+                {mostrarAcciones && (
+                  <td>
+                    <div className="acciones-tabla">
+                      <button type="button" aria-label="Editar" title="Editar" onClick={() => onEditar?.(fila)}>✎</button>
+                      <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => onEliminar?.(fila)}>⌫</button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

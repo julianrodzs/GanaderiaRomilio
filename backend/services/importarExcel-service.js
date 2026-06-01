@@ -3,6 +3,7 @@ const Animal = require('../models/Animal');
 const Potrero = require('../models/Potrero');
 const Pesaje = require('../models/Pesaje');
 const RotacionPotrero = require('../models/RotacionPotrero');
+const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 
 const LIMITE_PREVIEW = 20;
 
@@ -35,6 +36,13 @@ const aNumero = (valor) => {
     return Number.isFinite(numero) ? numero : undefined;
 };
 
+const detectarMoneda = (valor) => {
+    const texto = limpiarTexto(valor);
+    if (texto.includes('$')) return 'USD';
+    if (texto.includes('₡')) return 'CRC';
+    return undefined;
+};
+
 const aFecha = (valor) => {
     if (!valor) return undefined;
     if (valor instanceof Date && !Number.isNaN(valor.getTime())) return valor;
@@ -48,6 +56,12 @@ const aFecha = (valor) => {
     const texto = limpiarTexto(valor);
     if (!texto || texto === '-') return undefined;
 
+    const fechaCompacta = texto.match(/^(\d{1,2})[/-](\d{1,2})(\d{4})$/);
+    if (fechaCompacta) {
+        const fecha = new Date(Date.UTC(Number(fechaCompacta[3]), Number(fechaCompacta[2]) - 1, Number(fechaCompacta[1])));
+        return Number.isNaN(fecha.getTime()) ? undefined : fecha;
+    }
+
     const partes = texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
     if (partes) {
         let primero = Number(partes[1]);
@@ -59,6 +73,8 @@ const aFecha = (valor) => {
         const diaPrimero = primero > 12;
         const dia = diaPrimero ? primero : segundo;
         const mes = diaPrimero ? segundo : primero;
+        if (anio < 1900) return undefined;
+
         const fecha = new Date(Date.UTC(anio, mes - 1, dia));
 
         return Number.isNaN(fecha.getTime()) ? undefined : fecha;
@@ -98,6 +114,7 @@ const crearAcumulador = () => ({
     Pesaje: [],
     RegistroSanitario: [],
     Costo: [],
+    MovimientoFinanciero: [],
     RotacionPotrero: []
 });
 
@@ -330,10 +347,253 @@ const categoriaCosto = (texto) => {
     const valor = normalizar(texto);
     if (valor.includes('ALIMENT')) return 'Alimentacion';
     if (valor.includes('VACUNA') || valor.includes('VITAMINA') || valor.includes('MEDICAMENTO') || valor.includes('DESPAR')) return 'Sanidad';
+    if (valor.includes('CHANCH')) return 'Chanchos';
+    if (valor.includes('GANADO') || valor.includes('TERNER') || valor.includes('NOVILL') || valor.includes('VACA')) return 'Ganado';
+    if (valor.includes('MAQUINARIA') || valor.includes('DRAGA')) return 'Maquinaria';
     if (valor.includes('POTRERO') || valor.includes('MATERIAL') || valor.includes('INSUMO')) return 'Potreros';
     if (valor.includes('PLANILLA') || valor.includes('MANO DE OBRA')) return 'Mano de obra';
     if (valor.includes('FINCA')) return 'Fincas';
     return 'General';
+};
+
+const MESES = {
+    ENERO: 0,
+    FEBRERO: 1,
+    MARZO: 2,
+    ABRIL: 3,
+    MAYO: 4,
+    JUNIO: 5,
+    JULIO: 6,
+    AGOSTO: 7,
+    SEPTIEMBRE: 8,
+    SETIEMBRE: 8,
+    OCTUBRE: 9,
+    NOVIEMBRE: 10,
+    DICIEMBRE: 11
+};
+
+const fechaDesdeCorte = (texto) => {
+    const valor = normalizar(texto);
+    const mes = Object.keys(MESES).find((nombreMes) => valor.includes(nombreMes));
+    const anio = valor.match(/20\d{2}/)?.[0];
+
+    if (!mes || !anio) return undefined;
+    return new Date(Date.UTC(Number(anio), MESES[mes], 1));
+};
+
+const fechaHoyImportacion = () => new Date();
+
+const crearMovimiento = ({ fecha, tipoMovimiento, naturaleza = 'Egreso', categoria, descripcion, monto, moneda, proveedor, empleado, finca, observaciones }) => ({
+    fecha: serializarFecha(fecha || fechaHoyImportacion()),
+    tipoMovimiento,
+    naturaleza,
+    categoria,
+    descripcion,
+    monto,
+    moneda: moneda || 'CRC',
+    proveedor: proveedor || undefined,
+    empleado: empleado || undefined,
+    finca: finca || undefined,
+    observaciones
+});
+
+const mapearPlanillasFinancieras = ({ hoja, filas, acumulador }) => {
+    let detectada = false;
+
+    filas.forEach((fila, indice) => {
+        const columnaCorte = fila.findIndex((celda) => normalizar(celda).includes('CORTE'));
+        if (columnaCorte === -1) return;
+
+        const descripcion = limpiarTexto(fila[columnaCorte]);
+        const fecha = fechaDesdeCorte(descripcion) || fechaHoyImportacion();
+        const monto = aNumero(fila[10]) || aNumero(fila[columnaCorte + 8]);
+
+        if (!monto) return;
+
+        detectada = true;
+        agregar(acumulador, 'MovimientoFinanciero', crearMovimiento({
+            fecha,
+            tipoMovimiento: 'Planilla',
+            categoria: 'Mano de obra',
+            descripcion,
+            monto,
+            moneda: detectarMoneda(fila[10]) || 'CRC',
+            observaciones: `Importado desde ${hoja}; total del corte de planilla`
+        }), { hoja, fila: indice + 1 });
+    });
+
+    return detectada;
+};
+
+const indicesCompraDesdeEncabezado = (fila, columna) => {
+    const encabezados = fila.slice(columna, columna + 8).map(normalizar);
+    const indiceRelativo = (opciones) => encabezados.findIndex((celda) => opciones.some((opcion) => celda.includes(normalizar(opcion))));
+
+    const fecha = indiceRelativo(['FECHA']);
+    const item = indiceRelativo(['FUNCIÓN-ITEM', 'FUNCION-ITEM', 'ITEM']);
+    const lugar = indiceRelativo(['LUGAR']);
+    const precio = indiceRelativo(['PRECIO']);
+    const cantidad = indiceRelativo(['CANTIDAD']);
+    const unidad = indiceRelativo(['UNIDAD']);
+    const total = indiceRelativo(['PRECIO TOTAL']);
+
+    if (fecha === -1 || item === -1 || total === -1) return null;
+
+    return {
+        fecha: columna + fecha,
+        item: columna + item,
+        lugar: lugar === -1 ? -1 : columna + lugar,
+        precio: precio === -1 ? -1 : columna + precio,
+        cantidad: cantidad === -1 ? -1 : columna + cantidad,
+        unidad: unidad === -1 ? -1 : columna + unidad,
+        total: columna + total
+    };
+};
+
+const buscarTituloBloque = (filas, indiceFila, columna) => {
+    for (let fila = indiceFila - 1; fila >= Math.max(0, indiceFila - 4); fila -= 1) {
+        const titulo = limpiarTexto((filas[fila] || [])[columna]);
+        if (titulo && !normalizar(titulo).includes('FECHA')) return titulo;
+    }
+
+    return 'Compra importada';
+};
+
+const mapearComprasFinancieras = ({ hoja, filas, acumulador }) => {
+    let detectada = false;
+
+    filas.forEach((fila, indice) => {
+        fila.forEach((celda, columna) => {
+            if (normalizar(celda) !== 'FECHA' && normalizar(celda) !== 'CONTENIDO') return;
+
+            const idx = normalizar(celda) === 'CONTENIDO'
+                ? {
+                    fecha: columna + 2,
+                    item: columna + 3,
+                    lugar: columna + 1,
+                    precio: columna + 4,
+                    cantidad: columna + 5,
+                    unidad: columna + 6,
+                    total: columna + 7
+                }
+                : indicesCompraDesdeEncabezado(fila, columna);
+
+            if (!idx) return;
+
+            const titulo = buscarTituloBloque(filas, indice, columna);
+            const categoria = categoriaCosto(titulo);
+
+            for (let filaIndice = indice + 1; filaIndice < filas.length; filaIndice += 1) {
+                const filaDatos = filas[filaIndice];
+                const fechaDetectada = aFecha(filaDatos[idx.fecha]);
+                const fecha = fechaDetectada || fechaHoyImportacion();
+                const descripcion = limpiarTexto(filaDatos[idx.item]);
+                const monto = aNumero(filaDatos[idx.total]);
+                const marcador = normalizar(filaDatos[idx.fecha]);
+
+                if (marcador === 'FECHA' || marcador === 'CONTENIDO') break;
+                if (!fechaDetectada && !descripcion && !monto) break;
+                if (!descripcion || !monto || normalizar(descripcion).includes('TOTAL')) continue;
+
+                detectada = true;
+                agregar(acumulador, 'MovimientoFinanciero', crearMovimiento({
+                    fecha,
+                    tipoMovimiento: 'Compra',
+                    categoria,
+                    descripcion,
+                    monto,
+                    moneda: detectarMoneda(filaDatos[idx.total]) || detectarMoneda(filaDatos[idx.precio]) || 'CRC',
+                    proveedor: limpiarTexto(filaDatos[idx.lugar]),
+                    observaciones: [
+                        `Importado desde ${hoja} - ${titulo}`,
+                        idx.cantidad >= 0 && limpiarTexto(filaDatos[idx.cantidad]) ? `Cantidad: ${limpiarTexto(filaDatos[idx.cantidad])}` : '',
+                        idx.unidad >= 0 && limpiarTexto(filaDatos[idx.unidad]) ? `Unidad: ${limpiarTexto(filaDatos[idx.unidad])}` : '',
+                        idx.precio >= 0 && limpiarTexto(filaDatos[idx.precio]) ? `Precio unitario: ${limpiarTexto(filaDatos[idx.precio])}` : ''
+                    ].filter(Boolean).join('. ')
+                }), { hoja, fila: filaIndice + 1 });
+            }
+        });
+    });
+
+    return detectada;
+};
+
+const mapearInversionesFinancieras = ({ hoja, filas, acumulador, advertencias }) => {
+    let detectada = false;
+
+    filas.forEach((fila, indice) => {
+        const encabezado = fila.map(normalizar);
+        const esTablaCompraAnimal = encabezado.includes('FECHA')
+            && encabezado.includes('CANTIDAD')
+            && (encabezado.includes('CATEGORIA DEL ANIMAL') || encabezado.includes('MAQUINARIA'))
+            && encabezado.includes('COSTO');
+
+        if (!esTablaCompraAnimal) return;
+
+        const idxFecha = buscarIndice(fila, ['FECHA']);
+        const idxCantidad = buscarIndice(fila, ['CANTIDAD']);
+        const idxCategoriaAnimal = buscarIndice(fila, ['CATEGORIA DEL ANIMAL']);
+        const idxMaquinaria = buscarIndice(fila, ['MAQUINARIA']);
+        const idxCosto = buscarIndice(fila, ['COSTO']);
+        const idxTransporte = buscarIndice(fila, ['COSTO DE TRASPORTE ', 'COSTO DE TRANSPORTE']);
+        const idxProveedor = buscarIndice(fila, ['LUGAR DE COMPRA']);
+        const categoriaTabla = idxMaquinaria >= 0 ? 'Maquinaria' : 'Ganado';
+
+        for (let filaIndice = indice + 1; filaIndice < filas.length; filaIndice += 1) {
+            const filaDatos = filas[filaIndice];
+            const fechaDetectada = aFecha(filaDatos[idxFecha]);
+            const fecha = fechaDetectada || fechaHoyImportacion();
+            const descripcionBase = limpiarTexto(filaDatos[idxCategoriaAnimal >= 0 ? idxCategoriaAnimal : idxMaquinaria]);
+            const cantidad = limpiarTexto(filaDatos[idxCantidad]);
+            const costo = aNumero(filaDatos[idxCosto]);
+            const transporte = idxTransporte >= 0 ? aNumero(filaDatos[idxTransporte]) || 0 : 0;
+            const monto = costo ? costo + transporte : undefined;
+            const marcador = normalizar(filaDatos[idxFecha]);
+
+            if (marcador === 'FECHA') break;
+            if (marcador.includes('TOTAL')) break;
+            if (!fechaDetectada && !descripcionBase && !monto) break;
+            if (!descripcionBase || !monto) continue;
+
+            detectada = true;
+            agregar(acumulador, 'MovimientoFinanciero', crearMovimiento({
+                fecha,
+                tipoMovimiento: 'Inversion',
+                categoria: categoriaTabla,
+                descripcion: cantidad ? `${cantidad} - ${descripcionBase}` : descripcionBase,
+                monto,
+                moneda: detectarMoneda(filaDatos[idxCosto]) || 'CRC',
+                proveedor: limpiarTexto(filaDatos[idxProveedor]),
+                observaciones: `Importado desde ${hoja}. Costo: ${limpiarTexto(filaDatos[idxCosto]) || '0'}. Transporte: ${limpiarTexto(filaDatos[idxTransporte]) || '0'}`
+            }), { hoja, fila: filaIndice + 1 });
+        }
+    });
+
+    filas.forEach((fila, indice) => {
+        const fecha = aFecha(fila[12]) || fechaHoyImportacion();
+        const monto = aNumero(fila[13]);
+        const inversionista = limpiarTexto(fila[14]);
+
+        if (!monto || !inversionista) return;
+
+        detectada = true;
+        agregar(acumulador, 'MovimientoFinanciero', crearMovimiento({
+            fecha,
+            tipoMovimiento: 'Inversion',
+            naturaleza: 'Ingreso',
+            categoria: 'Aporte de inversionistas',
+            descripcion: `Aporte de ${inversionista}`,
+            monto,
+            moneda: detectarMoneda(fila[13]) || 'USD',
+            observaciones: `Importado desde ${hoja} - aportes de inversionistas`
+        }), { hoja, fila: indice + 1 });
+    });
+
+    if (normalizar(hoja).includes('INVERSION')) {
+        agregarAdvertencia(advertencias, hoja, 'Los movimientos financieros sin fecha se importan con la fecha actual para que el cliente los edite despues.');
+    }
+
+    return detectada;
 };
 
 const mapearCostosCompras = ({ hoja, filas, acumulador }) => {
@@ -471,14 +731,11 @@ const procesarExcelPreview = (buffer) => {
             reconocida = false;
             agregarAdvertencia(advertencias, hoja, 'Hoja de sanidad omitida por ahora a solicitud del flujo actual.');
         } else if (nombre.includes('CONTROL DE COMPRAS')) {
-            reconocida = false;
-            agregarAdvertencia(advertencias, hoja, 'Hoja de costos omitida por ahora a solicitud del flujo actual.');
+            reconocida = mapearComprasFinancieras({ hoja, filas, acumulador, advertencias });
         } else if (nombre.includes('PLANILLA')) {
-            reconocida = false;
-            agregarAdvertencia(advertencias, hoja, 'Hoja de planillas omitida por ahora a solicitud del flujo actual.');
+            reconocida = mapearPlanillasFinancieras({ hoja, filas, acumulador, advertencias });
         } else if (nombre.includes('INVERSION')) {
-            reconocida = false;
-            agregarAdvertencia(advertencias, hoja, 'Hoja de inversion omitida por ahora a solicitud del flujo actual.');
+            reconocida = mapearInversionesFinancieras({ hoja, filas, acumulador, advertencias });
         }
 
         const modelosDespues = obtenerResumen(acumulador);
@@ -529,7 +786,8 @@ const confirmarImportacionExcel = async (payload) => {
         Animal: { creados: 0, duplicados: 0, errores: [] },
         Potrero: { creados: 0, duplicados: 0, errores: [] },
         Pesaje: { creados: 0, omitidos: 0, errores: [] },
-        RotacionPotrero: { creados: 0, omitidos: 0, errores: [] }
+        RotacionPotrero: { creados: 0, omitidos: 0, errores: [] },
+        MovimientoFinanciero: { creados: 0, duplicados: 0, omitidos: 0, errores: [] }
     };
     const animalesPorDiio = new Map();
     const potrerosPorCodigo = new Map();
@@ -641,6 +899,37 @@ const confirmarImportacionExcel = async (payload) => {
             resultado.RotacionPotrero.creados += 1;
         } catch (error) {
             resultado.RotacionPotrero.errores.push({ meta: registro.meta, mensaje: error.message });
+        }
+    }
+
+    for (const registro of registros.MovimientoFinanciero || []) {
+        try {
+            const datos = registro.datos || registro;
+
+            if (!datos.fecha || !datos.tipoMovimiento || !datos.categoria || !datos.descripcion || !datos.monto) {
+                resultado.MovimientoFinanciero.omitidos += 1;
+                continue;
+            }
+
+            const existente = await MovimientoFinanciero.findOne({
+                fecha: new Date(datos.fecha),
+                tipoMovimiento: datos.tipoMovimiento,
+                naturaleza: datos.naturaleza || 'Egreso',
+                categoria: datos.categoria,
+                descripcion: datos.descripcion,
+                monto: datos.monto,
+                moneda: datos.moneda || 'CRC'
+            });
+
+            if (existente) {
+                resultado.MovimientoFinanciero.duplicados += 1;
+                continue;
+            }
+
+            await MovimientoFinanciero.create(datos);
+            resultado.MovimientoFinanciero.creados += 1;
+        } catch (error) {
+            resultado.MovimientoFinanciero.errores.push({ meta: registro.meta, mensaje: error.message });
         }
     }
 

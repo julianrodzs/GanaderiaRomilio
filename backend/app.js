@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { auth } = require('./middleware/auth');
 const app = express();
 
 // configuracion
@@ -18,14 +19,16 @@ app.get('/', (req, res)=>{
 
 // rutas principales
 app.use('/api/usuarios', require('./routes/usuario'));
-app.use('/api/animales', require('./routes/animal'));
-app.use('/api/potreros', require('./routes/potrero'));
-app.use('/api/pesajes', require('./routes/pesaje'));
-app.use('/api/sanidad', require('./routes/sanidad'));
-app.use('/api/plan-sanitario', require('./routes/planSanitario'));
-app.use('/api/costos', require('./routes/costo'));
-app.use('/api/rotaciones', require('./routes/rotacion'));
-app.use('/api/importar', require('./routes/importar'));
-app.use('/api/conteo-drone', require('./routes/conteoDroneRoutes'));
+app.use('/api/animales', auth, require('./routes/animal'));
+app.use('/api/potreros', auth, require('./routes/potrero'));
+app.use('/api/pesajes', auth, require('./routes/pesaje'));
+app.use('/api/sanidad', auth, require('./routes/sanidad'));
+app.use('/api/plan-sanitario', auth, require('./routes/planSanitario'));
+app.use('/api/costos', auth, require('./routes/costo'));
+app.use('/api/finanzas', auth, require('./routes/finanza'));
+app.use('/api/rotaciones', auth, require('./routes/rotacion'));
+app.use('/api/reportes', auth, require('./routes/reporte'));
+app.use('/api/importar', auth, require('./routes/importar'));
+app.use('/api/conteo-drone', auth, require('./routes/conteoDroneRoutes'));
 
 module.exports = app;

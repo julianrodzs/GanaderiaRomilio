@@ -96,11 +96,12 @@ const PlanSanitario = () => {
   };
 
   const borrarPlan = async (plan) => {
-    const confirmar = window.confirm(`¿Eliminar el plan ${plan.actividad || plan.producto || ''}?`);
+    const confirmar = window.confirm(`¿Eliminar el plan ${plan.actividad || plan.producto || ''}? Esta accion no se puede deshacer.`);
     if (!confirmar) return;
 
     try {
       await eliminarPlanSanitario(plan._id);
+      window.alert('Plan sanitario eliminado correctamente.');
       setCargando(true);
       await cargarPlanes();
     } catch (err) {
