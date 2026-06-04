@@ -1,4 +1,4 @@
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:4000/api' : '');
 
 const obtenerTokenSesion = () => {
   const sesionGuardada = localStorage.getItem('ganaderiaSesion');
@@ -12,6 +12,10 @@ const obtenerTokenSesion = () => {
 };
 
 const request = async (ruta, opciones = {}) => {
+  if (!API_URL) {
+    throw new Error('VITE_API_URL no configurado');
+  }
+
   const esFormData = opciones.body instanceof FormData;
   const token = obtenerTokenSesion();
   const { headers, ...fetchOpciones } = opciones;

@@ -28,10 +28,10 @@ const calcularConfianzaPromedio = (detecciones) => {
 
 const llamarServicioFastAPI = ({ imagenPath }) => {
     return new Promise((resolve, reject) => {
-        const baseUrl = process.env.IA_CONTEO_URL;
+        const baseUrl = process.env.IA_SERVICE_URL;
 
         if (!baseUrl) {
-            return reject(new Error('IA_CONTEO_URL no configurado'));
+            return reject(new Error('IA_SERVICE_URL no configurado'));
         }
 
         const endpoint = new URL('/detectar-vacas', baseUrl);
@@ -87,7 +87,7 @@ const llamarServicioFastAPI = ({ imagenPath }) => {
 };
 
 const procesarImagenConteo = async ({ imagenPath, imagenUrl }) => {
-    if (process.env.IA_CONTEO_URL) {
+    if (process.env.IA_SERVICE_URL) {
         try {
             const resultadoIA = await llamarServicioFastAPI({ imagenPath });
 
