@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 const estadoInicial = {
   grupoGanado: 'Todo el ganado',
+  animalDiio: '',
   actividad: '',
   producto: '',
   marca: '',
@@ -23,6 +24,7 @@ const grupos = [
   'Todo el ganado'
 ];
 
+
 const formatearFechaInput = (fecha) => {
   if (!fecha) return '';
   return new Date(fecha).toISOString().slice(0, 10);
@@ -37,6 +39,7 @@ const normalizarPlan = (plan) => ({
 
 const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error, planInicial, modo = 'crear' }) => {
   const [formulario, setFormulario] = useState(() => normalizarPlan(planInicial));
+  const mostrarAnimalDiio = formulario.grupoGanado !== 'Todo el ganado' || Boolean(formulario.animalDiio);
 
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
@@ -85,6 +88,18 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error, plan
             />
           </label>
         </div>
+
+        {mostrarAnimalDiio && (
+          <label>
+            DIIO de la vaca
+            <input
+              name="animalDiio"
+              value={formulario.animalDiio}
+              onChange={actualizarCampo}
+              placeholder="Opcional para casos individuales"
+            />
+          </label>
+        )}
 
         <div className="form-grid">
           <label>

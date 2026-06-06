@@ -13,18 +13,6 @@ import FormularioPotrero from './FormularioPotrero';
 import FormularioRotacion from './FormularioRotacion';
 import TablaDinamica from './TablaDinamica';
 
-const columnas = [
-  { id: 'codigo', label: 'Codigo', accessor: (potrero) => potrero.codigo },
-  { id: 'nombre', label: 'Nombre', accessor: (potrero) => potrero.nombre },
-  { id: 'capacidadMaxima', label: 'Capacidad', accessor: (potrero) => potrero.capacidadMaxima },
-  { id: 'ubicacion', label: 'Ubicacion', accessor: (potrero) => potrero.ubicacion },
-  { id: 'estado', label: 'Estado', accessor: (potrero) => potrero.estado }
-];
-
-const filtros = [
-  { id: 'estado', accessor: (potrero) => potrero.estado }
-];
-
 const formatearFecha = (fecha) => {
   if (!fecha) return '--';
   return new Date(fecha).toLocaleDateString('es-CR', {
@@ -34,6 +22,20 @@ const formatearFecha = (fecha) => {
   });
 };
 
+const columnas = [
+  { id: 'codigo', label: 'Codigo', accessor: (potrero) => potrero.codigo },
+  { id: 'nombre', label: 'Nombre', accessor: (potrero) => potrero.nombre },
+  { id: 'area', label: 'Area', accessor: (potrero) => potrero.area },
+  { id: 'ultimaAplicacionHerbicida', label: 'Ult. herbicida', accessor: (potrero) => formatearFecha(potrero.ultimaAplicacionHerbicida) },
+  { id: 'ultimaChapia', label: 'Ult. chapia', accessor: (potrero) => formatearFecha(potrero.ultimaChapia) },
+  { id: 'ultimaFertilizacion', label: 'Ult. fertilizacion', accessor: (potrero) => formatearFecha(potrero.ultimaFertilizacion) },
+  { id: 'estado', label: 'Estado', accessor: (potrero) => potrero.estado }
+];
+
+const filtros = [
+  { id: 'estado', accessor: (potrero) => potrero.estado }
+];
+
 const obtenerNombrePotrero = (rotacion) => {
   if (!rotacion.potrero) return '--';
   if (typeof rotacion.potrero === 'string') return rotacion.potrero;
@@ -42,12 +44,12 @@ const obtenerNombrePotrero = (rotacion) => {
 
 const columnasRotaciones = [
   { id: 'potrero', label: 'Potrero', accessor: obtenerNombrePotrero },
-  { id: 'lote', label: 'Lote', accessor: (rotacion) => rotacion.lote },
   { id: 'fechaEntrada', label: 'Entrada', accessor: (rotacion) => formatearFecha(rotacion.fechaEntrada) },
   { id: 'fechaSalida', label: 'Salida', accessor: (rotacion) => formatearFecha(rotacion.fechaSalida) },
+  { id: 'diasOcupado', label: 'Dias ocupado', accessor: (rotacion) => rotacion.diasOcupado },
+  { id: 'diasDescansoPrevio', label: 'Descanso previo', accessor: (rotacion) => rotacion.diasDescansoPrevio },
   { id: 'numeroAnimales', label: 'Animales', accessor: (rotacion) => rotacion.numeroAnimales },
-  { id: 'estado', label: 'Estado', accessor: (rotacion) => rotacion.estado },
-  { id: 'observaciones', label: 'Observaciones', accessor: (rotacion) => rotacion.observaciones }
+  { id: 'estado', label: 'Estado', accessor: (rotacion) => rotacion.estado }
 ];
 
 const filtrosRotaciones = [

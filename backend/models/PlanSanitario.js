@@ -57,6 +57,7 @@ const calcularEstadoPlanSanitario = (proximaAplicacion) => {
 const planSanitarioSchema = new Schema(
     {
         grupoGanado: { type: String, required: true, trim: true },
+        animalDiio: { type: String, trim: true },
         actividad: { type: String, required: true, trim: true },
         producto: { type: String, required: true, trim: true },
         marca: { type: String, trim: true },

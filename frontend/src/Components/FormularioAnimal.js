@@ -6,7 +6,12 @@ const estadoInicial = {
   nombre: '',
   sexo: 'Hembra',
   raza: '',
+  madreDiio: '',
+  padreDiio: '',
   fechaNacimiento: '',
+  fechaDestete: '',
+  pesoNacimiento: '',
+  pesoDestete: '',
   pesoActual: '',
   estado: 'Activo',
   observaciones: ''
@@ -21,8 +26,14 @@ const normalizarAnimal = (animal) => ({
   ...estadoInicial,
   ...animal,
   fechaNacimiento: formatearFechaInput(animal?.fechaNacimiento),
+  fechaDestete: formatearFechaInput(animal?.fechaDestete),
+  pesoNacimiento: animal?.pesoNacimiento ?? '',
+  pesoDestete: animal?.pesoDestete ?? '',
   pesoActual: animal?.pesoActual ?? ''
 });
+
+const numeroOpcional = (valor) => (valor === '' || valor === null || valor === undefined ? null : Number(valor));
+const fechaOpcional = (valor) => (valor ? valor : null);
 
 const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInicial, modo = 'crear' }) => {
   const [formulario, setFormulario] = useState(() => normalizarAnimal(animalInicial));
@@ -39,7 +50,11 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
     onGuardar({
       ...formulario,
       identificadorFinca: identificador,
-      pesoActual: formulario.pesoActual ? Number(formulario.pesoActual) : undefined
+      fechaNacimiento: fechaOpcional(formulario.fechaNacimiento),
+      fechaDestete: fechaOpcional(formulario.fechaDestete),
+      pesoNacimiento: numeroOpcional(formulario.pesoNacimiento),
+      pesoDestete: numeroOpcional(formulario.pesoDestete),
+      pesoActual: numeroOpcional(formulario.pesoActual)
     });
   };
 
@@ -94,6 +109,35 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
             <input name="pesoActual" type="number" min="0" value={formulario.pesoActual} onChange={actualizarCampo} />
           </label>
         </div>
+
+        <div className="form-grid">
+          <label>
+            Madre DIIO
+            <input name="madreDiio" value={formulario.madreDiio} onChange={actualizarCampo} placeholder="DIIO de la madre" />
+          </label>
+
+          <label>
+            Padre DIIO
+            <input name="padreDiio" value={formulario.padreDiio} onChange={actualizarCampo} placeholder="DIIO del padre" />
+          </label>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            Peso al nacer
+            <input name="pesoNacimiento" type="number" min="0" value={formulario.pesoNacimiento} onChange={actualizarCampo} />
+          </label>
+
+          <label>
+            Fecha destete
+            <input name="fechaDestete" type="date" value={formulario.fechaDestete} onChange={actualizarCampo} />
+          </label>
+        </div>
+
+        <label>
+          Peso al destete
+          <input name="pesoDestete" type="number" min="0" value={formulario.pesoDestete} onChange={actualizarCampo} />
+        </label>
 
         <div className="form-grid">
           <label>

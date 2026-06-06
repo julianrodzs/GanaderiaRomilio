@@ -7,6 +7,8 @@ const rotacionPotreroSchema = new Schema(
         fechaEntrada: { type: Date, required: true },
         fechaSalida: { type: Date },
         numeroAnimales: { type: Number, min: 0 },
+        diasOcupado: { type: Number, min: 0 },
+        diasDescansoPrevio: { type: Number, min: 0 },
         estado: {
             type: String,
             enum: ['Activa', 'Finalizada', 'Planificada'],

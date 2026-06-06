@@ -13,6 +13,9 @@ MONGODB_URI=
 FRONTEND_URL=
 IA_SERVICE_URL=
 JWT_SECRET=
+RESEND_API_KEY=
+EMAIL_FROM=Ganaderia Romilio <onboarding@resend.dev>
+EMAIL_ADMIN=
 ```
 
 Valores esperados:
@@ -21,6 +24,9 @@ Valores esperados:
 - `FRONTEND_URL`: URL final de Vercel, por ejemplo `https://tu-frontend.vercel.app`.
 - `IA_SERVICE_URL`: URL del servicio IA si se despliega; puede quedar vacia mientras el conteo use simulacion.
 - `JWT_SECRET`: clave larga y privada para firmar tokens.
+- `RESEND_API_KEY`: API key creada en Resend.
+- `EMAIL_FROM`: remitente de correos. Para pruebas puede ser `Ganaderia Romilio <onboarding@resend.dev>`.
+- `EMAIL_ADMIN`: correo de respaldo si no hay usuarios con rol `Administrador`.
 
 Pasos:
 

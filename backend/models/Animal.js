@@ -7,7 +7,12 @@ const animalSchema = new Schema(
         nombre: { type: String, trim: true },
         sexo: { type: String, enum: ['Macho', 'Hembra'], required: true },
         raza: { type: String, trim: true },
+        madreDiio: { type: String, trim: true },
+        padreDiio: { type: String, trim: true },
         fechaNacimiento: { type: Date },
+        fechaDestete: { type: Date },
+        pesoNacimiento: { type: Number, min: 0 },
+        pesoDestete: { type: Number, min: 0 },
         pesoActual: { type: Number, min: 0 },
         estado: {
             type: String,

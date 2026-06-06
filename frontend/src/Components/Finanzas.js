@@ -42,12 +42,27 @@ const formatearNumero = (valor, moneda = 'CRC') => {
 };
 
 const columnas = [
-  { id: 'fecha', label: 'Fecha', accessor: (movimiento) => formatearFecha(movimiento.fecha) },
+  {
+    id: 'fecha',
+    label: 'Fecha',
+    accessor: (movimiento) => formatearFecha(movimiento.fecha),
+    sortAccessor: (movimiento) => (movimiento.fecha ? new Date(movimiento.fecha).getTime() : null),
+    searchAccessor: (movimiento) => [
+      formatearFecha(movimiento.fecha),
+      movimiento.fecha ? new Date(movimiento.fecha).toISOString().slice(0, 10) : ''
+    ].join(' ')
+  },
   { id: 'tipoMovimiento', label: 'Tipo', accessor: (movimiento) => movimiento.tipoMovimiento },
   { id: 'naturaleza', label: 'Naturaleza', accessor: (movimiento) => movimiento.naturaleza },
   { id: 'categoria', label: 'Categoria', accessor: (movimiento) => movimiento.categoria },
   { id: 'descripcion', label: 'Descripcion', accessor: (movimiento) => movimiento.descripcion },
-  { id: 'monto', label: 'Monto', accessor: formatearMonto },
+  {
+    id: 'monto',
+    label: 'Monto',
+    accessor: formatearMonto,
+    sortAccessor: (movimiento) => movimiento.monto ?? null,
+    searchAccessor: (movimiento) => `${formatearMonto(movimiento)} ${movimiento.monto ?? ''}`
+  },
   { id: 'moneda', label: 'Moneda', accessor: (movimiento) => movimiento.moneda || 'CRC' },
   { id: 'proveedor', label: 'Proveedor/Lugar', accessor: (movimiento) => movimiento.proveedor },
   { id: 'observaciones', label: 'Observaciones', accessor: (movimiento) => movimiento.observaciones }

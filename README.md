@@ -41,3 +41,17 @@ Frontend: copia `frontend/.env.example` como `frontend/.env`.
 ## Seguridad
 
 No subir archivos `.env` al repositorio. Configurar las variables reales directamente en Vercel, Render y MongoDB Atlas.
+
+## Correos
+
+El backend esta preparado para enviar correos con Resend.
+
+Variables necesarias en Render:
+
+```env
+RESEND_API_KEY=
+EMAIL_FROM=Ganaderia Romilio <onboarding@resend.dev>
+EMAIL_ADMIN=
+```
+
+Los avisos administrativos se envian a todos los usuarios con rol `Administrador`. `EMAIL_ADMIN` queda como respaldo si no hay administradores registrados.

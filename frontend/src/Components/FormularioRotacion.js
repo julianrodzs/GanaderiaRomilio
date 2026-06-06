@@ -30,6 +30,9 @@ const normalizarRotacion = (rotacion) => ({
   numeroAnimales: rotacion?.numeroAnimales ?? ''
 });
 
+const numeroOpcional = (valor) => (valor === '' || valor === null || valor === undefined ? null : Number(valor));
+const fechaOpcional = (valor) => (valor ? valor : null);
+
 const FormularioRotacion = ({
   rotacionInicial,
   potreros,
@@ -57,8 +60,8 @@ const FormularioRotacion = ({
 
     onGuardar({
       ...formulario,
-      fechaSalida: formulario.fechaSalida || undefined,
-      numeroAnimales: formulario.numeroAnimales ? Number(formulario.numeroAnimales) : undefined
+      fechaSalida: fechaOpcional(formulario.fechaSalida),
+      numeroAnimales: numeroOpcional(formulario.numeroAnimales)
     });
   };
 

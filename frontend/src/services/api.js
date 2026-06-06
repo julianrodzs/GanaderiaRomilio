@@ -181,6 +181,30 @@ export const eliminarPlanSanitario = (id) => {
   });
 };
 
+export const obtenerRegistrosReproductivos = () => request('/reproduccion');
+
+export const crearRegistroReproductivo = (registro) => {
+  return request('/reproduccion', {
+    method: 'POST',
+    body: JSON.stringify(registro)
+  });
+};
+
+export const actualizarRegistroReproductivo = (id, registro) => {
+  return request(`/reproduccion/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(registro)
+  });
+};
+
+export const eliminarRegistroReproductivo = (id) => {
+  return request(`/reproduccion/${id}`, {
+    method: 'DELETE'
+  });
+};
+
+export const obtenerRegistrosReproductivosPorAnimal = (animalId) => request(`/reproduccion/animal/${animalId}`);
+
 export const procesarConteoDrone = ({ imagen, potrero, cantidadEsperada, observaciones }) => {
   const formData = new FormData();
   formData.append('imagen', imagen);

@@ -24,6 +24,7 @@ const formatearFrecuencia = (plan) => {
 
 const columnas = [
   { id: 'grupoGanado', label: 'Grupo', accessor: (plan) => plan.grupoGanado },
+  { id: 'animalDiio', label: 'DIIO', accessor: (plan) => plan.animalDiio },
   { id: 'actividad', label: 'Actividad', accessor: (plan) => plan.actividad },
   { id: 'producto', label: 'Producto', accessor: (plan) => plan.producto },
   {

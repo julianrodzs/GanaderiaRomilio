@@ -7,8 +7,15 @@ import ImportarExcel from './ImportarExcel';
 import Navegacion from './Navegacion';
 import PlanSanitario from './PlanSanitario';
 import Potreros from './Potreros';
+import Reproduccion from './Reproduccion';
 import Reportes from './Reportes';
-import { obtenerAnimales, obtenerPlanesSanitarios, obtenerPotreros, obtenerResumenFinanciero } from '../services/api';
+import {
+  obtenerAnimales,
+  obtenerPlanesSanitarios,
+  obtenerPotreros,
+  obtenerRegistrosReproductivos,
+  obtenerResumenFinanciero
+} from '../services/api';
 
 const ListaUsuario = ({ usuario, onLogout }) => {
   const [vistaActiva, setVistaActiva] = useState('Dashboard');
@@ -16,18 +23,24 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     animales: 0,
     potreros: 0,
     alertasSanidad: 0,
+    alertasReproduccion: 0,
     hembras: 0,
     machos: 0,
-    gastosMes: 0
+    gastosMes: 0,
+    potrerosDescanso: 0,
+    proximasSanidad: 0,
+    vencidasSanidad: 0,
+    listasMonta: 0
   });
 
   useEffect(() => {
     const cargarMetricas = async () => {
       try {
-        const [animales, potreros, planes, resumenFinanciero] = await Promise.all([
+        const [animales, potreros, planes, reproduccion, resumenFinanciero] = await Promise.all([
           obtenerAnimales(),
           obtenerPotreros(),
           obtenerPlanesSanitarios(),
+          obtenerRegistrosReproductivos(),
           obtenerResumenFinanciero()
         ]);
 
@@ -35,9 +48,18 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           animales: animales.length,
           potreros: potreros.length,
           alertasSanidad: planes.filter((plan) => ['Vencido', 'Próximo'].includes(plan.estado)).length,
+          alertasReproduccion: reproduccion.filter((registro) => [
+            'Próxima a parto',
+            'Lista para monta',
+            'Destete próximo'
+          ].includes(registro.estado)).length,
           hembras: animales.filter((animal) => animal.sexo === 'Hembra').length,
           machos: animales.filter((animal) => animal.sexo === 'Macho').length,
-          gastosMes: resumenFinanciero?.totalEgresos || 0
+          gastosMes: resumenFinanciero?.totalEgresos || 0,
+          potrerosDescanso: potreros.filter((potrero) => potrero.estado === 'Descanso').length,
+          proximasSanidad: planes.filter((plan) => plan.estado === 'Próximo').length,
+          vencidasSanidad: planes.filter((plan) => plan.estado === 'Vencido').length,
+          listasMonta: reproduccion.filter((registro) => registro.estado === 'Lista para monta').length
         });
       } catch (error) {
         console.error('Error cargando metricas del dashboard', error);
@@ -83,6 +105,15 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     );
   }
 
+  if (vistaActiva === 'Reproduccion') {
+    return (
+      <main className="dashboard-shell">
+        <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        <Reproduccion />
+      </main>
+    );
+  }
+
   if (vistaActiva === 'Finanzas' || vistaActiva === 'Costos') {
     return (
       <main className="dashboard-shell">
@@ -119,7 +150,6 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           <p className="eyebrow">Vision general de la hacienda</p>
           <h1>Buenos dias, {usuario?.nombre || 'Administrador'}</h1>
         </div>
-        <button className="boton-primario compacto" type="button">Nuevo registro</button>
       </section>
 
       <section className="metricas-grid">
@@ -131,7 +161,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
         <article className="metric-card">
           <span>Potreros activos</span>
           <strong>{metricas.potreros}</strong>
-          <small>Potreros registrados en sistema</small>
+          <small>{metricas.potrerosDescanso} en descanso</small>
         </article>
         <article className="metric-card">
           <span>Egresos registrados</span>
@@ -141,7 +171,12 @@ const ListaUsuario = ({ usuario, onLogout }) => {
         <article className="metric-card">
           <span>Alertas sanidad</span>
           <strong>{metricas.alertasSanidad}</strong>
-          <small>Planes vencidos o proximos</small>
+          <small>{metricas.vencidasSanidad} vencidas / {metricas.proximasSanidad} proximas</small>
+        </article>
+        <article className="metric-card">
+          <span>Alertas reproduccion</span>
+          <strong>{metricas.alertasReproduccion}</strong>
+          <small>{metricas.listasMonta} listas para monta</small>
         </article>
       </section>
 
@@ -155,11 +190,11 @@ const ListaUsuario = ({ usuario, onLogout }) => {
         </article>
 
         <article className="panel-alerta">
-          <p className="eyebrow">Siguiente paso</p>
-          <h2>Datos operativos</h2>
+          <p className="eyebrow">Alertas operativas</p>
+          <h2>Seguimiento diario</h2>
           <p>
-            El dashboard ya refleja inventario, potreros y alertas sanitarias
-            registradas en la base de datos.
+            Revisar sanidad próxima o vencida, vacas listas para monta,
+            partos estimados y destetes próximos antes de cerrar la jornada.
           </p>
         </article>
       </section>

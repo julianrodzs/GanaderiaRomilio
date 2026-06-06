@@ -6,6 +6,24 @@ const obtenerValor = (fila, columna) => {
   return valor;
 };
 
+const obtenerValorBusqueda = (fila, columna) => {
+  if (columna.searchAccessor) {
+    const valor = columna.searchAccessor(fila);
+    if (valor === null || valor === undefined || valor === '') return '--';
+    return valor;
+  }
+
+  return obtenerValor(fila, columna);
+};
+
+const obtenerValorOrden = (fila, columna) => {
+  if (columna.sortAccessor) {
+    return columna.sortAccessor(fila);
+  }
+
+  return obtenerValor(fila, columna);
+};
+
 const renderizarValor = (fila, columna) => {
   if (columna.render) {
     return columna.render(fila);
@@ -35,7 +53,7 @@ const TablaDinamica = ({
   const datosFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
     const porTexto = texto
-      ? datos.filter((fila) => columnas.some((columna) => String(obtenerValor(fila, columna)).toLowerCase().includes(texto)))
+      ? datos.filter((fila) => columnas.some((columna) => String(obtenerValorBusqueda(fila, columna)).toLowerCase().includes(texto)))
       : datos;
     const filtrados = porTexto.filter((fila) => filtros.every((filtro) => {
       const valorActivo = filtrosActivos[filtro.id];
@@ -47,9 +65,19 @@ const TablaDinamica = ({
     if (!columnaOrden) return filtrados;
 
     return [...filtrados].sort((a, b) => {
-      const valorA = obtenerValor(a, columnaOrden);
-      const valorB = obtenerValor(b, columnaOrden);
-      const resultado = String(valorA).localeCompare(String(valorB), 'es', { numeric: true });
+      const valorA = obtenerValorOrden(a, columnaOrden);
+      const valorB = obtenerValorOrden(b, columnaOrden);
+
+      if (valorA === null || valorA === undefined || valorA === '') return orden.direccion === 'asc' ? 1 : -1;
+      if (valorB === null || valorB === undefined || valorB === '') return orden.direccion === 'asc' ? -1 : 1;
+
+      const numeroA = Number(valorA);
+      const numeroB = Number(valorB);
+      const ambosNumericos = Number.isFinite(numeroA) && Number.isFinite(numeroB);
+      const resultado = ambosNumericos
+        ? numeroA - numeroB
+        : String(valorA).localeCompare(String(valorB), 'es', { numeric: true });
+
       return orden.direccion === 'asc' ? resultado : -resultado;
     });
   }, [busqueda, columnas, datos, filtros, filtrosActivos, orden]);

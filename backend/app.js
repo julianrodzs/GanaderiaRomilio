@@ -27,6 +27,7 @@ app.use('/api/potreros', auth, require('./routes/potrero'));
 app.use('/api/pesajes', auth, require('./routes/pesaje'));
 app.use('/api/sanidad', auth, require('./routes/sanidad'));
 app.use('/api/plan-sanitario', auth, require('./routes/planSanitario'));
+app.use('/api/reproduccion', auth, require('./routes/reproduccionRoutes'));
 app.use('/api/costos', auth, require('./routes/costo'));
 app.use('/api/finanzas', auth, require('./routes/finanza'));
 app.use('/api/rotaciones', auth, require('./routes/rotacion'));

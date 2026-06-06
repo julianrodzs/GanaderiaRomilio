@@ -3,17 +3,33 @@ import React, { useState } from 'react';
 const estadoInicial = {
   codigo: '',
   nombre: '',
+  area: '',
   capacidadMaxima: '',
   ubicacion: '',
+  ultimaAplicacionHerbicida: '',
+  ultimaChapia: '',
+  ultimaFertilizacion: '',
   estado: 'Disponible',
   observaciones: ''
+};
+
+const formatearFechaInput = (fecha) => {
+  if (!fecha) return '';
+  return new Date(fecha).toISOString().slice(0, 10);
 };
 
 const normalizarPotrero = (potrero) => ({
   ...estadoInicial,
   ...potrero,
-  capacidadMaxima: potrero?.capacidadMaxima ?? ''
+  area: potrero?.area ?? '',
+  capacidadMaxima: potrero?.capacidadMaxima ?? '',
+  ultimaAplicacionHerbicida: formatearFechaInput(potrero?.ultimaAplicacionHerbicida),
+  ultimaChapia: formatearFechaInput(potrero?.ultimaChapia),
+  ultimaFertilizacion: formatearFechaInput(potrero?.ultimaFertilizacion)
 });
+
+const numeroOpcional = (valor) => (valor === '' || valor === null || valor === undefined ? null : Number(valor));
+const fechaOpcional = (valor) => (valor ? valor : null);
 
 const FormularioPotrero = ({ onCancelar, onGuardar, guardando, error, potreroInicial, modo = 'crear' }) => {
   const [formulario, setFormulario] = useState(() => normalizarPotrero(potreroInicial));
@@ -27,7 +43,11 @@ const FormularioPotrero = ({ onCancelar, onGuardar, guardando, error, potreroIni
     evento.preventDefault();
     onGuardar({
       ...formulario,
-      capacidadMaxima: formulario.capacidadMaxima ? Number(formulario.capacidadMaxima) : undefined
+      area: numeroOpcional(formulario.area),
+      capacidadMaxima: numeroOpcional(formulario.capacidadMaxima),
+      ultimaAplicacionHerbicida: fechaOpcional(formulario.ultimaAplicacionHerbicida),
+      ultimaChapia: fechaOpcional(formulario.ultimaChapia),
+      ultimaFertilizacion: fechaOpcional(formulario.ultimaFertilizacion)
     });
   };
 
@@ -58,10 +78,17 @@ const FormularioPotrero = ({ onCancelar, onGuardar, guardando, error, potreroIni
 
         <div className="form-grid">
           <label>
+            Area
+            <input name="area" type="number" min="0" step="0.01" value={formulario.area} onChange={actualizarCampo} />
+          </label>
+
+          <label>
             Capacidad maxima
             <input name="capacidadMaxima" type="number" min="0" value={formulario.capacidadMaxima} onChange={actualizarCampo} />
           </label>
+        </div>
 
+        <div className="form-grid">
           <label>
             Estado
             <select name="estado" value={formulario.estado} onChange={actualizarCampo}>
@@ -76,6 +103,33 @@ const FormularioPotrero = ({ onCancelar, onGuardar, guardando, error, potreroIni
         <label>
           Ubicacion
           <input name="ubicacion" value={formulario.ubicacion} onChange={actualizarCampo} />
+        </label>
+
+        <div className="form-grid">
+          <label>
+            Ultima aplicacion de herbicida
+            <input
+              name="ultimaAplicacionHerbicida"
+              type="date"
+              value={formulario.ultimaAplicacionHerbicida}
+              onChange={actualizarCampo}
+            />
+          </label>
+
+          <label>
+            Ultima chapia
+            <input name="ultimaChapia" type="date" value={formulario.ultimaChapia} onChange={actualizarCampo} />
+          </label>
+        </div>
+
+        <label>
+          Ultima fertilizacion
+          <input
+            name="ultimaFertilizacion"
+            type="date"
+            value={formulario.ultimaFertilizacion}
+            onChange={actualizarCampo}
+          />
         </label>
 
         <label>
