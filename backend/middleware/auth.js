@@ -81,7 +81,20 @@ const auth = (req, res, next) => {
     }
 };
 
+const autorizarRoles = (...rolesPermitidos) => (req, res, next) => {
+    if (!req.usuario) {
+        return res.status(401).json({ mensaje: 'Token de autenticacion requerido' });
+    }
+
+    if (!rolesPermitidos.includes(req.usuario.rol)) {
+        return res.status(403).json({ mensaje: 'No tienes permisos para realizar esta accion' });
+    }
+
+    next();
+};
+
 module.exports = {
+    autorizarRoles,
     auth,
     generarToken,
     verificarToken

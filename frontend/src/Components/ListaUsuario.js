@@ -9,6 +9,7 @@ import PlanSanitario from './PlanSanitario';
 import Potreros from './Potreros';
 import Reproduccion from './Reproduccion';
 import Reportes from './Reportes';
+import Usuarios from '../pages/Usuarios';
 import {
   obtenerAnimales,
   obtenerPlanesSanitarios,
@@ -34,6 +35,11 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   });
 
   useEffect(() => {
+    if (usuario?.rol !== 'Administrador') {
+      setCargando(false);
+      return;
+    }
+
     const cargarMetricas = async () => {
       try {
         const [animales, potreros, planes, reproduccion, resumenFinanciero] = await Promise.all([
@@ -67,12 +73,33 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     };
 
     cargarMetricas();
-  }, []);
+  }, [usuario?.rol]);
+
+  const navegacion = <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} usuario={usuario} />;
+
+  if (usuario?.rol !== 'Administrador') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <section className="dashboard-hero">
+          <div>
+            <p className="eyebrow">Acceso restringido</p>
+            <h1>Sin permisos administrativos</h1>
+          </div>
+        </section>
+        <article className="panel-alerta">
+          <p className="eyebrow">Seguridad</p>
+          <h2>Cuenta sin permisos</h2>
+          <p>Por ahora la aplicacion requiere rol Administrador para acceder a los modulos operativos.</p>
+        </article>
+      </main>
+    );
+  }
 
   if (vistaActiva === 'Importar') {
     return (
       <main className="dashboard-shell">
-        <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        {navegacion}
         <ImportarExcel />
       </main>
     );
@@ -81,7 +108,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   if (vistaActiva === 'Inventario') {
     return (
       <main className="dashboard-shell">
-        <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        {navegacion}
         <Animales />
       </main>
     );
@@ -90,7 +117,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   if (vistaActiva === 'Potreros') {
     return (
       <main className="dashboard-shell">
-        <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        {navegacion}
         <Potreros />
       </main>
     );
@@ -99,7 +126,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   if (vistaActiva === 'Sanidad') {
     return (
       <main className="dashboard-shell">
-        <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        {navegacion}
         <PlanSanitario />
       </main>
     );
@@ -108,7 +135,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   if (vistaActiva === 'Reproduccion') {
     return (
       <main className="dashboard-shell">
-        <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        {navegacion}
         <Reproduccion />
       </main>
     );
@@ -117,7 +144,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   if (vistaActiva === 'Finanzas' || vistaActiva === 'Costos') {
     return (
       <main className="dashboard-shell">
-        <Navegacion vistaActiva="Finanzas" onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        <Navegacion vistaActiva="Finanzas" onCambiarVista={setVistaActiva} onLogout={onLogout} usuario={usuario} />
         <Finanzas />
       </main>
     );
@@ -126,7 +153,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   if (vistaActiva === 'Reportes') {
     return (
       <main className="dashboard-shell">
-        <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        {navegacion}
         <Reportes />
       </main>
     );
@@ -135,15 +162,24 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   if (vistaActiva === 'Drone') {
     return (
       <main className="dashboard-shell">
-        <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+        {navegacion}
         <ConteoDrone />
+      </main>
+    );
+  }
+
+  if (vistaActiva === 'Usuarios') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <Usuarios usuarioActual={usuario} />
       </main>
     );
   }
 
   return (
     <main className="dashboard-shell">
-      <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} />
+      {navegacion}
 
       <section className="dashboard-hero">
         <div>

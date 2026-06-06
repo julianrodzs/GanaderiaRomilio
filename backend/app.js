@@ -1,8 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { auth } = require('./middleware/auth');
+const { auth, autorizarRoles } = require('./middleware/auth');
 const app = express();
+const soloAdministrador = [auth, autorizarRoles('Administrador')];
 
 // configuracion
 app.set('port', process.env.PORT || 4000);
@@ -22,17 +23,17 @@ app.get('/', (req, res)=>{
 
 // rutas principales
 app.use('/api/usuarios', require('./routes/usuario'));
-app.use('/api/animales', auth, require('./routes/animal'));
-app.use('/api/potreros', auth, require('./routes/potrero'));
-app.use('/api/pesajes', auth, require('./routes/pesaje'));
-app.use('/api/sanidad', auth, require('./routes/sanidad'));
-app.use('/api/plan-sanitario', auth, require('./routes/planSanitario'));
-app.use('/api/reproduccion', auth, require('./routes/reproduccionRoutes'));
-app.use('/api/costos', auth, require('./routes/costo'));
-app.use('/api/finanzas', auth, require('./routes/finanza'));
-app.use('/api/rotaciones', auth, require('./routes/rotacion'));
-app.use('/api/reportes', auth, require('./routes/reporte'));
-app.use('/api/importar', auth, require('./routes/importar'));
-app.use('/api/conteo-drone', auth, require('./routes/conteoDroneRoutes'));
+app.use('/api/animales', soloAdministrador, require('./routes/animal'));
+app.use('/api/potreros', soloAdministrador, require('./routes/potrero'));
+app.use('/api/pesajes', soloAdministrador, require('./routes/pesaje'));
+app.use('/api/sanidad', soloAdministrador, require('./routes/sanidad'));
+app.use('/api/plan-sanitario', soloAdministrador, require('./routes/planSanitario'));
+app.use('/api/reproduccion', soloAdministrador, require('./routes/reproduccionRoutes'));
+app.use('/api/costos', soloAdministrador, require('./routes/costo'));
+app.use('/api/finanzas', soloAdministrador, require('./routes/finanza'));
+app.use('/api/rotaciones', soloAdministrador, require('./routes/rotacion'));
+app.use('/api/reportes', soloAdministrador, require('./routes/reporte'));
+app.use('/api/importar', soloAdministrador, require('./routes/importar'));
+app.use('/api/conteo-drone', soloAdministrador, require('./routes/conteoDroneRoutes'));
 
 module.exports = app;

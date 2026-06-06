@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { loginUsuario } from '../services/api';
 
-const IniciarSesion = ({ onLogin, onCambiarVista }) => {
+const IniciarSesion = ({ onLogin }) => {
   const [formulario, setFormulario] = useState({
     correo: '',
     contrasena: ''
@@ -77,9 +77,6 @@ const IniciarSesion = ({ onLogin, onCambiarVista }) => {
           {cargando ? 'Ingresando...' : 'Entrar al panel'}
         </button>
 
-        <button className="boton-link" type="button" onClick={onCambiarVista}>
-          Crear una cuenta nueva
-        </button>
       </form>
     </section>
   );

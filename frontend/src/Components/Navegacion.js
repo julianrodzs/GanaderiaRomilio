@@ -1,7 +1,8 @@
 import React from 'react';
 
-const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout }) => {
-  const items = ['Dashboard', 'Importar', 'Inventario', 'Potreros', 'Sanidad', 'Reproduccion', 'Finanzas', 'Reportes', 'Drone'];
+const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuario }) => {
+  const itemsBase = ['Dashboard', 'Importar', 'Inventario', 'Potreros', 'Sanidad', 'Reproduccion', 'Finanzas', 'Reportes', 'Drone'];
+  const items = usuario?.rol === 'Administrador' ? [...itemsBase, 'Usuarios'] : ['Dashboard'];
 
   return (
     <header className="app-header">

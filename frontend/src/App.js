@@ -1,7 +1,6 @@
 
 import './App.css';
 import { useEffect, useState } from 'react';
-import Crearusuario from './Components/Crearusuario';
 import IniciarSesion from './Components/IniciarSesion';
 import ListaUsuario from './Components/ListaUsuario';
 import { obtenerPerfilUsuario } from './services/api';
@@ -67,12 +66,6 @@ function App() {
     setVista('login');
   };
 
-  const usuarioCreado = (usuario) => {
-    const correo = usuario?.correo ? ` (${usuario.correo})` : '';
-    setMensaje(`Usuario creado correctamente${correo}. Ahora puedes iniciar sesion.`);
-    setVista('login');
-  };
-
   if (validandoSesion) {
     return (
       <div className="auth-page">
@@ -92,19 +85,9 @@ function App() {
       {vista === 'login' ? (
         <IniciarSesion
           onLogin={iniciarSesion}
-          onCambiarVista={() => {
-            setMensaje('');
-            setVista('registro');
-          }}
         />
       ) : (
-        <Crearusuario
-          onUsuarioCreado={usuarioCreado}
-          onCambiarVista={() => {
-            setMensaje('');
-            setVista('login');
-          }}
-        />
+        <IniciarSesion onLogin={iniciarSesion} />
       )}
     </div>
   );

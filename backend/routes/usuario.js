@@ -1,31 +1,36 @@
-const {Router} = require('express');
+const { Router } = require('express');
 const router = Router();
-const { auth } = require('../middleware/auth');
+const { auth, autorizarRoles } = require('../middleware/auth');
 
 const {
-    getUsuarios,
-    createUsuario,
-    getUsuario,
-    deleteUsuario,
-    updateUsuario,
-    loginUsuario,
+    actualizarUsuario,
+    cambiarEstadoUsuario,
+    crearUsuario,
+    eliminarUsuario,
     getPerfil,
-    solicitarRecuperacionContrasena,
-    restablecerContrasena
+    getUsuarioById,
+    getUsuarios,
+    loginUsuario,
+    restablecerContrasena,
+    solicitarRecuperacionContrasena
 } = require('../controllers/usuario-controller');
 
-router.route('/')
-    .get(auth, getUsuarios)
-    .post(createUsuario)
+const soloAdministrador = [auth, autorizarRoles('Administrador')];
 
 router.post('/login', loginUsuario);
 router.post('/recuperar-contrasena', solicitarRecuperacionContrasena);
 router.post('/restablecer-contrasena', restablecerContrasena);
 router.get('/perfil', auth, getPerfil);
 
+router.route('/')
+    .get(soloAdministrador, getUsuarios)
+    .post(soloAdministrador, crearUsuario);
+
+router.patch('/:id/estado', soloAdministrador, cambiarEstadoUsuario);
+
 router.route('/:id')
-    .get(auth, getUsuario)
-    .put(auth, updateUsuario)
-    .delete(auth, deleteUsuario)
+    .get(soloAdministrador, getUsuarioById)
+    .put(soloAdministrador, actualizarUsuario)
+    .delete(soloAdministrador, eliminarUsuario);
 
 module.exports = router;

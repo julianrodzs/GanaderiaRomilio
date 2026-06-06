@@ -66,6 +66,28 @@ export const crearUsuario = (usuario) => {
 
 export const obtenerPerfilUsuario = () => request('/usuarios/perfil');
 
+export const obtenerUsuarios = () => request('/usuarios');
+
+export const actualizarUsuario = (id, usuario) => {
+  return request(`/usuarios/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(usuario)
+  });
+};
+
+export const cambiarEstadoUsuario = (id, estado) => {
+  return request(`/usuarios/${id}/estado`, {
+    method: 'PATCH',
+    body: JSON.stringify({ estado })
+  });
+};
+
+export const eliminarUsuario = (id) => {
+  return request(`/usuarios/${id}`, {
+    method: 'DELETE'
+  });
+};
+
 export const previsualizarExcel = (archivo) => {
   const formData = new FormData();
   formData.append('archivo', archivo);

@@ -1170,6 +1170,14 @@
   width: min(100%, 760px);
 }
 
+.usuario-modal {
+  width: min(100%, 820px);
+}
+
+.acciones-tabla-amplia {
+  min-width: 126px;
+}
+
 .detalle-animal-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
