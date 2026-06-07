@@ -12,7 +12,23 @@ const estadoInicial = {
 
 const formatearFechaInput = (fecha) => {
   if (!fecha) return '';
-  return new Date(fecha).toISOString().slice(0, 10);
+  const fechaObj = new Date(fecha);
+  if (Number.isNaN(fechaObj.getTime())) return '';
+  return fechaObj.toISOString().slice(0, 10);
+};
+
+const sumarDiasInput = (fecha, dias) => {
+  if (!fecha) return '';
+  const fechaObj = new Date(`${fecha}T00:00:00.000Z`);
+  fechaObj.setUTCDate(fechaObj.getUTCDate() + dias);
+  return fechaObj.toISOString().slice(0, 10);
+};
+
+const sumarMesesInput = (fecha, meses) => {
+  if (!fecha) return '';
+  const fechaObj = new Date(`${fecha}T00:00:00.000Z`);
+  fechaObj.setUTCMonth(fechaObj.getUTCMonth() + meses);
+  return fechaObj.toISOString().slice(0, 10);
 };
 
 const obtenerAnimalId = (animal) => {
@@ -62,7 +78,20 @@ const FormularioReproduccion = ({
 
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
-    setFormulario((actual) => ({ ...actual, [name]: value }));
+    setFormulario((actual) => {
+      const actualizado = { ...actual, [name]: value };
+
+      if (name === 'fechaMonta' && value && !actual.fechaPartoEstimada) {
+        actualizado.fechaPartoEstimada = sumarDiasInput(value, 283);
+      }
+
+      if (name === 'fechaPartoReal') {
+        actualizado.fechaListaMonta = value ? sumarDiasInput(value, 60) : '';
+        actualizado.fechaDestete = value ? sumarMesesInput(value, 7) : '';
+      }
+
+      return actualizado;
+    });
   };
 
   const enviarFormulario = (evento) => {

@@ -1,5 +1,8 @@
 const { Router } = require('express');
 const router = Router();
+const { autorizarRoles } = require('../middleware/auth');
+const puedeVer = autorizarRoles('Administrador', 'Encargado');
+const soloAdministrador = autorizarRoles('Administrador');
 
 const {
     getPotreros,
@@ -10,12 +13,12 @@ const {
 } = require('../controllers/potrero-controller');
 
 router.route('/')
-    .get(getPotreros)
-    .post(createPotrero);
+    .get(puedeVer, getPotreros)
+    .post(soloAdministrador, createPotrero);
 
 router.route('/:id')
-    .get(getPotrero)
-    .put(updatePotrero)
-    .delete(deletePotrero);
+    .get(puedeVer, getPotrero)
+    .put(soloAdministrador, updatePotrero)
+    .delete(soloAdministrador, deletePotrero);
 
 module.exports = router;

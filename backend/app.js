@@ -23,15 +23,16 @@ app.get('/', (req, res)=>{
 
 // rutas principales
 app.use('/api/usuarios', require('./routes/usuario'));
-app.use('/api/animales', soloAdministrador, require('./routes/animal'));
-app.use('/api/potreros', soloAdministrador, require('./routes/potrero'));
+app.use('/api/tareas', require('./routes/tareaRoutes'));
+app.use('/api/animales', auth, require('./routes/animal'));
+app.use('/api/potreros', auth, require('./routes/potrero'));
 app.use('/api/pesajes', soloAdministrador, require('./routes/pesaje'));
 app.use('/api/sanidad', soloAdministrador, require('./routes/sanidad'));
 app.use('/api/plan-sanitario', soloAdministrador, require('./routes/planSanitario'));
-app.use('/api/reproduccion', soloAdministrador, require('./routes/reproduccionRoutes'));
+app.use('/api/reproduccion', auth, require('./routes/reproduccionRoutes'));
 app.use('/api/costos', soloAdministrador, require('./routes/costo'));
 app.use('/api/finanzas', soloAdministrador, require('./routes/finanza'));
-app.use('/api/rotaciones', soloAdministrador, require('./routes/rotacion'));
+app.use('/api/rotaciones', auth, require('./routes/rotacion'));
 app.use('/api/reportes', soloAdministrador, require('./routes/reporte'));
 app.use('/api/importar', soloAdministrador, require('./routes/importar'));
 app.use('/api/conteo-drone', soloAdministrador, require('./routes/conteoDroneRoutes'));

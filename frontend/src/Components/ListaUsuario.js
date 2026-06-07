@@ -10,13 +10,31 @@ import Potreros from './Potreros';
 import Reproduccion from './Reproduccion';
 import Reportes from './Reportes';
 import Usuarios from '../pages/Usuarios';
+import Tareas from '../pages/Tareas';
 import {
   obtenerAnimales,
   obtenerPlanesSanitarios,
   obtenerPotreros,
+  obtenerProductividadCria,
   obtenerRegistrosReproductivos,
   obtenerResumenFinanciero
 } from '../services/api';
+
+const obtenerRangoAnioActual = () => {
+  const anio = new Date().getFullYear();
+  return {
+    fechaInicio: `${anio}-01-01`,
+    fechaFin: `${anio}-12-31`
+  };
+};
+
+const obtenerNivelIpg = (ipg) => {
+  if (ipg >= 95) return 'excelente';
+  if (ipg >= 85) return 'muy-bueno';
+  if (ipg >= 75) return 'bueno';
+  if (ipg >= 60) return 'regular';
+  return 'deficiente';
+};
 
 const ListaUsuario = ({ usuario, onLogout }) => {
   const [vistaActiva, setVistaActiva] = useState('Dashboard');
@@ -31,23 +49,25 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     potrerosDescanso: 0,
     proximasSanidad: 0,
     vencidasSanidad: 0,
-    listasMonta: 0
+    listasMonta: 0,
+    ipg: 0,
+    clasificacionIpg: 'Deficiente'
   });
 
   useEffect(() => {
     if (usuario?.rol !== 'Administrador') {
-      setCargando(false);
       return;
     }
 
     const cargarMetricas = async () => {
       try {
-        const [animales, potreros, planes, reproduccion, resumenFinanciero] = await Promise.all([
+        const [animales, potreros, planes, reproduccion, resumenFinanciero, productividad] = await Promise.all([
           obtenerAnimales(),
           obtenerPotreros(),
           obtenerPlanesSanitarios(),
           obtenerRegistrosReproductivos(),
-          obtenerResumenFinanciero()
+          obtenerResumenFinanciero(),
+          obtenerProductividadCria(obtenerRangoAnioActual())
         ]);
 
         setMetricas({
@@ -65,7 +85,9 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           potrerosDescanso: potreros.filter((potrero) => potrero.estado === 'Descanso').length,
           proximasSanidad: planes.filter((plan) => plan.estado === 'Próximo').length,
           vencidasSanidad: planes.filter((plan) => plan.estado === 'Vencido').length,
-          listasMonta: reproduccion.filter((registro) => registro.estado === 'Lista para monta').length
+          listasMonta: reproduccion.filter((registro) => registro.estado === 'Lista para monta').length,
+          ipg: productividad?.ipg || 0,
+          clasificacionIpg: productividad?.clasificacion || 'Deficiente'
         });
       } catch (error) {
         console.error('Error cargando metricas del dashboard', error);
@@ -78,20 +100,37 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   const navegacion = <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} usuario={usuario} />;
 
   if (usuario?.rol !== 'Administrador') {
+    if (vistaActiva === 'Inventario') {
+      return (
+        <main className="dashboard-shell">
+          {navegacion}
+          <Animales soloLectura />
+        </main>
+      );
+    }
+
+    if (vistaActiva === 'Potreros') {
+      return (
+        <main className="dashboard-shell">
+          {navegacion}
+          <Potreros soloLectura />
+        </main>
+      );
+    }
+
+    if (vistaActiva === 'Gestación' || vistaActiva === 'Reproduccion') {
+      return (
+        <main className="dashboard-shell">
+          {navegacion}
+          <Reproduccion soloLectura />
+        </main>
+      );
+    }
+
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <section className="dashboard-hero">
-          <div>
-            <p className="eyebrow">Acceso restringido</p>
-            <h1>Sin permisos administrativos</h1>
-          </div>
-        </section>
-        <article className="panel-alerta">
-          <p className="eyebrow">Seguridad</p>
-          <h2>Cuenta sin permisos</h2>
-          <p>Por ahora la aplicacion requiere rol Administrador para acceder a los modulos operativos.</p>
-        </article>
+        <Tareas usuario={usuario} />
       </main>
     );
   }
@@ -177,6 +216,15 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     );
   }
 
+  if (vistaActiva === 'Tareas') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <Tareas usuario={usuario} />
+      </main>
+    );
+  }
+
   return (
     <main className="dashboard-shell">
       {navegacion}
@@ -232,6 +280,11 @@ const ListaUsuario = ({ usuario, onLogout }) => {
             Revisar sanidad próxima o vencida, vacas listas para monta,
             partos estimados y destetes próximos antes de cerrar la jornada.
           </p>
+          <div className={`dashboard-ipg-card ipg-fondo-${obtenerNivelIpg(metricas.ipg)}`}>
+            <span>IPG</span>
+            <strong>{metricas.ipg}</strong>
+            <small>{metricas.clasificacionIpg}</small>
+          </div>
         </article>
       </section>
     </main>

@@ -1,8 +1,9 @@
 import React from 'react';
 
 const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuario }) => {
-  const itemsBase = ['Dashboard', 'Importar', 'Inventario', 'Potreros', 'Sanidad', 'Reproduccion', 'Finanzas', 'Reportes', 'Drone'];
-  const items = usuario?.rol === 'Administrador' ? [...itemsBase, 'Usuarios'] : ['Dashboard'];
+  const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Potreros', 'Sanidad', 'Reproduccion', 'Finanzas', 'Reportes', 'Drone'];
+  const items = usuario?.rol === 'Administrador' ? [...itemsBase, 'Usuarios'] : ['Mis tareas', 'Inventario', 'Potreros', 'Gestación'];
+  const esItemActivo = (item) => item === vistaActiva || (usuario?.rol !== 'Administrador' && item === 'Mis tareas' && vistaActiva === 'Dashboard');
 
   return (
     <header className="app-header">
@@ -15,7 +16,7 @@ const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuar
         {items.map((item) => (
           <button
             key={item}
-            className={item === vistaActiva ? 'nav-item activo' : 'nav-item'}
+            className={esItemActivo(item) ? 'nav-item activo' : 'nav-item'}
             type="button"
             onClick={() => onCambiarVista?.(item)}
           >

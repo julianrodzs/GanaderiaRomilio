@@ -27,12 +27,33 @@ const diasHasta = (fecha) => {
     if (!fecha) return undefined;
 
     const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-
     const objetivo = new Date(fecha);
-    objetivo.setHours(0, 0, 0, 0);
+    const hoyUtc = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    const objetivoUtc = Date.UTC(objetivo.getUTCFullYear(), objetivo.getUTCMonth(), objetivo.getUTCDate());
 
-    return Math.ceil((objetivo.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.ceil((objetivoUtc - hoyUtc) / (1000 * 60 * 60 * 24));
+};
+
+const esFechaValida = (fecha) => {
+    if (!fecha) return false;
+    return !Number.isNaN(new Date(fecha).getTime());
+};
+
+const esHoyOAnterior = (fecha) => {
+    const dias = diasHasta(fecha);
+    return dias !== undefined && dias <= 0;
+};
+
+const fechasMismoDia = (fechaA, fechaB) => {
+    if (!fechaA && !fechaB) return true;
+    if (!fechaA || !fechaB) return false;
+
+    const a = new Date(fechaA);
+    const b = new Date(fechaB);
+
+    return a.getUTCFullYear() === b.getUTCFullYear()
+        && a.getUTCMonth() === b.getUTCMonth()
+        && a.getUTCDate() === b.getUTCDate();
 };
 
 const calcularEstadoReproductivo = ({
@@ -46,15 +67,15 @@ const calcularEstadoReproductivo = ({
     const diasParaListaMonta = diasHasta(fechaListaMonta);
     const diasParaDestete = diasHasta(fechaDestete);
 
-    if (fechaListaMonta && diasParaListaMonta <= 0) {
-        return 'Lista para monta';
-    }
+    if (fechaPartoReal && esHoyOAnterior(fechaPartoReal)) {
+        if (fechaListaMonta && diasParaListaMonta <= 0) {
+            return 'Lista para monta';
+        }
 
-    if (fechaDestete && diasParaDestete <= 15) {
-        return 'Destete próximo';
-    }
+        if (fechaDestete && diasParaDestete <= 15) {
+            return 'Destete próximo';
+        }
 
-    if (fechaPartoReal) {
         return 'Parida';
     }
 
@@ -62,7 +83,7 @@ const calcularEstadoReproductivo = ({
         return 'Próxima a parto';
     }
 
-    if (fechaMonta) {
+    if (fechaMonta || fechaPartoEstimada) {
         return 'Gestante';
     }
 
@@ -89,16 +110,16 @@ const registroReproductivoSchema = new Schema(
     }
 );
 
-const completarFechasYEstado = (datos) => {
+const completarFechasYEstado = (datos, opciones = {}) => {
     if (datos.fechaMonta && !datos.fechaPartoEstimada) {
         datos.fechaPartoEstimada = sumarDias(datos.fechaMonta, 283);
     }
 
-    if (datos.fechaPartoReal && !datos.fechaListaMonta) {
+    if (datos.fechaPartoReal && (opciones.recalcularDesdePartoReal || !datos.fechaListaMonta)) {
         datos.fechaListaMonta = sumarDias(datos.fechaPartoReal, 60);
     }
 
-    if (datos.fechaPartoReal && !datos.fechaDestete) {
+    if (datos.fechaPartoReal && (opciones.recalcularDesdePartoReal || !datos.fechaDestete)) {
         datos.fechaDestete = sumarMeses(datos.fechaPartoReal, 7);
     }
 
@@ -118,8 +139,12 @@ registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesD
         ...(actual || {}),
         ...datosUpdate
     };
+    const fechaPartoRealCambio = datosUpdate.fechaPartoReal !== undefined
+        && !fechasMismoDia(actual?.fechaPartoReal, datos.fechaPartoReal);
 
-    completarFechasYEstado(datos);
+    completarFechasYEstado(datos, {
+        recalcularDesdePartoReal: fechaPartoRealCambio && esFechaValida(datos.fechaPartoReal)
+    });
 
     datosUpdate.fechaPartoEstimada = datos.fechaPartoEstimada;
     datosUpdate.fechaListaMonta = datos.fechaListaMonta;

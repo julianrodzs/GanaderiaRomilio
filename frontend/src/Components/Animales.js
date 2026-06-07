@@ -96,7 +96,7 @@ const filtros = [
   { id: 'estado', accessor: (animal) => animal.estado }
 ];
 
-const Animales = () => {
+const Animales = ({ soloLectura = false }) => {
   const [animales, setAnimales] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -197,9 +197,10 @@ const Animales = () => {
         error={error}
         filtros={filtros}
         textoAgregar="Nuevo animal"
-        onAgregar={abrirNuevoAnimal}
-        onEditar={abrirEdicionAnimal}
-        onEliminar={borrarAnimal}
+        onAgregar={soloLectura ? undefined : abrirNuevoAnimal}
+        onEditar={soloLectura ? undefined : abrirEdicionAnimal}
+        onEliminar={soloLectura ? undefined : borrarAnimal}
+        mostrarAcciones={!soloLectura}
       />
 
       {animalDetalle && (

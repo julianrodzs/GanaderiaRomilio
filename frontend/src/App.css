@@ -300,6 +300,64 @@
   color: #6e766f;
 }
 
+.metric-card-ipg {
+  border-color: transparent;
+}
+
+.metric-card-ipg span,
+.metric-card-ipg strong,
+.metric-card-ipg small {
+  color: inherit;
+}
+
+.dashboard-ipg-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  border: 1px solid transparent;
+  padding: 14px;
+}
+
+.dashboard-ipg-card span {
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.dashboard-ipg-card strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.dashboard-ipg-card small {
+  font-weight: 800;
+}
+
+.ipg-fondo-deficiente {
+  background: #ffe4df;
+  color: #8f1f19;
+}
+
+.ipg-fondo-regular {
+  background: #fff3d5;
+  color: #765000;
+}
+
+.ipg-fondo-bueno {
+  background: #e7efd7;
+  color: #25430f;
+}
+
+.ipg-fondo-muy-bueno {
+  background: #d7eadc;
+  color: #0b3b21;
+}
+
+.ipg-fondo-excelente {
+  background: #0b3b21;
+  color: #fffdf7;
+}
+
 .dashboard-content {
   display: grid;
   grid-template-columns: 1.7fr 0.9fr;
@@ -827,6 +885,108 @@
   padding-top: 22px;
 }
 
+.tareas-page {
+  display: grid;
+  gap: 18px;
+  padding-top: 22px;
+}
+
+.tarea-badge,
+.tarea-prioridad {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 86px;
+  min-height: 28px;
+  border-radius: 3px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tarea-estado-pendiente {
+  background: #fff3d5;
+  color: #8b5e00;
+}
+
+.tarea-estado-en-proceso {
+  background: #e4efff;
+  color: #1f4b8f;
+}
+
+.tarea-estado-completada {
+  background: #e5efe7;
+  color: #0b3b21;
+}
+
+.tarea-estado-cancelada {
+  background: #e8ebee;
+  color: #3c464f;
+}
+
+.tarea-estado-vencida {
+  background: #ffe4df;
+  color: #b22822;
+}
+
+.tarea-prioridad-baja {
+  background: #eef0eb;
+  color: #3c464f;
+}
+
+.tarea-prioridad-media {
+  background: #e5efe7;
+  color: #0b3b21;
+}
+
+.tarea-prioridad-alta {
+  background: #fff3d5;
+  color: #8b5e00;
+}
+
+.tarea-prioridad-urgente {
+  background: #ffe4df;
+  color: #b22822;
+}
+
+.tarea-vencida td {
+  background: #fff7f4;
+}
+
+.tarea-evidencia {
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+}
+
+.tarea-completar-card {
+  padding: 14px;
+}
+
+.tarea-comentarios {
+  display: grid;
+  gap: 10px;
+}
+
+.tarea-comentarios article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+  padding: 12px;
+}
+
+.tarea-comentarios span {
+  color: #6e766f;
+  font-size: 12px;
+}
+
+.tarea-comentarios p {
+  margin: 0;
+}
+
 .reportes-filtros {
   display: flex;
   gap: 12px;
@@ -950,6 +1110,93 @@
   gap: 12px;
 }
 
+.partos-resumen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.partos-panel-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.partos-filtros {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.partos-filtros label {
+  display: grid;
+  gap: 6px;
+  min-width: 170px;
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.partos-filtros input {
+  min-height: 42px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 0 12px;
+  background: #f8f9f5;
+  color: #09160e;
+}
+
+.partos-resumen-grid article {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+  padding: 12px;
+}
+
+.partos-resumen-grid span {
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.partos-resumen-grid strong {
+  color: #0b3b21;
+  font-size: 24px;
+}
+
+.partos-tabla table {
+  min-width: 900px;
+}
+
+.parto-celda {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 28px;
+  border-radius: 3px;
+  font-weight: 900;
+}
+
+.parto-celda-ok {
+  background: #e5efe7;
+  color: #0b3b21;
+}
+
+.parto-celda-bajo {
+  background: #fff3d5;
+  color: #8b5e00;
+}
+
+.parto-celda-revisar {
+  background: #ffe4df;
+  color: #b22822;
+}
+
 .reporte-lista-item {
   display: grid;
   gap: 4px;
@@ -968,6 +1215,91 @@
 .reporte-lista-item span,
 .reporte-vacio {
   color: #6e766f;
+}
+
+.cria-panel {
+  gap: 18px;
+}
+
+.cria-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.ipg-clasificacion {
+  min-width: 110px;
+}
+
+.ipg-deficiente {
+  background: #ffe4df;
+  color: #b22822;
+}
+
+.ipg-regular {
+  background: #fff3d5;
+  color: #8b5e00;
+}
+
+.ipg-bueno,
+.ipg-muy-bueno,
+.ipg-excelente {
+  background: #e5efe7;
+  color: #0b3b21;
+}
+
+.cria-productividad-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) repeat(2, minmax(220px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.ipg-card {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  min-height: 150px;
+  border: 1px solid #dfe3dc;
+  padding: 18px;
+}
+
+.ipg-card span {
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ipg-card strong {
+  font-size: 52px;
+  line-height: 1;
+}
+
+.ipg-card small {
+  color: inherit;
+  opacity: 0.78;
+}
+
+.cria-recomendaciones {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+  padding: 14px;
+}
+
+.cria-recomendaciones strong {
+  color: #0b3b21;
+}
+
+.cria-recomendaciones span {
+  color: #314137;
+}
+
+.finanzas-cria-metricas {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 
 .finanzas-resumen,
@@ -1174,6 +1506,43 @@
   width: min(100%, 820px);
 }
 
+.usuario-form-modal {
+  gap: 18px;
+}
+
+.usuario-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.usuario-form-grid label {
+  display: grid;
+  gap: 8px;
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.usuario-form-grid input,
+.usuario-form-grid select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 0 12px;
+  background: #f8f9f5;
+  color: #09160e;
+  outline: none;
+}
+
+.usuario-form-grid input:focus,
+.usuario-form-grid select:focus {
+  border-color: #204b32;
+  box-shadow: 0 0 0 3px rgba(32, 75, 50, 0.12);
+}
+
 .acciones-tabla-amplia {
   min-width: 126px;
 }
@@ -1268,6 +1637,7 @@
   .finanzas-resumen,
   .finanzas-subresumen,
   .reportes-grid,
+  .cria-productividad-grid,
   .conteo-drone-grid,
   .conteo-resultado {
     grid-template-columns: 1fr;
@@ -1287,6 +1657,10 @@
   }
 
   .detalle-animal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .usuario-form-grid {
     grid-template-columns: 1fr;
   }
 }

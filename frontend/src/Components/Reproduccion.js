@@ -14,7 +14,8 @@ const formatearFecha = (fecha) => {
   return new Date(fecha).toLocaleDateString('es-CR', {
     year: 'numeric',
     month: '2-digit',
-    day: '2-digit'
+    day: '2-digit',
+    timeZone: 'UTC'
   });
 };
 
@@ -40,7 +41,7 @@ const filtros = [
   { id: 'estado', accessor: (registro) => registro.estado }
 ];
 
-const Reproduccion = () => {
+const Reproduccion = ({ soloLectura = false }) => {
   const [registros, setRegistros] = useState([]);
   const [animales, setAnimales] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -146,9 +147,10 @@ const Reproduccion = () => {
       error={error}
       filtros={filtros}
       textoAgregar="Nuevo registro"
-      onAgregar={abrirNuevoRegistro}
-      onEditar={abrirEdicionRegistro}
-      onEliminar={borrarRegistro}
+      onAgregar={soloLectura ? undefined : abrirNuevoRegistro}
+      onEditar={soloLectura ? undefined : abrirEdicionRegistro}
+      onEliminar={soloLectura ? undefined : borrarRegistro}
+      mostrarAcciones={!soloLectura}
     />
   );
 };

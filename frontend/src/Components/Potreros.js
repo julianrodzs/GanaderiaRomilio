@@ -57,7 +57,7 @@ const filtrosRotaciones = [
   { id: 'estado', accessor: (rotacion) => rotacion.estado }
 ];
 
-const Potreros = () => {
+const Potreros = ({ soloLectura = false }) => {
   const [potreros, setPotreros] = useState([]);
   const [rotaciones, setRotaciones] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -241,9 +241,10 @@ const Potreros = () => {
         error={error}
         filtros={filtros}
         textoAgregar="Nuevo potrero"
-        onAgregar={abrirNuevoPotrero}
-        onEditar={abrirEdicionPotrero}
-        onEliminar={borrarPotrero}
+        onAgregar={soloLectura ? undefined : abrirNuevoPotrero}
+        onEditar={soloLectura ? undefined : abrirEdicionPotrero}
+        onEliminar={soloLectura ? undefined : borrarPotrero}
+        mostrarAcciones={!soloLectura}
       />
 
       <TablaDinamica
@@ -255,9 +256,10 @@ const Potreros = () => {
         error={error}
         filtros={filtrosRotaciones}
         textoAgregar="Nueva rotacion"
-        onAgregar={abrirNuevaRotacion}
-        onEditar={abrirEdicionRotacion}
-        onEliminar={borrarRotacion}
+        onAgregar={soloLectura ? undefined : abrirNuevaRotacion}
+        onEditar={soloLectura ? undefined : abrirEdicionRotacion}
+        onEliminar={soloLectura ? undefined : borrarRotacion}
+        mostrarAcciones={!soloLectura}
       />
     </section>
   );

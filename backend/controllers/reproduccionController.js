@@ -1,9 +1,38 @@
-const { RegistroReproductivo } = require('../models/RegistroReproductivo');
+const { RegistroReproductivo, completarFechasYEstado } = require('../models/RegistroReproductivo');
 const Animal = require('../models/Animal');
 
 const reproduccionCtrl = {};
 
 const poblarAnimal = (query) => query.populate('animal');
+
+const fechaKey = (fecha) => {
+    if (!fecha) return '';
+    return new Date(fecha).toISOString().slice(0, 10);
+};
+
+const refrescarRegistro = async (registro) => {
+    const original = {
+        estado: registro.estado,
+        fechaPartoEstimada: fechaKey(registro.fechaPartoEstimada),
+        fechaListaMonta: fechaKey(registro.fechaListaMonta),
+        fechaDestete: fechaKey(registro.fechaDestete)
+    };
+
+    completarFechasYEstado(registro);
+
+    const actualizado = {
+        estado: registro.estado,
+        fechaPartoEstimada: fechaKey(registro.fechaPartoEstimada),
+        fechaListaMonta: fechaKey(registro.fechaListaMonta),
+        fechaDestete: fechaKey(registro.fechaDestete)
+    };
+
+    if (JSON.stringify(original) !== JSON.stringify(actualizado)) {
+        await registro.save();
+    }
+
+    return registro;
+};
 
 const validarHembra = async (animalId) => {
     const animal = await Animal.findById(animalId);
@@ -21,6 +50,8 @@ const validarHembra = async (animalId) => {
 
 reproduccionCtrl.getRegistros = async (req, res) => {
     try {
+        const registrosSinPoblar = await RegistroReproductivo.find().sort({ fechaPartoEstimada: 1, createdAt: -1 });
+        await Promise.all(registrosSinPoblar.map(refrescarRegistro));
         const registros = await poblarAnimal(
             RegistroReproductivo.find().sort({ fechaPartoEstimada: 1, createdAt: -1 })
         );
@@ -51,11 +82,14 @@ reproduccionCtrl.createRegistro = async (req, res) => {
 
 reproduccionCtrl.getRegistro = async (req, res) => {
     try {
-        const registro = await poblarAnimal(RegistroReproductivo.findById(req.params.id));
+        const registroSinPoblar = await RegistroReproductivo.findById(req.params.id);
 
-        if (!registro) {
+        if (!registroSinPoblar) {
             return res.status(404).json({ mensaje: 'Registro reproductivo no encontrado' });
         }
+
+        await refrescarRegistro(registroSinPoblar);
+        const registro = await poblarAnimal(RegistroReproductivo.findById(req.params.id));
 
         res.json(registro);
     } catch (error) {
@@ -65,6 +99,8 @@ reproduccionCtrl.getRegistro = async (req, res) => {
 
 reproduccionCtrl.getRegistrosPorAnimal = async (req, res) => {
     try {
+        const registrosSinPoblar = await RegistroReproductivo.find({ animal: req.params.animalId }).sort({ fechaMonta: -1, createdAt: -1 });
+        await Promise.all(registrosSinPoblar.map(refrescarRegistro));
         const registros = await poblarAnimal(
             RegistroReproductivo.find({ animal: req.params.animalId }).sort({ fechaMonta: -1, createdAt: -1 })
         );

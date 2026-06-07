@@ -88,6 +88,69 @@ export const eliminarUsuario = (id) => {
   });
 };
 
+export const obtenerTareas = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/tareas${query ? `?${query}` : ''}`);
+};
+
+export const obtenerMisTareas = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/tareas/mis-tareas${query ? `?${query}` : ''}`);
+};
+
+export const crearTarea = (tarea) => {
+  return request('/tareas', {
+    method: 'POST',
+    body: JSON.stringify(tarea)
+  });
+};
+
+export const actualizarTarea = (id, tarea) => {
+  return request(`/tareas/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(tarea)
+  });
+};
+
+export const cambiarEstadoTarea = (id, estado) => {
+  return request(`/tareas/${id}/estado`, {
+    method: 'PATCH',
+    body: JSON.stringify({ estado })
+  });
+};
+
+export const completarTarea = ({ id, observaciones, evidencia }) => {
+  const formData = new FormData();
+  if (observaciones) formData.append('observaciones', observaciones);
+  if (evidencia) formData.append('evidencia', evidencia);
+
+  return request(`/tareas/${id}/completar`, {
+    method: 'PATCH',
+    body: formData
+  });
+};
+
+export const agregarComentarioTarea = (id, texto) => {
+  return request(`/tareas/${id}/comentarios`, {
+    method: 'POST',
+    body: JSON.stringify({ texto })
+  });
+};
+
+export const eliminarTarea = (id) => {
+  return request(`/tareas/${id}`, {
+    method: 'DELETE'
+  });
+};
+
 export const previsualizarExcel = (archivo) => {
   const formData = new FormData();
   formData.append('archivo', archivo);
@@ -268,13 +331,32 @@ export const eliminarMovimientoFinanciero = (id) => {
   });
 };
 
-export const obtenerResumenReportes = ({ fechaInicio, fechaFin } = {}) => {
+export const obtenerResumenReportes = ({ fechaInicio, fechaFin, diio } = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  if (diio) params.append('diio', diio);
+  const query = params.toString();
+
+  return request(`/reportes/resumen${query ? `?${query}` : ''}`);
+};
+
+export const obtenerProductividadCria = ({ fechaInicio, fechaFin } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
   const query = params.toString();
 
-  return request(`/reportes/resumen${query ? `?${query}` : ''}`);
+  return request(`/reportes/productividad${query ? `?${query}` : ''}`);
+};
+
+export const obtenerFinanzasCria = ({ fechaInicio, fechaFin } = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  const query = params.toString();
+
+  return request(`/reportes/finanzas-cria${query ? `?${query}` : ''}`);
 };
 
 export { API_URL };

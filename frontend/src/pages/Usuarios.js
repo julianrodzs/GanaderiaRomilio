@@ -250,7 +250,7 @@ const Usuarios = ({ usuarioActual }) => {
 
       {modoFormulario && (
         <div className="modal-backdrop">
-          <form className="modal-panel usuario-modal" onSubmit={guardarUsuario}>
+          <form className="modal-panel usuario-modal usuario-form-modal" onSubmit={guardarUsuario}>
             <div className="panel-title">
               <div>
                 <p className="eyebrow">Usuarios</p>
@@ -261,7 +261,7 @@ const Usuarios = ({ usuarioActual }) => {
 
             {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
 
-            <div className="form-grid">
+            <div className="usuario-form-grid">
               <label>
                 Nombre
                 <input name="nombre" value={formulario.nombre} onChange={actualizarCampo} required />
@@ -271,19 +271,17 @@ const Usuarios = ({ usuarioActual }) => {
                 Apellido
                 <input name="apellido" value={formulario.apellido} onChange={actualizarCampo} />
               </label>
-            </div>
 
-            <label>
-              Correo
-              <input name="correo" type="email" value={formulario.correo} onChange={actualizarCampo} required />
-            </label>
+              <label>
+                Correo
+                <input name="correo" type="email" value={formulario.correo} onChange={actualizarCampo} required />
+              </label>
 
-            <label>
-              Telefono
-              <input name="telefono" value={formulario.telefono} onChange={actualizarCampo} />
-            </label>
+              <label>
+                Telefono
+                <input name="telefono" value={formulario.telefono} onChange={actualizarCampo} />
+              </label>
 
-            <div className="form-grid">
               <label>
                 Rol
                 <select name="rol" value={formulario.rol} onChange={actualizarCampo}>
@@ -297,9 +295,7 @@ const Usuarios = ({ usuarioActual }) => {
                   {estados.map((estado) => <option key={estado} value={estado}>{estado}</option>)}
                 </select>
               </label>
-            </div>
 
-            <div className="form-grid">
               <label>
                 Contrasena
                 <input
