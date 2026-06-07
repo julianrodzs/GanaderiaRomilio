@@ -14,7 +14,7 @@ const refrescarRegistro = async (registro) => {
     const original = {
         estado: registro.estado,
         fechaPartoEstimada: fechaKey(registro.fechaPartoEstimada),
-        fechaListaMonta: fechaKey(registro.fechaListaMonta),
+        fechaProximoCelo: fechaKey(registro.fechaProximoCelo),
         fechaDestete: fechaKey(registro.fechaDestete)
     };
 
@@ -23,7 +23,7 @@ const refrescarRegistro = async (registro) => {
     const actualizado = {
         estado: registro.estado,
         fechaPartoEstimada: fechaKey(registro.fechaPartoEstimada),
-        fechaListaMonta: fechaKey(registro.fechaListaMonta),
+        fechaProximoCelo: fechaKey(registro.fechaProximoCelo),
         fechaDestete: fechaKey(registro.fechaDestete)
     };
 

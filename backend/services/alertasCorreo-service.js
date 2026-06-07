@@ -159,15 +159,16 @@ const obtenerAlertasReproduccion = async () => {
         const animal = registro.animal;
         const animalNombre = obtenerNombreAnimal(animal);
 
-        const fechaListaMonta = datos.fechaListaMonta;
-        if (fechaListaMonta && diasHasta(fechaListaMonta) <= 0) {
-            const clave = `reproduccion-lista-monta:${registro._id}`;
+        const fechaProximoCelo = datos.fechaProximoCelo;
+        const diasProximoCelo = diasHasta(fechaProximoCelo);
+        if (fechaProximoCelo && diasProximoCelo !== null && diasProximoCelo >= 0 && diasProximoCelo <= 7) {
+            const clave = `reproduccion-proximo-celo:${registro._id}`;
             const revision = await debeEnviarAlerta({
                 clave,
-                tipo: 'Lista para monta',
+                tipo: 'Próximo celo estimado',
                 referenciaModelo: 'RegistroReproductivo',
                 referenciaId: registro._id,
-                fechaObjetivo: fechaListaMonta,
+                fechaObjetivo: fechaProximoCelo,
                 frecuenciaDias: 1
             });
 
@@ -175,11 +176,11 @@ const obtenerAlertasReproduccion = async () => {
                 alertas.push({
                     ...revision.datosEstado,
                     categoria: 'Reproducción',
-                    estadoAlerta: 'Lista para monta',
-                    asunto: 'Alertas de reproducción: lista para monta',
-                    detalle: `${animalNombre} ya está lista para monta`,
-                    fecha: fechaListaMonta,
-                    dias: diasHasta(fechaListaMonta)
+                    estadoAlerta: 'Próximo celo estimado',
+                    asunto: 'Alertas de reproducción: próximo celo estimado',
+                    detalle: `${animalNombre} tiene próximo celo estimado`,
+                    fecha: fechaProximoCelo,
+                    dias: diasProximoCelo
                 });
             }
         }

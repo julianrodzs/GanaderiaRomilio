@@ -33,7 +33,7 @@ const columnas = [
   { id: 'fechaMonta', label: 'Fecha monta', accessor: (registro) => formatearFecha(registro.fechaMonta) },
   { id: 'fechaPartoEstimada', label: 'Parto estimado', accessor: (registro) => formatearFecha(registro.fechaPartoEstimada) },
   { id: 'fechaPartoReal', label: 'Ultimo parto', accessor: (registro) => formatearFecha(registro.fechaPartoReal) },
-  { id: 'fechaListaMonta', label: 'Lista para monta', accessor: (registro) => formatearFecha(registro.fechaListaMonta) },
+  { id: 'fechaProximoCelo', label: 'Próximo celo estimado', accessor: (registro) => formatearFecha(registro.fechaProximoCelo || registro.fechaListaMonta) },
   { id: 'fechaDestete', label: 'Destete', accessor: (registro) => formatearFecha(registro.fechaDestete) }
 ];
 

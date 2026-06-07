@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   obtenerFinanzasCria,
   obtenerProductividadCria,
-  obtenerResumenReportes
+  obtenerResumenReportes,
+  obtenerSustentabilidadCria
 } from '../services/api';
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR').format(Math.round(valor || 0));
@@ -79,6 +80,7 @@ const Reportes = () => {
   const [reporte, setReporte] = useState(null);
   const [productividad, setProductividad] = useState(null);
   const [finanzasCria, setFinanzasCria] = useState(null);
+  const [sustentabilidadCria, setSustentabilidadCria] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
@@ -95,14 +97,16 @@ const Reportes = () => {
         fechaInicio: filtros.partosFechaInicio || filtros.fechaInicio,
         fechaFin: filtros.partosFechaFin || filtros.fechaFin
       };
-      const [data, productividadData, finanzasCriaData] = await Promise.all([
+      const [data, productividadData, finanzasCriaData, sustentabilidadData] = await Promise.all([
         obtenerResumenReportes(filtrosPartos),
         obtenerProductividadCria(filtrosGenerales),
-        obtenerFinanzasCria(filtrosGenerales)
+        obtenerFinanzasCria(filtrosGenerales),
+        obtenerSustentabilidadCria(filtrosGenerales)
       ]);
       setReporte(data);
       setProductividad(productividadData);
       setFinanzasCria(finanzasCriaData);
+      setSustentabilidadCria(sustentabilidadData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -284,6 +288,35 @@ const Reportes = () => {
                   <span>Patrimonio estimado</span>
                   <strong>{formatearMoneda(finanzasCria.patrimonioGanaderoEstimado)}</strong>
                   <small>Hato estimado mas inversion acumulada</small>
+                </article>
+              </div>
+            </section>
+          )}
+
+          {sustentabilidadCria && (
+            <section className="reporte-panel reporte-panel-amplio">
+              <p className="eyebrow">Sustentabilidad de cria</p>
+              <h2>Ventas menos compras y gastos operativos</h2>
+              <div className="reportes-metricas finanzas-cria-metricas">
+                <article>
+                  <span>Ventas de animales</span>
+                  <strong>{formatearMoneda(sustentabilidadCria.montoVentasAnimales)}</strong>
+                  <small>{formatearNumero(sustentabilidadCria.animalesVendidosPeriodo)} animales vendidos</small>
+                </article>
+                <article>
+                  <span>Compras de animales</span>
+                  <strong>{formatearMoneda(sustentabilidadCria.montoComprasAnimales)}</strong>
+                  <small>{formatearNumero(sustentabilidadCria.animalesCompradosPeriodo)} animales comprados</small>
+                </article>
+                <article>
+                  <span>Gastos operativos</span>
+                  <strong>{formatearMoneda(sustentabilidadCria.gastosOperativosPeriodo)}</strong>
+                  <small>Segun movimientos financieros</small>
+                </article>
+                <article className={sustentabilidadCria.margenSustentabilidad >= 0 ? 'sustentabilidad-positiva' : 'sustentabilidad-negativa'}>
+                  <span>Margen de sustentabilidad</span>
+                  <strong>{formatearMoneda(sustentabilidadCria.margenSustentabilidad)}</strong>
+                  <small>Ventas - compras - gastos operativos</small>
                 </article>
               </div>
             </section>

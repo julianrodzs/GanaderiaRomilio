@@ -1302,6 +1302,18 @@
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 
+.reportes-metricas .sustentabilidad-positiva {
+  background: #e5efe7;
+}
+
+.reportes-metricas .sustentabilidad-negativa {
+  background: #ffe4df;
+}
+
+.reportes-metricas .sustentabilidad-negativa strong {
+  color: #b22822;
+}
+
 .finanzas-resumen,
 .finanzas-subresumen {
   display: grid;

@@ -95,6 +95,22 @@ const crearFiltroPeriodo = (campo, fechaInicio, fechaFin) => {
     return filtro[campo] || {};
 };
 
+const estaFechaEnPeriodo = (fecha, fechaInicio, fechaFin) => {
+    if (!fecha) return false;
+
+    const valorFecha = new Date(fecha).getTime();
+    if (Number.isNaN(valorFecha)) return false;
+
+    if (fechaInicio && valorFecha < new Date(fechaInicio).getTime()) return false;
+    if (fechaFin) {
+        const fin = new Date(fechaFin);
+        fin.setUTCHours(23, 59, 59, 999);
+        if (valorFecha > fin.getTime()) return false;
+    }
+
+    return true;
+};
+
 const obtenerInicioPeriodo = (fechaInicio) => {
     if (fechaInicio) return new Date(fechaInicio);
 
@@ -180,6 +196,7 @@ const sumarMovimientos = (movimientos) => movimientos.reduce((total, movimiento)
 
 const calcularValorAnimal = (animal) => {
     if (animal.valorEstimado) return animal.valorEstimado;
+    if (animal.montoCompra) return animal.montoCompra;
 
     const precioKg = animal.precioEstimadoKg || animal.precioKg || animal.valorKg || 0;
     if (animal.pesoActual && precioKg) {
@@ -187,6 +204,20 @@ const calcularValorAnimal = (animal) => {
     }
 
     return 0;
+};
+
+const esMovimientoInversion = (movimiento) => {
+    return movimiento.tipoMovimiento === 'Inversion' || contieneCategoria(movimiento, categoriasInversion);
+};
+
+const esMovimientoIngreso = (movimiento) => movimiento.naturaleza === 'Ingreso';
+
+const esMovimientoGastoOperativo = (movimiento) => {
+    if (movimiento.naturaleza !== 'Egreso') return false;
+    if (esMovimientoInversion(movimiento)) return false;
+    return movimiento.tipoMovimiento === 'Planilla'
+        || movimiento.tipoMovimiento === 'Compra'
+        || contieneCategoria(movimiento, categoriasOperativas);
 };
 
 reporteCtrl.getProductividadCria = async (req, res) => {
@@ -285,24 +316,11 @@ reporteCtrl.getFinanzasCria = async (req, res) => {
             Animal.find().lean()
         ]);
 
-        const esInversion = (movimiento) => {
-            return movimiento.tipoMovimiento === 'Inversion' || contieneCategoria(movimiento, categoriasInversion);
-        };
-
-        const esIngreso = (movimiento) => movimiento.naturaleza === 'Ingreso';
-        const esGastoOperativo = (movimiento) => {
-            if (movimiento.naturaleza !== 'Egreso') return false;
-            if (esInversion(movimiento)) return false;
-            return movimiento.tipoMovimiento === 'Planilla'
-                || movimiento.tipoMovimiento === 'Compra'
-                || contieneCategoria(movimiento, categoriasOperativas);
-        };
-
         const inversionAcumulada = sumarMovimientos(movimientos.filter((movimiento) => {
-            return movimiento.naturaleza !== 'Ingreso' && esInversion(movimiento);
+            return movimiento.naturaleza !== 'Ingreso' && esMovimientoInversion(movimiento);
         }));
-        const gastosOperativosPeriodo = sumarMovimientos(movimientosPeriodo.filter(esGastoOperativo));
-        const ingresosPeriodo = sumarMovimientos(movimientosPeriodo.filter(esIngreso));
+        const gastosOperativosPeriodo = sumarMovimientos(movimientosPeriodo.filter(esMovimientoGastoOperativo));
+        const ingresosPeriodo = sumarMovimientos(movimientosPeriodo.filter(esMovimientoIngreso));
         const animalesActivos = animales.filter((animal) => !['Muerto', 'Vendido'].includes(animal.estado));
         const animalesActuales = animalesActivos.length;
         const animalesInicioPeriodo = animales.filter((animal) => {
@@ -325,6 +343,48 @@ reporteCtrl.getFinanzasCria = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener finanzas de cria', error: error.message });
+    }
+};
+
+reporteCtrl.getSustentabilidadCria = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const filtroPeriodo = crearFiltroFechas('fecha', fechaInicio, fechaFin);
+
+        const [animales, movimientosPeriodo] = await Promise.all([
+            Animal.find().lean(),
+            MovimientoFinanciero.find(filtroPeriodo).lean()
+        ]);
+
+        const comprasAnimales = animales.filter((animal) => {
+            return animal.montoCompra > 0 && estaFechaEnPeriodo(animal.fechaCompra, fechaInicio, fechaFin);
+        });
+        const ventasAnimales = animales.filter((animal) => {
+            return animal.estado === 'Vendido'
+                && animal.montoVenta > 0
+                && estaFechaEnPeriodo(animal.fechaVenta, fechaInicio, fechaFin);
+        });
+        const montoComprasAnimales = sumarMovimientos(comprasAnimales.map((animal) => ({ monto: animal.montoCompra })));
+        const montoVentasAnimales = sumarMovimientos(ventasAnimales.map((animal) => ({ monto: animal.montoVenta })));
+        const gastosOperativosPeriodo = sumarMovimientos(movimientosPeriodo.filter(esMovimientoGastoOperativo));
+        const margenSustentabilidad = montoVentasAnimales - montoComprasAnimales - gastosOperativosPeriodo;
+
+        res.json({
+            montoVentasAnimales: redondear(montoVentasAnimales),
+            montoComprasAnimales: redondear(montoComprasAnimales),
+            gastosOperativosPeriodo: redondear(gastosOperativosPeriodo),
+            margenSustentabilidad: redondear(margenSustentabilidad),
+            animalesCompradosPeriodo: comprasAnimales.length,
+            animalesVendidosPeriodo: ventasAnimales.length,
+            formula: 'ventas de animales - compras de animales - gastos operativos',
+            criterioFechas: {
+                compras: 'fechaCompra del animal',
+                ventas: 'fechaVenta del animal cuando estado es Vendido',
+                gastosOperativos: 'fecha del movimiento financiero'
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener sustentabilidad de cria', error: error.message });
     }
 };
 

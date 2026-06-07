@@ -5,21 +5,21 @@ const ESTADOS_REPRODUCTIVOS = [
     'Gestante',
     'Próxima a parto',
     'Parida',
-    'Lista para monta',
+    'Próximo celo estimado',
     'Destete próximo'
 ];
 
 const sumarDias = (fecha, dias) => {
     if (!fecha) return undefined;
     const nuevaFecha = new Date(fecha);
-    nuevaFecha.setDate(nuevaFecha.getDate() + dias);
+    nuevaFecha.setUTCDate(nuevaFecha.getUTCDate() + dias);
     return nuevaFecha;
 };
 
 const sumarMeses = (fecha, meses) => {
     if (!fecha) return undefined;
     const nuevaFecha = new Date(fecha);
-    nuevaFecha.setMonth(nuevaFecha.getMonth() + meses);
+    nuevaFecha.setUTCMonth(nuevaFecha.getUTCMonth() + meses);
     return nuevaFecha;
 };
 
@@ -39,6 +39,13 @@ const esFechaValida = (fecha) => {
     return !Number.isNaN(new Date(fecha).getTime());
 };
 
+const normalizarDiaUtc = (fecha) => {
+    if (!fecha) return null;
+    const fechaObj = new Date(fecha);
+    if (Number.isNaN(fechaObj.getTime())) return null;
+    return new Date(Date.UTC(fechaObj.getUTCFullYear(), fechaObj.getUTCMonth(), fechaObj.getUTCDate()));
+};
+
 const esHoyOAnterior = (fecha) => {
     const dias = diasHasta(fecha);
     return dias !== undefined && dias <= 0;
@@ -56,24 +63,37 @@ const fechasMismoDia = (fechaA, fechaB) => {
         && a.getUTCDate() === b.getUTCDate();
 };
 
+const calcularProximoCelo = (fechaPartoReal) => {
+    const parto = normalizarDiaUtc(fechaPartoReal);
+    if (!parto) return undefined;
+
+    const hoy = normalizarDiaUtc(new Date());
+    const proximoCelo = sumarDias(parto, 60);
+
+    while (proximoCelo < hoy) {
+        proximoCelo.setUTCDate(proximoCelo.getUTCDate() + 21);
+    }
+
+    return proximoCelo;
+};
+
 const calcularEstadoReproductivo = ({
     fechaMonta,
     fechaPartoEstimada,
     fechaPartoReal,
-    fechaListaMonta,
+    fechaProximoCelo,
     fechaDestete
 }) => {
     const diasParaParto = diasHasta(fechaPartoEstimada);
-    const diasParaListaMonta = diasHasta(fechaListaMonta);
     const diasParaDestete = diasHasta(fechaDestete);
 
     if (fechaPartoReal && esHoyOAnterior(fechaPartoReal)) {
-        if (fechaListaMonta && diasParaListaMonta <= 0) {
-            return 'Lista para monta';
-        }
-
         if (fechaDestete && diasParaDestete <= 15) {
             return 'Destete próximo';
+        }
+
+        if (fechaProximoCelo) {
+            return 'Próximo celo estimado';
         }
 
         return 'Parida';
@@ -96,6 +116,8 @@ const registroReproductivoSchema = new Schema(
         fechaMonta: { type: Date },
         fechaPartoEstimada: { type: Date },
         fechaPartoReal: { type: Date },
+        fechaProximoCelo: { type: Date },
+        // Campo legado: se mantiene para leer registros viejos, pero la UI usa fechaProximoCelo.
         fechaListaMonta: { type: Date },
         fechaDestete: { type: Date },
         estado: {
@@ -115,8 +137,10 @@ const completarFechasYEstado = (datos, opciones = {}) => {
         datos.fechaPartoEstimada = sumarDias(datos.fechaMonta, 283);
     }
 
-    if (datos.fechaPartoReal && (opciones.recalcularDesdePartoReal || !datos.fechaListaMonta)) {
-        datos.fechaListaMonta = sumarDias(datos.fechaPartoReal, 60);
+    if (datos.fechaPartoReal) {
+        datos.fechaProximoCelo = calcularProximoCelo(datos.fechaPartoReal);
+    } else if (!datos.fechaProximoCelo && datos.fechaListaMonta) {
+        datos.fechaProximoCelo = datos.fechaListaMonta;
     }
 
     if (datos.fechaPartoReal && (opciones.recalcularDesdePartoReal || !datos.fechaDestete)) {
@@ -147,7 +171,7 @@ registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesD
     });
 
     datosUpdate.fechaPartoEstimada = datos.fechaPartoEstimada;
-    datosUpdate.fechaListaMonta = datos.fechaListaMonta;
+    datosUpdate.fechaProximoCelo = datos.fechaProximoCelo;
     datosUpdate.fechaDestete = datos.fechaDestete;
     datosUpdate.estado = datos.estado;
 
@@ -161,5 +185,6 @@ registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesD
 module.exports = {
     RegistroReproductivo: model('RegistroReproductivo', registroReproductivoSchema),
     calcularEstadoReproductivo,
+    calcularProximoCelo,
     completarFechasYEstado
 };

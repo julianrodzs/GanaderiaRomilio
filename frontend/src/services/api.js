@@ -359,4 +359,13 @@ export const obtenerFinanzasCria = ({ fechaInicio, fechaFin } = {}) => {
   return request(`/reportes/finanzas-cria${query ? `?${query}` : ''}`);
 };
 
+export const obtenerSustentabilidadCria = ({ fechaInicio, fechaFin } = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  const query = params.toString();
+
+  return request(`/reportes/sustentabilidad-cria${query ? `?${query}` : ''}`);
+};
+
 export { API_URL };

@@ -63,6 +63,15 @@ const formatearPeso = (peso) => {
   return `${peso} kg`;
 };
 
+const formatearMoneda = (valor) => {
+  if (valor === null || valor === undefined || valor === '') return '--';
+  return new Intl.NumberFormat('es-CR', {
+    style: 'currency',
+    currency: 'CRC',
+    maximumFractionDigits: 0
+  }).format(valor || 0);
+};
+
 const columnas = [
   {
     id: 'diio',
@@ -254,6 +263,22 @@ const Animales = ({ soloLectura = false }) => {
               <article>
                 <span>Peso actual</span>
                 <strong>{formatearPeso(animalDetalle.pesoActual)}</strong>
+              </article>
+              <article>
+                <span>Monto compra</span>
+                <strong>{formatearMoneda(animalDetalle.montoCompra)}</strong>
+              </article>
+              <article>
+                <span>Monto venta</span>
+                <strong>{formatearMoneda(animalDetalle.montoVenta)}</strong>
+              </article>
+              <article>
+                <span>Fecha compra</span>
+                <strong>{formatearFecha(animalDetalle.fechaCompra)}</strong>
+              </article>
+              <article>
+                <span>Fecha venta</span>
+                <strong>{formatearFecha(animalDetalle.fechaVenta)}</strong>
               </article>
             </div>
 

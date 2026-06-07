@@ -5,7 +5,7 @@ const estadoInicial = {
   fechaMonta: '',
   fechaPartoEstimada: '',
   fechaPartoReal: '',
-  fechaListaMonta: '',
+  fechaProximoCelo: '',
   fechaDestete: '',
   observaciones: ''
 };
@@ -22,6 +22,20 @@ const sumarDiasInput = (fecha, dias) => {
   const fechaObj = new Date(`${fecha}T00:00:00.000Z`);
   fechaObj.setUTCDate(fechaObj.getUTCDate() + dias);
   return fechaObj.toISOString().slice(0, 10);
+};
+
+const calcularProximoCeloInput = (fechaPartoReal) => {
+  if (!fechaPartoReal) return '';
+  const hoy = new Date();
+  const hoyUtc = new Date(Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()));
+  const proximoCelo = new Date(`${fechaPartoReal}T00:00:00.000Z`);
+  proximoCelo.setUTCDate(proximoCelo.getUTCDate() + 60);
+
+  while (proximoCelo < hoyUtc) {
+    proximoCelo.setUTCDate(proximoCelo.getUTCDate() + 21);
+  }
+
+  return proximoCelo.toISOString().slice(0, 10);
 };
 
 const sumarMesesInput = (fecha, meses) => {
@@ -44,12 +58,12 @@ const normalizarRegistro = (registro) => ({
   fechaMonta: formatearFechaInput(registro?.fechaMonta),
   fechaPartoEstimada: formatearFechaInput(registro?.fechaPartoEstimada),
   fechaPartoReal: formatearFechaInput(registro?.fechaPartoReal),
-  fechaListaMonta: formatearFechaInput(registro?.fechaListaMonta),
+  fechaProximoCelo: formatearFechaInput(registro?.fechaProximoCelo || registro?.fechaListaMonta),
   fechaDestete: formatearFechaInput(registro?.fechaDestete)
 });
 
 const normalizarEnvio = (registro) => {
-  const camposFecha = ['fechaMonta', 'fechaPartoEstimada', 'fechaPartoReal', 'fechaListaMonta', 'fechaDestete'];
+  const camposFecha = ['fechaMonta', 'fechaPartoEstimada', 'fechaPartoReal', 'fechaProximoCelo', 'fechaDestete'];
 
   return Object.fromEntries(
     Object.entries(registro)
@@ -86,7 +100,7 @@ const FormularioReproduccion = ({
       }
 
       if (name === 'fechaPartoReal') {
-        actualizado.fechaListaMonta = value ? sumarDiasInput(value, 60) : '';
+        actualizado.fechaProximoCelo = value ? calcularProximoCeloInput(value) : '';
         actualizado.fechaDestete = value ? sumarMesesInput(value, 7) : '';
       }
 
@@ -142,8 +156,8 @@ const FormularioReproduccion = ({
           </label>
 
           <label>
-            Lista para monta
-            <input name="fechaListaMonta" type="date" value={formulario.fechaListaMonta} onChange={actualizarCampo} />
+            Próximo celo estimado
+            <input name="fechaProximoCelo" type="date" value={formulario.fechaProximoCelo} readOnly />
           </label>
         </div>
 

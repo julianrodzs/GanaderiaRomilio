@@ -14,6 +14,10 @@ const animalSchema = new Schema(
         pesoNacimiento: { type: Number, min: 0 },
         pesoDestete: { type: Number, min: 0 },
         pesoActual: { type: Number, min: 0 },
+        montoCompra: { type: Number, min: 0 },
+        montoVenta: { type: Number, min: 0 },
+        fechaCompra: { type: Date },
+        fechaVenta: { type: Date },
         estado: {
             type: String,
             enum: ['Activo', 'Vendido', 'Muerto', 'En tratamiento'],

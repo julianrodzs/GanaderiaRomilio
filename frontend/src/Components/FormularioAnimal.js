@@ -13,6 +13,10 @@ const estadoInicial = {
   pesoNacimiento: '',
   pesoDestete: '',
   pesoActual: '',
+  montoCompra: '',
+  montoVenta: '',
+  fechaCompra: '',
+  fechaVenta: '',
   estado: 'Activo',
   observaciones: ''
 };
@@ -29,7 +33,11 @@ const normalizarAnimal = (animal) => ({
   fechaDestete: formatearFechaInput(animal?.fechaDestete),
   pesoNacimiento: animal?.pesoNacimiento ?? '',
   pesoDestete: animal?.pesoDestete ?? '',
-  pesoActual: animal?.pesoActual ?? ''
+  pesoActual: animal?.pesoActual ?? '',
+  montoCompra: animal?.montoCompra ?? '',
+  montoVenta: animal?.montoVenta ?? '',
+  fechaCompra: formatearFechaInput(animal?.fechaCompra),
+  fechaVenta: formatearFechaInput(animal?.fechaVenta)
 });
 
 const numeroOpcional = (valor) => (valor === '' || valor === null || valor === undefined ? null : Number(valor));
@@ -54,7 +62,11 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       fechaDestete: fechaOpcional(formulario.fechaDestete),
       pesoNacimiento: numeroOpcional(formulario.pesoNacimiento),
       pesoDestete: numeroOpcional(formulario.pesoDestete),
-      pesoActual: numeroOpcional(formulario.pesoActual)
+      pesoActual: numeroOpcional(formulario.pesoActual),
+      montoCompra: numeroOpcional(formulario.montoCompra),
+      montoVenta: numeroOpcional(formulario.montoVenta),
+      fechaCompra: fechaOpcional(formulario.fechaCompra),
+      fechaVenta: fechaOpcional(formulario.fechaVenta)
     });
   };
 
@@ -138,6 +150,30 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
           Peso al destete
           <input name="pesoDestete" type="number" min="0" value={formulario.pesoDestete} onChange={actualizarCampo} />
         </label>
+
+        <div className="form-grid">
+          <label>
+            Monto compra
+            <input name="montoCompra" type="number" min="0" step="0.01" value={formulario.montoCompra} onChange={actualizarCampo} />
+          </label>
+
+          <label>
+            Monto venta
+            <input name="montoVenta" type="number" min="0" step="0.01" value={formulario.montoVenta} onChange={actualizarCampo} />
+          </label>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            Fecha compra
+            <input name="fechaCompra" type="date" value={formulario.fechaCompra} onChange={actualizarCampo} />
+          </label>
+
+          <label>
+            Fecha venta
+            <input name="fechaVenta" type="date" value={formulario.fechaVenta} onChange={actualizarCampo} />
+          </label>
+        </div>
 
         <div className="form-grid">
           <label>

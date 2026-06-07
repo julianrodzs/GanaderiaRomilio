@@ -49,7 +49,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     potrerosDescanso: 0,
     proximasSanidad: 0,
     vencidasSanidad: 0,
-    listasMonta: 0,
+    proximosCelos: 0,
     ipg: 0,
     clasificacionIpg: 'Deficiente'
   });
@@ -76,7 +76,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           alertasSanidad: planes.filter((plan) => ['Vencido', 'Próximo'].includes(plan.estado)).length,
           alertasReproduccion: reproduccion.filter((registro) => [
             'Próxima a parto',
-            'Lista para monta',
+            'Próximo celo estimado',
             'Destete próximo'
           ].includes(registro.estado)).length,
           hembras: animales.filter((animal) => animal.sexo === 'Hembra').length,
@@ -85,7 +85,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           potrerosDescanso: potreros.filter((potrero) => potrero.estado === 'Descanso').length,
           proximasSanidad: planes.filter((plan) => plan.estado === 'Próximo').length,
           vencidasSanidad: planes.filter((plan) => plan.estado === 'Vencido').length,
-          listasMonta: reproduccion.filter((registro) => registro.estado === 'Lista para monta').length,
+          proximosCelos: reproduccion.filter((registro) => registro.estado === 'Próximo celo estimado').length,
           ipg: productividad?.ipg || 0,
           clasificacionIpg: productividad?.clasificacion || 'Deficiente'
         });
@@ -260,7 +260,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
         <article className="metric-card">
           <span>Alertas reproduccion</span>
           <strong>{metricas.alertasReproduccion}</strong>
-          <small>{metricas.listasMonta} listas para monta</small>
+          <small>{metricas.proximosCelos} próximos celos estimados</small>
         </article>
       </section>
 
@@ -277,7 +277,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           <p className="eyebrow">Alertas operativas</p>
           <h2>Seguimiento diario</h2>
           <p>
-            Revisar sanidad próxima o vencida, vacas listas para monta,
+            Revisar sanidad próxima o vencida, próximos celos estimados,
             partos estimados y destetes próximos antes de cerrar la jornada.
           </p>
           <div className={`dashboard-ipg-card ipg-fondo-${obtenerNivelIpg(metricas.ipg)}`}>
