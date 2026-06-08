@@ -879,6 +879,82 @@
   padding-top: 22px;
 }
 
+.pesajes-toolbar input[type="date"] {
+  width: 150px;
+}
+
+.pesaje-formulario {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 18px;
+}
+
+.pesaje-formulario label {
+  display: grid;
+  gap: 8px;
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pesaje-formulario input,
+.pesaje-formulario select,
+.pesaje-formulario textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 0 12px;
+  background: #f8f9f5;
+  color: #09160e;
+  outline: none;
+}
+
+.pesaje-formulario textarea {
+  padding: 12px;
+  resize: vertical;
+}
+
+.pesaje-formulario .campo-completo,
+.pesaje-formulario .alerta-formulario,
+.pesaje-formulario .form-actions {
+  grid-column: 1 / -1;
+}
+
+.historial-pesajes-animal {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.historial-pesajes-tabla table {
+  min-width: 620px;
+}
+
+.peso-diferencia {
+  display: inline-flex;
+  min-width: 72px;
+  justify-content: center;
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.peso-diferencia.positiva {
+  background: #e5efe7;
+  color: #0b3b21;
+}
+
+.peso-diferencia.negativa {
+  background: #ffe4df;
+  color: #b22822;
+}
+
 .reportes-page {
   display: grid;
   gap: 18px;
@@ -1140,7 +1216,8 @@
   text-transform: uppercase;
 }
 
-.partos-filtros input {
+.partos-filtros input,
+.partos-filtros select {
   min-height: 42px;
   border: 1px solid #d9ddd5;
   border-radius: 2px;
@@ -1300,6 +1377,65 @@
 
 .finanzas-cria-metricas {
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.crecimiento-pesajes-panel {
+  gap: 18px;
+}
+
+.crecimiento-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.crecimiento-grid > article,
+.evolucion-peso-grid article {
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+  padding: 14px;
+}
+
+.crecimiento-grid h3 {
+  margin: 0 0 8px;
+  color: #0b3b21;
+  font-size: 18px;
+}
+
+.evolucion-peso-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.evolucion-peso-grid article {
+  display: grid;
+  gap: 10px;
+}
+
+.evolucion-peso-grid article div {
+  display: grid;
+  gap: 4px;
+}
+
+.evolucion-peso-grid strong {
+  color: #0b3b21;
+}
+
+.evolucion-peso-grid span {
+  color: #6e766f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.linea-peso {
+  width: 100%;
+  height: 110px;
+  color: #0b3b21;
+  background:
+    linear-gradient(#e2e7df 1px, transparent 1px),
+    linear-gradient(90deg, #e2e7df 1px, transparent 1px);
+  background-size: 100% 50%, 25% 100%;
 }
 
 .reportes-metricas .sustentabilidad-positiva {
@@ -1493,6 +1629,8 @@
   display: grid;
   gap: 14px;
   width: min(100%, 430px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   border: 1px solid #dfe3dc;
   border-radius: 6px;
   background: #fffdf7;
@@ -1511,7 +1649,17 @@
 }
 
 .detalle-animal-panel {
-  width: min(100%, 760px);
+  width: min(100%, 920px);
+  align-content: start;
+}
+
+.detalle-animal-panel > .panel-title {
+  position: sticky;
+  top: -24px;
+  z-index: 2;
+  background: #fffdf7;
+  padding-top: 2px;
+  padding-bottom: 10px;
 }
 
 .usuario-modal {
@@ -1538,7 +1686,8 @@
 }
 
 .usuario-form-grid input,
-.usuario-form-grid select {
+.usuario-form-grid select,
+.usuario-form-grid textarea {
   width: 100%;
   min-height: 44px;
   border: 1px solid #d9ddd5;
@@ -1550,9 +1699,15 @@
 }
 
 .usuario-form-grid input:focus,
-.usuario-form-grid select:focus {
+.usuario-form-grid select:focus,
+.usuario-form-grid textarea:focus {
   border-color: #204b32;
   box-shadow: 0 0 0 3px rgba(32, 75, 50, 0.12);
+}
+
+.tabla-accion-texto {
+  padding: 0;
+  min-height: auto;
 }
 
 .acciones-tabla-amplia {
@@ -1589,6 +1744,113 @@
 
 .detalle-observaciones p {
   color: #243229;
+}
+
+.bitacora-animal {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.bitacora-form {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+  padding: 12px;
+}
+
+.bitacora-form label {
+  display: grid;
+  gap: 8px;
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.bitacora-form textarea {
+  width: 100%;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 10px 12px;
+  background: #fffdf7;
+  color: #09160e;
+  resize: vertical;
+}
+
+.bitacora-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.bitacora-vacia {
+  display: grid;
+  gap: 6px;
+  border: 1px dashed #cfd6ce;
+  background: #f8f9f5;
+  padding: 14px;
+}
+
+.bitacora-vacia strong {
+  color: #0b3b21;
+}
+
+.bitacora-vacia span {
+  color: #6e766f;
+}
+
+.bitacora-evento {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 14px;
+  border-left: 3px solid #0b3b21;
+  background: #fffdf7;
+  border-top: 1px solid #dfe3dc;
+  border-right: 1px solid #dfe3dc;
+  border-bottom: 1px solid #dfe3dc;
+  padding: 12px;
+}
+
+.bitacora-fecha {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.bitacora-fecha strong {
+  color: #0b3b21;
+}
+
+.bitacora-fecha span {
+  color: #6e766f;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.bitacora-contenido {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.bitacora-contenido h3,
+.bitacora-contenido p {
+  margin: 0;
+}
+
+.bitacora-contenido h3 {
+  color: #09160e;
+  font-size: 18px;
+}
+
+.bitacora-contenido p {
+  color: #3c4640;
+}
+
+.bitacora-referencia {
+  padding: 0;
 }
 
 .modal-actions {
@@ -1650,6 +1912,9 @@
   .finanzas-subresumen,
   .reportes-grid,
   .cria-productividad-grid,
+  .crecimiento-grid,
+  .evolucion-peso-grid,
+  .pesaje-formulario,
   .conteo-drone-grid,
   .conteo-resultado {
     grid-template-columns: 1fr;
@@ -1673,6 +1938,10 @@
   }
 
   .usuario-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bitacora-evento {
     grid-template-columns: 1fr;
   }
 }

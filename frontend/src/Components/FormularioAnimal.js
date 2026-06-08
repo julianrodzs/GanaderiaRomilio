@@ -17,6 +17,7 @@ const estadoInicial = {
   montoVenta: '',
   fechaCompra: '',
   fechaVenta: '',
+  fechaMuerte: '',
   estado: 'Activo',
   observaciones: ''
 };
@@ -37,7 +38,8 @@ const normalizarAnimal = (animal) => ({
   montoCompra: animal?.montoCompra ?? '',
   montoVenta: animal?.montoVenta ?? '',
   fechaCompra: formatearFechaInput(animal?.fechaCompra),
-  fechaVenta: formatearFechaInput(animal?.fechaVenta)
+  fechaVenta: formatearFechaInput(animal?.fechaVenta),
+  fechaMuerte: formatearFechaInput(animal?.fechaMuerte)
 });
 
 const numeroOpcional = (valor) => (valor === '' || valor === null || valor === undefined ? null : Number(valor));
@@ -66,7 +68,8 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       montoCompra: numeroOpcional(formulario.montoCompra),
       montoVenta: numeroOpcional(formulario.montoVenta),
       fechaCompra: fechaOpcional(formulario.fechaCompra),
-      fechaVenta: fechaOpcional(formulario.fechaVenta)
+      fechaVenta: fechaOpcional(formulario.fechaVenta),
+      fechaMuerte: fechaOpcional(formulario.fechaMuerte)
     });
   };
 
@@ -174,6 +177,11 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
             <input name="fechaVenta" type="date" value={formulario.fechaVenta} onChange={actualizarCampo} />
           </label>
         </div>
+
+        <label>
+          Fecha muerte
+          <input name="fechaMuerte" type="date" value={formulario.fechaMuerte} onChange={actualizarCampo} />
+        </label>
 
         <div className="form-grid">
           <label>

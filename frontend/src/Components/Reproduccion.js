@@ -4,7 +4,8 @@ import {
   crearRegistroReproductivo,
   eliminarRegistroReproductivo,
   obtenerAnimales,
-  obtenerRegistrosReproductivos
+  obtenerRegistrosReproductivos,
+  registrarTerneroDesdeParto
 } from '../services/api';
 import FormularioReproduccion from './FormularioReproduccion';
 import TablaDinamica from './TablaDinamica';
@@ -21,6 +22,17 @@ const formatearFecha = (fecha) => {
 
 const obtenerAnimal = (registro) => registro.animal || {};
 
+const estadoTerneroInicial = {
+  diio: '',
+  identificadorFinca: '',
+  nombre: '',
+  sexo: 'Hembra',
+  raza: '',
+  padreDiio: '',
+  pesoNacimiento: '',
+  observaciones: ''
+};
+
 const columnas = [
   { id: 'diio', label: 'DIIO', accessor: (registro) => obtenerAnimal(registro).diio || obtenerAnimal(registro).identificadorFinca },
   { id: 'nombre', label: 'Nombre', accessor: (registro) => obtenerAnimal(registro).nombre },
@@ -34,7 +46,17 @@ const columnas = [
   { id: 'fechaPartoEstimada', label: 'Parto estimado', accessor: (registro) => formatearFecha(registro.fechaPartoEstimada) },
   { id: 'fechaPartoReal', label: 'Ultimo parto', accessor: (registro) => formatearFecha(registro.fechaPartoReal) },
   { id: 'fechaProximoCelo', label: 'Próximo celo estimado', accessor: (registro) => formatearFecha(registro.fechaProximoCelo || registro.fechaListaMonta) },
-  { id: 'fechaDestete', label: 'Destete', accessor: (registro) => formatearFecha(registro.fechaDestete) }
+  { id: 'fechaDestete', label: 'Destete', accessor: (registro) => formatearFecha(registro.fechaDestete) },
+  {
+    id: 'ternero',
+    label: 'Ternero',
+    accessor: (registro) => registro.fechaPartoReal ? 'Registrar ternero' : '',
+    render: (registro) => registro.fechaPartoReal && !registro.soloLectura ? (
+      <button className="boton-link tabla-accion-texto" type="button" onClick={() => registro.abrirTernero?.(registro)}>
+        Registrar
+      </button>
+    ) : '--'
+  }
 ];
 
 const filtros = [
@@ -50,6 +72,8 @@ const Reproduccion = ({ soloLectura = false }) => {
   const [errorFormulario, setErrorFormulario] = useState('');
   const [modoFormulario, setModoFormulario] = useState(false);
   const [registroSeleccionado, setRegistroSeleccionado] = useState(null);
+  const [registroTernero, setRegistroTernero] = useState(null);
+  const [formularioTernero, setFormularioTernero] = useState(estadoTerneroInicial);
 
   const cargarDatos = async () => {
     try {
@@ -123,6 +147,44 @@ const Reproduccion = ({ soloLectura = false }) => {
     setModoFormulario(false);
   };
 
+  const abrirFormularioTernero = (registro) => {
+    const madre = obtenerAnimal(registro);
+    setRegistroTernero(registro);
+    setFormularioTernero({
+      ...estadoTerneroInicial,
+      raza: madre.raza || ''
+    });
+    setErrorFormulario('');
+  };
+
+  const actualizarCampoTernero = (evento) => {
+    const { name, value } = evento.target;
+    setFormularioTernero((actual) => ({ ...actual, [name]: value }));
+  };
+
+  const guardarTernero = async (evento) => {
+    evento.preventDefault();
+
+    try {
+      setGuardando(true);
+      setErrorFormulario('');
+      await registrarTerneroDesdeParto(registroTernero._id, {
+        ...formularioTernero,
+        identificadorFinca: formularioTernero.identificadorFinca || formularioTernero.diio,
+        pesoNacimiento: formularioTernero.pesoNacimiento === '' ? null : Number(formularioTernero.pesoNacimiento)
+      });
+      window.alert('Ternero registrado correctamente.');
+      setRegistroTernero(null);
+      setFormularioTernero(estadoTerneroInicial);
+      setCargando(true);
+      await cargarDatos();
+    } catch (err) {
+      setErrorFormulario(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   if (modoFormulario) {
     return (
       <FormularioReproduccion
@@ -138,20 +200,58 @@ const Reproduccion = ({ soloLectura = false }) => {
   }
 
   return (
-    <TablaDinamica
-      titulo="Gestión Reproductiva"
-      subtitulo="Reproduccion"
-      columnas={columnas}
-      datos={registros}
-      cargando={cargando}
-      error={error}
-      filtros={filtros}
-      textoAgregar="Nuevo registro"
-      onAgregar={soloLectura ? undefined : abrirNuevoRegistro}
-      onEditar={soloLectura ? undefined : abrirEdicionRegistro}
-      onEliminar={soloLectura ? undefined : borrarRegistro}
-      mostrarAcciones={!soloLectura}
-    />
+    <>
+      <TablaDinamica
+        titulo="Gestión Reproductiva"
+        subtitulo="Reproduccion"
+        columnas={columnas}
+        datos={registros.map((registro) => ({
+          ...registro,
+          abrirTernero: abrirFormularioTernero,
+          soloLectura
+        }))}
+        cargando={cargando}
+        error={error}
+        filtros={filtros}
+        textoAgregar="Nuevo registro"
+        onAgregar={soloLectura ? undefined : abrirNuevoRegistro}
+        onEditar={soloLectura ? undefined : abrirEdicionRegistro}
+        onEliminar={soloLectura ? undefined : borrarRegistro}
+        mostrarAcciones={!soloLectura}
+      />
+
+      {registroTernero && (
+        <div className="modal-backdrop">
+          <section className="modal-panel usuario-form-modal">
+            <div className="panel-title">
+              <div>
+                <p className="eyebrow">Reproducción</p>
+                <h2>Registrar ternero</h2>
+              </div>
+              <button className="boton-link" type="button" onClick={() => setRegistroTernero(null)}>Cerrar</button>
+            </div>
+
+            <form className="usuario-form-grid" onSubmit={guardarTernero}>
+              {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
+              <label>DIIO<input name="diio" value={formularioTernero.diio} onChange={actualizarCampoTernero} required /></label>
+              <label>Identificador finca<input name="identificadorFinca" value={formularioTernero.identificadorFinca} onChange={actualizarCampoTernero} placeholder="Si se deja vacío usa el DIIO" /></label>
+              <label>Nombre<input name="nombre" value={formularioTernero.nombre} onChange={actualizarCampoTernero} /></label>
+              <label>Sexo<select name="sexo" value={formularioTernero.sexo} onChange={actualizarCampoTernero}><option value="Hembra">Hembra</option><option value="Macho">Macho</option></select></label>
+              <label>Raza<input name="raza" value={formularioTernero.raza} onChange={actualizarCampoTernero} /></label>
+              <label>Padre DIIO<input name="padreDiio" value={formularioTernero.padreDiio} onChange={actualizarCampoTernero} /></label>
+              <label>Peso al nacer<input name="pesoNacimiento" type="number" min="0" step="0.01" value={formularioTernero.pesoNacimiento} onChange={actualizarCampoTernero} /></label>
+              <label>Observaciones<textarea name="observaciones" rows="3" value={formularioTernero.observaciones} onChange={actualizarCampoTernero} /></label>
+              <div className="modal-actions">
+                <button className="boton-link" type="button" onClick={() => setRegistroTernero(null)}>Cancelar</button>
+                <button className="boton-primario compacto" type="submit" disabled={guardando}>
+                  {guardando ? 'Guardando...' : 'Guardar ternero'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </>
   );
 };
 

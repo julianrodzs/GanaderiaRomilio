@@ -5,6 +5,7 @@ const {
     getPesajes,
     createPesaje,
     getPesaje,
+    getPesajesPorAnimal,
     updatePesaje,
     deletePesaje
 } = require('../controllers/pesaje-controller');
@@ -12,6 +13,8 @@ const {
 router.route('/')
     .get(getPesajes)
     .post(createPesaje);
+
+router.get('/animal/:animalId', getPesajesPorAnimal);
 
 router.route('/:id')
     .get(getPesaje)

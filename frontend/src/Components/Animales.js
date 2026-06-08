@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { actualizarAnimal, crearAnimal, eliminarAnimal, obtenerAnimales } from '../services/api';
+import {
+  actualizarAnimal,
+  crearAnimal,
+  crearEventoAnimal,
+  eliminarAnimal,
+  obtenerAnimales,
+  obtenerEventosAnimal,
+  obtenerPesajesPorAnimal
+} from '../services/api';
 import FormularioAnimal from './FormularioAnimal';
 import TablaDinamica from './TablaDinamica';
 
@@ -88,7 +96,7 @@ const columnas = [
   { id: 'edad', label: 'Edad', accessor: (animal) => formatearEdad(animal.fechaNacimiento) },
   {
     id: 'listaMontaEdad',
-    label: 'Monta edad',
+    label: 'Edad reproductiva',
     accessor: obtenerEstadoMontaEdad,
     render: (animal) => (
       <span className={estaListaMontaPorEdad(animal) ? 'estado-badge estado-Gestante' : 'estado-badge estado-Vacía'}>
@@ -114,6 +122,14 @@ const Animales = ({ soloLectura = false }) => {
   const [modoFormulario, setModoFormulario] = useState(false);
   const [animalSeleccionado, setAnimalSeleccionado] = useState(null);
   const [animalDetalle, setAnimalDetalle] = useState(null);
+  const [eventosAnimal, setEventosAnimal] = useState([]);
+  const [pesajesAnimal, setPesajesAnimal] = useState([]);
+  const [cargandoEventos, setCargandoEventos] = useState(false);
+  const [cargandoPesajes, setCargandoPesajes] = useState(false);
+  const [errorEventos, setErrorEventos] = useState('');
+  const [errorPesajes, setErrorPesajes] = useState('');
+  const [observacionManual, setObservacionManual] = useState('');
+  const [guardandoEvento, setGuardandoEvento] = useState(false);
 
   const cargarAnimales = async () => {
     try {
@@ -177,9 +193,93 @@ const Animales = ({ soloLectura = false }) => {
     setModoFormulario(true);
   };
 
+  const cargarEventosAnimal = async (animalId) => {
+    try {
+      setCargandoEventos(true);
+      setErrorEventos('');
+      const eventos = await obtenerEventosAnimal(animalId);
+      setEventosAnimal(eventos);
+    } catch (err) {
+      setErrorEventos(err.message);
+    } finally {
+      setCargandoEventos(false);
+    }
+  };
+
+  const cargarPesajesAnimal = async (animalId) => {
+    try {
+      setCargandoPesajes(true);
+      setErrorPesajes('');
+      const pesajes = await obtenerPesajesPorAnimal(animalId);
+      setPesajesAnimal(pesajes);
+    } catch (err) {
+      setErrorPesajes(err.message);
+    } finally {
+      setCargandoPesajes(false);
+    }
+  };
+
+  const abrirDetalleAnimal = async (animal) => {
+    setAnimalDetalle(animal);
+    setObservacionManual('');
+    setEventosAnimal([]);
+    setPesajesAnimal([]);
+    await Promise.all([
+      cargarEventosAnimal(animal._id),
+      cargarPesajesAnimal(animal._id)
+    ]);
+  };
+
+  const cerrarDetalleAnimal = () => {
+    setAnimalDetalle(null);
+    setEventosAnimal([]);
+    setPesajesAnimal([]);
+    setObservacionManual('');
+    setErrorEventos('');
+    setErrorPesajes('');
+  };
+
+  const crearObservacionManual = async (evento) => {
+    evento.preventDefault();
+    if (!observacionManual.trim() || !animalDetalle?._id) return;
+
+    try {
+      setGuardandoEvento(true);
+      setErrorEventos('');
+      await crearEventoAnimal({
+        animal: animalDetalle._id,
+        tipoEvento: 'Observacion',
+        fecha: new Date().toISOString(),
+        titulo: 'Observación manual',
+        descripcion: observacionManual.trim(),
+        moduloOrigen: 'Manual'
+      });
+      setObservacionManual('');
+      await cargarEventosAnimal(animalDetalle._id);
+    } catch (err) {
+      setErrorEventos(err.message);
+    } finally {
+      setGuardandoEvento(false);
+    }
+  };
+
   const cancelarFormulario = () => {
     setAnimalSeleccionado(null);
     setModoFormulario(false);
+  };
+
+  const pesajesConDiferencia = [...pesajesAnimal]
+    .sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0))
+    .map((pesaje, indice, lista) => ({
+      ...pesaje,
+      diferencia: indice === 0 ? null : Number(pesaje.peso || 0) - Number(lista[indice - 1].peso || 0)
+    }))
+    .sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
+
+  const formatearDiferenciaPeso = (diferencia) => {
+    if (diferencia === null || diferencia === undefined || Number.isNaN(diferencia)) return '--';
+    if (diferencia > 0) return `+${diferencia} kg`;
+    return `${diferencia} kg`;
   };
 
   if (modoFormulario) {
@@ -201,7 +301,7 @@ const Animales = ({ soloLectura = false }) => {
         titulo="Animales"
         subtitulo="Inventario"
         columnas={columnas}
-        datos={animales.map((animal) => ({ ...animal, abrirDetalle: setAnimalDetalle }))}
+        datos={animales.map((animal) => ({ ...animal, abrirDetalle: abrirDetalleAnimal }))}
         cargando={cargando}
         error={error}
         filtros={filtros}
@@ -220,7 +320,7 @@ const Animales = ({ soloLectura = false }) => {
                 <p className="eyebrow">Detalle animal</p>
                 <h2>{animalDetalle.diio || animalDetalle.nombre || 'Animal'}</h2>
               </div>
-              <button className="boton-link" type="button" onClick={() => setAnimalDetalle(null)}>Cerrar</button>
+              <button className="boton-link" type="button" onClick={cerrarDetalleAnimal}>Cerrar</button>
             </div>
 
             <div className="detalle-animal-grid">
@@ -229,7 +329,7 @@ const Animales = ({ soloLectura = false }) => {
                 <strong>{formatearEdad(animalDetalle.fechaNacimiento)}</strong>
               </article>
               <article>
-                <span>Lista por edad</span>
+                <span>Edad reproductiva</span>
                 <strong>{estaListaMontaPorEdad(animalDetalle) ? 'Sí' : 'No'}</strong>
               </article>
               <article>
@@ -280,6 +380,10 @@ const Animales = ({ soloLectura = false }) => {
                 <span>Fecha venta</span>
                 <strong>{formatearFecha(animalDetalle.fechaVenta)}</strong>
               </article>
+              <article>
+                <span>Fecha muerte</span>
+                <strong>{formatearFecha(animalDetalle.fechaMuerte)}</strong>
+              </article>
             </div>
 
             {animalDetalle.observaciones && (
@@ -288,6 +392,118 @@ const Animales = ({ soloLectura = false }) => {
                 <p>{animalDetalle.observaciones}</p>
               </div>
             )}
+
+            <section className="historial-pesajes-animal">
+              <div className="panel-title">
+                <div>
+                  <p className="eyebrow">Crecimiento</p>
+                  <h2>Historial de Pesajes</h2>
+                </div>
+              </div>
+
+              {errorPesajes && <div className="alerta-formulario">{errorPesajes}</div>}
+              {cargandoPesajes && <span className="reporte-vacio">Cargando pesajes...</span>}
+
+              {!cargandoPesajes && pesajesConDiferencia.length === 0 && (
+                <div className="bitacora-vacia">
+                  <strong>Sin pesajes históricos todavía.</strong>
+                  <span>Cuando registres pesajes, aquí se verá la evolución de peso del animal.</span>
+                </div>
+              )}
+
+              {pesajesConDiferencia.length > 0 && (
+                <div className="tabla-scroll tabla-dinamica historial-pesajes-tabla">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Peso</th>
+                        <th>Diferencia</th>
+                        <th>Observaciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pesajesConDiferencia.map((pesaje) => (
+                        <tr key={pesaje._id}>
+                          <td>{formatearFecha(pesaje.fecha)}</td>
+                          <td>{formatearPeso(pesaje.peso)}</td>
+                          <td>
+                            <span className={pesaje.diferencia >= 0 ? 'peso-diferencia positiva' : 'peso-diferencia negativa'}>
+                              {formatearDiferenciaPeso(pesaje.diferencia)}
+                            </span>
+                          </td>
+                          <td>{pesaje.observaciones || '--'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className="bitacora-animal">
+              <div className="panel-title">
+                <div>
+                  <p className="eyebrow">Historial</p>
+                  <h2>Bitácora</h2>
+                </div>
+              </div>
+
+              {!soloLectura && (
+                <form className="bitacora-form" onSubmit={crearObservacionManual}>
+                  <label>
+                    Nueva observación
+                    <textarea
+                      rows="3"
+                      value={observacionManual}
+                      onChange={(evento) => setObservacionManual(evento.target.value)}
+                      placeholder="Agregar una nota manual al historial del animal"
+                    />
+                  </label>
+                  <button className="boton-primario compacto" type="submit" disabled={guardandoEvento || !observacionManual.trim()}>
+                    {guardandoEvento ? 'Guardando...' : 'Agregar observación'}
+                  </button>
+                </form>
+              )}
+
+              {errorEventos && <div className="alerta-formulario">{errorEventos}</div>}
+              {cargandoEventos && <span className="reporte-vacio">Cargando bitácora...</span>}
+
+              {!cargandoEventos && eventosAnimal.length === 0 && (
+                <div className="bitacora-vacia">
+                  <strong>Sin eventos registrados todavía.</strong>
+                  <span>
+                    Los próximos registros de nacimiento, compra, venta, muerte, pesaje, sanidad,
+                    reproducción u observaciones aparecerán aquí automáticamente.
+                  </span>
+                </div>
+              )}
+
+              <div className="bitacora-timeline">
+                {eventosAnimal.map((evento) => (
+                  <article className="bitacora-evento" key={evento._id}>
+                    <div className="bitacora-fecha">
+                      <strong>{formatearFecha(evento.fecha)}</strong>
+                      <span>{evento.moduloOrigen || 'Manual'}</span>
+                    </div>
+                    <div className="bitacora-contenido">
+                      <span className="estado-badge estado-Gestante">{evento.tipoEvento}</span>
+                      <h3>{evento.titulo}</h3>
+                      {evento.descripcion && <p>{evento.descripcion}</p>}
+                      {evento.referenciaId && (
+                        <button
+                          className="boton-link bitacora-referencia"
+                          type="button"
+                          onClick={() => window.alert(`${evento.moduloOrigen}: ${evento.referenciaId}`)}
+                        >
+                          Ver detalle
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
           </section>
         </div>
       )}

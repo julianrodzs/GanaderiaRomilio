@@ -9,6 +9,7 @@ const {
     createRegistro,
     getRegistro,
     getRegistrosPorAnimal,
+    registrarTerneroDesdeParto,
     updateRegistro,
     deleteRegistro
 } = require('../controllers/reproduccionController');
@@ -18,6 +19,7 @@ router.route('/')
     .post(soloAdministrador, createRegistro);
 
 router.get('/animal/:animalId', puedeVer, getRegistrosPorAnimal);
+router.post('/:id/ternero', soloAdministrador, registrarTerneroDesdeParto);
 
 router.route('/:id')
     .get(puedeVer, getRegistro)

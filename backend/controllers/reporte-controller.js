@@ -5,6 +5,7 @@ const RotacionPotrero = require('../models/RotacionPotrero');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const ConteoDrone = require('../models/ConteoDrone');
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
+const Pesaje = require('../models/Pesaje');
 
 const reporteCtrl = {};
 
@@ -73,6 +74,21 @@ const calcularEdadMeses = (fechaNacimiento) => {
     }
 
     return Math.max(meses, 0);
+};
+
+const calcularDiasEntre = (fechaInicio, fechaFin = new Date()) => {
+    if (!fechaInicio) return null;
+    const inicio = new Date(fechaInicio);
+    const fin = new Date(fechaFin);
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) return null;
+
+    return Math.max(Math.floor((fin - inicio) / (1000 * 60 * 60 * 24)), 0);
+};
+
+const restarMeses = (fecha, meses) => {
+    const resultado = new Date(fecha);
+    resultado.setUTCMonth(resultado.getUTCMonth() - meses);
+    return resultado;
 };
 
 const porcentaje = (numerador, denominador) => {
@@ -470,6 +486,271 @@ const crearReportePartos = async ({ fechaInicio, fechaFin, diio }) => {
         },
         porVaca
     };
+};
+
+const tieneGestacionActiva = (registros, fechaCorte) => {
+    return registros.some((registro) => {
+        if (!registro.fechaPartoEstimada || registro.fechaPartoReal) return false;
+        return new Date(registro.fechaPartoEstimada) >= fechaCorte;
+    });
+};
+
+const obtenerUltimoParto = (registros) => {
+    return registros
+        .filter((registro) => registro.fechaPartoReal)
+        .sort((a, b) => new Date(b.fechaPartoReal) - new Date(a.fechaPartoReal))[0] || null;
+};
+
+const obtenerDestetesBajos = (vaca, terneros, pesoDesteteMin, fechaInicio, fechaFin) => {
+    const posiblesMadres = [vaca.diio, vaca.identificadorFinca].filter(Boolean);
+
+    return terneros.filter((ternero) => {
+        if (!posiblesMadres.includes(ternero.madreDiio)) return false;
+        if (!ternero.pesoDestete || ternero.pesoDestete >= pesoDesteteMin) return false;
+        if (fechaInicio || fechaFin) {
+            return estaFechaEnPeriodo(ternero.fechaDestete || ternero.updatedAt, fechaInicio, fechaFin);
+        }
+        return true;
+    });
+};
+
+const calcularCategoriaAnimal = (animal) => {
+    const edadMeses = calcularEdadMeses(animal.fechaNacimiento);
+    if (edadMeses !== null && edadMeses < 12) return 'Ternero';
+    if (animal.sexo === 'Hembra') return edadMeses !== null && edadMeses >= 24 ? 'Vaca' : 'Novilla';
+    return edadMeses !== null && edadMeses >= 24 ? 'Toro' : 'Novillo';
+};
+
+const crearAnalisisPesajesAnimal = (animal, pesajes) => {
+    const ordenados = [...pesajes].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+    const inicial = ordenados[0];
+    const actual = ordenados[ordenados.length - 1];
+    const dias = inicial && actual ? calcularDiasEntre(inicial.fecha, actual.fecha) : 0;
+    const gananciaTotal = actual && inicial ? actual.peso - inicial.peso : 0;
+    const gananciaDiariaPromedio = dias > 0 ? gananciaTotal / dias : 0;
+    const gananciaMensualPromedio = gananciaDiariaPromedio * 30.44;
+
+    return {
+        animalId: animal._id,
+        diio: animal.diio || animal.identificadorFinca || '--',
+        nombre: animal.nombre || '',
+        sexo: animal.sexo,
+        categoria: calcularCategoriaAnimal(animal),
+        pesoInicial: inicial?.peso || 0,
+        pesoActual: actual?.peso || 0,
+        fechaInicial: inicial?.fecha || null,
+        fechaUltimoPesaje: actual?.fecha || null,
+        cantidadPesajes: ordenados.length,
+        diasTranscurridos: dias,
+        gananciaTotal: redondear(gananciaTotal),
+        gananciaDiariaPromedio: redondear(gananciaDiariaPromedio, 3),
+        gananciaMensualPromedio: redondear(gananciaMensualPromedio, 2),
+        evolucion: ordenados.map((pesaje) => ({
+            fecha: pesaje.fecha,
+            peso: pesaje.peso
+        }))
+    };
+};
+
+reporteCtrl.getCrecimientoPesajes = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin, animalId, diasSinPesaje = 60 } = req.query;
+        const filtroPesajes = crearFiltroFechas('fecha', fechaInicio, fechaFin);
+        if (animalId) filtroPesajes.animal = animalId;
+
+        const [pesajes, animales] = await Promise.all([
+            Pesaje.find(filtroPesajes).sort({ fecha: 1 }).lean(),
+            Animal.find({ estado: { $nin: ['Muerto', 'Vendido'] } }).lean()
+        ]);
+        const pesajesPorAnimal = pesajes.reduce((mapa, pesaje) => {
+            const id = pesaje.animal?.toString();
+            if (!id) return mapa;
+            if (!mapa.has(id)) mapa.set(id, []);
+            mapa.get(id).push(pesaje);
+            return mapa;
+        }, new Map());
+        const analisis = animales
+            .filter((animal) => !animalId || animal._id.toString() === animalId)
+            .map((animal) => crearAnalisisPesajesAnimal(animal, pesajesPorAnimal.get(animal._id.toString()) || []))
+            .filter((item) => item.cantidadPesajes > 0);
+        const conCrecimiento = analisis.filter((item) => item.cantidadPesajes >= 2);
+        const fechaLimiteReciente = new Date();
+        fechaLimiteReciente.setDate(fechaLimiteReciente.getDate() - Number(diasSinPesaje || 60));
+        const animalesSinPesajesRecientes = animales.filter((animal) => {
+            const ultimo = [...(pesajesPorAnimal.get(animal._id.toString()) || [])].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0];
+            return !ultimo || new Date(ultimo.fecha) < fechaLimiteReciente;
+        }).map((animal) => ({
+            animalId: animal._id,
+            diio: animal.diio || animal.identificadorFinca || '--',
+            nombre: animal.nombre || '',
+            sexo: animal.sexo,
+            categoria: calcularCategoriaAnimal(animal),
+            fechaUltimoPesaje: (pesajesPorAnimal.get(animal._id.toString()) || []).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0]?.fecha || null
+        }));
+        const crecimientoTerneros = analisis.filter((item) => item.categoria === 'Ternero').map((item) => {
+            const animal = animales.find((animalItem) => animalItem._id.toString() === item.animalId.toString());
+            const pesoNacimiento = animal?.pesoNacimiento || 0;
+            return {
+                ...item,
+                pesoNacimiento,
+                gananciaDesdeNacimiento: redondear(item.pesoActual - pesoNacimiento)
+            };
+        });
+
+        res.json({
+            filtros: {
+                fechaInicio: fechaInicio || null,
+                fechaFin: fechaFin || null,
+                animalId: animalId || null,
+                diasSinPesaje: Number(diasSinPesaje || 60)
+            },
+            resumen: {
+                animalesConPesajes: analisis.length,
+                totalPesajes: pesajes.length,
+                animalesConCrecimiento: conCrecimiento.length,
+                animalesSinPesajesRecientes: animalesSinPesajesRecientes.length,
+                gananciaPromedioDiaria: redondear(
+                    conCrecimiento.reduce((total, item) => total + item.gananciaDiariaPromedio, 0) / (conCrecimiento.length || 1),
+                    3
+                ),
+                gananciaDiariaPromedio: redondear(
+                    conCrecimiento.reduce((total, item) => total + item.gananciaDiariaPromedio, 0) / (conCrecimiento.length || 1),
+                    3
+                ),
+                gananciaPromedioMensual: redondear(
+                    conCrecimiento.reduce((total, item) => total + item.gananciaMensualPromedio, 0) / (conCrecimiento.length || 1),
+                    2
+                ),
+                gananciaMensualPromedio: redondear(
+                    conCrecimiento.reduce((total, item) => total + item.gananciaMensualPromedio, 0) / (conCrecimiento.length || 1),
+                    2
+                ),
+                sinPesajesRecientes: animalesSinPesajesRecientes.length
+            },
+            mejoresCrecimientos: [...conCrecimiento].sort((a, b) => b.gananciaDiariaPromedio - a.gananciaDiariaPromedio).slice(0, 10),
+            menoresCrecimientos: [...conCrecimiento].sort((a, b) => a.gananciaDiariaPromedio - b.gananciaDiariaPromedio).slice(0, 10),
+            animalesSinPesajesRecientes,
+            evolucion: animalId ? analisis[0]?.evolucion || [] : analisis.slice(0, 10),
+            crecimientoTerneros
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener reporte de crecimiento', error: error.message });
+    }
+};
+
+reporteCtrl.getVacasImproductivas = async (req, res) => {
+    try {
+        const {
+            fechaInicio,
+            fechaFin,
+            diio,
+            mesesSinParto = 12,
+            diasAbiertos = 120,
+            pesoDesteteMin = 140
+        } = req.query;
+        const mesesSinPartoNumero = Number(mesesSinParto) || 12;
+        const diasAbiertosNumero = Number(diasAbiertos) || 120;
+        const pesoDesteteMinNumero = Number(pesoDesteteMin) || 140;
+        const fechaCorte = fechaFin ? new Date(fechaFin) : new Date();
+        fechaCorte.setUTCHours(23, 59, 59, 999);
+        const limiteParto = restarMeses(fechaCorte, mesesSinPartoNumero);
+
+        const filtroHembras = {
+            sexo: 'Hembra',
+            estado: { $in: ['Activo', 'En tratamiento'] }
+        };
+
+        if (diio) {
+            filtroHembras.$or = [
+                { diio: { $regex: diio, $options: 'i' } },
+                { identificadorFinca: { $regex: diio, $options: 'i' } },
+                { nombre: { $regex: diio, $options: 'i' } }
+            ];
+        }
+
+        const [hembras, registros, terneros] = await Promise.all([
+            Animal.find(filtroHembras).lean(),
+            RegistroReproductivo.find().lean(),
+            Animal.find({ madreDiio: { $exists: true, $ne: null } }).lean()
+        ]);
+        const registrosPorAnimal = registros.reduce((mapa, registro) => {
+            const animalId = registro.animal?.toString();
+            if (!animalId) return mapa;
+            if (!mapa.has(animalId)) mapa.set(animalId, []);
+            mapa.get(animalId).push(registro);
+            return mapa;
+        }, new Map());
+
+        const vacas = hembras
+            .map((vaca) => {
+                const edadMeses = calcularEdadMeses(vaca.fechaNacimiento);
+                const registrosVaca = registrosPorAnimal.get(vaca._id.toString()) || [];
+                const ultimoParto = obtenerUltimoParto(registrosVaca);
+                const gestacionActiva = tieneGestacionActiva(registrosVaca, fechaCorte);
+                const diasAbierta = ultimoParto ? calcularDiasEntre(ultimoParto.fechaPartoReal, fechaCorte) : null;
+                const destetesBajos = obtenerDestetesBajos(vaca, terneros, pesoDesteteMinNumero, fechaInicio, fechaFin);
+                const motivos = [];
+
+                if (edadMeses === null || edadMeses < 24) return null;
+
+                if (!ultimoParto || new Date(ultimoParto.fechaPartoReal) < limiteParto) {
+                    motivos.push('Sin parto reciente');
+                }
+
+                if (!gestacionActiva) {
+                    motivos.push('Sin gestación activa');
+                }
+
+                if (ultimoParto && !gestacionActiva && diasAbierta > diasAbiertosNumero) {
+                    motivos.push('Muchos días abiertos');
+                }
+
+                if (destetesBajos.length > 0) {
+                    motivos.push('Destete bajo');
+                }
+
+                if (motivos.length === 0) return null;
+
+                return {
+                    animalId: vaca._id,
+                    diio: vaca.diio || vaca.identificadorFinca || '--',
+                    nombre: vaca.nombre || '',
+                    edadMeses,
+                    ultimoParto: ultimoParto?.fechaPartoReal || null,
+                    diasAbierta,
+                    gestacionActiva,
+                    destetesBajos: destetesBajos.map((ternero) => ({
+                        animalId: ternero._id,
+                        diio: ternero.diio || ternero.identificadorFinca || '--',
+                        pesoDestete: ternero.pesoDestete,
+                        fechaDestete: ternero.fechaDestete || null
+                    })),
+                    motivos
+                };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.motivos.length - a.motivos.length || a.diio.localeCompare(b.diio, 'es', { numeric: true }));
+
+        res.json({
+            parametros: {
+                mesesSinParto: mesesSinPartoNumero,
+                diasAbiertos: diasAbiertosNumero,
+                pesoDesteteMin: pesoDesteteMinNumero,
+                fechaInicio: fechaInicio || null,
+                fechaFin: fechaFin || null
+            },
+            resumen: {
+                totalVacasRevisar: vacas.length,
+                sinPartoReciente: vacas.filter((vaca) => vaca.motivos.includes('Sin parto reciente')).length,
+                sinGestacionActiva: vacas.filter((vaca) => vaca.motivos.includes('Sin gestación activa')).length,
+                muchosDiasAbiertos: vacas.filter((vaca) => vaca.motivos.includes('Muchos días abiertos')).length,
+                destetesBajos: vacas.filter((vaca) => vaca.motivos.includes('Destete bajo')).length
+            },
+            vacas
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener vacas a revisar', error: error.message });
+    }
 };
 
 reporteCtrl.getResumenReportes = async (req, res) => {

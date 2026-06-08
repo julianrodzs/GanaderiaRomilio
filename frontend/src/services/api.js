@@ -200,6 +200,52 @@ export const eliminarAnimal = (id) => {
   });
 };
 
+export const obtenerPesajes = () => request('/pesajes');
+
+export const obtenerPesajesPorAnimal = (animalId) => request(`/pesajes/animal/${animalId}`);
+
+export const crearPesaje = (pesaje) => {
+  return request('/pesajes', {
+    method: 'POST',
+    body: JSON.stringify(pesaje)
+  });
+};
+
+export const actualizarPesaje = (id, pesaje) => {
+  return request(`/pesajes/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(pesaje)
+  });
+};
+
+export const eliminarPesaje = (id) => {
+  return request(`/pesajes/${id}`, {
+    method: 'DELETE'
+  });
+};
+
+export const obtenerEventosAnimal = (animalId) => request(`/eventos-animal/animal/${animalId}`);
+
+export const crearEventoAnimal = (evento) => {
+  return request('/eventos-animal', {
+    method: 'POST',
+    body: JSON.stringify(evento)
+  });
+};
+
+export const actualizarEventoAnimal = (id, evento) => {
+  return request(`/eventos-animal/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(evento)
+  });
+};
+
+export const eliminarEventoAnimal = (id) => {
+  return request(`/eventos-animal/${id}`, {
+    method: 'DELETE'
+  });
+};
+
 export const obtenerPotreros = () => request('/potreros');
 
 export const crearPotrero = (potrero) => {
@@ -290,6 +336,13 @@ export const eliminarRegistroReproductivo = (id) => {
 
 export const obtenerRegistrosReproductivosPorAnimal = (animalId) => request(`/reproduccion/animal/${animalId}`);
 
+export const registrarTerneroDesdeParto = (registroId, ternero) => {
+  return request(`/reproduccion/${registroId}/ternero`, {
+    method: 'POST',
+    body: JSON.stringify(ternero)
+  });
+};
+
 export const procesarConteoDrone = ({ imagen, potrero, cantidadEsperada, observaciones }) => {
   const formData = new FormData();
   formData.append('imagen', imagen);
@@ -366,6 +419,37 @@ export const obtenerSustentabilidadCria = ({ fechaInicio, fechaFin } = {}) => {
   const query = params.toString();
 
   return request(`/reportes/sustentabilidad-cria${query ? `?${query}` : ''}`);
+};
+
+export const obtenerVacasImproductivas = ({
+  fechaInicio,
+  fechaFin,
+  diio,
+  mesesSinParto,
+  diasAbiertos,
+  pesoDesteteMin
+} = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  if (diio) params.append('diio', diio);
+  if (mesesSinParto) params.append('mesesSinParto', mesesSinParto);
+  if (diasAbiertos) params.append('diasAbiertos', diasAbiertos);
+  if (pesoDesteteMin) params.append('pesoDesteteMin', pesoDesteteMin);
+  const query = params.toString();
+
+  return request(`/reportes/vacas-improductivas${query ? `?${query}` : ''}`);
+};
+
+export const obtenerReporteCrecimientoPesajes = ({ fechaInicio, fechaFin, animalId, diasSinPesaje } = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  if (animalId) params.append('animalId', animalId);
+  if (diasSinPesaje) params.append('diasSinPesaje', diasSinPesaje);
+  const query = params.toString();
+
+  return request(`/reportes/crecimiento-pesajes${query ? `?${query}` : ''}`);
 };
 
 export { API_URL };

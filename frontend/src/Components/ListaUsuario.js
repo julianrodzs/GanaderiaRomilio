@@ -5,6 +5,7 @@ import ConteoDrone from './ConteoDrone';
 import Finanzas from './Finanzas';
 import ImportarExcel from './ImportarExcel';
 import Navegacion from './Navegacion';
+import Pesajes from './Pesajes';
 import PlanSanitario from './PlanSanitario';
 import Potreros from './Potreros';
 import Reproduccion from './Reproduccion';
@@ -158,6 +159,15 @@ const ListaUsuario = ({ usuario, onLogout }) => {
       <main className="dashboard-shell">
         {navegacion}
         <Potreros />
+      </main>
+    );
+  }
+
+  if (vistaActiva === 'Pesajes') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <Pesajes />
       </main>
     );
   }

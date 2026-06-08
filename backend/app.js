@@ -25,6 +25,7 @@ app.get('/', (req, res)=>{
 app.use('/api/usuarios', require('./routes/usuario'));
 app.use('/api/tareas', require('./routes/tareaRoutes'));
 app.use('/api/animales', auth, require('./routes/animal'));
+app.use('/api/eventos-animal', auth, require('./routes/eventoAnimalRoutes'));
 app.use('/api/potreros', auth, require('./routes/potrero'));
 app.use('/api/pesajes', soloAdministrador, require('./routes/pesaje'));
 app.use('/api/sanidad', soloAdministrador, require('./routes/sanidad'));

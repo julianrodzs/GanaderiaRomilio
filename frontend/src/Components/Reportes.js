@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   obtenerFinanzasCria,
   obtenerProductividadCria,
+  obtenerReporteCrecimientoPesajes,
   obtenerResumenReportes,
-  obtenerSustentabilidadCria
+  obtenerSustentabilidadCria,
+  obtenerVacasImproductivas
 } from '../services/api';
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR').format(Math.round(valor || 0));
@@ -69,18 +71,46 @@ const BarraReporte = ({ label, valor, detalle, maximo }) => {
 
 const obtenerMaximo = (items, campo) => Math.max(...items.map((item) => item[campo] || 0), 0);
 
+const LineaPeso = ({ puntos = [] }) => {
+  if (!puntos || puntos.length < 2) {
+    return <span className="reporte-vacio">Se necesitan al menos dos pesajes.</span>;
+  }
+
+  const pesos = puntos.map((punto) => Number(punto.peso || 0));
+  const minimo = Math.min(...pesos);
+  const maximo = Math.max(...pesos);
+  const rango = Math.max(maximo - minimo, 1);
+  const coordenadas = puntos.map((punto, indice) => {
+    const x = puntos.length === 1 ? 0 : (indice / (puntos.length - 1)) * 100;
+    const y = 90 - ((Number(punto.peso || 0) - minimo) / rango) * 80;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg className="linea-peso" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Evolución de peso">
+      <polyline points={coordenadas} fill="none" stroke="currentColor" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+};
+
 const Reportes = () => {
   const [filtros, setFiltros] = useState({
     fechaInicio: `${obtenerAnioActual()}-01-01`,
     fechaFin: `${obtenerAnioActual()}-12-31`,
     diio: '',
     partosFechaInicio: `${obtenerAnioActual()}-01-01`,
-    partosFechaFin: `${obtenerAnioActual()}-12-31`
+    partosFechaFin: `${obtenerAnioActual()}-12-31`,
+    mesesSinParto: '12',
+    diasAbiertos: '120',
+    pesoDesteteMin: '140',
+    diasSinPesaje: '60'
   });
   const [reporte, setReporte] = useState(null);
   const [productividad, setProductividad] = useState(null);
   const [finanzasCria, setFinanzasCria] = useState(null);
   const [sustentabilidadCria, setSustentabilidadCria] = useState(null);
+  const [vacasImproductivas, setVacasImproductivas] = useState(null);
+  const [crecimientoPesajes, setCrecimientoPesajes] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
@@ -97,16 +127,31 @@ const Reportes = () => {
         fechaInicio: filtros.partosFechaInicio || filtros.fechaInicio,
         fechaFin: filtros.partosFechaFin || filtros.fechaFin
       };
-      const [data, productividadData, finanzasCriaData, sustentabilidadData] = await Promise.all([
+      const filtrosImproductivas = {
+        fechaInicio: filtros.partosFechaInicio || filtros.fechaInicio,
+        fechaFin: filtros.partosFechaFin || filtros.fechaFin,
+        diio: filtros.diio,
+        mesesSinParto: filtros.mesesSinParto,
+        diasAbiertos: filtros.diasAbiertos,
+        pesoDesteteMin: filtros.pesoDesteteMin
+      };
+      const [data, productividadData, finanzasCriaData, sustentabilidadData, vacasImproductivasData, crecimientoData] = await Promise.all([
         obtenerResumenReportes(filtrosPartos),
         obtenerProductividadCria(filtrosGenerales),
         obtenerFinanzasCria(filtrosGenerales),
-        obtenerSustentabilidadCria(filtrosGenerales)
+        obtenerSustentabilidadCria(filtrosGenerales),
+        obtenerVacasImproductivas(filtrosImproductivas),
+        obtenerReporteCrecimientoPesajes({
+          ...filtrosGenerales,
+          diasSinPesaje: filtros.diasSinPesaje
+        })
       ]);
       setReporte(data);
       setProductividad(productividadData);
       setFinanzasCria(finanzasCriaData);
       setSustentabilidadCria(sustentabilidadData);
+      setVacasImproductivas(vacasImproductivasData);
+      setCrecimientoPesajes(crecimientoData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -322,6 +367,111 @@ const Reportes = () => {
             </section>
           )}
 
+          {crecimientoPesajes && (
+            <section className="reporte-panel reporte-panel-amplio crecimiento-pesajes-panel">
+              <div className="partos-panel-header">
+                <div>
+                  <p className="eyebrow">Crecimiento</p>
+                  <h2>Análisis de pesajes históricos</h2>
+                </div>
+                <div className="partos-filtros">
+                  <label>
+                    Sin pesaje reciente
+                    <select
+                      value={filtros.diasSinPesaje}
+                      onChange={(evento) => setFiltros((actual) => ({ ...actual, diasSinPesaje: evento.target.value }))}
+                    >
+                      <option value="30">30 días</option>
+                      <option value="60">60 días</option>
+                      <option value="90">90 días</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="reportes-metricas finanzas-cria-metricas">
+                <article>
+                  <span>Animales con pesajes</span>
+                  <strong>{formatearNumero(crecimientoPesajes.resumen.animalesConPesajes)}</strong>
+                  <small>{formatearNumero(crecimientoPesajes.resumen.totalPesajes)} pesajes en el rango</small>
+                </article>
+                <article>
+                  <span>Ganancia diaria prom.</span>
+                  <strong>{formatearNumero(crecimientoPesajes.resumen.gananciaDiariaPromedio)} kg</strong>
+                  <small>Promedio por animal con historial</small>
+                </article>
+                <article>
+                  <span>Ganancia mensual prom.</span>
+                  <strong>{formatearNumero(crecimientoPesajes.resumen.gananciaMensualPromedio)} kg</strong>
+                  <small>Proyección a 30 días</small>
+                </article>
+                <article>
+                  <span>Sin pesaje reciente</span>
+                  <strong>{formatearNumero(crecimientoPesajes.resumen.animalesSinPesajesRecientes)}</strong>
+                  <small>Umbral: {crecimientoPesajes.filtros?.diasSinPesaje || filtros.diasSinPesaje} días</small>
+                </article>
+              </div>
+
+              <div className="crecimiento-grid">
+                <article>
+                  <h3>Mejor crecimiento</h3>
+                  {(crecimientoPesajes.mejoresCrecimientos || []).slice(0, 10).map((animal) => (
+                    <div className="reporte-lista-item" key={animal.animalId}>
+                      <strong>{animal.diio || '--'} {animal.nombre || ''}</strong>
+                      <span>{formatearNumero(animal.gananciaTotal)} kg · {formatearNumero(animal.gananciaDiariaPromedio)} kg/día</span>
+                    </div>
+                  ))}
+                  {(crecimientoPesajes.mejoresCrecimientos || []).length === 0 && <span className="reporte-vacio">Sin datos suficientes.</span>}
+                </article>
+
+                <article>
+                  <h3>Menor crecimiento</h3>
+                  {(crecimientoPesajes.menoresCrecimientos || []).slice(0, 10).map((animal) => (
+                    <div className="reporte-lista-item" key={animal.animalId}>
+                      <strong>{animal.diio || '--'} {animal.nombre || ''}</strong>
+                      <span>{formatearNumero(animal.gananciaTotal)} kg · {formatearNumero(animal.gananciaDiariaPromedio)} kg/día</span>
+                    </div>
+                  ))}
+                  {(crecimientoPesajes.menoresCrecimientos || []).length === 0 && <span className="reporte-vacio">Sin datos suficientes.</span>}
+                </article>
+
+                <article>
+                  <h3>Sin pesaje reciente</h3>
+                  {(crecimientoPesajes.animalesSinPesajesRecientes || []).slice(0, 10).map((animal) => (
+                    <div className="reporte-lista-item" key={animal.animalId}>
+                      <strong>{animal.diio || '--'} {animal.nombre || ''}</strong>
+                      <span>Último pesaje: {formatearFecha(animal.fechaUltimoPesaje)}</span>
+                    </div>
+                  ))}
+                  {(crecimientoPesajes.animalesSinPesajesRecientes || []).length === 0 && <span className="reporte-vacio">Todos tienen pesaje reciente.</span>}
+                </article>
+
+                <article>
+                  <h3>Crecimiento de terneros</h3>
+                  {(crecimientoPesajes.crecimientoTerneros || []).slice(0, 10).map((animal) => (
+                    <div className="reporte-lista-item" key={animal.animalId}>
+                      <strong>{animal.diio || '--'} {animal.nombre || ''}</strong>
+                      <span>Nacimiento: {formatearNumero(animal.pesoNacimiento)} kg · Actual: {formatearNumero(animal.pesoActual)} kg</span>
+                    </div>
+                  ))}
+                  {(crecimientoPesajes.crecimientoTerneros || []).length === 0 && <span className="reporte-vacio">Sin terneros con peso al nacer y pesajes.</span>}
+                </article>
+              </div>
+
+              <div className="evolucion-peso-grid">
+                {(crecimientoPesajes.evolucion || []).slice(0, 4).map((animal) => (
+                  <article key={animal.animalId}>
+                    <div>
+                      <strong>{animal.diio || '--'} {animal.nombre || ''}</strong>
+                      <span>{animal.cantidadPesajes} pesajes · {formatearNumero(animal.gananciaTotal)} kg</span>
+                    </div>
+                    <LineaPeso puntos={animal.evolucion} />
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
           <section className="reportes-grid">
             <article className="reporte-panel">
               <p className="eyebrow">Inventario</p>
@@ -502,6 +652,110 @@ const Reportes = () => {
                 </div>
               )}
             </article>
+
+            {vacasImproductivas && (
+              <article className="reporte-panel reporte-panel-amplio">
+                <div className="partos-panel-header">
+                  <div>
+                    <p className="eyebrow">Reproduccion</p>
+                    <h2>Vacas a revisar</h2>
+                  </div>
+                  <div className="partos-filtros">
+                    <label>
+                      Meses sin parto
+                      <input
+                        type="number"
+                        min="1"
+                        value={filtros.mesesSinParto}
+                        onChange={(evento) => setFiltros((actual) => ({ ...actual, mesesSinParto: evento.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      Días abiertos
+                      <input
+                        type="number"
+                        min="1"
+                        value={filtros.diasAbiertos}
+                        onChange={(evento) => setFiltros((actual) => ({ ...actual, diasAbiertos: evento.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      Peso destete min
+                      <input
+                        type="number"
+                        min="1"
+                        value={filtros.pesoDesteteMin}
+                        onChange={(evento) => setFiltros((actual) => ({ ...actual, pesoDesteteMin: evento.target.value }))}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="partos-resumen-grid">
+                  <article>
+                    <span>Total a revisar</span>
+                    <strong>{formatearNumero(vacasImproductivas.resumen.totalVacasRevisar)}</strong>
+                  </article>
+                  <article>
+                    <span>Sin parto reciente</span>
+                    <strong>{formatearNumero(vacasImproductivas.resumen.sinPartoReciente)}</strong>
+                  </article>
+                  <article>
+                    <span>Sin gestación</span>
+                    <strong>{formatearNumero(vacasImproductivas.resumen.sinGestacionActiva)}</strong>
+                  </article>
+                  <article>
+                    <span>Días abiertos</span>
+                    <strong>{formatearNumero(vacasImproductivas.resumen.muchosDiasAbiertos)}</strong>
+                  </article>
+                  <article>
+                    <span>Destetes bajos</span>
+                    <strong>{formatearNumero(vacasImproductivas.resumen.destetesBajos)}</strong>
+                  </article>
+                </div>
+
+                {vacasImproductivas.vacas.length === 0 && (
+                  <span className="reporte-vacio">Sin vacas marcadas para revisión con estos criterios.</span>
+                )}
+
+                {vacasImproductivas.vacas.length > 0 && (
+                  <div className="tabla-scroll tabla-dinamica partos-tabla">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>DIIO</th>
+                          <th>Nombre</th>
+                          <th>Edad</th>
+                          <th>Último parto</th>
+                          <th>Días abiertos</th>
+                          <th>Gestación</th>
+                          <th>Motivos</th>
+                          <th>Destetes bajos</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vacasImproductivas.vacas.map((vaca) => (
+                          <tr key={vaca.animalId}>
+                            <td>{vaca.diio}</td>
+                            <td>{vaca.nombre || '--'}</td>
+                            <td>{formatearEdadMeses(vaca.edadMeses)}</td>
+                            <td>{formatearFecha(vaca.ultimoParto)}</td>
+                            <td>{vaca.diasAbierta ?? '--'}</td>
+                            <td>{vaca.gestacionActiva ? 'Activa' : 'No registrada'}</td>
+                            <td>{vaca.motivos.join(', ')}</td>
+                            <td>
+                              {vaca.destetesBajos.length === 0
+                                ? '--'
+                                : vaca.destetesBajos.map((ternero) => `${ternero.diio}: ${ternero.pesoDestete} kg`).join(', ')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </article>
+            )}
           </section>
         </>
       )}
