@@ -415,11 +415,45 @@ Tipos:
 - `Inversion`
 - `Compra`
 - `Venta de animales`
+- `Compra de animales`
 
 Naturaleza:
 
 - `Ingreso`
 - `Egreso`
+
+### Compras de animales
+
+Base:
+
+```txt
+/api/compras
+```
+
+Modelo: `CompraAnimal`.
+
+Funciones:
+
+- registrar compra de uno o varios animales.
+- calcular subtotal por animal.
+- calcular monto total y peso total.
+- crear animales nuevos en inventario al confirmar compra.
+- guardar `fechaCompra`, `pesoCompra`, `pesoActual`, `precioCompraPorKg`, `montoCompra`, `proveedorCompra` y `compraId`.
+- crear evento de bitacora tipo `Compra`.
+- crear movimiento financiero de egreso tipo `Compra de animales`.
+- anular o eliminar compras siempre que los animales no hayan sido vendidos o marcados como muertos despues.
+
+Endpoints:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Lista compras |
+| GET | `/resumen` | Resumen de compras |
+| GET | `/:id` | Detalle |
+| POST | `/` | Crea compra |
+| PUT | `/:id` | Actualiza compra |
+| PATCH | `/:id/anular` | Anula compra |
+| DELETE | `/:id` | Elimina compra |
 
 ### Ventas de animales
 

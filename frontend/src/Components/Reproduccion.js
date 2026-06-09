@@ -3,6 +3,7 @@ import {
   actualizarRegistroReproductivo,
   crearRegistroReproductivo,
   eliminarRegistroReproductivo,
+  evaluarRiesgoCruce,
   obtenerAnimales,
   obtenerRegistrosReproductivos,
   registrarTerneroDesdeParto
@@ -22,6 +23,10 @@ const formatearFecha = (fecha) => {
 };
 
 const obtenerAnimal = (registro) => registro.animal || {};
+const etiquetaAnimal = (animal) => {
+  const codigo = animal?.diio || animal?.identificadorFinca || 'Sin codigo';
+  return `${codigo}${animal?.nombre ? ` - ${animal.nombre}` : ''}`;
+};
 
 const estadoTerneroInicial = {
   diio: '',
@@ -30,6 +35,7 @@ const estadoTerneroInicial = {
   sexo: 'Hembra',
   raza: '',
   padreDiio: '',
+  padreExternoNombre: '',
   pesoNacimiento: '',
   observaciones: ''
 };
@@ -75,6 +81,9 @@ const Reproduccion = ({ soloLectura = false }) => {
   const [registroSeleccionado, setRegistroSeleccionado] = useState(null);
   const [registroTernero, setRegistroTernero] = useState(null);
   const [formularioTernero, setFormularioTernero] = useState(estadoTerneroInicial);
+  const [cruce, setCruce] = useState({ macho: '', hembra: '' });
+  const [resultadoCruce, setResultadoCruce] = useState(null);
+  const [evaluandoCruce, setEvaluandoCruce] = useState(false);
 
   const cargarDatos = async () => {
     try {
@@ -172,6 +181,23 @@ const Reproduccion = ({ soloLectura = false }) => {
     setFormularioTernero((actual) => ({ ...actual, [name]: value }));
   };
 
+  const evaluarCruce = async (evento) => {
+    evento.preventDefault();
+    if (!cruce.macho || !cruce.hembra) return;
+
+    try {
+      setEvaluandoCruce(true);
+      setError('');
+      const resultado = await evaluarRiesgoCruce(cruce);
+      setResultadoCruce(resultado);
+    } catch (err) {
+      setResultadoCruce(null);
+      setError(err.message);
+    } finally {
+      setEvaluandoCruce(false);
+    }
+  };
+
   const guardarTernero = async (evento) => {
     evento.preventDefault();
 
@@ -211,6 +237,54 @@ const Reproduccion = ({ soloLectura = false }) => {
 
   return (
     <>
+      <section className="panel-seccion evaluar-cruce-panel">
+        <div className="panel-title">
+          <div>
+            <p className="eyebrow">Genealogía</p>
+            <h2>Evaluar cruce</h2>
+          </div>
+        </div>
+
+        <form className="form-grid evaluar-cruce-form" onSubmit={evaluarCruce}>
+          <label>
+            Toro
+            <select value={cruce.macho} onChange={(evento) => setCruce((actual) => ({ ...actual, macho: evento.target.value }))}>
+              <option value="">Seleccionar toro</option>
+              {animales.filter((animal) => animal.sexo === 'Macho').map((animal) => (
+                <option key={animal._id} value={animal._id}>{etiquetaAnimal(animal)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Vaca
+            <select value={cruce.hembra} onChange={(evento) => setCruce((actual) => ({ ...actual, hembra: evento.target.value }))}>
+              <option value="">Seleccionar vaca</option>
+              {animales.filter((animal) => animal.sexo === 'Hembra').map((animal) => (
+                <option key={animal._id} value={animal._id}>{etiquetaAnimal(animal)}</option>
+              ))}
+            </select>
+          </label>
+
+          <button className="boton-primario compacto" type="submit" disabled={evaluandoCruce || !cruce.macho || !cruce.hembra}>
+            {evaluandoCruce ? 'Evaluando...' : 'Evaluar'}
+          </button>
+        </form>
+
+        {resultadoCruce && (
+          <div className={`riesgo-cruce resultado-${resultadoCruce.nivel}`}>
+            <span>Riesgo {resultadoCruce.nivel}</span>
+            <strong>{resultadoCruce.motivo}</strong>
+            <p>{resultadoCruce.recomendacion}</p>
+            {(resultadoCruce.ancestrosComunes || []).length > 0 && (
+              <small>
+                Ancestros comunes: {resultadoCruce.ancestrosComunes.map((animal) => animal.diio || animal.identificadorFinca || animal.nombre).join(', ')}
+              </small>
+            )}
+          </div>
+        )}
+      </section>
+
       <TablaDinamica
         titulo="Gestión Reproductiva"
         subtitulo="Reproduccion"
@@ -249,6 +323,7 @@ const Reproduccion = ({ soloLectura = false }) => {
               <label>Sexo<select name="sexo" value={formularioTernero.sexo} onChange={actualizarCampoTernero}><option value="Hembra">Hembra</option><option value="Macho">Macho</option></select></label>
               <label>Raza<input name="raza" value={formularioTernero.raza} onChange={actualizarCampoTernero} /></label>
               <label>Padre DIIO<input name="padreDiio" value={formularioTernero.padreDiio} onChange={actualizarCampoTernero} /></label>
+              <label>Padre externo<input name="padreExternoNombre" value={formularioTernero.padreExternoNombre || ''} onChange={actualizarCampoTernero} /></label>
               <label>Peso al nacer<input name="pesoNacimiento" type="number" min="0" step="0.01" value={formularioTernero.pesoNacimiento} onChange={actualizarCampoTernero} /></label>
               <label>Observaciones<textarea name="observaciones" rows="3" value={formularioTernero.observaciones} onChange={actualizarCampoTernero} /></label>
               <div className="modal-actions">

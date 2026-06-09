@@ -8,6 +8,13 @@ const estadoInicial = {
   raza: '',
   madreDiio: '',
   padreDiio: '',
+  padre: '',
+  madre: '',
+  origenGenealogico: 'Desconocido',
+  padreExternoNombre: '',
+  madreExternaNombre: '',
+  registroGenealogico: '',
+  observacionesGenealogicas: '',
   fechaNacimiento: '',
   fechaDestete: '',
   pesoNacimiento: '',
@@ -34,6 +41,8 @@ const formatearFechaInput = (fecha) => {
 const normalizarAnimal = (animal) => ({
   ...estadoInicial,
   ...animal,
+  padre: animal?.padre?._id || animal?.padre || '',
+  madre: animal?.madre?._id || animal?.madre || '',
   fechaNacimiento: formatearFechaInput(animal?.fechaNacimiento),
   fechaDestete: formatearFechaInput(animal?.fechaDestete),
   pesoNacimiento: animal?.pesoNacimiento ?? '',
@@ -53,7 +62,12 @@ const normalizarAnimal = (animal) => ({
 const numeroOpcional = (valor) => (valor === '' || valor === null || valor === undefined ? null : Number(valor));
 const fechaOpcional = (valor) => (valor ? valor : null);
 
-const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInicial, modo = 'crear' }) => {
+const obtenerEtiquetaAnimal = (animal) => {
+  const codigo = animal.diio || animal.identificadorFinca || 'Sin codigo';
+  return `${codigo}${animal.nombre ? ` - ${animal.nombre}` : ''}`;
+};
+
+const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInicial, modo = 'crear', animales = [] }) => {
   const [formulario, setFormulario] = useState(() => normalizarAnimal(animalInicial));
 
   const actualizarCampo = (evento) => {
@@ -81,9 +95,19 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       montoVenta: numeroOpcional(formulario.montoVenta),
       fechaCompra: fechaOpcional(formulario.fechaCompra),
       fechaVenta: fechaOpcional(formulario.fechaVenta),
-      fechaMuerte: fechaOpcional(formulario.fechaMuerte)
+      fechaMuerte: fechaOpcional(formulario.fechaMuerte),
+      padre: formulario.padre || null,
+      madre: formulario.madre || null,
+      padreExternoNombre: formulario.padreExternoNombre || '',
+      madreExternaNombre: formulario.madreExternaNombre || '',
+      origenGenealogico: formulario.origenGenealogico,
+      registroGenealogico: formulario.registroGenealogico || '',
+      observacionesGenealogicas: formulario.observacionesGenealogicas || ''
     });
   };
+
+  const machos = animales.filter((animal) => animal.sexo === 'Macho' && animal._id !== animalInicial?._id);
+  const hembras = animales.filter((animal) => animal.sexo === 'Hembra' && animal._id !== animalInicial?._id);
 
   return (
     <section className="form-page">
@@ -137,17 +161,68 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
           </label>
         </div>
 
-        <div className="form-grid">
+        <section className="form-section">
+          <div>
+            <p className="eyebrow">Genealogía</p>
+            <h3>Padres y registro familiar</h3>
+          </div>
+
+          <div className="form-grid">
+            <label>
+              Padre registrado en finca
+              <select name="padre" value={formulario.padre} onChange={actualizarCampo}>
+                <option value="">Sin padre registrado</option>
+                {machos.map((animal) => (
+                  <option key={animal._id} value={animal._id}>{obtenerEtiquetaAnimal(animal)}</option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Madre registrada en finca
+              <select name="madre" value={formulario.madre} onChange={actualizarCampo}>
+                <option value="">Sin madre registrada</option>
+                {hembras.map((animal) => (
+                  <option key={animal._id} value={animal._id}>{obtenerEtiquetaAnimal(animal)}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="form-grid">
+            <label>
+              Padre externo
+              <input name="padreExternoNombre" value={formulario.padreExternoNombre} onChange={actualizarCampo} placeholder="Nombre, codigo o referencia" />
+            </label>
+
+            <label>
+              Madre externa
+              <input name="madreExternaNombre" value={formulario.madreExternaNombre} onChange={actualizarCampo} placeholder="Nombre, codigo o referencia" />
+            </label>
+          </div>
+
+          <div className="form-grid">
+            <label>
+              Padre DIIO anterior
+              <input name="padreDiio" value={formulario.padreDiio} onChange={actualizarCampo} placeholder="Dato historico si existe" />
+            </label>
+
+            <label>
+              Madre DIIO anterior
+              <input name="madreDiio" value={formulario.madreDiio} onChange={actualizarCampo} placeholder="Dato historico si existe" />
+            </label>
+          </div>
+
           <label>
-            Madre DIIO
-            <input name="madreDiio" value={formulario.madreDiio} onChange={actualizarCampo} placeholder="DIIO de la madre" />
+            Registro genealógico
+            <input name="registroGenealogico" value={formulario.registroGenealogico} onChange={actualizarCampo} placeholder="Registro, lote familiar o linea" />
           </label>
 
           <label>
-            Padre DIIO
-            <input name="padreDiio" value={formulario.padreDiio} onChange={actualizarCampo} placeholder="DIIO del padre" />
+            Observaciones genealógicas
+            <textarea name="observacionesGenealogicas" rows="3" value={formulario.observacionesGenealogicas} onChange={actualizarCampo} />
           </label>
-        </div>
+        </section>
 
         <div className="form-grid">
           <label>

@@ -12,6 +12,7 @@ const normalizarTipoMovimiento = (tipoMovimiento = '') => {
     if (tipo === 'planilla' || tipo === 'planillas') return 'Planilla';
     if (tipo === 'inversion' || tipo === 'inversiones' || tipo === 'inversión') return 'Inversion';
     if (tipo === 'compra' || tipo === 'compras') return 'Compra';
+    if (tipo === 'compra de animales' || tipo === 'compras de animales') return 'Compra de animales';
 
     return tipoMovimiento;
 };
@@ -126,7 +127,7 @@ movimientoFinancieroCtrl.getResumen = async (req, res) => {
             totalGeneral: totalGeneralResultado[0]?.total || 0,
             totalPlanillas: totalesPorTipo.Planilla || 0,
             totalInversiones: totalesPorTipo.Inversion || 0,
-            totalCompras: totalesPorTipo.Compra || 0,
+            totalCompras: (totalesPorTipo.Compra || 0) + (totalesPorTipo['Compra de animales'] || 0),
             totalIngresos: totalesPorNaturaleza.Ingreso || 0,
             totalEgresos: totalesPorNaturaleza.Egreso || 0,
             balance: (totalesPorNaturaleza.Ingreso || 0) - (totalesPorNaturaleza.Egreso || 0),

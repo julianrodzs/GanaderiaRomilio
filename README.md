@@ -237,6 +237,7 @@ Unifica:
 - inversiones.
 - compras.
 - ventas de animales.
+- compras de animales.
 
 Permite clasificar por naturaleza:
 
@@ -244,6 +245,28 @@ Permite clasificar por naturaleza:
 - `Egreso`
 
 El modelo `Costo` queda por compatibilidad.
+
+### Compras de animales
+
+Modulo formal para compras:
+
+- fecha de compra.
+- proveedor.
+- varios animales por compra.
+- identificador provisional o DIIO.
+- peso compra y precio por kg.
+- subtotal por animal.
+- total por compra.
+- comprobante.
+- estado: pendiente, confirmada o anulada.
+
+Al confirmar compra:
+
+- crea animales nuevos en inventario.
+- registra peso y precio de compra.
+- deja el animal activo.
+- crea evento en bitacora.
+- crea movimiento financiero de egreso.
 
 ### Ventas de animales
 

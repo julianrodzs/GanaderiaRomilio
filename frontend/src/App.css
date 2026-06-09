@@ -222,7 +222,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   padding-bottom: 16px;
   border-bottom: 1px solid #e0e2dc;
 }
@@ -230,7 +230,7 @@
 .app-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0;
 }
 
 .brand-icon {
@@ -1048,6 +1048,19 @@
 .form-card textarea {
   padding: 12px;
   resize: vertical;
+}
+
+.form-section {
+  border-top: 1px solid #dfe3dc;
+  display: grid;
+  gap: 16px;
+  padding-top: 18px;
+}
+
+.form-section h3 {
+  color: #09160e;
+  font-size: 1.15rem;
+  margin: 4px 0 0;
 }
 
 .form-card input:focus,
@@ -2061,6 +2074,154 @@
   color: #243229;
 }
 
+.genealogia-animal,
+.evaluar-cruce-panel {
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.genealogia-arbol {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.genealogia-nodo {
+  background: #f8f9f5;
+  border: 1px solid #d9ddd5;
+  display: inline-grid;
+  gap: 4px;
+  min-width: 180px;
+  padding: 12px;
+  vertical-align: top;
+}
+
+.genealogia-nodo.externo {
+  border-style: dashed;
+}
+
+.genealogia-nodo span,
+.genealogia-nodo small {
+  color: #66736b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.genealogia-nodo strong {
+  color: #043c22;
+}
+
+.genealogia-ramas {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.genealogia-descendencia {
+  display: grid;
+  gap: 12px;
+}
+
+.genealogia-descendencia h3 {
+  margin: 0;
+}
+
+.chips-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chips-lista span {
+  background: #e7f0e8;
+  color: #043c22;
+  font-size: 0.86rem;
+  font-weight: 800;
+  padding: 8px 10px;
+}
+
+.evaluar-cruce-panel {
+  margin-bottom: 34px;
+  padding: 22px;
+}
+
+.evaluar-cruce-form {
+  align-items: end;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(160px, 220px);
+}
+
+.evaluar-cruce-form label {
+  color: #314137;
+  display: grid;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 8px;
+  text-transform: uppercase;
+}
+
+.evaluar-cruce-form select {
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, #0b3b21 50%) calc(100% - 18px) 50% / 7px 7px no-repeat,
+    linear-gradient(135deg, #0b3b21 50%, transparent 50%) calc(100% - 13px) 50% / 7px 7px no-repeat,
+    #f8f9f5;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  color: #09160e;
+  font: inherit;
+  min-height: 48px;
+  outline: none;
+  padding: 0 38px 0 14px;
+  width: 100%;
+}
+
+.evaluar-cruce-form select:focus {
+  border-color: #204b32;
+  box-shadow: 0 0 0 3px rgba(32, 75, 50, 0.12);
+}
+
+.evaluar-cruce-form .boton-primario {
+  min-height: 48px;
+  width: 100%;
+}
+
+.riesgo-cruce {
+  border-left: 4px solid #767774;
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+}
+
+.riesgo-cruce span {
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.riesgo-cruce strong,
+.riesgo-cruce p {
+  margin: 0;
+}
+
+.resultado-Bajo {
+  background: #e7f0e8;
+  border-left-color: #2f6f43;
+}
+
+.resultado-Medio,
+.resultado-Indeterminado {
+  background: #fff4d8;
+  border-left-color: #b98528;
+}
+
+.resultado-Alto {
+  background: #fde2df;
+  border-left-color: #b13b2e;
+}
+
 .bitacora-animal {
   display: grid;
   gap: 14px;
@@ -2197,6 +2358,7 @@
   }
 
   .form-grid,
+  .evaluar-cruce-form,
   .dashboard-content {
     grid-template-columns: 1fr;
   }

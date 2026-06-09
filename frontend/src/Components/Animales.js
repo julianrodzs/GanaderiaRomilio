@@ -5,6 +5,8 @@ import {
   crearEventoAnimal,
   eliminarAnimal,
   obtenerAnimales,
+  obtenerArbolGenealogico,
+  obtenerDescendenciaAnimal,
   obtenerEventosAnimal,
   obtenerPesajesPorAnimal
 } from '../services/api';
@@ -81,6 +83,31 @@ const formatearMoneda = (valor) => {
   }).format(valor || 0);
 };
 
+const etiquetaAnimal = (animal) => {
+  if (!animal) return '';
+  if (animal.externo) return `${animal.nombre || 'Externo'} (externo)`;
+  const codigo = animal.diio || animal.identificadorFinca || animal.nombre || '';
+  return `${codigo}${animal.nombre && codigo !== animal.nombre ? ` - ${animal.nombre}` : ''}`;
+};
+
+const NodoGenealogico = ({ nodo, titulo = 'Animal' }) => {
+  if (!nodo?.animal) return null;
+
+  return (
+    <article className={`genealogia-nodo ${nodo.animal.externo ? 'externo' : ''}`}>
+      <span>{titulo}</span>
+      <strong>{etiquetaAnimal(nodo.animal) || '--'}</strong>
+      <small>{nodo.animal.sexo || 'Sin sexo registrado'}</small>
+      {(nodo.padre || nodo.madre) && (
+        <div className="genealogia-ramas">
+          <NodoGenealogico nodo={nodo.padre} titulo="Padre" />
+          <NodoGenealogico nodo={nodo.madre} titulo="Madre" />
+        </div>
+      )}
+    </article>
+  );
+};
+
 const columnas = [
   {
     id: 'diio',
@@ -125,10 +152,14 @@ const Animales = ({ soloLectura = false }) => {
   const [animalDetalle, setAnimalDetalle] = useState(null);
   const [eventosAnimal, setEventosAnimal] = useState([]);
   const [pesajesAnimal, setPesajesAnimal] = useState([]);
+  const [arbolGenealogico, setArbolGenealogico] = useState(null);
+  const [descendenciaAnimal, setDescendenciaAnimal] = useState(null);
   const [cargandoEventos, setCargandoEventos] = useState(false);
   const [cargandoPesajes, setCargandoPesajes] = useState(false);
+  const [cargandoGenealogia, setCargandoGenealogia] = useState(false);
   const [errorEventos, setErrorEventos] = useState('');
   const [errorPesajes, setErrorPesajes] = useState('');
+  const [errorGenealogia, setErrorGenealogia] = useState('');
   const [observacionManual, setObservacionManual] = useState('');
   const [guardandoEvento, setGuardandoEvento] = useState(false);
 
@@ -229,14 +260,34 @@ const Animales = ({ soloLectura = false }) => {
     }
   };
 
+  const cargarGenealogiaAnimal = async (animalId) => {
+    try {
+      setCargandoGenealogia(true);
+      setErrorGenealogia('');
+      const [arbol, descendencia] = await Promise.all([
+        obtenerArbolGenealogico(animalId, 3),
+        obtenerDescendenciaAnimal(animalId)
+      ]);
+      setArbolGenealogico(arbol);
+      setDescendenciaAnimal(descendencia);
+    } catch (err) {
+      setErrorGenealogia(err.message);
+    } finally {
+      setCargandoGenealogia(false);
+    }
+  };
+
   const abrirDetalleAnimal = async (animal) => {
     setAnimalDetalle(animal);
     setObservacionManual('');
     setEventosAnimal([]);
     setPesajesAnimal([]);
+    setArbolGenealogico(null);
+    setDescendenciaAnimal(null);
     await Promise.all([
       cargarEventosAnimal(animal._id),
-      cargarPesajesAnimal(animal._id)
+      cargarPesajesAnimal(animal._id),
+      cargarGenealogiaAnimal(animal._id)
     ]);
   };
 
@@ -244,9 +295,12 @@ const Animales = ({ soloLectura = false }) => {
     setAnimalDetalle(null);
     setEventosAnimal([]);
     setPesajesAnimal([]);
+    setArbolGenealogico(null);
+    setDescendenciaAnimal(null);
     setObservacionManual('');
     setErrorEventos('');
     setErrorPesajes('');
+    setErrorGenealogia('');
   };
 
   const crearObservacionManual = async (evento) => {
@@ -296,6 +350,7 @@ const Animales = ({ soloLectura = false }) => {
     return (
       <FormularioAnimal
         animalInicial={animalSeleccionado}
+        animales={animales}
         modo={animalSeleccionado ? 'editar' : 'crear'}
         onCancelar={cancelarFormulario}
         onGuardar={guardarAnimal}
@@ -343,12 +398,12 @@ const Animales = ({ soloLectura = false }) => {
                 <strong>{estaListaMontaPorEdad(animalDetalle) ? 'Sí' : 'No'}</strong>
               </article>
               <article>
-                <span>Madre DIIO</span>
-                <strong>{animalDetalle.madreDiio || '--'}</strong>
+                <span>Madre</span>
+                <strong>{etiquetaAnimal(animalDetalle.madre) || animalDetalle.madreExternaNombre || animalDetalle.madreDiio || '--'}</strong>
               </article>
               <article>
-                <span>Padre DIIO</span>
-                <strong>{animalDetalle.padreDiio || '--'}</strong>
+                <span>Padre</span>
+                <strong>{etiquetaAnimal(animalDetalle.padre) || animalDetalle.padreExternoNombre || animalDetalle.padreDiio || '--'}</strong>
               </article>
               <article>
                 <span>Fecha nacimiento</span>
@@ -418,6 +473,68 @@ const Animales = ({ soloLectura = false }) => {
                 <p>{animalDetalle.observaciones}</p>
               </div>
             )}
+
+            <section className="genealogia-animal">
+              <div className="panel-title">
+                <div>
+                  <p className="eyebrow">Genealogía</p>
+                  <h2>Árbol familiar</h2>
+                </div>
+                {!soloLectura && (
+                  <button className="boton-link" type="button" onClick={() => abrirEdicionAnimal(animalDetalle)}>
+                    Editar genealogía
+                  </button>
+                )}
+              </div>
+
+              {errorGenealogia && <div className="alerta-formulario">{errorGenealogia}</div>}
+              {cargandoGenealogia && <span className="reporte-vacio">Cargando genealogía...</span>}
+
+              {!cargandoGenealogia && (
+                <>
+                  <div className="detalle-animal-grid">
+                    <article><span>Padre</span><strong>{etiquetaAnimal(animalDetalle.padre) || animalDetalle.padreExternoNombre || animalDetalle.padreDiio || '--'}</strong></article>
+                    <article><span>Madre</span><strong>{etiquetaAnimal(animalDetalle.madre) || animalDetalle.madreExternaNombre || animalDetalle.madreDiio || '--'}</strong></article>
+                    <article><span>Origen</span><strong>{animalDetalle.origenGenealogico || 'Desconocido'}</strong></article>
+                    <article><span>Registro</span><strong>{animalDetalle.registroGenealogico || '--'}</strong></article>
+                  </div>
+
+                  {animalDetalle.observacionesGenealogicas && (
+                    <div className="detalle-observaciones">
+                      <span>Observaciones genealógicas</span>
+                      <p>{animalDetalle.observacionesGenealogicas}</p>
+                    </div>
+                  )}
+
+                  <div className="genealogia-arbol">
+                    {arbolGenealogico?.animal ? (
+                      <NodoGenealogico nodo={arbolGenealogico} titulo="Animal" />
+                    ) : (
+                      <div className="bitacora-vacia">
+                        <strong>Sin árbol genealógico registrado.</strong>
+                        <span>Agrega padre o madre para empezar a construir la línea familiar.</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="genealogia-descendencia">
+                    <h3>Descendencia</h3>
+                    <div className="detalle-animal-grid">
+                      <article><span>Hijos</span><strong>{descendenciaAnimal?.hijos?.length || 0}</strong></article>
+                      <article><span>Nietos</span><strong>{descendenciaAnimal?.nietos?.length || 0}</strong></article>
+                      <article><span>Total descendientes</span><strong>{descendenciaAnimal?.totalDescendientes || 0}</strong></article>
+                    </div>
+                    {(descendenciaAnimal?.hijos || []).length > 0 && (
+                      <div className="chips-lista">
+                        {descendenciaAnimal.hijos.map((hijo) => (
+                          <span key={hijo._id}>{etiquetaAnimal(hijo)}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
 
             <section className="historial-pesajes-animal">
               <div className="panel-title">

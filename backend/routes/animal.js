@@ -11,6 +11,7 @@ const {
     updateAnimal,
     deleteAnimal
 } = require('../controllers/animal-controller');
+const { updateGenealogiaAnimal } = require('../controllers/genealogiaController');
 
 router.route('/')
     .get(puedeVer, getAnimales)
@@ -20,5 +21,7 @@ router.route('/:id')
     .get(puedeVer, getAnimal)
     .put(soloAdministrador, updateAnimal)
     .delete(soloAdministrador, deleteAnimal);
+
+router.put('/:id/genealogia', soloAdministrador, updateGenealogiaAnimal);
 
 module.exports = router;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import Animales from './Animales';
+import Compras from './Compras';
 import ConteoDrone from './ConteoDrone';
 import Finanzas from './Finanzas';
 import ImportarExcel from './ImportarExcel';
@@ -272,6 +273,15 @@ const ListaUsuario = ({ usuario, onLogout }) => {
       <main className="dashboard-shell">
         {navegacion}
         <Ventas />
+      </main>
+    );
+  }
+
+  if (vistaActiva === 'Compras') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <Compras />
       </main>
     );
   }

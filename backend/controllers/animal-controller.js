@@ -2,10 +2,57 @@ const animalCtrl = {};
 
 const Animal = require('../models/Animal');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
+const {
+    prepararDatosGenealogia,
+    validarRelacionGenealogica
+} = require('../services/genealogiaService');
+
+const limpiarDiio = (diio) => {
+    if (diio === undefined) return undefined;
+    const valor = String(diio || '').trim();
+    return valor || undefined;
+};
+
+const validarDiioDisponible = async (diio, animalId = null) => {
+    const diioLimpio = limpiarDiio(diio);
+    if (!diioLimpio) return;
+
+    const filtro = { diio: diioLimpio };
+    if (animalId) {
+        filtro._id = { $ne: animalId };
+    }
+
+    const existente = await Animal.findOne(filtro).select('_id identificadorFinca diio');
+    if (existente) {
+        const error = new Error(`El DIIO ${diioLimpio} ya está registrado en otro animal.`);
+        error.status = 400;
+        throw error;
+    }
+};
 
 const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId }) => {
     const referenciaId = animal._id;
     const creadoPor = usuarioId;
+
+    const diioAnterior = limpiarDiio(animalAnterior?.diio);
+    const diioActual = limpiarDiio(animal.diio);
+
+    if (animalAnterior && diioAnterior !== diioActual) {
+        await upsertEventoAnimal({
+            animal: animal._id,
+            tipoEvento: 'Observacion',
+            fecha: new Date(),
+            titulo: 'DIIO actualizado',
+            descripcion: `DIIO actualizado de ${diioAnterior || 'sin DIIO'} a ${diioActual || 'sin DIIO'}.`,
+            moduloOrigen: 'Inventario',
+            creadoPor,
+            metadata: {
+                diioAnterior,
+                diioActual,
+                identificadorFinca: animal.identificadorFinca
+            }
+        });
+    }
 
     if (animal.fechaNacimiento) {
         await upsertEventoAnimal({
@@ -92,7 +139,11 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
 
 animalCtrl.getAnimales = async (req, res) => {
     try {
-        const animales = await Animal.find().populate('potreroActual').sort({ createdAt: -1 });
+        const animales = await Animal.find()
+            .populate('potreroActual')
+            .populate('padre', 'diio identificadorFinca nombre sexo')
+            .populate('madre', 'diio identificadorFinca nombre sexo')
+            .sort({ createdAt: -1 });
         res.json(animales);
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener animales', error: error.message });
@@ -101,18 +152,28 @@ animalCtrl.getAnimales = async (req, res) => {
 
 animalCtrl.createAnimal = async (req, res) => {
     try {
-        const nuevoAnimal = new Animal(req.body);
+        const datos = prepararDatosGenealogia({
+            ...req.body,
+            diio: limpiarDiio(req.body.diio)
+        });
+        await validarDiioDisponible(datos.diio);
+        await validarRelacionGenealogica(null, datos.padre, datos.madre);
+
+        const nuevoAnimal = new Animal(datos);
         const animalGuardado = await nuevoAnimal.save();
         await crearEventosInventario({ animal: animalGuardado, usuarioId: req.usuario?.id });
         res.status(201).json(animalGuardado);
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al crear animal', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al crear animal', error: error.message });
     }
 };
 
 animalCtrl.getAnimal = async (req, res) => {
     try {
-        const animal = await Animal.findById(req.params.id).populate('potreroActual');
+        const animal = await Animal.findById(req.params.id)
+            .populate('potreroActual')
+            .populate('padre', 'diio identificadorFinca nombre sexo')
+            .populate('madre', 'diio identificadorFinca nombre sexo');
 
         if (!animal) {
             return res.status(404).json({ mensaje: 'Animal no encontrado' });
@@ -126,11 +187,28 @@ animalCtrl.getAnimal = async (req, res) => {
 
 animalCtrl.updateAnimal = async (req, res) => {
     try {
+        const datos = prepararDatosGenealogia({
+            ...req.body,
+            diio: req.body.diio !== undefined ? limpiarDiio(req.body.diio) : req.body.diio
+        });
         const animalAnterior = await Animal.findById(req.params.id).lean();
-        const animal = await Animal.findByIdAndUpdate(req.params.id, req.body, {
+
+        if (!animalAnterior) {
+            return res.status(404).json({ mensaje: 'Animal no encontrado' });
+        }
+
+        if (datos.diio !== undefined && limpiarDiio(animalAnterior.diio) !== datos.diio) {
+            await validarDiioDisponible(datos.diio, req.params.id);
+        }
+        await validarRelacionGenealogica(req.params.id, datos.padre, datos.madre);
+
+        const animal = await Animal.findByIdAndUpdate(req.params.id, datos, {
             new: true,
             runValidators: true
-        });
+        })
+            .populate('potreroActual')
+            .populate('padre', 'diio identificadorFinca nombre sexo')
+            .populate('madre', 'diio identificadorFinca nombre sexo');
 
         if (!animal) {
             return res.status(404).json({ mensaje: 'Animal no encontrado' });
@@ -140,7 +218,7 @@ animalCtrl.updateAnimal = async (req, res) => {
 
         res.json(animal);
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al actualizar animal', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar animal', error: error.message });
     }
 };
 

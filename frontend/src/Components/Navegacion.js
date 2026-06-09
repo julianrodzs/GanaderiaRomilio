@@ -1,15 +1,15 @@
 import React from 'react';
 
 const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuario }) => {
-  const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Ventas', 'Finanzas', 'Reportes', 'Drone'];
+  const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone'];
   const items = usuario?.rol === 'Administrador' ? [...itemsBase, 'Usuarios'] : ['Mis tareas', 'Inventario', 'Potreros', 'Gestación'];
   const esItemActivo = (item) => item === vistaActiva || (usuario?.rol !== 'Administrador' && item === 'Mis tareas' && vistaActiva === 'Dashboard');
+  const etiquetaItem = (item) => (item === 'Dashboard' ? 'Db' : item);
 
   return (
     <header className="app-header">
       <div className="app-brand">
         <span className="brand-icon">GR</span>
-        <strong>GanaderiaRomilio</strong>
       </div>
 
       <nav className="app-nav" aria-label="Navegacion principal">
@@ -20,7 +20,7 @@ const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuar
             type="button"
             onClick={() => onCambiarVista?.(item)}
           >
-            {item}
+            {etiquetaItem(item)}
           </button>
         ))}
       </nav>

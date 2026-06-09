@@ -220,6 +220,35 @@ export const eliminarAnimal = (id) => {
   });
 };
 
+export const actualizarGenealogiaAnimal = (id, genealogia) => {
+  return request(`/animales/${id}/genealogia`, {
+    method: 'PUT',
+    body: JSON.stringify(genealogia)
+  });
+};
+
+export const obtenerArbolGenealogico = (animalId, generaciones = 3) => {
+  return request(`/genealogia/animal/${animalId}/arbol?generaciones=${generaciones}`);
+};
+
+export const obtenerDescendenciaAnimal = (animalId) => {
+  return request(`/genealogia/animal/${animalId}/descendencia`);
+};
+
+export const obtenerParentesco = ({ animalA, animalB }) => {
+  const params = new URLSearchParams();
+  if (animalA) params.append('animalA', animalA);
+  if (animalB) params.append('animalB', animalB);
+  return request(`/genealogia/parentesco?${params.toString()}`);
+};
+
+export const evaluarRiesgoCruce = ({ macho, hembra }) => {
+  const params = new URLSearchParams();
+  if (macho) params.append('macho', macho);
+  if (hembra) params.append('hembra', hembra);
+  return request(`/genealogia/riesgo-cruce?${params.toString()}`);
+};
+
 export const obtenerPesajes = () => request('/pesajes');
 
 export const obtenerPesajesPorAnimal = (animalId) => request(`/pesajes/animal/${animalId}`);
@@ -460,6 +489,66 @@ export const anularVentaAnimal = (id, motivoAnulacion = '') => {
 
 export const eliminarVentaAnimal = (id) => {
   return request(`/ventas/${id}`, {
+    method: 'DELETE'
+  });
+};
+
+const crearFormDataCompra = (compra) => {
+  const formData = new FormData();
+  Object.entries(compra).forEach(([clave, valor]) => {
+    if (clave === 'comprobante') return;
+    if (clave === 'animales') {
+      formData.append(clave, JSON.stringify(valor || []));
+      return;
+    }
+    if (valor !== undefined && valor !== null) {
+      formData.append(clave, valor);
+    }
+  });
+  if (compra.comprobante) formData.append('comprobante', compra.comprobante);
+  return formData;
+};
+
+export const obtenerCompras = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/compras${query ? `?${query}` : ''}`);
+};
+
+export const obtenerResumenCompras = ({ fechaInicio, fechaFin } = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  const query = params.toString();
+  return request(`/compras/resumen${query ? `?${query}` : ''}`);
+};
+
+export const crearCompraAnimal = (compra) => {
+  return request('/compras', {
+    method: 'POST',
+    body: crearFormDataCompra(compra)
+  });
+};
+
+export const actualizarCompraAnimal = (id, compra) => {
+  return request(`/compras/${id}`, {
+    method: 'PUT',
+    body: crearFormDataCompra(compra)
+  });
+};
+
+export const anularCompraAnimal = (id, motivoAnulacion = '') => {
+  return request(`/compras/${id}/anular`, {
+    method: 'PATCH',
+    body: JSON.stringify({ motivoAnulacion })
+  });
+};
+
+export const eliminarCompraAnimal = (id) => {
+  return request(`/compras/${id}`, {
     method: 'DELETE'
   });
 };

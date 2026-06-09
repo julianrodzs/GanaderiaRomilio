@@ -1,6 +1,7 @@
 const { RegistroReproductivo, completarFechasYEstado } = require('../models/RegistroReproductivo');
 const Animal = require('../models/Animal');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
+const { prepararDatosGenealogia, validarRelacionGenealogica } = require('../services/genealogiaService');
 
 const reproduccionCtrl = {};
 
@@ -150,20 +151,36 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             return res.status(400).json({ mensaje: 'El DIIO o identificador de finca del ternero es requerido' });
         }
 
-        const nuevoTernero = new Animal({
+        const padreRegistrado = req.body.padre
+            ? await Animal.findById(req.body.padre)
+            : req.body.padreDiio
+                ? await Animal.findOne({
+                    $or: [
+                        { diio: req.body.padreDiio },
+                        { identificadorFinca: req.body.padreDiio }
+                    ]
+                })
+                : null;
+
+        const datosTernero = prepararDatosGenealogia({
             identificadorFinca: identificador,
             diio: req.body.diio || undefined,
             nombre: req.body.nombre,
             sexo: req.body.sexo,
             raza: req.body.raza || madre.raza,
+            madre: madre._id,
             madreDiio: madre.diio || madre.identificadorFinca,
+            padre: padreRegistrado?._id,
             padreDiio: req.body.padreDiio,
+            padreExternoNombre: padreRegistrado ? undefined : req.body.padreExternoNombre || req.body.padreDiio,
             fechaNacimiento: registro.fechaPartoReal,
             pesoNacimiento: req.body.pesoNacimiento,
             estado: 'Activo',
             observaciones: req.body.observaciones
         });
 
+        await validarRelacionGenealogica(null, datosTernero.padre, datosTernero.madre);
+        const nuevoTernero = new Animal(datosTernero);
         const terneroGuardado = await nuevoTernero.save();
 
         await upsertEventoAnimal({
