@@ -6,6 +6,66 @@ const RotacionPotrero = require('../models/RotacionPotrero');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 
 const LIMITE_PREVIEW = 20;
+const MODULOS_MODELOS = {
+    inventario: ['Animal'],
+    potreros: ['Potrero'],
+    finanzas: ['MovimientoFinanciero'],
+    pesajes: ['Pesaje'],
+    rotaciones: ['RotacionPotrero'],
+    sanidad: ['RegistroSanitario']
+};
+
+const TODOS_LOS_MODULOS = Object.keys(MODULOS_MODELOS);
+
+const normalizarModulo = (valor) => {
+    const modulo = normalizar(valor).toLowerCase();
+    const equivalencias = {
+        animales: 'inventario',
+        animal: 'inventario',
+        inventario: 'inventario',
+        potrero: 'potreros',
+        potreros: 'potreros',
+        finanza: 'finanzas',
+        finanzas: 'finanzas',
+        costo: 'finanzas',
+        costos: 'finanzas',
+        compras: 'finanzas',
+        compra: 'finanzas',
+        planilla: 'finanzas',
+        inversion: 'finanzas',
+        inversiones: 'finanzas',
+        pesaje: 'pesajes',
+        pesajes: 'pesajes',
+        rotacion: 'rotaciones',
+        rotaciones: 'rotaciones',
+        sanidad: 'sanidad'
+    };
+
+    return equivalencias[modulo] || modulo;
+};
+
+const normalizarModulos = (modulos) => {
+    if (!modulos) return TODOS_LOS_MODULOS;
+
+    const valores = Array.isArray(modulos)
+        ? modulos
+        : String(modulos)
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+    const modulosValidos = [...new Set(valores.map(normalizarModulo).filter((modulo) => TODOS_LOS_MODULOS.includes(modulo)))];
+
+    return modulosValidos.length > 0 ? modulosValidos : TODOS_LOS_MODULOS;
+};
+
+const modelosPermitidosPorModulo = (modulos) => {
+    const permitidos = new Set();
+    modulos.forEach((modulo) => {
+        (MODULOS_MODELOS[modulo] || []).forEach((modelo) => permitidos.add(modelo));
+    });
+    return permitidos;
+};
 
 const limpiarTexto = (valor) => {
     if (valor === null || valor === undefined) return '';
@@ -96,6 +156,15 @@ const mapearSexo = (valor) => {
     return undefined;
 };
 
+const mapearEstadoPotrero = (valor) => {
+    const texto = normalizar(valor);
+    if (texto.includes('OCUP')) return 'Ocupado';
+    if (texto.includes('DESCANS')) return 'Descanso';
+    if (texto.includes('MANTEN')) return 'Mantenimiento';
+    if (texto.includes('DISPON')) return 'Disponible';
+    return undefined;
+};
+
 const buscarIndice = (fila, opciones) => {
     const normalizadas = opciones.map(normalizar);
     return fila.findIndex((celda) => normalizadas.includes(normalizar(celda)));
@@ -142,6 +211,20 @@ const mapearControlPesoDiio = ({ hoja, filas, acumulador, advertencias }) => {
         identificadorFinca: buscarIndice(encabezado, ['ID de finca']),
         fechaNacimiento: buscarIndice(encabezado, ['Fecha de Nacimiento']),
         sexo: buscarIndice(encabezado, ['Sexo']),
+        madreDiio: buscarIndice(encabezado, ['Madre DIIO', 'Madre', 'DIIO Madre']),
+        padreDiio: buscarIndice(encabezado, ['Padre DIIO', 'Padre', 'DIIO Padre']),
+        raza: buscarIndice(encabezado, ['Raza']),
+        fechaCompra: buscarIndice(encabezado, ['Fecha Compra', 'Fecha de Compra']),
+        pesoNacimiento: buscarIndice(encabezado, ['Peso Nacimiento', 'Peso al Nacer']),
+        pesoDestete: buscarIndice(encabezado, ['Peso Destete', 'Peso al Destete']),
+        fechaDestete: buscarIndice(encabezado, ['Fecha Destete']),
+        pesoCompra: buscarIndice(encabezado, ['Peso Compra']),
+        precioCompraPorKg: buscarIndice(encabezado, ['Precio Compra Kg', 'Precio Compra por Kg', 'Precio de Compra por kilo']),
+        precioVentaPorKg: buscarIndice(encabezado, ['Precio Venta Kg', 'Precio Venta por Kg', 'Precio de venta por kilo']),
+        montoCompra: buscarIndice(encabezado, ['Monto Compra', 'Total compra']),
+        montoVenta: buscarIndice(encabezado, ['Monto Venta', 'Total venta']),
+        fechaVenta: buscarIndice(encabezado, ['Fecha Venta']),
+        fechaMuerte: buscarIndice(encabezado, ['Fecha Muerte']),
         peso1: buscarIndice(encabezado, ['Pesa #1']),
         fecha1: buscarIndice(encabezado, ['Fecha']),
         peso2: buscarIndice(encabezado.slice(buscarIndice(encabezado, ['Pesa #2'])), ['Pesa #2'])
@@ -167,7 +250,21 @@ const mapearControlPesoDiio = ({ hoja, filas, acumulador, advertencias }) => {
             diio,
             nombre: limpiarTexto(fila[idx.identificadorFinca]) || undefined,
             sexo,
+            raza: limpiarTexto(fila[idx.raza]) || undefined,
+            madreDiio: limpiarTexto(fila[idx.madreDiio]) || undefined,
+            padreDiio: limpiarTexto(fila[idx.padreDiio]) || undefined,
             fechaNacimiento: serializarFecha(aFecha(fila[idx.fechaNacimiento])),
+            fechaCompra: serializarFecha(aFecha(fila[idx.fechaCompra])),
+            fechaVenta: serializarFecha(aFecha(fila[idx.fechaVenta])),
+            fechaMuerte: serializarFecha(aFecha(fila[idx.fechaMuerte])),
+            fechaDestete: serializarFecha(aFecha(fila[idx.fechaDestete])),
+            pesoNacimiento: aNumero(fila[idx.pesoNacimiento]),
+            pesoDestete: aNumero(fila[idx.pesoDestete]),
+            pesoCompra: aNumero(fila[idx.pesoCompra]),
+            precioCompraPorKg: aNumero(fila[idx.precioCompraPorKg]),
+            precioVentaPorKg: aNumero(fila[idx.precioVentaPorKg]),
+            montoCompra: aNumero(fila[idx.montoCompra]),
+            montoVenta: aNumero(fila[idx.montoVenta]),
             pesoActual: peso2 || peso1,
             estado: 'Activo',
             observaciones: `Importado desde hoja ${hoja}`
@@ -251,6 +348,56 @@ const mapearControlPesoArete = ({ hoja, filas, acumulador, advertencias }) => {
     });
 
     agregarAdvertencia(advertencias, hoja, 'La hoja con # Arete no trae sexo; se deja Macho como valor temporal para cumplir el modelo actual.');
+    return true;
+};
+
+const mapearPotrerosGenerico = ({ hoja, filas, acumulador }) => {
+    const indiceEncabezado = filas.findIndex((fila) => {
+        const textoFila = fila.map(normalizar);
+        const tieneCodigoONombre = textoFila.includes('CODIGO') || textoFila.includes('CÓDIGO') || textoFila.includes('NOMBRE');
+        const parecePotrero = textoFila.some((celda) => celda.includes('POTRERO') || celda.includes('AREA') || celda.includes('CHAPIA'));
+        return tieneCodigoONombre && parecePotrero;
+    });
+
+    if (indiceEncabezado === -1) return false;
+
+    const encabezado = filas[indiceEncabezado];
+    const idx = {
+        codigo: buscarIndice(encabezado, ['Codigo', 'Código', 'Potrero', 'Numero', 'Número']),
+        nombre: buscarIndice(encabezado, ['Nombre']),
+        area: buscarIndice(encabezado, ['Area', 'Área', 'Hectareas', 'Hectáreas']),
+        capacidadMaxima: buscarIndice(encabezado, ['Capacidad', 'Capacidad maxima', 'Capacidad máxima']),
+        ubicacion: buscarIndice(encabezado, ['Ubicacion', 'Ubicación']),
+        ultimaAplicacionHerbicida: buscarIndice(encabezado, ['Ultima aplicacion herbicida', 'Última aplicación herbicida', 'Herbicida']),
+        ultimaChapia: buscarIndice(encabezado, ['Ultima chapia', 'Última chapia', 'Chapia']),
+        ultimaFertilizacion: buscarIndice(encabezado, ['Ultima fertilizacion', 'Última fertilización', 'Fertilizacion', 'Fertilización']),
+        estado: buscarIndice(encabezado, ['Estado']),
+        observaciones: buscarIndice(encabezado, ['Observaciones'])
+    };
+
+    filas.slice(indiceEncabezado + 1).forEach((fila, offset) => {
+        if (!tieneDatos(fila)) return;
+
+        const codigoBase = limpiarTexto(fila[idx.codigo]);
+        const nombre = limpiarTexto(fila[idx.nombre]);
+        const codigo = codigoBase || nombre;
+
+        if (!codigo || normalizar(codigo).includes('TOTAL')) return;
+
+        agregar(acumulador, 'Potrero', {
+            codigo,
+            nombre: nombre || `Potrero ${codigo}`,
+            area: aNumero(fila[idx.area]),
+            capacidadMaxima: aNumero(fila[idx.capacidadMaxima]),
+            ubicacion: limpiarTexto(fila[idx.ubicacion]) || undefined,
+            ultimaAplicacionHerbicida: serializarFecha(aFecha(fila[idx.ultimaAplicacionHerbicida])),
+            ultimaChapia: serializarFecha(aFecha(fila[idx.ultimaChapia])),
+            ultimaFertilizacion: serializarFecha(aFecha(fila[idx.ultimaFertilizacion])),
+            estado: mapearEstadoPotrero(fila[idx.estado]),
+            observaciones: limpiarTexto(fila[idx.observaciones]) || `Importado desde hoja ${hoja}`
+        }, { hoja, fila: indiceEncabezado + offset + 2 });
+    });
+
     return true;
 };
 
@@ -698,7 +845,59 @@ const obtenerResumen = (acumulador) => {
     );
 };
 
-const procesarExcelPreview = (buffer) => {
+const filtrarAcumuladorPorModelos = (acumulador, modelosPermitidos) => {
+    Object.keys(acumulador).forEach((modelo) => {
+        if (!modelosPermitidos.has(modelo)) {
+            acumulador[modelo] = [];
+        }
+    });
+};
+
+const obtenerModuloHoja = (nombreHoja) => {
+    const nombre = normalizar(nombreHoja);
+    if (nombre.includes('CONTROL DE PESO')) return 'inventario';
+    if (nombre.includes('ROTACION') || nombre.includes('ROTACIÓN')) return 'rotaciones';
+    if (nombre.includes('POTRERO')) return 'potreros';
+    if (nombre.includes('REGISTRO SANITARIO')) return 'sanidad';
+    if (nombre.includes('CONTROL DE COMPRAS') || nombre.includes('PLANILLA') || nombre.includes('INVERSION')) return 'finanzas';
+    return null;
+};
+
+const crearReporteModelo = () => ({
+    creados: 0,
+    actualizados: 0,
+    duplicados: 0,
+    omitidos: 0,
+    errores: []
+});
+
+const limpiarDatosVacios = (datos) => {
+    const limpio = {};
+
+    Object.entries(datos || {}).forEach(([clave, valor]) => {
+        if (valor === undefined || valor === null) return;
+        if (typeof valor === 'string' && valor.trim() === '') return;
+        limpio[clave] = valor;
+    });
+
+    return limpio;
+};
+
+const asignarCamposConValor = (documento, datos, camposProtegidos = []) => {
+    let actualizado = false;
+
+    Object.entries(limpiarDatosVacios(datos)).forEach(([clave, valor]) => {
+        if (camposProtegidos.includes(clave)) return;
+        documento[clave] = valor;
+        actualizado = true;
+    });
+
+    return actualizado;
+};
+
+const procesarExcelPreview = (buffer, opciones = {}) => {
+    const modulosSeleccionados = normalizarModulos(opciones.modulos);
+    const modelosPermitidos = modelosPermitidosPorModulo(modulosSeleccionados);
     const workbook = XLSX.read(buffer, {
         type: 'buffer',
         cellDates: true
@@ -716,8 +915,21 @@ const procesarExcelPreview = (buffer) => {
             blankrows: false
         });
         const nombre = normalizar(hoja);
+        const moduloHoja = obtenerModuloHoja(hoja);
         const modelosAntes = obtenerResumen(acumulador);
         let reconocida = false;
+
+        if (moduloHoja && !modulosSeleccionados.includes(moduloHoja)) {
+            hojasDetectadas.push({
+                nombre: hoja,
+                rango: worksheet['!ref'],
+                reconocida: true,
+                modulo: moduloHoja,
+                omitidaPorModulo: true,
+                registrosDetectados: {}
+            });
+            return;
+        }
 
         if (nombre.includes('CONTROL DE PESO')) {
             reconocida = mapearControlPesoDiio({ hoja, filas, acumulador, advertencias });
@@ -727,6 +939,8 @@ const procesarExcelPreview = (buffer) => {
             }
         } else if (nombre.includes('ROTACION') || nombre.includes('ROTACIÓN')) {
             reconocida = mapearRotaciones({ hoja, filas, acumulador, advertencias });
+        } else if (nombre.includes('POTRERO')) {
+            reconocida = mapearPotrerosGenerico({ hoja, filas, acumulador, advertencias });
         } else if (nombre.includes('REGISTRO SANITARIO')) {
             reconocida = false;
             agregarAdvertencia(advertencias, hoja, 'Hoja de sanidad omitida por ahora a solicitud del flujo actual.');
@@ -738,17 +952,22 @@ const procesarExcelPreview = (buffer) => {
             reconocida = mapearInversionesFinancieras({ hoja, filas, acumulador, advertencias });
         }
 
+        if (!reconocida && modulosSeleccionados.includes('potreros')) {
+            reconocida = mapearPotrerosGenerico({ hoja, filas, acumulador, advertencias });
+        }
+
         const modelosDespues = obtenerResumen(acumulador);
         const detectados = Object.fromEntries(
             Object.keys(modelosDespues)
                 .map((modelo) => [modelo, modelosDespues[modelo] - modelosAntes[modelo]])
-                .filter(([, total]) => total > 0)
+                .filter(([modelo, total]) => total > 0 && modelosPermitidos.has(modelo))
         );
 
         hojasDetectadas.push({
             nombre: hoja,
             rango: worksheet['!ref'],
             reconocida,
+            modulo: moduloHoja,
             registrosDetectados: detectados
         });
 
@@ -759,8 +978,11 @@ const procesarExcelPreview = (buffer) => {
         }
     });
 
+    filtrarAcumuladorPorModelos(acumulador, modelosPermitidos);
+
     return {
         mensaje: 'Vista previa generada. No se inserto ningun dato en la base de datos.',
+        modulosSeleccionados,
         resumen: obtenerResumen(acumulador),
         hojasDetectadas,
         preview: crearPreview(acumulador),
@@ -780,30 +1002,44 @@ const obtenerRegistrosConfirmacion = (payload) => {
     return payload;
 };
 
-const confirmarImportacionExcel = async (payload) => {
+const confirmarImportacionExcel = async (payload, opciones = {}) => {
     const registros = obtenerRegistrosConfirmacion(payload || {});
+    const modulosSeleccionados = normalizarModulos(payload?.modulos || opciones.modulos);
+    const modelosPermitidos = modelosPermitidosPorModulo(modulosSeleccionados);
     const resultado = {
-        Animal: { creados: 0, duplicados: 0, errores: [] },
-        Potrero: { creados: 0, duplicados: 0, errores: [] },
-        Pesaje: { creados: 0, omitidos: 0, errores: [] },
-        RotacionPotrero: { creados: 0, omitidos: 0, errores: [] },
-        MovimientoFinanciero: { creados: 0, duplicados: 0, omitidos: 0, errores: [] }
+        Animal: crearReporteModelo(),
+        Potrero: crearReporteModelo(),
+        Pesaje: crearReporteModelo(),
+        RotacionPotrero: crearReporteModelo(),
+        MovimientoFinanciero: crearReporteModelo()
     };
     const animalesPorDiio = new Map();
     const potrerosPorCodigo = new Map();
 
-    for (const registro of registros.Animal || []) {
+    for (const registro of modelosPermitidos.has('Animal') ? registros.Animal || [] : []) {
         try {
-            const datos = registro.datos || registro;
+            const datos = limpiarDatosVacios(registro.datos || registro);
             if (!datos.identificadorFinca || !datos.diio) {
-                resultado.Animal.errores.push({ datos, mensaje: 'Animal omitido por falta de DIIO o identificadorFinca' });
+                resultado.Animal.omitidos += 1;
+                resultado.Animal.errores.push({ datos, meta: registro.meta, mensaje: 'Animal omitido por falta de DIIO o identificadorFinca' });
                 continue;
             }
 
-            const existente = await Animal.findOne({ identificadorFinca: datos.identificadorFinca });
+            const existente = await Animal.findOne({
+                $or: [
+                    { identificadorFinca: datos.identificadorFinca },
+                    { diio: datos.diio }
+                ]
+            });
 
             if (existente) {
-                resultado.Animal.duplicados += 1;
+                const huboCambios = asignarCamposConValor(existente, datos, ['_id', 'identificadorFinca', 'diio']);
+                if (huboCambios) {
+                    await existente.save();
+                    resultado.Animal.actualizados += 1;
+                } else {
+                    resultado.Animal.duplicados += 1;
+                }
                 animalesPorDiio.set(datos.diio, existente);
                 continue;
             }
@@ -816,18 +1052,25 @@ const confirmarImportacionExcel = async (payload) => {
         }
     }
 
-    for (const registro of registros.Potrero || []) {
+    for (const registro of modelosPermitidos.has('Potrero') ? registros.Potrero || [] : []) {
         try {
-            const datos = registro.datos || registro;
+            const datos = limpiarDatosVacios(registro.datos || registro);
             if (!datos.codigo) {
-                resultado.Potrero.errores.push({ datos, mensaje: 'Potrero omitido por falta de codigo' });
+                resultado.Potrero.omitidos += 1;
+                resultado.Potrero.errores.push({ datos, meta: registro.meta, mensaje: 'Potrero omitido por falta de codigo' });
                 continue;
             }
 
             const existente = await Potrero.findOne({ codigo: datos.codigo });
 
             if (existente) {
-                resultado.Potrero.duplicados += 1;
+                const huboCambios = asignarCamposConValor(existente, datos, ['_id', 'codigo']);
+                if (huboCambios) {
+                    await existente.save();
+                    resultado.Potrero.actualizados += 1;
+                } else {
+                    resultado.Potrero.duplicados += 1;
+                }
                 potrerosPorCodigo.set(datos.codigo, existente);
                 continue;
             }
@@ -840,9 +1083,9 @@ const confirmarImportacionExcel = async (payload) => {
         }
     }
 
-    for (const registro of registros.Pesaje || []) {
+    for (const registro of modelosPermitidos.has('Pesaje') ? registros.Pesaje || [] : []) {
         try {
-            const datos = registro.datos || registro;
+            const datos = limpiarDatosVacios(registro.datos || registro);
             const animal = animalesPorDiio.get(datos.animal) || await Animal.findOne({ diio: datos.animal });
 
             if (!animal || !datos.peso) {
@@ -857,7 +1100,7 @@ const confirmarImportacionExcel = async (payload) => {
             });
 
             if (existente) {
-                resultado.Pesaje.omitidos += 1;
+                resultado.Pesaje.duplicados += 1;
                 continue;
             }
 
@@ -871,9 +1114,9 @@ const confirmarImportacionExcel = async (payload) => {
         }
     }
 
-    for (const registro of registros.RotacionPotrero || []) {
+    for (const registro of modelosPermitidos.has('RotacionPotrero') ? registros.RotacionPotrero || [] : []) {
         try {
-            const datos = registro.datos || registro;
+            const datos = limpiarDatosVacios(registro.datos || registro);
             const potrero = potrerosPorCodigo.get(datos.potrero) || await Potrero.findOne({ codigo: datos.potrero });
 
             if (!potrero || !datos.fechaEntrada) {
@@ -888,7 +1131,7 @@ const confirmarImportacionExcel = async (payload) => {
             });
 
             if (existente) {
-                resultado.RotacionPotrero.omitidos += 1;
+                resultado.RotacionPotrero.duplicados += 1;
                 continue;
             }
 
@@ -902,9 +1145,9 @@ const confirmarImportacionExcel = async (payload) => {
         }
     }
 
-    for (const registro of registros.MovimientoFinanciero || []) {
+    for (const registro of modelosPermitidos.has('MovimientoFinanciero') ? registros.MovimientoFinanciero || [] : []) {
         try {
-            const datos = registro.datos || registro;
+            const datos = limpiarDatosVacios(registro.datos || registro);
 
             if (!datos.fecha || !datos.tipoMovimiento || !datos.categoria || !datos.descripcion || !datos.monto) {
                 resultado.MovimientoFinanciero.omitidos += 1;
@@ -935,6 +1178,7 @@ const confirmarImportacionExcel = async (payload) => {
 
     return {
         mensaje: 'Importacion confirmada',
+        modulosSeleccionados,
         resultado
     };
 };

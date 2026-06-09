@@ -1,10 +1,19 @@
 import React, { useRef, useState } from 'react';
 import { importarExcel } from '../services/api';
 
+const MODULOS_IMPORTACION = [
+  { id: 'inventario', nombre: 'Inventario', descripcion: 'Animales con DIIO y datos opcionales' },
+  { id: 'potreros', nombre: 'Potreros', descripcion: 'Potreros detectados o inferidos' },
+  { id: 'pesajes', nombre: 'Pesajes', descripcion: 'Historial de pesos con animal por DIIO' },
+  { id: 'finanzas', nombre: 'Finanzas', descripcion: 'Planillas, inversiones y compras' },
+  { id: 'rotaciones', nombre: 'Rotaciones', descripcion: 'Histórico y planificación de potreros' }
+];
+
 const ImportarExcel = () => {
   const inputRef = useRef(null);
   const [archivo, setArchivo] = useState(null);
   const [archivoPendiente, setArchivoPendiente] = useState(null);
+  const [modulosSeleccionados, setModulosSeleccionados] = useState(['inventario', 'potreros', 'pesajes', 'finanzas', 'rotaciones']);
   const [resultado, setResultado] = useState(null);
   const [modal, setModal] = useState(null);
   const [error, setError] = useState('');
@@ -29,7 +38,7 @@ const ImportarExcel = () => {
     setCargando(true);
 
     try {
-      const data = await importarExcel(archivoSeleccionado);
+      const data = await importarExcel(archivoSeleccionado, modulosSeleccionados);
       setResultado(data);
       setModal('exito');
     } catch (err) {
@@ -37,6 +46,16 @@ const ImportarExcel = () => {
     } finally {
       setCargando(false);
     }
+  };
+
+  const alternarModulo = (modulo) => {
+    setModulosSeleccionados((actual) => {
+      if (actual.includes(modulo)) {
+        return actual.filter((item) => item !== modulo);
+      }
+
+      return [...actual, modulo];
+    });
   };
 
   return (
@@ -73,8 +92,30 @@ const ImportarExcel = () => {
         />
         <span className="drop-icon">XLSX</span>
         <strong>{archivo ? archivo.name : 'Suelta el archivo Excel aqui'}</strong>
-        <small>Al soltarlo se importa directo. Luego revisa Animales, Potreros y Finanzas en sus tablas.</small>
+        <small>Selecciona los módulos que quieres procesar. Los campos opcionales vacíos no borran datos existentes.</small>
       </div>
+
+      <section className="modulos-importacion">
+        <div>
+          <p className="eyebrow">Módulos</p>
+          <h3>Qué se va a importar</h3>
+        </div>
+        <div className="modulos-importacion-grid">
+          {MODULOS_IMPORTACION.map((modulo) => (
+            <label key={modulo.id} className={modulosSeleccionados.includes(modulo.id) ? 'modulo-importacion activo' : 'modulo-importacion'}>
+              <input
+                type="checkbox"
+                checked={modulosSeleccionados.includes(modulo.id)}
+                onChange={() => alternarModulo(modulo.id)}
+              />
+              <span>
+                <strong>{modulo.nombre}</strong>
+                <small>{modulo.descripcion}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+      </section>
 
       {error && <div className="alerta-formulario">{error}</div>}
 
@@ -90,26 +131,58 @@ const ImportarExcel = () => {
               <strong>{resultado.resultado?.Animal?.creados || 0}</strong>
             </article>
             <article>
-              <span>Animales duplicados</span>
-              <strong>{resultado.resultado?.Animal?.duplicados || 0}</strong>
+              <span>Animales actualizados</span>
+              <strong>{resultado.resultado?.Animal?.actualizados || 0}</strong>
             </article>
             <article>
               <span>Potreros creados</span>
               <strong>{resultado.resultado?.Potrero?.creados || 0}</strong>
             </article>
             <article>
-              <span>Potreros duplicados</span>
-              <strong>{resultado.resultado?.Potrero?.duplicados || 0}</strong>
+              <span>Potreros actualizados</span>
+              <strong>{resultado.resultado?.Potrero?.actualizados || 0}</strong>
+            </article>
+            <article>
+              <span>Pesajes creados</span>
+              <strong>{resultado.resultado?.Pesaje?.creados || 0}</strong>
+            </article>
+            <article>
+              <span>Rotaciones creadas</span>
+              <strong>{resultado.resultado?.RotacionPotrero?.creados || 0}</strong>
             </article>
             <article>
               <span>Movimientos financieros</span>
               <strong>{resultado.resultado?.MovimientoFinanciero?.creados || 0}</strong>
             </article>
             <article>
-              <span>Finanzas duplicadas</span>
-              <strong>{resultado.resultado?.MovimientoFinanciero?.duplicados || 0}</strong>
+              <span>Registros omitidos</span>
+              <strong>
+                {(resultado.resultado?.Animal?.omitidos || 0)
+                  + (resultado.resultado?.Potrero?.omitidos || 0)
+                  + (resultado.resultado?.Pesaje?.omitidos || 0)
+                  + (resultado.resultado?.RotacionPotrero?.omitidos || 0)
+                  + (resultado.resultado?.MovimientoFinanciero?.omitidos || 0)}
+              </strong>
             </article>
           </section>
+
+          {resultado.hojasDetectadas?.length > 0 && (
+            <section className="advertencias-importacion">
+              <p className="eyebrow">Hojas detectadas</p>
+              {resultado.hojasDetectadas.map((hoja, indice) => (
+                <div key={`${hoja.nombre}-${indice}`}>
+                  <strong>{hoja.nombre}</strong>
+                  <span>
+                    {hoja.omitidaPorModulo
+                      ? 'Detectada, pero omitida porque el módulo no estaba seleccionado.'
+                      : hoja.reconocida
+                        ? `Módulo: ${hoja.modulo || 'sin clasificar'}`
+                        : 'No se encontró un mapeo confiable.'}
+                  </span>
+                </div>
+              ))}
+            </section>
+          )}
 
           {resultado.advertencias?.length > 0 && (
             <section className="advertencias-importacion">
@@ -131,11 +204,12 @@ const ImportarExcel = () => {
             <p className="eyebrow">Confirmar importacion</p>
             <h2>Subir este Excel</h2>
             <p>{archivoPendiente?.name}</p>
+            <p>Se procesarán estos módulos: {modulosSeleccionados.map((modulo) => MODULOS_IMPORTACION.find((item) => item.id === modulo)?.nombre || modulo).join(', ') || 'ninguno'}.</p>
             <div className="modal-actions">
               <button className="boton-link" type="button" onClick={() => setModal(null)}>
                 Cancelar
               </button>
-              <button className="boton-primario compacto" type="button" onClick={procesarArchivo}>
+              <button className="boton-primario compacto" type="button" onClick={procesarArchivo} disabled={modulosSeleccionados.length === 0}>
                 Importar
               </button>
             </div>

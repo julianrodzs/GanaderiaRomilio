@@ -4,6 +4,11 @@ const Usuario = require('../models/Usuario');
 const crearTokenRecuperacion = () => crypto.randomBytes(32).toString('hex');
 
 const obtenerRemitente = () => process.env.EMAIL_FROM || 'Ganaderia Romilio <onboarding@resend.dev>';
+const obtenerRemitenteRecuperacion = () => (
+    process.env.EMAIL_PASSWORD_RESET_FROM
+    || process.env.EMAIL_FROM
+    || 'Ganaderia Romilio <notificaciones@alertas.ganaderiaromilio.com>'
+);
 
 const obtenerDestinatariosAdministradores = async () => {
     if (process.env.EMAIL_TEST_TO) {
@@ -88,15 +93,17 @@ const enviarCorreoAdministradores = async ({ subject, html, text }) => {
 
 const enviarCorreoRecuperacion = async ({ correo, nombre, token }) => {
     const enlaceBase = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const enlaceRecuperacion = `${enlaceBase}/recuperar-contrasena/${token}`;
+    const enlaceRecuperacion = `${enlaceBase}/restablecer-contrasena/${token}`;
 
     const mensaje = {
+        from: obtenerRemitenteRecuperacion(),
         to: correo,
-        subject: 'Recuperacion de contrasena - GanaderiaRomilio',
-        text: `Hola ${nombre || ''}. Usa este enlace para recuperar tu contrasena: ${enlaceRecuperacion}`,
+        subject: 'Recuperacion de cuenta - Ganaderia Romilio',
+        text: `Hola ${nombre || ''}. Usa este enlace para crear una nueva contrasena. El enlace vence en 30 minutos: ${enlaceRecuperacion}`,
         html: `
             <p>Hola ${nombre || ''},</p>
-            <p>Usa el siguiente enlace para recuperar tu contrasena:</p>
+            <p>Recibimos una solicitud para recuperar el acceso a tu cuenta de Ganaderia Romilio.</p>
+            <p>Usa el siguiente enlace para crear una nueva contrasena. El enlace vence en 30 minutos:</p>
             <p><a href="${enlaceRecuperacion}">${enlaceRecuperacion}</a></p>
             <p>Si no solicitaste este cambio, puedes ignorar este correo.</p>
         `

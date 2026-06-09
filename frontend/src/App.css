@@ -180,6 +180,20 @@
   font-weight: 800;
 }
 
+.auth-link {
+  width: fit-content;
+  align-self: center;
+  padding: 0 8px;
+}
+
+.exito-formulario {
+  border-left: 4px solid #204b32;
+  background: #e7f1e7;
+  color: #0b3b21;
+  padding: 14px 16px;
+  font-weight: 800;
+}
+
 .alerta-formulario,
 .toast {
   border-left: 4px solid #b85e34;
@@ -601,6 +615,60 @@
   background: #0b3b21;
   color: #fff;
   font-weight: 900;
+}
+
+.modulos-importacion {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 18px;
+}
+
+.modulos-importacion h3 {
+  margin: 4px 0 0;
+  color: #071d10;
+  font-size: 24px;
+}
+
+.modulos-importacion-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.modulo-importacion {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+  padding: 14px;
+  cursor: pointer;
+}
+
+.modulo-importacion.activo {
+  border-color: #204b32;
+  background: #e7f1e7;
+}
+
+.modulo-importacion input {
+  margin-top: 3px;
+  accent-color: #0b3b21;
+}
+
+.modulo-importacion span {
+  display: grid;
+  gap: 4px;
+}
+
+.modulo-importacion strong {
+  color: #0b3b21;
+}
+
+.modulo-importacion small {
+  color: #667069;
+  line-height: 1.35;
 }
 
 .estado-importacion {
@@ -2179,6 +2247,7 @@
 
   .importar-grid,
   .importar-resumen,
+  .modulos-importacion-grid,
   .confirmacion-grid,
   .venta-totales,
   .ventas-reportes-grid,

@@ -8,13 +8,17 @@ const {
 const { generarToken } = require('../middleware/auth');
 
 const usuarioCtrl = {};
-const CAMPOS_PRIVADOS = '-contrasena -recuperacionContrasenaToken -recuperacionContrasenaExpira';
+const MENSAJE_RECUPERACION = 'Si el correo existe, se enviarán instrucciones para recuperar la contraseña.';
+const MENSAJE_TOKEN_INVALIDO = 'El enlace de recuperación es inválido o ha expirado.';
+const CAMPOS_PRIVADOS = '-contrasena -resetPasswordToken -resetPasswordExpires -resetPasswordRequestedAt -resetPasswordRequestIp -recuperacionContrasenaToken -recuperacionContrasenaExpira';
 
 const limpiarUsuario = (usuario) => {
     const datos = usuario.toObject ? usuario.toObject() : usuario;
     delete datos.contrasena;
-    delete datos.recuperacionContrasenaToken;
-    delete datos.recuperacionContrasenaExpira;
+    delete datos.resetPasswordToken;
+    delete datos.resetPasswordExpires;
+    delete datos.resetPasswordRequestedAt;
+    delete datos.resetPasswordRequestIp;
     return datos;
 };
 
@@ -243,14 +247,16 @@ usuarioCtrl.solicitarRecuperacionContrasena = async (req, res) => {
         const usuario = await Usuario.findOne({ correo: normalizarCorreo(correo) });
 
         if (!usuario) {
-            return res.json({ mensaje: 'Si el correo existe, se enviaran instrucciones de recuperacion' });
+            return res.json({ message: MENSAJE_RECUPERACION });
         }
 
         const token = crearTokenRecuperacion();
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-        usuario.recuperacionContrasenaToken = tokenHash;
-        usuario.recuperacionContrasenaExpira = new Date(Date.now() + 1000 * 60 * 30);
+        usuario.resetPasswordToken = tokenHash;
+        usuario.resetPasswordExpires = new Date(Date.now() + 1000 * 60 * 30);
+        usuario.resetPasswordRequestedAt = new Date();
+        usuario.resetPasswordRequestIp = req.ip;
         await usuario.save();
 
         await enviarCorreoRecuperacion({
@@ -259,7 +265,7 @@ usuarioCtrl.solicitarRecuperacionContrasena = async (req, res) => {
             token
         });
 
-        res.json({ mensaje: 'Si el correo existe, se enviaran instrucciones de recuperacion' });
+        res.json({ message: MENSAJE_RECUPERACION });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al solicitar recuperacion de contrasena', error: error.message });
     }
@@ -267,28 +273,35 @@ usuarioCtrl.solicitarRecuperacionContrasena = async (req, res) => {
 
 usuarioCtrl.restablecerContrasena = async (req, res) => {
     try {
-        const { token, contrasena } = req.body;
+        const { token } = req.body;
+        const contrasena = req.body.password || req.body.contrasena;
 
         if (!token || !contrasena) {
-            return res.status(400).json({ mensaje: 'Token y contrasena son requeridos' });
+            return res.status(400).json({ message: 'Token y contraseña son requeridos.' });
+        }
+
+        if (contrasena.length < 8) {
+            return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres.' });
         }
 
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         const usuario = await Usuario.findOne({
-            recuperacionContrasenaToken: tokenHash,
-            recuperacionContrasenaExpira: { $gt: new Date() }
+            resetPasswordToken: tokenHash,
+            resetPasswordExpires: { $gt: new Date() }
         });
 
         if (!usuario) {
-            return res.status(400).json({ mensaje: 'Token invalido o expirado' });
+            return res.status(400).json({ message: MENSAJE_TOKEN_INVALIDO });
         }
 
         usuario.contrasena = await hashContrasena(contrasena);
-        usuario.recuperacionContrasenaToken = undefined;
-        usuario.recuperacionContrasenaExpira = undefined;
+        usuario.resetPasswordToken = undefined;
+        usuario.resetPasswordExpires = undefined;
+        usuario.resetPasswordRequestedAt = undefined;
+        usuario.resetPasswordRequestIp = undefined;
         await usuario.save();
 
-        res.json({ mensaje: 'Contrasena actualizada correctamente' });
+        res.json({ message: 'Contraseña actualizada correctamente.' });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al restablecer contrasena', error: error.message });
     }

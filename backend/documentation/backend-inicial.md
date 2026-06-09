@@ -1,108 +1,158 @@
-# Documentacion inicial del backend
+# Documentacion tecnica actual - Backend GanaderiaRomilio
 
-## Proyecto
+Este documento describe el estado actual del backend Node/Express de GanaderiaRomilio.
 
-GanaderiaRomilio es una API REST para administrar informacion basica de una finca ganadera.
+Aunque el archivo conserva el nombre `backend-inicial.md`, el contenido corresponde al backend actual.
 
-Por ahora el backend incluye:
-
-- Configuracion de Express.
-- Conexion a MongoDB con Mongoose.
-- Modelos principales de la finca.
-- CRUD inicial para animales.
-- CRUD inicial para potreros.
-- CRUD inicial para pesajes.
-- CRUD inicial para sanidad.
-- Modulo central de Plan Sanitario.
-- CRUD inicial para costos.
-- CRUD inicial para rotaciones.
-- Servicio base para recuperacion de contrasena por correo.
-- Middleware inicial para autenticacion con JWT.
-- Modulo de importacion de Excel con vista previa sin insertar datos.
-- Modulo de Conteo Drone con servicio IA simulado.
-
-## Stack
+## Stack backend
 
 - Node.js
 - Express
-- MongoDB
+- MongoDB Atlas
 - Mongoose
-- dotenv
-- cors
+- bcrypt
+- multer
+- xlsx
+- Resend por HTTP API
 
 ## Archivos principales
 
-### `app.js`
-
-Configura la aplicacion Express:
-
-- Puerto desde `process.env.PORT` o `4000`.
-- Middleware `cors`.
-- Middleware `express.json`.
-- Rutas principales de la API.
-
-Rutas registradas actualmente:
-
-- `/api/usuarios`
-- `/api/animales`
-- `/api/potreros`
-- `/api/pesajes`
-- `/api/sanidad`
-- `/api/plan-sanitario`
-- `/api/costos`
-- `/api/rotaciones`
-- `/api/importar`
-- `/api/conteo-drone`
-
-### `index.js`
-
-Es el punto de entrada del backend.
-
-Responsabilidades:
-
-- Cargar variables de entorno con `dotenv`.
-- Conectar a MongoDB.
-- Iniciar el servidor Express.
-
-### `database.js`
-
-Centraliza la conexion a MongoDB.
-
-Usa la variable:
-
-```env
-MONGODB_URI=mongodb://localhost/dataganado
-```
-
-Si no existe `MONGODB_URI`, usa como respaldo:
-
 ```txt
-mongodb://localhost/dataganado
+backend/
+  app.js
+  index.js
+  database.js
+  controllers/
+  middleware/
+  models/
+  routes/
+  services/
+  documentation/
 ```
 
-## Ejecutar el backend
-
-Desde la carpeta `backend`:
+## Arranque
 
 ```bash
+cd backend
+npm install
 npm run dev
 ```
 
-O directamente:
+Produccion:
 
 ```bash
-node index.js
+npm start
 ```
 
-La API queda disponible por defecto en:
+Puerto por defecto:
 
 ```txt
-http://localhost:4000
+4000
 ```
 
-## Endpoints disponibles
+## Variables de entorno
 
-### Usuarios y recuperacion de contrasena
+Ver `backend/.env.example`.
+
+Variables principales:
+
+```env
+PORT=4000
+MONGODB_URI=
+FRONTEND_URL=
+JWT_SECRET=
+RESEND_API_KEY=
+EMAIL_FROM=
+EMAIL_PASSWORD_RESET_FROM=
+EMAIL_ADMIN=
+EMAIL_TEST_TO=
+EMAIL_ALERTS_ENABLED=true
+EMAIL_ALERTS_INTERVAL_MS=
+IA_SERVICE_URL=
+```
+
+Notas:
+
+- `FRONTEND_URL` se usa para CORS y enlaces de recuperacion.
+- `JWT_SECRET` firma tokens de login.
+- `RESEND_API_KEY` habilita envio real de correos.
+- `EMAIL_TEST_TO` fuerza todos los correos a un unico destinatario de prueba.
+
+## Seguridad
+
+### Autenticacion
+
+Middleware:
+
+```txt
+backend/middleware/auth.js
+```
+
+Exporta:
+
+- `auth`
+- `autorizarRoles(...roles)`
+- `generarToken`
+
+El login usa JWT. La recuperacion de contrasena no usa JWT.
+
+### Roles
+
+Roles actuales:
+
+- `Administrador`
+- `Encargado`
+- `Consulta`
+
+Regla general actual:
+
+- Administrador tiene acceso completo.
+- Encargado tiene acceso limitado a tareas y vistas operativas.
+- Consulta queda preparado para lectura.
+
+### Recuperacion de contrasena
+
+Endpoints:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| POST | `/api/auth/forgot-password` | Solicita enlace temporal |
+| POST | `/api/auth/reset-password` | Actualiza contrasena usando token |
+
+Flujo:
+
+1. Usuario solicita recuperacion con correo.
+2. Se responde siempre el mismo mensaje, exista o no el correo.
+3. Si existe, se genera token con `crypto.randomBytes`.
+4. Se guarda `sha256(token)` en `resetPasswordToken`.
+5. Se guarda expiracion en `resetPasswordExpires`.
+6. Se envia enlace `FRONTEND_URL/restablecer-contrasena/TOKEN`.
+7. Al usar el token se encripta la contrasena con bcrypt.
+8. El token se elimina.
+
+Campos en `Usuario`:
+
+- `resetPasswordToken`
+- `resetPasswordExpires`
+- `resetPasswordRequestedAt`
+- `resetPasswordRequestIp`
+
+## Rutas principales
+
+### Auth
+
+Base:
+
+```txt
+/api/auth
+```
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| POST | `/forgot-password` | Solicita recuperacion |
+| POST | `/reset-password` | Restablece contrasena |
+
+### Usuarios
 
 Base:
 
@@ -110,34 +160,18 @@ Base:
 /api/usuarios
 ```
 
-Endpoints:
-
 | Metodo | Ruta | Descripcion |
 | --- | --- | --- |
-| GET | `/api/usuarios` | Lista usuarios |
-| POST | `/api/usuarios` | Crea un usuario |
-| POST | `/api/usuarios/recuperar-contrasena` | Solicita recuperacion de contrasena |
-| POST | `/api/usuarios/restablecer-contrasena` | Restablece contrasena usando token |
-| GET | `/api/usuarios/:id` | Obtiene un usuario por ID |
-| PUT | `/api/usuarios/:id` | Actualiza un usuario |
-| DELETE | `/api/usuarios/:id` | Elimina un usuario |
+| POST | `/login` | Login JWT |
+| GET | `/perfil` | Perfil del usuario autenticado |
+| GET | `/` | Lista usuarios |
+| POST | `/` | Crea usuario |
+| GET | `/:id` | Obtiene usuario |
+| PUT | `/:id` | Actualiza usuario |
+| PATCH | `/:id/estado` | Activa/Inactiva usuario |
+| DELETE | `/:id` | Elimina usuario |
 
-Body para solicitar recuperacion:
-
-```json
-{
-  "correo": "admin@ganaderiaromilio.com"
-}
-```
-
-Body para restablecer contrasena:
-
-```json
-{
-  "token": "token-recibido",
-  "contrasena": "nueva-contrasena"
-}
-```
+Las rutas administrativas requieren rol `Administrador`.
 
 ### Animales
 
@@ -147,43 +181,79 @@ Base:
 /api/animales
 ```
 
-Endpoints:
+CRUD completo:
 
-| Metodo | Ruta | Descripcion |
-| --- | --- | --- |
-| GET | `/api/animales` | Lista todos los animales |
-| POST | `/api/animales` | Crea un animal |
-| GET | `/api/animales/:id` | Obtiene un animal por ID |
-| PUT | `/api/animales/:id` | Actualiza un animal |
-| DELETE | `/api/animales/:id` | Elimina un animal |
+- `GET /`
+- `POST /`
+- `GET /:id`
+- `PUT /:id`
+- `DELETE /:id`
 
-Ejemplo de body para crear un animal:
+Campos relevantes:
 
-```json
-{
-  "identificadorFinca": "ROM-001",
-  "diio": "123456789",
-  "nombre": "Lucera",
-  "sexo": "Hembra",
-  "raza": "Brahman",
-  "fechaNacimiento": "2024-03-10",
-  "pesoActual": 320,
-  "estado": "Activo",
-  "observaciones": "Animal registrado inicialmente"
-}
-```
+- `identificadorFinca`
+- `diio`
+- `nombre`
+- `sexo`
+- `raza`
+- `madreDiio`
+- `padreDiio`
+- `fechaNacimiento`
+- `fechaDestete`
+- `pesoNacimiento`
+- `pesoDestete`
+- `pesoActual`
+- `pesoCompra`
+- `pesoVenta`
+- `precioCompraPorKg`
+- `precioVentaPorKg`
+- `montoCompra`
+- `montoVenta`
+- `fechaCompra`
+- `fechaVenta`
+- `fechaMuerte`
+- `estado`
+- `potreroActual`
 
-Valores permitidos para `sexo`:
-
-- `Macho`
-- `Hembra`
-
-Valores permitidos para `estado`:
+Estados:
 
 - `Activo`
 - `Vendido`
 - `Muerto`
 - `En tratamiento`
+
+### Eventos de animal
+
+Base:
+
+```txt
+/api/eventos-animal
+```
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/animal/:animalId` | Historial de un animal |
+| POST | `/` | Crea evento manual |
+| PUT | `/:id` | Actualiza evento |
+| DELETE | `/:id` | Elimina evento |
+
+Modelo: `EventoAnimal`.
+
+Tipos:
+
+- Nacimiento
+- Compra
+- Venta
+- Muerte
+- Cambio de potrero
+- Pesaje
+- Sanidad
+- Tratamiento
+- Parto
+- Destete
+- Monta
+- Diagnostico de gestacion
+- Observacion
 
 ### Potreros
 
@@ -193,37 +263,307 @@ Base:
 /api/potreros
 ```
 
-Endpoints:
+CRUD completo.
 
-| Metodo | Ruta | Descripcion |
-| --- | --- | --- |
-| GET | `/api/potreros` | Lista todos los potreros |
-| POST | `/api/potreros` | Crea un potrero |
-| GET | `/api/potreros/:id` | Obtiene un potrero por ID |
-| PUT | `/api/potreros/:id` | Actualiza un potrero |
-| DELETE | `/api/potreros/:id` | Elimina un potrero |
+Campos:
 
-Ejemplo de body para crear un potrero:
+- `codigo`
+- `nombre`
+- `area`
+- `capacidadMaxima`
+- `ubicacion`
+- `ultimaAplicacionHerbicida`
+- `ultimaChapia`
+- `ultimaFertilizacion`
+- `estado`
+- `observaciones`
 
-```json
-{
-  "codigo": "POT-001",
-  "nombre": "Potrero Principal",
-  "capacidadMaxima": 25,
-  "ubicacion": "Sector norte",
-  "estado": "Disponible",
-  "observaciones": "Potrero listo para rotacion"
-}
-```
-
-Valores permitidos para `estado`:
+Estados:
 
 - `Disponible`
 - `Ocupado`
 - `Descanso`
 - `Mantenimiento`
 
-### Conteo Drone
+### Rotaciones
+
+Base:
+
+```txt
+/api/rotaciones
+```
+
+CRUD para movimientos de potrero.
+
+Guarda:
+
+- potrero.
+- lote.
+- fechaEntrada.
+- fechaSalida.
+- estado.
+- observaciones.
+
+Se usa para medir ocupacion y descanso.
+
+### Plan Sanitario
+
+Base:
+
+```txt
+/api/plan-sanitario
+```
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Lista planes |
+| POST | `/` | Crea plan |
+| GET | `/alertas` | Vencidos y proximos |
+| PUT | `/:id` | Actualiza plan |
+| DELETE | `/:id` | Elimina plan |
+| PATCH | `/:id/marcar-aplicado` | Marca como aplicado |
+
+Modelo: `PlanSanitario`.
+
+Calcula:
+
+- `proximaAplicacion`
+- estado sanitario segun fecha:
+  - vencido.
+  - proximo.
+  - vigente.
+
+Puede aplicar por grupo o con animales especificos opcionales, salvo `Todo el ganado`.
+
+### Reproduccion
+
+Base:
+
+```txt
+/api/reproduccion
+```
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Lista registros |
+| POST | `/` | Crea registro |
+| GET | `/:id` | Obtiene registro |
+| GET | `/animal/:animalId` | Registros por animal |
+| PUT | `/:id` | Actualiza registro |
+| DELETE | `/:id` | Elimina registro |
+
+Modelo: `RegistroReproductivo`.
+
+Reglas:
+
+- Si hay fecha monta y no hay parto estimado, suma 283 dias.
+- Si hay parto real, calcula destete a 7 meses si falta.
+- Calcula proximo celo estimado desde parto real:
+  - parto + 60 dias.
+  - ciclos de 21 dias.
+  - no muestra celos pasados.
+- Calcula estado reproductivo.
+- Permite crear ternero desde parto y asociarlo a la madre.
+
+### Pesajes
+
+Base:
+
+```txt
+/api/pesajes
+```
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Lista pesajes |
+| GET | `/:id` | Obtiene pesaje |
+| GET | `/animal/:animalId` | Pesajes de un animal |
+| POST | `/` | Crea pesaje |
+| PUT | `/:id` | Actualiza pesaje |
+| DELETE | `/:id` | Elimina pesaje |
+
+Reglas:
+
+- Peso debe ser mayor a cero.
+- Al crear pesaje se actualiza `Animal.pesoActual`.
+- Al crear pesaje se crea `EventoAnimal` tipo `Pesaje`.
+
+### Finanzas
+
+Base:
+
+```txt
+/api/finanzas
+```
+
+Modelo principal: `MovimientoFinanciero`.
+
+Endpoints:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Lista movimientos |
+| POST | `/` | Crea movimiento |
+| GET | `/resumen` | Resumen financiero |
+| GET | `/tipo/:tipoMovimiento` | Filtra por tipo |
+| PUT | `/:id` | Actualiza movimiento |
+| DELETE | `/:id` | Elimina movimiento |
+
+Tipos:
+
+- `Planilla`
+- `Inversion`
+- `Compra`
+- `Venta de animales`
+
+Naturaleza:
+
+- `Ingreso`
+- `Egreso`
+
+### Ventas de animales
+
+Base:
+
+```txt
+/api/ventas
+```
+
+Modelo: `VentaAnimal`.
+
+Funciones:
+
+- registrar venta de uno o varios animales.
+- calcular subtotal por animal.
+- calcular monto total y peso total.
+- impedir vender animales ya vendidos o muertos.
+- actualizar animal al confirmar venta.
+- crear evento de bitacora.
+- crear movimiento financiero.
+- revertir movimiento financiero al anular.
+
+Reportes de ventas disponibles desde resumen:
+
+- total vendido.
+- total kg vendidos.
+- precio promedio kg.
+- ventas por mes.
+- ventas por origen.
+- rotacion de inventario vendido.
+
+### Tareas
+
+Base:
+
+```txt
+/api/tareas
+```
+
+Endpoints:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Lista tareas segun rol/filtros |
+| GET | `/mis-tareas` | Tareas del usuario autenticado |
+| GET | `/:id` | Detalle |
+| POST | `/` | Crea tarea |
+| PUT | `/:id` | Actualiza tarea |
+| PATCH | `/:id/estado` | Cambia estado |
+| PATCH | `/:id/completar` | Completa tarea |
+| POST | `/:id/comentarios` | Agrega comentario |
+| DELETE | `/:id` | Elimina tarea |
+
+Reglas:
+
+- Administrador gestiona todas.
+- Encargado ve sus tareas.
+- Encargado puede pasar sus tareas a `En proceso` o `Completada`.
+- Encargado no elimina ni reasigna.
+
+### Importacion Excel
+
+Base:
+
+```txt
+/api/importar
+```
+
+Endpoints:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| POST | `/excel` | Vista previa sin insertar |
+| POST | `/excel/confirmar` | Inserta datos enviados |
+| POST | `/excel/importar` | Importacion directa con reporte |
+
+Campo multipart:
+
+```txt
+archivo
+```
+
+Campo opcional:
+
+```txt
+modulos=["inventario","potreros","pesajes","finanzas","rotaciones"]
+```
+
+Reglas actuales:
+
+- Procesa solo modulos seleccionados.
+- No sobrescribe datos con celdas vacias.
+- Si existe animal/potrero, actualiza solo campos con valor.
+- Animal sin DIIO se omite.
+- Potrero sin codigo/nombre se omite.
+- Movimiento financiero sin campos minimos se omite.
+- Registra historial en `ImportacionExcel`.
+
+Modelo `ImportacionExcel` guarda:
+
+- archivo.
+- modulos solicitados.
+- hojas detectadas.
+- resumen detectado.
+- resultado.
+- advertencias.
+- usuario.
+
+### Reportes
+
+Base:
+
+```txt
+/api/reportes
+```
+
+Reportes principales:
+
+- resumen general.
+- productividad de cria.
+- finanzas de cria.
+- sustentabilidad de cria.
+- vacas improductivas.
+- crecimiento por pesajes.
+- partos por vaca y ano.
+
+Indicador IPG:
+
+```txt
+IPG = natalidad * 0.40
+    + destete * 0.25
+    + gestacion * 0.20
+    + supervivencia * 0.15
+```
+
+Clasificacion:
+
+- 0 a 59: Deficiente
+- 60 a 74: Regular
+- 75 a 84: Bueno
+- 85 a 94: Muy bueno
+- 95 a 100: Excelente
+
+### Conteo por drone
 
 Base:
 
@@ -235,371 +575,107 @@ Endpoints:
 
 | Metodo | Ruta | Descripcion |
 | --- | --- | --- |
-| GET | `/api/conteo-drone` | Lista conteos por drone |
-| POST | `/api/conteo-drone/procesar` | Sube imagen y genera conteo simulado |
-| GET | `/api/conteo-drone/:id` | Obtiene un conteo por ID |
-| DELETE | `/api/conteo-drone/:id` | Elimina un conteo |
+| GET | `/` | Lista conteos |
+| POST | `/procesar` | Procesa imagen |
+| GET | `/:id` | Detalle |
+| DELETE | `/:id` | Elimina registro |
 
-El `POST /procesar` usa `multipart/form-data`.
+`POST /procesar` recibe:
 
-Campos:
+- imagen con multer.
+- potrero.
+- cantidadEsperada.
 
-- `imagen`: archivo de imagen.
-- `potrero`: ID del potrero.
-- `cantidadEsperada`: numero esperado en el potrero.
-- `observaciones`: opcional.
+Se comunica con servicio IA si esta configurado.
 
-Por ahora la IA esta simulada en:
+## Servicios internos
 
-```txt
-backend/services/iaConteoService.js
-```
+### `correoElectronico-service.js`
 
-La funcion queda lista para reemplazarse por una llamada HTTP a un servicio Python + FastAPI con YOLO.
+Responsable de:
 
-Riesgos actuales:
+- enviar correos via Resend.
+- correos a administradores.
+- correos de recuperacion de contrasena.
 
-- La cantidad detectada es simulada; no debe usarse para decisiones reales.
-- No hay validacion de calidad de imagen, altura de vuelo, escala ni angulo.
-- La imagen procesada usa la misma URL que la original porque aun no hay cajas reales dibujadas.
-- No se borran archivos fisicos al eliminar un registro.
-- Falta autenticacion/autorizacion sobre carga y consulta de imagenes.
-- El rendimiento y almacenamiento pueden crecer rapido si se suben imagenes grandes.
-- El modelo futuro YOLO puede requerir calibracion local para ganado, potreros, sombras y oclusiones.
+### `alertasCorreo-service.js`
 
-### Pesajes
+Revisa y envia alertas:
 
-Base:
+- sanidad proxima.
+- sanidad vencida.
+- proximo celo.
+- parto estimado.
+- destete proximo.
 
-```txt
-/api/pesajes
-```
-
-Endpoints:
-
-| Metodo | Ruta | Descripcion |
-| --- | --- | --- |
-| GET | `/api/pesajes` | Lista todos los pesajes |
-| POST | `/api/pesajes` | Crea un pesaje |
-| GET | `/api/pesajes/:id` | Obtiene un pesaje por ID |
-| PUT | `/api/pesajes/:id` | Actualiza un pesaje |
-| DELETE | `/api/pesajes/:id` | Elimina un pesaje |
-
-### Sanidad
-
-Base:
-
-```txt
-/api/sanidad
-```
-
-Endpoints:
-
-| Metodo | Ruta | Descripcion |
-| --- | --- | --- |
-| GET | `/api/sanidad` | Lista registros sanitarios |
-| POST | `/api/sanidad` | Crea un registro sanitario |
-| GET | `/api/sanidad/:id` | Obtiene un registro sanitario por ID |
-| PUT | `/api/sanidad/:id` | Actualiza un registro sanitario |
-| DELETE | `/api/sanidad/:id` | Elimina un registro sanitario |
-
-### Plan Sanitario
-
-Base:
-
-```txt
-/api/plan-sanitario
-```
-
-Endpoints:
-
-| Metodo | Ruta | Descripcion |
-| --- | --- | --- |
-| GET | `/api/plan-sanitario` | Lista planes sanitarios |
-| POST | `/api/plan-sanitario` | Crea un plan sanitario |
-| GET | `/api/plan-sanitario/alertas` | Lista planes vencidos y proximos |
-| PUT | `/api/plan-sanitario/:id` | Actualiza un plan sanitario |
-| DELETE | `/api/plan-sanitario/:id` | Elimina un plan sanitario |
-| PATCH | `/api/plan-sanitario/:id/marcar-aplicado` | Marca un plan como aplicado |
-
-Ejemplo de body:
-
-```json
-{
-  "grupoGanado": "Todo el ganado",
-  "actividad": "Desparasitacion interna",
-  "producto": "Bimectin 3.5%",
-  "marca": "Bimectin",
-  "dosis": "1 cc",
-  "criterioPeso": "Por cada 50 kg",
-  "fechaAplicacion": "2026-05-28",
-  "frecuenciaCantidad": 3,
-  "frecuenciaUnidad": "meses",
-  "responsable": "Administrador",
-  "observaciones": "Plan general de desparasitacion"
-}
-```
-
-Notas:
-
-- `proximaAplicacion` se calcula automaticamente.
-- `estado` se calcula como `Vencido`, `Próximo` o `Vigente`.
-- `RegistroSanitario` queda disponible por compatibilidad, pero el modulo principal es `PlanSanitario`.
-
-### Costos
-
-Base:
-
-```txt
-/api/costos
-```
-
-Endpoints:
-
-| Metodo | Ruta | Descripcion |
-| --- | --- | --- |
-| GET | `/api/costos` | Lista todos los costos |
-| POST | `/api/costos` | Crea un costo |
-| GET | `/api/costos/:id` | Obtiene un costo por ID |
-| PUT | `/api/costos/:id` | Actualiza un costo |
-| DELETE | `/api/costos/:id` | Elimina un costo |
-
-### Rotaciones
-
-Base:
-
-```txt
-/api/rotaciones
-```
-
-Endpoints:
-
-| Metodo | Ruta | Descripcion |
-| --- | --- | --- |
-| GET | `/api/rotaciones` | Lista todas las rotaciones |
-| POST | `/api/rotaciones` | Crea una rotacion |
-| GET | `/api/rotaciones/:id` | Obtiene una rotacion por ID |
-| PUT | `/api/rotaciones/:id` | Actualiza una rotacion |
-| DELETE | `/api/rotaciones/:id` | Elimina una rotacion |
-
-### Importacion de Excel
-
-Base:
-
-```txt
-/api/importar
-```
-
-Endpoint:
-
-| Metodo | Ruta | Descripcion |
-| --- | --- | --- |
-| POST | `/api/importar/excel` | Sube un `.xlsx` y devuelve vista previa sin insertar |
-| POST | `/api/importar/excel/confirmar` | Inserta en MongoDB los registros validados de la vista previa |
-| POST | `/api/importar/excel/importar` | Sube un `.xlsx` e importa directamente los datos validos |
-
-El request debe enviarse como `multipart/form-data`.
-
-Campo del archivo:
-
-```txt
-archivo
-```
-
-Ejemplo en Postman o Insomnia:
-
-- Method: `POST`
-- URL: `http://localhost:4000/api/importar/excel`
-- Body: `form-data`
-- Key: `archivo`
-- Type: `File`
-- Value: archivo `.xlsx`
-
-Respuesta esperada de la vista previa:
-
-```json
-{
-  "mensaje": "Vista previa generada. No se inserto ningun dato en la base de datos.",
-  "resumen": {
-    "Animal": 59,
-    "Potrero": 14,
-    "Pesaje": 22,
-    "RegistroSanitario": 0,
-    "Costo": 0,
-    "RotacionPotrero": 6
-  },
-  "hojasDetectadas": [],
-  "preview": {},
-  "registros": {},
-  "advertencias": []
-}
-```
-
-Mapeo actual del archivo del cliente:
-
-- `CONTROL DE PESO,`: animales con DIIO y pesajes relacionados.
-- `ROTACIÓN POTREROS`: potreros inferidos y rotaciones.
-
-Notas importantes:
-
-- `POST /api/importar/excel` no inserta nada en MongoDB.
-- `POST /api/importar/excel/confirmar` inserta datos enviados en `registros`.
-- `POST /api/importar/excel/importar` procesa el archivo e inserta directamente sin vista previa.
-- Animal evita duplicados por `identificadorFinca`.
-- Potrero evita duplicados por `codigo`.
-- Los pesajes resuelven el animal usando `diio`.
-- Las rotaciones resuelven el potrero usando `codigo`.
-- Por ahora se omiten costos, planillas, inversion, sanidad y la hoja de peso que no trae DIIO.
-
-## Autenticacion
-
-Existe un middleware inicial en:
-
-```txt
-backend/middleware/auth.js
-```
-
-Uso esperado en rutas protegidas:
-
-```js
-const { auth } = require('../middleware/auth');
-
-router.get('/privado', auth, controlador);
-```
-
-El cliente debe enviar:
-
-```txt
-Authorization: Bearer <token>
-```
-
-Variable requerida:
+Frecuencia configurable por:
 
 ```env
-JWT_SECRET=valor-secreto
+EMAIL_ALERTS_INTERVAL_MS=
 ```
 
-Por ahora el middleware verifica tokens JWT firmados con HS256 usando `crypto`. Falta crear el login formal que emita los tokens.
+### `eventoAnimal-service.js`
 
-## Correo electronico
+Crea eventos de bitacora desde modulos.
 
-Existe un servicio inicial en:
+### `iaConteoService.js`
 
-```txt
-backend/services/correoElectronico-service.js
+Simula o conecta con el servicio IA.
+
+Variable esperada:
+
+```env
+IA_SERVICE_URL=
 ```
 
-Responsabilidades actuales:
+## Modelos principales
 
-- Crear token de recuperacion de contrasena.
-- Preparar enlace de recuperacion usando `FRONTEND_URL`.
-- En desarrollo imprime el correo preparado en consola.
+- `Usuario`
+- `Animal`
+- `EventoAnimal`
+- `Potrero`
+- `RotacionPotrero`
+- `PlanSanitario`
+- `RegistroSanitario`
+- `RegistroReproductivo`
+- `Pesaje`
+- `MovimientoFinanciero`
+- `Costo`
+- `VentaAnimal`
+- `Tarea`
+- `ConteoDrone`
+- `AlertaCorreo`
+- `ImportacionExcel`
 
-Pendiente para envio real:
+## Compatibilidades mantenidas
 
-- Configurar proveedor SMTP o servicio externo.
-- Instalar y conectar una libreria de envio como `nodemailer`, si se decide usar SMTP.
+- `RegistroSanitario` no se elimina, aunque el modulo principal es `PlanSanitario`.
+- `Costo` no se elimina, aunque el modulo principal es `MovimientoFinanciero`.
+- Endpoints viejos de recuperacion bajo `/api/usuarios` siguen disponibles como compatibilidad:
+  - `/api/usuarios/recuperar-contrasena`
+  - `/api/usuarios/restablecer-contrasena`
 
-## Modelos actuales
+## Verificacion
 
-### Animal
+Cargar backend:
 
-Campos principales:
-
-- `identificadorFinca`
-- `diio`
-- `nombre`
-- `sexo`
-- `raza`
-- `fechaNacimiento`
-- `pesoActual`
-- `estado`
-- `potreroActual`
-- `fotoUrl`
-- `observaciones`
-
-### Potrero
-
-Campos principales:
-
-- `codigo`
-- `nombre`
-- `capacidadMaxima`
-- `ubicacion`
-- `estado`
-- `observaciones`
-
-### Pesaje
-
-Campos principales:
-
-- `animal`
-- `fecha`
-- `peso`
-- `aumentoKg`
-- `diasDesdeUltimoPesaje`
-- `observaciones`
-
-### RegistroSanitario
-
-Campos principales:
-
-- `animal`
-- `fecha`
-- `tipo`
-- `producto`
-- `dosis`
-- `viaAplicacion`
-- `responsable`
-- `proximaAplicacion`
-- `observaciones`
-
-### Costo
-
-Campos principales:
-
-- `fecha`
-- `categoria`
-- `descripcion`
-- `monto`
-- `proveedor`
-- `comprobante`
-- `observaciones`
-
-### RotacionPotrero
-
-Campos principales:
-
-- `potrero`
-- `lote`
-- `fechaEntrada`
-- `fechaSalida`
-- `numeroAnimales`
-- `estado`
-- `observaciones`
-
-## Prueba realizada
-
-Se probo el endpoint:
-
-```txt
-GET /api/animales
+```bash
+cd backend
+node -e "require('./app'); console.log('backend ok')"
 ```
 
-Resultado:
+Ejecutar servidor:
 
-```txt
-STATUS 200
-[]
+```bash
+npm run dev
 ```
 
-Esto indica que la ruta esta funcionando y que la coleccion de animales esta vacia por ahora.
+## Despliegue
 
-## Pendiente recomendado
+Render:
 
-- Crear login formal y emision de tokens JWT.
-- Proteger rutas privadas con `auth`.
-- Agregar hashing de contrasenas antes de guardar usuarios.
-- Configurar envio real de correos.
-- Conectar el frontend React con Axios.
-- Crear pantallas iniciales: Dashboard, Inventario, Potreros y Costos.
+- Root Directory: `backend`
+- Build Command: `npm install`
+- Start Command: `npm start`
+
+Variables reales se configuran en Render, no en GitHub.

@@ -22,6 +22,7 @@ app.get('/', (req, res)=>{
 });
 
 // rutas principales
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api/usuarios', require('./routes/usuario'));
 app.use('/api/tareas', require('./routes/tareaRoutes'));
 app.use('/api/animales', auth, require('./routes/animal'));

@@ -3,16 +3,33 @@ import './App.css';
 import { useEffect, useState } from 'react';
 import IniciarSesion from './Components/IniciarSesion';
 import ListaUsuario from './Components/ListaUsuario';
+import OlvideContrasena from './Components/OlvideContrasena';
+import RestablecerContrasena from './Components/RestablecerContrasena';
 import { obtenerPerfilUsuario } from './services/api';
 
+const obtenerTokenRestablecimiento = () => {
+  const partes = window.location.pathname.split('/').filter(Boolean);
+  return partes[0] === 'restablecer-contrasena' ? partes[1] || '' : '';
+};
+
 function App() {
-  const [vista, setVista] = useState('login');
+  const [vista, setVista] = useState(obtenerTokenRestablecimiento() ? 'restablecer-contrasena' : 'login');
+  const [tokenRestablecimiento, setTokenRestablecimiento] = useState(obtenerTokenRestablecimiento());
   const [sesion, setSesion] = useState(null);
   const [mensaje, setMensaje] = useState('');
   const [validandoSesion, setValidandoSesion] = useState(true);
 
   useEffect(() => {
     const validarSesion = async () => {
+      const tokenRuta = obtenerTokenRestablecimiento();
+
+      if (tokenRuta) {
+        setTokenRestablecimiento(tokenRuta);
+        setVista('restablecer-contrasena');
+        setValidandoSesion(false);
+        return;
+      }
+
       const sesionGuardada = localStorage.getItem('ganaderiaSesion');
 
       if (!sesionGuardada) {
@@ -75,6 +92,13 @@ function App() {
     setVista('login');
   };
 
+  const irLogin = () => {
+    window.history.pushState({}, '', '/');
+    setTokenRestablecimiento('');
+    setVista('login');
+    setMensaje('');
+  };
+
   if (validandoSesion) {
     return (
       <div className="auth-page">
@@ -94,9 +118,14 @@ function App() {
       {vista === 'login' ? (
         <IniciarSesion
           onLogin={iniciarSesion}
+          onOlvideContrasena={() => setVista('olvide-contrasena')}
         />
+      ) : vista === 'olvide-contrasena' ? (
+        <OlvideContrasena onVolver={irLogin} />
+      ) : vista === 'restablecer-contrasena' ? (
+        <RestablecerContrasena token={tokenRestablecimiento} onVolver={irLogin} />
       ) : (
-        <IniciarSesion onLogin={iniciarSesion} />
+        <IniciarSesion onLogin={iniciarSesion} onOlvideContrasena={() => setVista('olvide-contrasena')} />
       )}
     </div>
   );

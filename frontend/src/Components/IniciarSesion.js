@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { loginUsuario } from '../services/api';
 
-const IniciarSesion = ({ onLogin }) => {
+const IniciarSesion = ({ onLogin, onOlvideContrasena }) => {
   const [formulario, setFormulario] = useState({
     correo: '',
     contrasena: ''
@@ -75,6 +75,10 @@ const IniciarSesion = ({ onLogin }) => {
 
         <button className="boton-primario" type="submit" disabled={cargando}>
           {cargando ? 'Ingresando...' : 'Entrar al panel'}
+        </button>
+
+        <button className="boton-link auth-link" type="button" onClick={onOlvideContrasena}>
+          Olvidé mi contraseña
         </button>
 
       </form>

@@ -44,7 +44,7 @@ const request = async (ruta, opciones = {}) => {
       window.dispatchEvent(new Event('ganaderiaSesionExpirada'));
     }
 
-    throw new Error(data.mensaje || 'Error en la solicitud');
+    throw new Error(data.mensaje || data.message || 'Error en la solicitud');
   }
 
   return data;
@@ -54,6 +54,20 @@ export const loginUsuario = ({ correo, contrasena }) => {
   return request('/usuarios/login', {
     method: 'POST',
     body: JSON.stringify({ correo, contrasena })
+  });
+};
+
+export const solicitarRecuperacionPassword = (correo) => {
+  return request('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ correo })
+  });
+};
+
+export const restablecerPassword = ({ token, password }) => {
+  return request('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password })
   });
 };
 
@@ -151,9 +165,12 @@ export const eliminarTarea = (id) => {
   });
 };
 
-export const previsualizarExcel = (archivo) => {
+export const previsualizarExcel = (archivo, modulos = []) => {
   const formData = new FormData();
   formData.append('archivo', archivo);
+  if (modulos.length > 0) {
+    formData.append('modulos', JSON.stringify(modulos));
+  }
 
   return request('/importar/excel', {
     method: 'POST',
@@ -161,9 +178,12 @@ export const previsualizarExcel = (archivo) => {
   });
 };
 
-export const importarExcel = (archivo) => {
+export const importarExcel = (archivo, modulos = []) => {
   const formData = new FormData();
   formData.append('archivo', archivo);
+  if (modulos.length > 0) {
+    formData.append('modulos', JSON.stringify(modulos));
+  }
 
   return request('/importar/excel/importar', {
     method: 'POST',

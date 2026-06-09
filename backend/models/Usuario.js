@@ -18,8 +18,10 @@ const usuarioSchema = new Schema(
             default: 'Activo'
         },
         ultimoAcceso: { type: Date },
-        recuperacionContrasenaToken: { type: String },
-        recuperacionContrasenaExpira: { type: Date }
+        resetPasswordToken: { type: String },
+        resetPasswordExpires: { type: Date },
+        resetPasswordRequestedAt: { type: Date },
+        resetPasswordRequestIp: { type: String }
     },
     {
         timestamps: true
