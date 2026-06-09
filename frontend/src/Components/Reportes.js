@@ -341,7 +341,7 @@ const Reportes = () => {
           {sustentabilidadCria && (
             <section className="reporte-panel reporte-panel-amplio">
               <p className="eyebrow">Sustentabilidad de cria</p>
-              <h2>Ventas menos compras y gastos operativos</h2>
+              <h2>Ventas por kilo menos compras y costo operativo</h2>
               <div className="reportes-metricas finanzas-cria-metricas">
                 <article>
                   <span>Ventas de animales</span>
@@ -356,14 +356,84 @@ const Reportes = () => {
                 <article>
                   <span>Gastos operativos</span>
                   <strong>{formatearMoneda(sustentabilidadCria.gastosOperativosPeriodo)}</strong>
-                  <small>Segun movimientos financieros</small>
+                  <small>{formatearNumero(sustentabilidadCria.animalesActivosCosto)} animales · {sustentabilidadCria.mesesPeriodo} meses</small>
+                </article>
+                <article>
+                  <span>Costo mensual/animal</span>
+                  <strong>{formatearMoneda(sustentabilidadCria.costoProduccionMensualPorAnimal)}</strong>
+                  <small>Costo operativo prorrateado</small>
+                </article>
+                <article>
+                  <span>Costo asignado</span>
+                  <strong>{formatearMoneda(sustentabilidadCria.costoProduccionAsignado)}</strong>
+                  <small>Segun meses en finca de vendidos</small>
                 </article>
                 <article className={sustentabilidadCria.margenSustentabilidad >= 0 ? 'sustentabilidad-positiva' : 'sustentabilidad-negativa'}>
-                  <span>Margen de sustentabilidad</span>
+                  <span>Utilidad / pérdida</span>
                   <strong>{formatearMoneda(sustentabilidadCria.margenSustentabilidad)}</strong>
-                  <small>Ventas - compras - gastos operativos</small>
+                  <small>Ventas - compras - costo asignado</small>
+                </article>
+                <article>
+                  <span>Precio venta prom/kg</span>
+                  <strong>{formatearMoneda(sustentabilidadCria.precioVentaPromedioKg)}</strong>
+                  <small>{formatearNumero(sustentabilidadCria.pesoVentaTotal)} kg vendidos</small>
+                </article>
+                <article>
+                  <span>Precio compra prom/kg</span>
+                  <strong>{formatearMoneda(sustentabilidadCria.precioCompraPromedioKg)}</strong>
+                  <small>{formatearNumero(sustentabilidadCria.pesoCompraTotal)} kg compra/nacimiento</small>
+                </article>
+                <article>
+                  <span>Duración promedio</span>
+                  <strong>{sustentabilidadCria.duracionPromedioMeses || 0}</strong>
+                  <small>Meses en finca por animal vendido</small>
                 </article>
               </div>
+
+              {(sustentabilidadCria.detalleAnimales || []).length > 0 && (
+                <div className="tabla-scroll tabla-dinamica sustentabilidad-tabla">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>DIIO</th>
+                        <th>Origen</th>
+                        <th>Venta kg</th>
+                        <th>Compra kg</th>
+                        <th>Peso venta</th>
+                        <th>Peso compra</th>
+                        <th>Total venta</th>
+                        <th>Total compra</th>
+                        <th>Meses</th>
+                        <th>Costo asignado</th>
+                        <th>Utilidad/pérdida</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sustentabilidadCria.detalleAnimales.map((animal) => (
+                        <tr key={animal.animalId}>
+                          <td>{animal.diio}</td>
+                          <td>{animal.origen}</td>
+                          <td>{formatearMoneda(animal.precioVentaPorKg)}</td>
+                          <td>{formatearMoneda(animal.precioCompraPorKg)}</td>
+                          <td>{formatearNumero(animal.pesoVenta)} kg</td>
+                          <td>{formatearNumero(animal.pesoCompra)} kg</td>
+                          <td>{formatearMoneda(animal.totalVenta)}</td>
+                          <td>{formatearMoneda(animal.totalCompra)}</td>
+                          <td>{animal.duracionMeses}</td>
+                          <td>{formatearMoneda(animal.costoProduccionAsignado)}</td>
+                          <td>{formatearMoneda(animal.utilidadPerdida)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {(sustentabilidadCria.animalesIgnorados || []).length > 0 && (
+                <div className="alerta-formulario">
+                  {sustentabilidadCria.animalesIgnorados.length} animales vendidos no se usaron porque les falta peso de venta o precio de venta por kg.
+                </div>
+              )}
             </section>
           )}
 

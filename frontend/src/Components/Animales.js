@@ -375,6 +375,22 @@ const Animales = ({ soloLectura = false }) => {
                 <strong>{formatearPeso(animalDetalle.pesoActual)}</strong>
               </article>
               <article>
+                <span>Peso compra</span>
+                <strong>{formatearPeso(animalDetalle.pesoCompra)}</strong>
+              </article>
+              <article>
+                <span>Peso venta</span>
+                <strong>{formatearPeso(animalDetalle.pesoVenta)}</strong>
+              </article>
+              <article>
+                <span>Precio compra por kg</span>
+                <strong>{formatearMoneda(animalDetalle.precioCompraPorKg)}</strong>
+              </article>
+              <article>
+                <span>Precio venta por kg</span>
+                <strong>{formatearMoneda(animalDetalle.precioVentaPorKg)}</strong>
+              </article>
+              <article>
                 <span>Monto compra</span>
                 <strong>{formatearMoneda(animalDetalle.montoCompra)}</strong>
               </article>

@@ -85,6 +85,19 @@ const calcularDiasEntre = (fechaInicio, fechaFin = new Date()) => {
     return Math.max(Math.floor((fin - inicio) / (1000 * 60 * 60 * 24)), 0);
 };
 
+const calcularMesesEntre = (fechaInicio, fechaFin = new Date()) => {
+    const dias = calcularDiasEntre(fechaInicio, fechaFin);
+    if (dias === null) return null;
+    return redondear(Math.max(dias / 30.4375, 0), 2);
+};
+
+const calcularMesesPeriodo = (fechaInicio, fechaFin) => {
+    const inicio = fechaInicio ? new Date(fechaInicio) : new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
+    const fin = fechaFin ? new Date(fechaFin) : new Date();
+    const meses = calcularMesesEntre(inicio, fin);
+    return meses && meses > 0 ? meses : 1;
+};
+
 const restarMeses = (fecha, meses) => {
     const resultado = new Date(fecha);
     resultado.setUTCMonth(resultado.getUTCMonth() - meses);
@@ -125,6 +138,37 @@ const estaFechaEnPeriodo = (fecha, fechaInicio, fechaFin) => {
     }
 
     return true;
+};
+
+const obtenerFechaIngresoFinca = (animal) => animal.fechaCompra || animal.fechaNacimiento || animal.createdAt;
+
+const esAnimalConsideradoActivoEnPeriodo = (animal, fechaInicio, fechaFin) => {
+    if (animal.estado === 'Muerto') return false;
+
+    const ingreso = obtenerFechaIngresoFinca(animal);
+    const finPeriodo = fechaFin ? new Date(fechaFin) : new Date();
+    finPeriodo.setUTCHours(23, 59, 59, 999);
+    if (ingreso && new Date(ingreso) > finPeriodo) return false;
+
+    if (!animal.fechaVenta) return true;
+    if (!fechaInicio) return true;
+
+    return new Date(animal.fechaVenta).getTime() >= new Date(fechaInicio).getTime();
+};
+
+const calcularTotalCompraAnimal = (animal) => {
+    if (!animal.fechaCompra) return 0;
+    if (animal.pesoCompra && animal.precioCompraPorKg) {
+        return animal.pesoCompra * animal.precioCompraPorKg;
+    }
+    return animal.montoCompra || 0;
+};
+
+const calcularTotalVentaAnimal = (animal) => {
+    if (animal.pesoVenta && animal.precioVentaPorKg) {
+        return animal.pesoVenta * animal.precioVentaPorKg;
+    }
+    return 0;
 };
 
 const obtenerInicioPeriodo = (fechaInicio) => {
@@ -372,31 +416,89 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
             MovimientoFinanciero.find(filtroPeriodo).lean()
         ]);
 
-        const comprasAnimales = animales.filter((animal) => {
-            return animal.montoCompra > 0 && estaFechaEnPeriodo(animal.fechaCompra, fechaInicio, fechaFin);
-        });
-        const ventasAnimales = animales.filter((animal) => {
-            return animal.estado === 'Vendido'
-                && animal.montoVenta > 0
-                && estaFechaEnPeriodo(animal.fechaVenta, fechaInicio, fechaFin);
-        });
-        const montoComprasAnimales = sumarMovimientos(comprasAnimales.map((animal) => ({ monto: animal.montoCompra })));
-        const montoVentasAnimales = sumarMovimientos(ventasAnimales.map((animal) => ({ monto: animal.montoVenta })));
+        const mesesPeriodo = calcularMesesPeriodo(fechaInicio, fechaFin);
+        const animalesActivosCosto = animales.filter((animal) => esAnimalConsideradoActivoEnPeriodo(animal, fechaInicio, fechaFin));
         const gastosOperativosPeriodo = sumarMovimientos(movimientosPeriodo.filter(esMovimientoGastoOperativo));
-        const margenSustentabilidad = montoVentasAnimales - montoComprasAnimales - gastosOperativosPeriodo;
+        const costoProduccionMensualPorAnimal = animalesActivosCosto.length
+            ? gastosOperativosPeriodo / animalesActivosCosto.length / mesesPeriodo
+            : 0;
+        const animalesVendidos = animales.filter((animal) => {
+            return animal.estado === 'Vendido'
+                && estaFechaEnPeriodo(animal.fechaVenta, fechaInicio, fechaFin)
+                && animal.pesoVenta > 0
+                && animal.precioVentaPorKg > 0;
+        });
+        const animalesAnalizados = animalesVendidos.map((animal) => {
+            const fechaIngreso = obtenerFechaIngresoFinca(animal);
+            const duracionMeses = calcularMesesEntre(fechaIngreso, animal.fechaVenta) || 0;
+            const totalCompra = calcularTotalCompraAnimal(animal);
+            const totalVenta = calcularTotalVentaAnimal(animal);
+            const costoProduccionAsignado = costoProduccionMensualPorAnimal * duracionMeses;
+            const utilidadPerdida = totalVenta - totalCompra - costoProduccionAsignado;
+
+            return {
+                animalId: animal._id,
+                diio: animal.diio || animal.identificadorFinca || '--',
+                nombre: animal.nombre || '',
+                origen: animal.fechaCompra ? 'Comprado' : 'Nacido en finca',
+                fechaIngreso: fechaIngreso || null,
+                fechaVenta: animal.fechaVenta,
+                precioCompraPorKg: animal.precioCompraPorKg || 0,
+                precioVentaPorKg: animal.precioVentaPorKg || 0,
+                pesoCompra: animal.fechaCompra ? animal.pesoCompra || 0 : animal.pesoNacimiento || 0,
+                pesoVenta: animal.pesoVenta || 0,
+                totalCompra: redondear(totalCompra),
+                totalVenta: redondear(totalVenta),
+                duracionMeses,
+                costoProduccionAsignado: redondear(costoProduccionAsignado),
+                utilidadPerdida: redondear(utilidadPerdida)
+            };
+        });
+        const montoComprasAnimales = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.totalCompra })));
+        const montoVentasAnimales = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.totalVenta })));
+        const costoProduccionAsignado = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.costoProduccionAsignado })));
+        const margenSustentabilidad = montoVentasAnimales - montoComprasAnimales - costoProduccionAsignado;
+        const pesoCompraTotal = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.pesoCompra })));
+        const pesoVentaTotal = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.pesoVenta })));
+        const duracionPromedioMeses = animalesAnalizados.length
+            ? animalesAnalizados.reduce((total, animal) => total + animal.duracionMeses, 0) / animalesAnalizados.length
+            : 0;
+        const precioVentaPromedioKg = pesoVentaTotal ? montoVentasAnimales / pesoVentaTotal : 0;
+        const precioCompraPromedioKg = pesoCompraTotal ? montoComprasAnimales / pesoCompraTotal : 0;
 
         res.json({
             montoVentasAnimales: redondear(montoVentasAnimales),
             montoComprasAnimales: redondear(montoComprasAnimales),
             gastosOperativosPeriodo: redondear(gastosOperativosPeriodo),
+            costoProduccionAsignado: redondear(costoProduccionAsignado),
+            costoProduccionMensualPorAnimal: redondear(costoProduccionMensualPorAnimal),
             margenSustentabilidad: redondear(margenSustentabilidad),
-            animalesCompradosPeriodo: comprasAnimales.length,
-            animalesVendidosPeriodo: ventasAnimales.length,
-            formula: 'ventas de animales - compras de animales - gastos operativos',
+            utilidadPerdida: redondear(margenSustentabilidad),
+            animalesCompradosPeriodo: animalesAnalizados.filter((animal) => animal.origen === 'Comprado').length,
+            animalesVendidosPeriodo: animalesAnalizados.length,
+            animalesActivosCosto: animalesActivosCosto.length,
+            mesesPeriodo: redondear(mesesPeriodo),
+            precioVentaPromedioKg: redondear(precioVentaPromedioKg),
+            precioCompraPromedioKg: redondear(precioCompraPromedioKg),
+            pesoCompraTotal: redondear(pesoCompraTotal),
+            pesoVentaTotal: redondear(pesoVentaTotal),
+            duracionPromedioMeses: redondear(duracionPromedioMeses),
+            detalleAnimales: animalesAnalizados,
+            animalesIgnorados: animales.filter((animal) => {
+                return animal.estado === 'Vendido'
+                    && estaFechaEnPeriodo(animal.fechaVenta, fechaInicio, fechaFin)
+                    && (!animal.pesoVenta || !animal.precioVentaPorKg);
+            }).map((animal) => ({
+                animalId: animal._id,
+                diio: animal.diio || animal.identificadorFinca || '--',
+                motivo: 'Falta pesoVenta o precioVentaPorKg'
+            })),
+            formula: 'venta por kilo - compra por kilo - costo operativo mensual por animal segun meses en finca',
             criterioFechas: {
-                compras: 'fechaCompra del animal',
+                ingreso: 'fechaNacimiento para nacidos en finca y fechaCompra para comprados',
                 ventas: 'fechaVenta del animal cuando estado es Vendido',
-                gastosOperativos: 'fecha del movimiento financiero'
+                gastosOperativos: 'fecha del movimiento financiero',
+                costoOperativo: 'gastos operativos del periodo / animales activos considerados / meses del periodo'
             }
         });
     } catch (error) {

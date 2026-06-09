@@ -13,6 +13,10 @@ const estadoInicial = {
   pesoNacimiento: '',
   pesoDestete: '',
   pesoActual: '',
+  pesoCompra: '',
+  pesoVenta: '',
+  precioCompraPorKg: '',
+  precioVentaPorKg: '',
   montoCompra: '',
   montoVenta: '',
   fechaCompra: '',
@@ -35,6 +39,10 @@ const normalizarAnimal = (animal) => ({
   pesoNacimiento: animal?.pesoNacimiento ?? '',
   pesoDestete: animal?.pesoDestete ?? '',
   pesoActual: animal?.pesoActual ?? '',
+  pesoCompra: animal?.pesoCompra ?? '',
+  pesoVenta: animal?.pesoVenta ?? '',
+  precioCompraPorKg: animal?.precioCompraPorKg ?? '',
+  precioVentaPorKg: animal?.precioVentaPorKg ?? '',
   montoCompra: animal?.montoCompra ?? '',
   montoVenta: animal?.montoVenta ?? '',
   fechaCompra: formatearFechaInput(animal?.fechaCompra),
@@ -65,6 +73,10 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       pesoNacimiento: numeroOpcional(formulario.pesoNacimiento),
       pesoDestete: numeroOpcional(formulario.pesoDestete),
       pesoActual: numeroOpcional(formulario.pesoActual),
+      pesoCompra: numeroOpcional(formulario.pesoCompra),
+      pesoVenta: numeroOpcional(formulario.pesoVenta),
+      precioCompraPorKg: numeroOpcional(formulario.precioCompraPorKg),
+      precioVentaPorKg: numeroOpcional(formulario.precioVentaPorKg),
       montoCompra: numeroOpcional(formulario.montoCompra),
       montoVenta: numeroOpcional(formulario.montoVenta),
       fechaCompra: fechaOpcional(formulario.fechaCompra),
@@ -163,6 +175,30 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
           <label>
             Monto venta
             <input name="montoVenta" type="number" min="0" step="0.01" value={formulario.montoVenta} onChange={actualizarCampo} />
+          </label>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            Precio compra por kg
+            <input name="precioCompraPorKg" type="number" min="0" step="0.01" value={formulario.precioCompraPorKg} onChange={actualizarCampo} />
+          </label>
+
+          <label>
+            Peso compra
+            <input name="pesoCompra" type="number" min="0" step="0.01" value={formulario.pesoCompra} onChange={actualizarCampo} />
+          </label>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            Precio venta por kg
+            <input name="precioVentaPorKg" type="number" min="0" step="0.01" value={formulario.precioVentaPorKg} onChange={actualizarCampo} />
+          </label>
+
+          <label>
+            Peso venta
+            <input name="pesoVenta" type="number" min="0" step="0.01" value={formulario.pesoVenta} onChange={actualizarCampo} />
           </label>
         </div>
 

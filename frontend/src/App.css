@@ -1317,6 +1317,10 @@
   min-width: 900px;
 }
 
+.sustentabilidad-tabla table {
+  min-width: 1280px;
+}
+
 .parto-celda {
   display: inline-grid;
   place-items: center;
