@@ -384,6 +384,66 @@ export const eliminarMovimientoFinanciero = (id) => {
   });
 };
 
+const crearFormDataVenta = (venta) => {
+  const formData = new FormData();
+  Object.entries(venta).forEach(([clave, valor]) => {
+    if (clave === 'comprobante') return;
+    if (clave === 'animales') {
+      formData.append(clave, JSON.stringify(valor || []));
+      return;
+    }
+    if (valor !== undefined && valor !== null) {
+      formData.append(clave, valor);
+    }
+  });
+  if (venta.comprobante) formData.append('comprobante', venta.comprobante);
+  return formData;
+};
+
+export const obtenerVentas = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/ventas${query ? `?${query}` : ''}`);
+};
+
+export const obtenerResumenVentas = ({ fechaInicio, fechaFin } = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  const query = params.toString();
+  return request(`/ventas/resumen${query ? `?${query}` : ''}`);
+};
+
+export const crearVentaAnimal = (venta) => {
+  return request('/ventas', {
+    method: 'POST',
+    body: crearFormDataVenta(venta)
+  });
+};
+
+export const actualizarVentaAnimal = (id, venta) => {
+  return request(`/ventas/${id}`, {
+    method: 'PUT',
+    body: crearFormDataVenta(venta)
+  });
+};
+
+export const anularVentaAnimal = (id, motivoAnulacion = '') => {
+  return request(`/ventas/${id}/anular`, {
+    method: 'PATCH',
+    body: JSON.stringify({ motivoAnulacion })
+  });
+};
+
+export const eliminarVentaAnimal = (id) => {
+  return request(`/ventas/${id}`, {
+    method: 'DELETE'
+  });
+};
+
 export const obtenerResumenReportes = ({ fechaInicio, fechaFin, diio } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);

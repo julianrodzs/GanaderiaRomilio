@@ -3,6 +3,7 @@ import {
   obtenerFinanzasCria,
   obtenerProductividadCria,
   obtenerReporteCrecimientoPesajes,
+  obtenerResumenVentas,
   obtenerResumenReportes,
   obtenerSustentabilidadCria,
   obtenerVacasImproductivas
@@ -111,6 +112,7 @@ const Reportes = () => {
   const [sustentabilidadCria, setSustentabilidadCria] = useState(null);
   const [vacasImproductivas, setVacasImproductivas] = useState(null);
   const [crecimientoPesajes, setCrecimientoPesajes] = useState(null);
+  const [ventasReporte, setVentasReporte] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
@@ -135,7 +137,7 @@ const Reportes = () => {
         diasAbiertos: filtros.diasAbiertos,
         pesoDesteteMin: filtros.pesoDesteteMin
       };
-      const [data, productividadData, finanzasCriaData, sustentabilidadData, vacasImproductivasData, crecimientoData] = await Promise.all([
+      const [data, productividadData, finanzasCriaData, sustentabilidadData, vacasImproductivasData, crecimientoData, ventasData] = await Promise.all([
         obtenerResumenReportes(filtrosPartos),
         obtenerProductividadCria(filtrosGenerales),
         obtenerFinanzasCria(filtrosGenerales),
@@ -144,7 +146,8 @@ const Reportes = () => {
         obtenerReporteCrecimientoPesajes({
           ...filtrosGenerales,
           diasSinPesaje: filtros.diasSinPesaje
-        })
+        }),
+        obtenerResumenVentas(filtrosGenerales)
       ]);
       setReporte(data);
       setProductividad(productividadData);
@@ -152,6 +155,7 @@ const Reportes = () => {
       setSustentabilidadCria(sustentabilidadData);
       setVacasImproductivas(vacasImproductivasData);
       setCrecimientoPesajes(crecimientoData);
+      setVentasReporte(ventasData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -432,6 +436,156 @@ const Reportes = () => {
               {(sustentabilidadCria.animalesIgnorados || []).length > 0 && (
                 <div className="alerta-formulario">
                   {sustentabilidadCria.animalesIgnorados.length} animales vendidos no se usaron porque les falta peso de venta o precio de venta por kg.
+                </div>
+              )}
+            </section>
+          )}
+
+          {ventasReporte && (
+            <section className="reporte-panel reporte-panel-amplio">
+              <p className="eyebrow">Ventas</p>
+              <h2>Análisis de ventas de animales</h2>
+              <div className="ventas-reportes-grid">
+                <article className="ventas-reporte-card">
+                  <p className="eyebrow">Periodo</p>
+                  <h2>Ventas por período</h2>
+                  <div className="reporte-lista-item">
+                    <strong>{formatearMoneda(ventasReporte.ventasPorPeriodo?.ticketPromedioVenta)}</strong>
+                    <span>Ticket promedio por venta</span>
+                  </div>
+                  <div className="reporte-lista-item">
+                    <strong>{formatearMoneda(ventasReporte.ventasPorPeriodo?.ventaPromedioPorAnimal)}</strong>
+                    <span>Venta promedio por animal</span>
+                  </div>
+                  <div className="reporte-lista-item">
+                    <strong>{formatearNumero(ventasReporte.ventasPorPeriodo?.totalAnimalesVendidos)}</strong>
+                    <span>Animales vendidos</span>
+                  </div>
+                </article>
+
+                <article className="ventas-reporte-card">
+                  <p className="eyebrow">Precio</p>
+                  <h2>Precio por kilo</h2>
+                  <div className="reporte-lista-item">
+                    <strong>{formatearMoneda(ventasReporte.precioKg?.promedio)}</strong>
+                    <span>Promedio general</span>
+                  </div>
+                  <div className="reporte-lista-item">
+                    <strong>{formatearMoneda(ventasReporte.precioKg?.minimo)}</strong>
+                    <span>Precio mínimo</span>
+                  </div>
+                  <div className="reporte-lista-item">
+                    <strong>{formatearMoneda(ventasReporte.precioKg?.maximo)}</strong>
+                    <span>Precio máximo</span>
+                  </div>
+                </article>
+
+                <article className="ventas-reporte-card">
+                  <p className="eyebrow">Origen</p>
+                  <h2>Ventas por origen</h2>
+                  {(ventasReporte.ventasPorOrigen || []).length === 0 && <span className="reporte-vacio">Sin ventas confirmadas.</span>}
+                  {(ventasReporte.ventasPorOrigen || []).map((item) => (
+                    <div className="reporte-lista-item" key={item.origen}>
+                      <strong>{item.origen}</strong>
+                      <span>{item.animales} animales · {formatearNumero(item.pesoTotalKg)} kg · {formatearMoneda(item.montoTotal)}</span>
+                      <span>{formatearMoneda(item.precioPromedioKg)}/kg · {item.mesesPromedioEnFinca} meses promedio</span>
+                    </div>
+                  ))}
+                </article>
+
+                <article className="ventas-reporte-card">
+                  <p className="eyebrow">Rotación</p>
+                  <h2>Inventario vendido</h2>
+                  <div className="reporte-lista-item">
+                    <strong>{ventasReporte.rotacionInventarioVendido?.duracionPromedioMeses || 0} meses</strong>
+                    <span>Duración promedio en finca</span>
+                  </div>
+                  <div className="reporte-lista-item">
+                    <strong>{ventasReporte.rotacionInventarioVendido?.menorDuracion || 0} / {ventasReporte.rotacionInventarioVendido?.mayorDuracion || 0}</strong>
+                    <span>Menor / mayor duración en meses</span>
+                  </div>
+                  <div className="reporte-lista-item">
+                    <strong>{formatearNumero(ventasReporte.rotacionInventarioVendido?.animalesConDuracion)}</strong>
+                    <span>Animales con fecha de ingreso</span>
+                  </div>
+                </article>
+              </div>
+
+              {ventasReporte.ventasPorMes?.length > 0 && (
+                <div className="ventas-reporte-seccion">
+                  <div className="partos-panel-header">
+                    <div>
+                      <p className="eyebrow">Ventas por mes</p>
+                      <h3>Comportamiento mensual de ventas</h3>
+                    </div>
+                  </div>
+                  <div className="tabla-scroll tabla-dinamica ventas-mes-tabla">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Mes</th>
+                          <th>Ventas</th>
+                          <th>Animales</th>
+                          <th>Kg vendidos</th>
+                          <th>Total</th>
+                          <th>Prom/kg</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ventasReporte.ventasPorMes.map((item) => (
+                          <tr key={item.mes}>
+                            <td>{item.mes}</td>
+                            <td>{item.ventas}</td>
+                            <td>{item.animales}</td>
+                            <td>{formatearNumero(item.pesoTotalKg)} kg</td>
+                            <td>{formatearMoneda(item.total)}</td>
+                            <td>{formatearMoneda(item.precioPromedioKg)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {ventasReporte.rotacionInventarioVendido?.detalle?.length > 0 && (
+                <div className="ventas-reporte-seccion">
+                  <div className="partos-panel-header">
+                    <div>
+                      <p className="eyebrow">Rotación de inventario vendido</p>
+                      <h3>Animales vendidos y tiempo en finca</h3>
+                    </div>
+                  </div>
+                  <div className="tabla-scroll tabla-dinamica ventas-mes-tabla">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>DIIO</th>
+                          <th>Nombre</th>
+                          <th>Origen</th>
+                          <th>Comprador</th>
+                          <th>Meses en finca</th>
+                          <th>Peso venta</th>
+                          <th>Precio/kg</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ventasReporte.rotacionInventarioVendido.detalle.slice(0, 12).map((item) => (
+                          <tr key={item.animalId || `${item.diio}-${item.fechaVenta}`}>
+                            <td>{item.diio}</td>
+                            <td>{item.nombre || '--'}</td>
+                            <td>{item.origen}</td>
+                            <td>{item.comprador}</td>
+                            <td>{item.mesesEnFinca}</td>
+                            <td>{formatearNumero(item.pesoVentaKg)} kg</td>
+                            <td>{formatearMoneda(item.precioKg)}</td>
+                            <td>{formatearMoneda(item.subtotal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </section>

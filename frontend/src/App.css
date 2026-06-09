@@ -367,6 +367,18 @@
   color: #6e766f;
 }
 
+.metric-card-positive {
+  background: #f4fbf5;
+}
+
+.metric-card-negative {
+  background: #fff4ef;
+}
+
+.metric-card-negative strong {
+  color: #b22822;
+}
+
 .metric-card-ipg {
   border-color: transparent;
 }
@@ -398,6 +410,41 @@
 
 .dashboard-ipg-card small {
   font-weight: 800;
+}
+
+.dashboard-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.dashboard-mini-grid article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 12px;
+}
+
+.dashboard-mini-grid article:last-child {
+  grid-column: 1 / -1;
+}
+
+.dashboard-mini-grid span {
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.dashboard-mini-grid strong {
+  color: #0b3b21;
+  font-size: 24px;
+}
+
+.dashboard-mini-grid small {
+  color: #6e766f;
 }
 
 .ipg-fondo-deficiente {
@@ -848,6 +895,21 @@
   color: #3c464f;
 }
 
+.estado-Confirmada {
+  background: #e5efe7;
+  color: #0b3b21;
+}
+
+.estado-Pendiente {
+  background: #fff3d5;
+  color: #8b5e00;
+}
+
+.estado-Anulada {
+  background: #ffe4df;
+  color: #b22822;
+}
+
 .estado-Vacía {
   background: #e8ebee;
   color: #3c464f;
@@ -944,6 +1006,120 @@
   display: grid;
   gap: 18px;
   padding-top: 22px;
+}
+
+.ventas-page {
+  display: grid;
+  gap: 18px;
+  padding-top: 22px;
+}
+
+.venta-selector {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+  padding: 16px;
+}
+
+.venta-selector .panel-title {
+  margin-bottom: 0;
+}
+
+.venta-selector select {
+  width: min(100%, 360px);
+  min-height: 42px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 0 12px;
+  background: #fffdf7;
+  color: #09160e;
+}
+
+.venta-detalle-tabla table {
+  min-width: 980px;
+}
+
+.venta-detalle-tabla input {
+  width: 110px;
+  min-height: 38px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 0 10px;
+  background: #fffdf7;
+}
+
+.venta-totales {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.venta-totales article {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 12px;
+}
+
+.venta-totales span {
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.venta-totales strong {
+  color: #0b3b21;
+  font-size: 22px;
+}
+
+.venta-comprobante-link {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.ventas-reportes-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ventas-reporte-card {
+  min-height: 220px;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 18px;
+}
+
+.ventas-reporte-card h2 {
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+
+.ventas-reporte-seccion {
+  margin-top: 18px;
+}
+
+.ventas-reporte-seccion h3 {
+  margin: 0;
+  color: #071d10;
+  font-size: 24px;
+}
+
+.ventas-reportes-grid .reporte-panel {
+  min-height: 220px;
+}
+
+.ventas-mes-panel {
+  gap: 12px;
+}
+
+.ventas-mes-tabla table {
+  min-width: 780px;
 }
 
 .pesajes-toolbar input[type="date"] {
@@ -2004,6 +2180,8 @@
   .importar-grid,
   .importar-resumen,
   .confirmacion-grid,
+  .venta-totales,
+  .ventas-reportes-grid,
   .finanzas-resumen,
   .finanzas-subresumen,
   .reportes-grid,

@@ -12,13 +12,14 @@ import Reproduccion from './Reproduccion';
 import Reportes from './Reportes';
 import Usuarios from '../pages/Usuarios';
 import Tareas from '../pages/Tareas';
+import Ventas from './Ventas';
 import {
   obtenerAnimales,
   obtenerPlanesSanitarios,
   obtenerPotreros,
   obtenerProductividadCria,
   obtenerRegistrosReproductivos,
-  obtenerResumenFinanciero
+  obtenerSustentabilidadCria
 } from '../services/api';
 import { obtenerCambiosPendientes } from '../services/offlineStorage';
 
@@ -30,6 +31,17 @@ const obtenerRangoAnioActual = () => {
   };
 };
 
+const obtenerRangoMesActual = () => {
+  const hoy = new Date();
+  const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+
+  return {
+    fechaInicio: inicio.toISOString().slice(0, 10),
+    fechaFin: fin.toISOString().slice(0, 10)
+  };
+};
+
 const obtenerNivelIpg = (ipg) => {
   if (ipg >= 95) return 'excelente';
   if (ipg >= 85) return 'muy-bueno';
@@ -38,20 +50,41 @@ const obtenerNivelIpg = (ipg) => {
   return 'deficiente';
 };
 
+const calcularEdadMeses = (fechaNacimiento) => {
+  if (!fechaNacimiento) return null;
+  const nacimiento = new Date(fechaNacimiento);
+  if (Number.isNaN(nacimiento.getTime())) return null;
+
+  const hoy = new Date();
+  let meses = (hoy.getFullYear() - nacimiento.getFullYear()) * 12;
+  meses += hoy.getMonth() - nacimiento.getMonth();
+  if (hoy.getDate() < nacimiento.getDate()) meses -= 1;
+  return Math.max(meses, 0);
+};
+
+const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
+  style: 'currency',
+  currency: 'CRC',
+  maximumFractionDigits: 0
+}).format(valor || 0);
+
 const ListaUsuario = ({ usuario, onLogout }) => {
   const [vistaActiva, setVistaActiva] = useState('Dashboard');
   const [metricas, setMetricas] = useState({
     animales: 0,
     potreros: 0,
-    alertasSanidad: 0,
-    alertasReproduccion: 0,
+    vacasReproductivas: 0,
+    vacasPrenadas: 0,
+    proximosPartos: 0,
+    proximosCelos: 0,
+    destetesProximos: 0,
     hembras: 0,
     machos: 0,
-    gastosMes: 0,
+    gastosOperativosMes: 0,
+    utilidadPerdidaMes: 0,
     potrerosDescanso: 0,
     proximasSanidad: 0,
     vencidasSanidad: 0,
-    proximosCelos: 0,
     ipg: 0,
     clasificacionIpg: 'Deficiente'
   });
@@ -67,31 +100,40 @@ const ListaUsuario = ({ usuario, onLogout }) => {
 
     const cargarMetricas = async () => {
       try {
-        const [animales, potreros, planes, reproduccion, resumenFinanciero, productividad] = await Promise.all([
+        const [animales, potreros, planes, reproduccion, productividad, sustentabilidadMes] = await Promise.all([
           obtenerAnimales(),
           obtenerPotreros(),
           obtenerPlanesSanitarios(),
           obtenerRegistrosReproductivos(),
-          obtenerResumenFinanciero(),
-          obtenerProductividadCria(obtenerRangoAnioActual())
+          obtenerProductividadCria(obtenerRangoAnioActual()),
+          obtenerSustentabilidadCria(obtenerRangoMesActual())
         ]);
+        const animalesActivos = animales.filter((animal) => !['Muerto', 'Vendido'].includes(animal.estado));
+        const animalesConRegistroReproductivo = new Set(
+          reproduccion.map((registro) => registro.animal?._id || registro.animal).filter(Boolean)
+        );
+        const vacasReproductivas = animalesActivos.filter((animal) => {
+          if (animal.sexo !== 'Hembra') return false;
+          const edadMeses = calcularEdadMeses(animal.fechaNacimiento);
+          return (edadMeses !== null && edadMeses >= 24) || animalesConRegistroReproductivo.has(animal._id);
+        }).length;
+        const vacasPrenadas = reproduccion.filter((registro) => ['Gestante', 'Próxima a parto'].includes(registro.estado)).length;
 
         setMetricas({
-          animales: animales.length,
+          animales: animalesActivos.length,
           potreros: potreros.length,
-          alertasSanidad: planes.filter((plan) => ['Vencido', 'Próximo'].includes(plan.estado)).length,
-          alertasReproduccion: reproduccion.filter((registro) => [
-            'Próxima a parto',
-            'Próximo celo estimado',
-            'Destete próximo'
-          ].includes(registro.estado)).length,
-          hembras: animales.filter((animal) => animal.sexo === 'Hembra').length,
-          machos: animales.filter((animal) => animal.sexo === 'Macho').length,
-          gastosMes: resumenFinanciero?.totalEgresos || 0,
+          vacasReproductivas,
+          vacasPrenadas,
+          proximosPartos: reproduccion.filter((registro) => registro.estado === 'Próxima a parto').length,
+          proximosCelos: reproduccion.filter((registro) => registro.estado === 'Próximo celo estimado').length,
+          destetesProximos: reproduccion.filter((registro) => registro.estado === 'Destete próximo').length,
+          hembras: animalesActivos.filter((animal) => animal.sexo === 'Hembra').length,
+          machos: animalesActivos.filter((animal) => animal.sexo === 'Macho').length,
+          gastosOperativosMes: sustentabilidadMes?.gastosOperativosPeriodo || 0,
+          utilidadPerdidaMes: sustentabilidadMes?.utilidadPerdida || sustentabilidadMes?.margenSustentabilidad || 0,
           potrerosDescanso: potreros.filter((potrero) => potrero.estado === 'Descanso').length,
           proximasSanidad: planes.filter((plan) => plan.estado === 'Próximo').length,
           vencidasSanidad: planes.filter((plan) => plan.estado === 'Vencido').length,
-          proximosCelos: reproduccion.filter((registro) => registro.estado === 'Próximo celo estimado').length,
           ipg: productividad?.ipg || 0,
           clasificacionIpg: productividad?.clasificacion || 'Deficiente'
         });
@@ -225,6 +267,15 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     );
   }
 
+  if (vistaActiva === 'Ventas') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <Ventas />
+      </main>
+    );
+  }
+
   if (vistaActiva === 'Reportes') {
     return (
       <main className="dashboard-shell">
@@ -287,24 +338,44 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           <small>{metricas.hembras} hembras / {metricas.machos} machos</small>
         </article>
         <article className="metric-card">
-          <span>Potreros activos</span>
+          <span>Vacas reproductivas</span>
+          <strong>{metricas.vacasReproductivas}</strong>
+          <small>Hembras adultas o con registro reproductivo</small>
+        </article>
+        <article className="metric-card">
+          <span>Vacas preñadas</span>
+          <strong>{metricas.vacasPrenadas}</strong>
+          <small>Gestantes o próximas a parto</small>
+        </article>
+        <article className="metric-card">
+          <span>Próximos partos</span>
+          <strong>{metricas.proximosPartos}</strong>
+          <small>Dentro de la ventana de alerta</small>
+        </article>
+        <article className="metric-card">
+          <span>Próximos celos</span>
+          <strong>{metricas.proximosCelos}</strong>
+          <small>Estimados por último parto</small>
+        </article>
+        <article className="metric-card">
+          <span>Destetes próximos</span>
+          <strong>{metricas.destetesProximos}</strong>
+          <small>Terneros en seguimiento</small>
+        </article>
+        <article className="metric-card">
+          <span>Gastos operativos mes</span>
+          <strong>{formatearMoneda(metricas.gastosOperativosMes)}</strong>
+          <small>Finanzas del mes actual</small>
+        </article>
+        <article className={metricas.utilidadPerdidaMes >= 0 ? 'metric-card metric-card-positive' : 'metric-card metric-card-negative'}>
+          <span>Utilidad / pérdida estimada</span>
+          <strong>{formatearMoneda(metricas.utilidadPerdidaMes)}</strong>
+          <small>Ventas - compras - costo operativo</small>
+        </article>
+        <article className="metric-card">
+          <span>Potreros</span>
           <strong>{metricas.potreros}</strong>
           <small>{metricas.potrerosDescanso} en descanso</small>
-        </article>
-        <article className="metric-card">
-          <span>Egresos registrados</span>
-          <strong>{new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(metricas.gastosMes)}</strong>
-          <small>Modulo de finanzas activo</small>
-        </article>
-        <article className="metric-card">
-          <span>Alertas sanidad</span>
-          <strong>{metricas.alertasSanidad}</strong>
-          <small>{metricas.vencidasSanidad} vencidas / {metricas.proximasSanidad} proximas</small>
-        </article>
-        <article className="metric-card">
-          <span>Alertas reproduccion</span>
-          <strong>{metricas.alertasReproduccion}</strong>
-          <small>{metricas.proximosCelos} próximos celos estimados</small>
         </article>
       </section>
 
@@ -318,16 +389,33 @@ const ListaUsuario = ({ usuario, onLogout }) => {
         </article>
 
         <article className="panel-alerta">
-          <p className="eyebrow">Alertas operativas</p>
+          <p className="eyebrow">Indicadores ejecutivos</p>
           <h2>Seguimiento diario</h2>
           <p>
-            Revisar sanidad próxima o vencida, próximos celos estimados,
-            partos estimados y destetes próximos antes de cerrar la jornada.
+            Priorizar partos, celos, destetes y sanidad pendiente. Revisar utilidad estimada
+            cuando existan ventas registradas con peso y precio por kilo.
           </p>
           <div className={`dashboard-ipg-card ipg-fondo-${obtenerNivelIpg(metricas.ipg)}`}>
             <span>IPG</span>
             <strong>{metricas.ipg}</strong>
             <small>{metricas.clasificacionIpg}</small>
+          </div>
+          <div className="dashboard-mini-grid">
+            <article>
+              <span>Sanidad</span>
+              <strong>{metricas.vencidasSanidad}</strong>
+              <small>vencidas</small>
+            </article>
+            <article>
+              <span>Sanidad</span>
+              <strong>{metricas.proximasSanidad}</strong>
+              <small>próximas</small>
+            </article>
+            <article>
+              <span>Margen mes</span>
+              <strong>{formatearMoneda(metricas.utilidadPerdidaMes)}</strong>
+              <small>estimado</small>
+            </article>
           </div>
           <div className="dashboard-logout-row">
             <button className="logout-dashboard-button" type="button" onClick={onLogout}>

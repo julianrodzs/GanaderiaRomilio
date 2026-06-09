@@ -1,7 +1,7 @@
 import React from 'react';
 
 const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuario }) => {
-  const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Finanzas', 'Reportes', 'Drone'];
+  const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Ventas', 'Finanzas', 'Reportes', 'Drone'];
   const items = usuario?.rol === 'Administrador' ? [...itemsBase, 'Usuarios'] : ['Mis tareas', 'Inventario', 'Potreros', 'Gestación'];
   const esItemActivo = (item) => item === vistaActiva || (usuario?.rol !== 'Administrador' && item === 'Mis tareas' && vistaActiva === 'Dashboard');
 

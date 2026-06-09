@@ -33,6 +33,7 @@ app.use('/api/plan-sanitario', soloAdministrador, require('./routes/planSanitari
 app.use('/api/reproduccion', auth, require('./routes/reproduccionRoutes'));
 app.use('/api/costos', soloAdministrador, require('./routes/costo'));
 app.use('/api/finanzas', soloAdministrador, require('./routes/finanza'));
+app.use('/api/ventas', soloAdministrador, require('./routes/ventaAnimalRoutes'));
 app.use('/api/rotaciones', auth, require('./routes/rotacion'));
 app.use('/api/reportes', soloAdministrador, require('./routes/reporte'));
 app.use('/api/importar', soloAdministrador, require('./routes/importar'));

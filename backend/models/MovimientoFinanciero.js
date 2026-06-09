@@ -5,7 +5,7 @@ const movimientoFinancieroSchema = new Schema(
         fecha: { type: Date, required: true },
         tipoMovimiento: {
             type: String,
-            enum: ['Planilla', 'Inversion', 'Compra'],
+            enum: ['Planilla', 'Inversion', 'Compra', 'Venta de animales'],
             required: true,
             trim: true
         },
@@ -31,6 +31,8 @@ const movimientoFinancieroSchema = new Schema(
         finca: { type: String, trim: true },
         potrero: { type: Schema.Types.ObjectId, ref: 'Potrero' },
         animal: { type: Schema.Types.ObjectId, ref: 'Animal' },
+        referenciaId: { type: Schema.Types.ObjectId },
+        referenciaModelo: { type: String, trim: true },
         comprobante: { type: String, trim: true },
         observaciones: { type: String, trim: true }
     },

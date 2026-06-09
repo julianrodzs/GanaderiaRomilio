@@ -20,6 +20,8 @@ const animalSchema = new Schema(
         precioVentaPorKg: { type: Number, min: 0 },
         montoCompra: { type: Number, min: 0 },
         montoVenta: { type: Number, min: 0 },
+        comprador: { type: String, trim: true },
+        ventaId: { type: Schema.Types.ObjectId, ref: 'VentaAnimal' },
         fechaCompra: { type: Date },
         fechaVenta: { type: Date },
         fechaMuerte: { type: Date },
