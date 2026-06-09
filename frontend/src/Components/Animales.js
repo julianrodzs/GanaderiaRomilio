@@ -8,6 +8,7 @@ import {
   obtenerEventosAnimal,
   obtenerPesajesPorAnimal
 } from '../services/api';
+import { guardarInventarioOffline, obtenerInventarioOffline } from '../services/offlineStorage';
 import FormularioAnimal from './FormularioAnimal';
 import TablaDinamica from './TablaDinamica';
 
@@ -136,8 +137,17 @@ const Animales = ({ soloLectura = false }) => {
       setError('');
       const data = await obtenerAnimales();
       setAnimales(data);
+      if (soloLectura) {
+        await guardarInventarioOffline(data);
+      }
     } catch (err) {
-      setError(err.message);
+      if (soloLectura) {
+        const datosOffline = await obtenerInventarioOffline().catch(() => []);
+        setAnimales(datosOffline);
+        setError(datosOffline.length ? 'Sin conexion. Mostrando inventario guardado en este dispositivo.' : err.message);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setCargando(false);
     }

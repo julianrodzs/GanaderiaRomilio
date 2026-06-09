@@ -24,10 +24,6 @@ const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuar
           </button>
         ))}
       </nav>
-
-      <button className="icon-button" type="button" onClick={onLogout} title="Cerrar sesion">
-        Salir
-      </button>
     </header>
   );
 };

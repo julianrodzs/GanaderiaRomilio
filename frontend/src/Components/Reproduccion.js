@@ -7,6 +7,7 @@ import {
   obtenerRegistrosReproductivos,
   registrarTerneroDesdeParto
 } from '../services/api';
+import { guardarGestacionOffline, obtenerGestacionOffline } from '../services/offlineStorage';
 import FormularioReproduccion from './FormularioReproduccion';
 import TablaDinamica from './TablaDinamica';
 
@@ -84,8 +85,17 @@ const Reproduccion = ({ soloLectura = false }) => {
       ]);
       setRegistros(registrosData);
       setAnimales(animalesData);
+      if (soloLectura) {
+        await guardarGestacionOffline(registrosData);
+      }
     } catch (err) {
-      setError(err.message);
+      if (soloLectura) {
+        const gestacionOffline = await obtenerGestacionOffline().catch(() => []);
+        setRegistros(gestacionOffline);
+        setError(gestacionOffline.length ? 'Sin conexion. Mostrando gestacion guardada en este dispositivo.' : err.message);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setCargando(false);
     }

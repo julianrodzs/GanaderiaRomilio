@@ -9,6 +9,7 @@ import {
   obtenerPotreros,
   obtenerRotaciones
 } from '../services/api';
+import { guardarPotrerosOffline, obtenerPotrerosOffline } from '../services/offlineStorage';
 import FormularioPotrero from './FormularioPotrero';
 import FormularioRotacion from './FormularioRotacion';
 import TablaDinamica from './TablaDinamica';
@@ -78,8 +79,18 @@ const Potreros = ({ soloLectura = false }) => {
       ]);
       setPotreros(potrerosData);
       setRotaciones(rotacionesData);
+      if (soloLectura) {
+        await guardarPotrerosOffline(potrerosData);
+      }
     } catch (err) {
-      setError(err.message);
+      if (soloLectura) {
+        const potrerosOffline = await obtenerPotrerosOffline().catch(() => []);
+        setPotreros(potrerosOffline);
+        setRotaciones([]);
+        setError(potrerosOffline.length ? 'Sin conexion. Mostrando potreros guardados en este dispositivo.' : err.message);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setCargando(false);
     }

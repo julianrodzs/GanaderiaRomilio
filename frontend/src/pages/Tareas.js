@@ -13,6 +13,13 @@ import {
   obtenerUsuarios,
   API_URL
 } from '../services/api';
+import {
+  guardarCambiosPendientes,
+  guardarTareasOffline,
+  limpiarCambiosPendientes,
+  obtenerCambiosPendientes,
+  obtenerTareasOffline
+} from '../services/offlineStorage';
 
 const tipos = [
   'Chapia',
@@ -113,7 +120,15 @@ const Tareas = ({ usuario }) => {
       setError('');
       const filtrosActivos = Object.fromEntries(Object.entries(filtros).filter(([, valor]) => Boolean(valor)));
       const tareasData = esAdmin ? await obtenerTareas(filtrosActivos) : await obtenerMisTareas(filtrosActivos);
-      setTareas(tareasData);
+      const pendientes = await obtenerCambiosPendientes().catch(() => []);
+      const tareasConPendientes = tareasData.map((tarea) => {
+        const cambioPendiente = pendientes.find((cambio) => cambio.tipo === 'completar-tarea' && cambio.referenciaId === tarea._id);
+        return cambioPendiente ? { ...tarea, estado: 'Completada', pendienteSincronizar: true } : tarea;
+      });
+      setTareas(tareasConPendientes);
+      if (!esAdmin) {
+        await guardarTareasOffline(tareasConPendientes);
+      }
 
       if (esAdmin) {
         const [usuariosData, potrerosData, animalesData] = await Promise.all([
@@ -126,15 +141,54 @@ const Tareas = ({ usuario }) => {
         setAnimales(animalesData);
       }
     } catch (err) {
-      setError(err.message);
+      if (!esAdmin) {
+        const tareasOffline = await obtenerTareasOffline().catch(() => []);
+        setTareas(tareasOffline);
+        setError(tareasOffline.length ? 'Sin conexion. Mostrando tareas guardadas en este dispositivo.' : err.message);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setCargando(false);
+    }
+  };
+
+  const sincronizarCambiosPendientes = async () => {
+    if (!navigator.onLine) return;
+
+    const cambios = await obtenerCambiosPendientes().catch(() => []);
+    const cambiosTareas = cambios.filter((cambio) => cambio.tipo === 'completar-tarea');
+    if (cambiosTareas.length === 0) return;
+
+    const sincronizados = [];
+    for (const cambio of cambiosTareas) {
+      try {
+        await completarTarea({
+          id: cambio.referenciaId,
+          observaciones: cambio.payload?.observaciones || '',
+          evidencia: cambio.payload?.evidencia || null
+        });
+        sincronizados.push(cambio.id);
+      } catch (err) {
+        console.error('No se pudo sincronizar tarea pendiente', cambio, err);
+      }
+    }
+
+    if (sincronizados.length > 0) {
+      await limpiarCambiosPendientes(sincronizados);
+      await cargarDatos();
     }
   };
 
   useEffect(() => {
     cargarDatos();
   }, [filtros.estado, filtros.prioridad, filtros.tipo, filtros.asignadoA, usuario?.rol]);
+
+  useEffect(() => {
+    window.addEventListener('online', sincronizarCambiosPendientes);
+    sincronizarCambiosPendientes();
+    return () => window.removeEventListener('online', sincronizarCambiosPendientes);
+  }, [usuario?.rol]);
 
   const resumen = useMemo(() => ({
     total: tareas.length,
@@ -207,10 +261,28 @@ const Tareas = ({ usuario }) => {
   const completar = async (tarea) => {
     try {
       setGuardando(true);
-      await completarTarea({ id: tarea._id, observaciones: observacionesCompletar, evidencia });
+      if (!navigator.onLine) {
+        await guardarCambiosPendientes({
+          tipo: 'completar-tarea',
+          referenciaId: tarea._id,
+          payload: {
+            observaciones: observacionesCompletar,
+            evidencia
+          }
+        });
+        const tareasActualizadas = tareas.map((item) => (
+          item._id === tarea._id ? { ...item, estado: 'Completada', pendienteSincronizar: true } : item
+        ));
+        setTareas(tareasActualizadas);
+        await guardarTareasOffline(tareasActualizadas);
+        setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, estado: 'Completada', pendienteSincronizar: true } : actual));
+        setError('Sin conexion. La tarea queda pendiente de sincronizar.');
+      } else {
+        await completarTarea({ id: tarea._id, observaciones: observacionesCompletar, evidencia });
+        await cargarDatos();
+      }
       setEvidencia(null);
       setObservacionesCompletar('');
-      await cargarDatos();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -318,7 +390,12 @@ const Tareas = ({ usuario }) => {
                 <td>{formatearFecha(tarea.fechaProgramada)}</td>
                 <td>{formatearFecha(tarea.fechaLimite)}</td>
                 <td><span className={`tarea-prioridad tarea-prioridad-${slug(tarea.prioridad)}`}>{tarea.prioridad}</span></td>
-                <td><span className={`tarea-badge tarea-estado-${slug(estaVencida(tarea) ? 'Vencida' : tarea.estado)}`}>{estaVencida(tarea) ? 'Vencida' : tarea.estado}</span></td>
+                <td>
+                  <span className={`tarea-badge tarea-estado-${slug(estaVencida(tarea) ? 'Vencida' : tarea.estado)}`}>
+                    {estaVencida(tarea) ? 'Vencida' : tarea.estado}
+                  </span>
+                  {tarea.pendienteSincronizar && <span className="sync-badge">Pendiente de sincronizar</span>}
+                </td>
                 <td>
                   <div className="acciones-tabla acciones-tabla-amplia">
                     <button type="button" title="Ver detalle" onClick={() => setDetalle(tarea)}>⊙</button>

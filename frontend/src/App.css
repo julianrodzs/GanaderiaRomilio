@@ -206,7 +206,7 @@
 
 .app-header {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   padding-bottom: 16px;
@@ -228,6 +228,13 @@
 .app-nav {
   display: flex;
   gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.app-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-item {
@@ -249,6 +256,66 @@
   background: #eef0eb;
   color: #183724;
   font-weight: 800;
+}
+
+.logout-dashboard-button {
+  min-height: 52px;
+  border: 0;
+  border-radius: 4px;
+  padding: 0 22px;
+  background: #0b3b21;
+  color: #fffdf7;
+  font-weight: 900;
+}
+
+.dashboard-logout-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.app-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dashboard-saludo-linea {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.status-pill,
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border-radius: 3px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.status-pill.online {
+  background: #e5efe7;
+  color: #0b3b21;
+}
+
+.status-pill.offline {
+  background: #ffe4df;
+  color: #b22822;
+}
+
+.status-pill.pending,
+.sync-badge {
+  margin-top: 4px;
+  background: #fff3d5;
+  color: #8b5e00;
 }
 
 .dashboard-hero {
@@ -1888,12 +1955,37 @@
 
   .app-header {
     grid-template-columns: 1fr auto;
+    padding-bottom: 12px;
   }
 
   .app-nav {
-    grid-column: 1 / -1;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    grid-column: auto;
+    justify-content: flex-start;
+    gap: 8px;
     overflow-x: auto;
-    padding-bottom: 4px;
+    border-top: 1px solid #dfe3dc;
+    background: #fffdf7;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    box-shadow: 0 -10px 24px rgba(15, 26, 18, 0.12);
+  }
+
+  .nav-item {
+    min-width: 104px;
+    min-height: 48px;
+    padding: 0 12px;
+  }
+
+  .app-status {
+    justify-content: flex-start;
+  }
+
+  .logout-dashboard-button {
+    min-height: 48px;
   }
 
   .dashboard-hero {
@@ -1933,6 +2025,59 @@
     width: 100%;
   }
 
+  .boton-primario,
+  .boton-link,
+  .acciones-tabla button {
+    min-height: 46px;
+  }
+
+  .tabla-dinamica table,
+  .tabla-dinamica thead,
+  .tabla-dinamica tbody,
+  .tabla-dinamica th,
+  .tabla-dinamica td,
+  .tabla-dinamica tr {
+    display: block;
+  }
+
+  .tabla-dinamica table {
+    min-width: 0;
+  }
+
+  .tabla-dinamica thead {
+    display: none;
+  }
+
+  .tabla-dinamica tbody {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .tabla-dinamica tr {
+    border: 1px solid #dfe3dc;
+    background: #fffdf7;
+  }
+
+  .tabla-dinamica td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid #e6e8e1;
+    padding: 12px;
+    white-space: normal;
+  }
+
+  .tabla-dinamica td:last-child {
+    border-bottom: 0;
+  }
+
+  .acciones-tabla {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
   .detalle-animal-grid {
     grid-template-columns: 1fr;
   }
@@ -1960,5 +2105,6 @@
     min-height: 100vh;
     border-width: 0;
     border-radius: 0;
+    padding-bottom: 96px;
   }
 }

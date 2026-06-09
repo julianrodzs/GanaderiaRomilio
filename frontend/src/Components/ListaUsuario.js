@@ -20,6 +20,7 @@ import {
   obtenerRegistrosReproductivos,
   obtenerResumenFinanciero
 } from '../services/api';
+import { obtenerCambiosPendientes } from '../services/offlineStorage';
 
 const obtenerRangoAnioActual = () => {
   const anio = new Date().getFullYear();
@@ -53,6 +54,10 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     proximosCelos: 0,
     ipg: 0,
     clasificacionIpg: 'Deficiente'
+  });
+  const [estadoConexion, setEstadoConexion] = useState({
+    online: navigator.onLine,
+    pendientes: 0
   });
 
   useEffect(() => {
@@ -97,6 +102,27 @@ const ListaUsuario = ({ usuario, onLogout }) => {
 
     cargarMetricas();
   }, [usuario?.rol]);
+
+  useEffect(() => {
+    const actualizarEstadoConexion = async () => {
+      const cambios = await obtenerCambiosPendientes().catch(() => []);
+      setEstadoConexion({
+        online: navigator.onLine,
+        pendientes: cambios.length
+      });
+    };
+
+    window.addEventListener('online', actualizarEstadoConexion);
+    window.addEventListener('offline', actualizarEstadoConexion);
+    window.addEventListener('ganaderiaOfflineCambios', actualizarEstadoConexion);
+    actualizarEstadoConexion();
+
+    return () => {
+      window.removeEventListener('online', actualizarEstadoConexion);
+      window.removeEventListener('offline', actualizarEstadoConexion);
+      window.removeEventListener('ganaderiaOfflineCambios', actualizarEstadoConexion);
+    };
+  }, []);
 
   const navegacion = <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} usuario={usuario} />;
 
@@ -242,7 +268,15 @@ const ListaUsuario = ({ usuario, onLogout }) => {
       <section className="dashboard-hero">
         <div>
           <p className="eyebrow">Vision general de la hacienda</p>
-          <h1>Buenos dias, {usuario?.nombre || 'Administrador'}</h1>
+          <div className="dashboard-saludo-linea">
+            <h1>Buenos dias, {usuario?.nombre || 'Administrador'}</h1>
+            <div className="app-status">
+              <span className={estadoConexion.online ? 'status-pill online' : 'status-pill offline'}>
+                {estadoConexion.online ? 'Online' : 'Offline'}
+              </span>
+              {estadoConexion.pendientes > 0 && <span className="status-pill pending">{estadoConexion.pendientes} pendientes</span>}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -294,6 +328,11 @@ const ListaUsuario = ({ usuario, onLogout }) => {
             <span>IPG</span>
             <strong>{metricas.ipg}</strong>
             <small>{metricas.clasificacionIpg}</small>
+          </div>
+          <div className="dashboard-logout-row">
+            <button className="logout-dashboard-button" type="button" onClick={onLogout}>
+              Salir
+            </button>
           </div>
         </article>
       </section>

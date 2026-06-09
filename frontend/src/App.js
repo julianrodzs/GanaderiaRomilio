@@ -21,6 +21,15 @@ function App() {
       }
 
       try {
+        if (!navigator.onLine) {
+          const sesionLocal = JSON.parse(sesionGuardada);
+          setSesion(sesionLocal);
+          setVista('dashboard');
+          setMensaje('Sin conexion. Usando datos guardados en este dispositivo.');
+          setValidandoSesion(false);
+          return;
+        }
+
         const data = await obtenerPerfilUsuario();
         const sesionLocal = JSON.parse(sesionGuardada);
         const sesionValidada = {
