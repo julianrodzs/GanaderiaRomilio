@@ -28,4 +28,7 @@ const usuarioSchema = new Schema(
     }
 );
 
+usuarioSchema.index({ rol: 1 });
+usuarioSchema.index({ estado: 1 });
+
 module.exports = model('Usuario', usuarioSchema);

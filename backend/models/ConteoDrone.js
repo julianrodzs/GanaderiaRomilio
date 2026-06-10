@@ -36,4 +36,6 @@ const conteoDroneSchema = new Schema(
     }
 );
 
+conteoDroneSchema.index({ potrero: 1, fechaVuelo: -1 });
+
 module.exports = model('ConteoDrone', conteoDroneSchema);

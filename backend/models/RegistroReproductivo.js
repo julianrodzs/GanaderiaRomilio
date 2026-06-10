@@ -182,6 +182,12 @@ registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesD
     next();
 });
 
+registroReproductivoSchema.index({ animal: 1, fechaMonta: -1 });
+registroReproductivoSchema.index({ estado: 1 });
+registroReproductivoSchema.index({ fechaProximoCelo: 1 });
+registroReproductivoSchema.index({ fechaPartoEstimada: 1 });
+registroReproductivoSchema.index({ fechaPartoReal: 1 });
+
 module.exports = {
     RegistroReproductivo: model('RegistroReproductivo', registroReproductivoSchema),
     calcularEstadoReproductivo,

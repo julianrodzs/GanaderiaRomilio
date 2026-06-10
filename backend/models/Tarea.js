@@ -45,6 +45,10 @@ const tareaSchema = new Schema(
     }
 );
 
+tareaSchema.index({ asignadoA: 1, estado: 1, fechaProgramada: 1 });
+tareaSchema.index({ fechaProgramada: 1 });
+tareaSchema.index({ prioridad: 1 });
+
 module.exports = {
     Tarea: model('Tarea', tareaSchema),
     TIPOS_TAREA,

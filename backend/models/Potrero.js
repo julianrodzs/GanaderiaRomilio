@@ -22,4 +22,6 @@ const potreroSchema = new Schema(
     }
 );
 
+potreroSchema.index({ estado: 1 });
+
 module.exports = model('Potrero', potreroSchema);

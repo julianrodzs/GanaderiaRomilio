@@ -53,4 +53,8 @@ ventaAnimalSchema.pre('validate', function calcularTotales(next) {
     next();
 });
 
+ventaAnimalSchema.index({ estado: 1, fechaVenta: -1 });
+ventaAnimalSchema.index({ comprador: 1 });
+ventaAnimalSchema.index({ 'animales.animal': 1 });
+
 module.exports = model('VentaAnimal', ventaAnimalSchema);

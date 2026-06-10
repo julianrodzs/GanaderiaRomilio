@@ -67,4 +67,8 @@ compraAnimalSchema.pre('validate', function calcularTotales(next) {
     next();
 });
 
+compraAnimalSchema.index({ estado: 1, fechaCompra: -1 });
+compraAnimalSchema.index({ proveedor: 1 });
+compraAnimalSchema.index({ 'animales.animal': 1 });
+
 module.exports = model('CompraAnimal', compraAnimalSchema);

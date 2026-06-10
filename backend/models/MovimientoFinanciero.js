@@ -41,4 +41,9 @@ const movimientoFinancieroSchema = new Schema(
     }
 );
 
+movimientoFinancieroSchema.index({ fecha: -1 });
+movimientoFinancieroSchema.index({ tipoMovimiento: 1, fecha: -1 });
+movimientoFinancieroSchema.index({ categoria: 1, fecha: -1 });
+movimientoFinancieroSchema.index({ referenciaModelo: 1, referenciaId: 1 });
+
 module.exports = model('MovimientoFinanciero', movimientoFinancieroSchema);

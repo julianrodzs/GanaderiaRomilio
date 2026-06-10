@@ -52,4 +52,9 @@ const animalSchema = new Schema(
     }
 );
 
+animalSchema.index({ estado: 1 });
+animalSchema.index({ sexo: 1 });
+animalSchema.index({ potreroActual: 1 });
+animalSchema.index({ estado: 1, potreroActual: 1 });
+
 module.exports = model('Animal', animalSchema);

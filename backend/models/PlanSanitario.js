@@ -115,6 +115,9 @@ planSanitarioSchema.pre('findOneAndUpdate', function calcularProximaEnUpdate(nex
     next();
 });
 
+planSanitarioSchema.index({ estado: 1, proximaAplicacion: 1 });
+planSanitarioSchema.index({ grupoGanado: 1 });
+
 const PlanSanitario = model('PlanSanitario', planSanitarioSchema);
 
 module.exports = {

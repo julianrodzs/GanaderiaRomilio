@@ -15,4 +15,6 @@ const pesajeSchema = new Schema(
     }
 );
 
+pesajeSchema.index({ animal: 1, fecha: -1 });
+
 module.exports = model('Pesaje', pesajeSchema);
