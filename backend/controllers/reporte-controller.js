@@ -68,6 +68,56 @@ const normalizarUnidadPipeline = {
     ]
 };
 
+const agregarCantidadProductoPipeline = [
+    {
+        $addFields: {
+            unidadNormalizada: normalizarUnidadPipeline
+        }
+    },
+    {
+        $addFields: {
+            unidadPartes: {
+                $regexFind: {
+                    input: '$unidadNormalizada',
+                    regex: /^([0-9]+(?:[,.][0-9]+)?)\s*(.+)$/
+                }
+            }
+        }
+    },
+    {
+        $addFields: {
+            cantidadCompra: { $ifNull: ['$cantidad', 0] },
+            factorUnidad: {
+                $cond: [
+                    { $ne: ['$unidadPartes', null] },
+                    {
+                        $toDouble: {
+                            $replaceAll: {
+                                input: { $arrayElemAt: ['$unidadPartes.captures', 0] },
+                                find: ',',
+                                replacement: '.'
+                            }
+                        }
+                    },
+                    1
+                ]
+            },
+            unidadBase: {
+                $cond: [
+                    { $ne: ['$unidadPartes', null] },
+                    { $arrayElemAt: ['$unidadPartes.captures', 1] },
+                    '$unidadNormalizada'
+                ]
+            }
+        }
+    },
+    {
+        $addFields: {
+            cantidadFisica: { $multiply: ['$cantidadCompra', '$factorUnidad'] }
+        }
+    }
+];
+
 const pipelineDestinoUso = {
     $let: {
         vars: {
@@ -950,17 +1000,20 @@ reporteCtrl.getProductosResumen = async (req, res) => {
             ]),
             MovimientoFinanciero.aggregate([
                 { $match: filtro },
+                ...agregarCantidadProductoPipeline,
                 {
                     $group: {
                         _id: '$producto',
                         cantidadRegistros: { $sum: 1 },
-                        cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                        cantidadTotal: { $sum: '$cantidadCompra' },
+                        cantidadFisicaTotal: { $sum: '$cantidadFisica' },
                         montoTotal: { $sum: '$monto' },
                         categoria: { $first: '$categoria' },
-                        unidadMedida: { $first: normalizarUnidadPipeline }
+                        unidadMedida: { $first: '$unidadNormalizada' },
+                        unidadBase: { $first: '$unidadBase' }
                     }
                 },
-                { $sort: { cantidadTotal: -1, cantidadRegistros: -1, montoTotal: -1 } },
+                { $sort: { cantidadFisicaTotal: -1, cantidadTotal: -1, cantidadRegistros: -1, montoTotal: -1 } },
                 { $limit: 8 }
             ]),
             MovimientoFinanciero.aggregate([
@@ -1009,6 +1062,8 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 categoria: item.categoria || 'Otros',
                 unidadMedida: item.unidadMedida || 'sin unidad',
                 cantidadTotal: item.cantidadTotal || 0,
+                cantidadFisicaTotal: item.cantidadFisicaTotal || 0,
+                unidadBase: item.unidadBase || item.unidadMedida || 'sin unidad',
                 montoTotal: item.montoTotal || 0,
                 cantidadRegistros: item.cantidadRegistros || 0
             })),
@@ -1039,14 +1094,17 @@ reporteCtrl.getProductosPorProducto = async (req, res) => {
         const filtro = crearFiltroProductos(req.query);
         const productos = await MovimientoFinanciero.aggregate([
             { $match: filtro },
+            ...agregarCantidadProductoPipeline,
             {
                 $group: {
                     _id: {
                         producto: '$producto',
                         categoria: '$categoria',
-                        unidadMedida: normalizarUnidadPipeline
+                        unidadMedida: '$unidadNormalizada',
+                        unidadBase: '$unidadBase'
                     },
-                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    cantidadTotal: { $sum: '$cantidadCompra' },
+                    cantidadFisicaTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' },
                     cantidadRegistros: { $sum: 1 }
                 }
@@ -1057,19 +1115,21 @@ reporteCtrl.getProductosPorProducto = async (req, res) => {
                     producto: '$_id.producto',
                     categoria: { $ifNull: ['$_id.categoria', 'Otros'] },
                     unidadMedida: '$_id.unidadMedida',
+                    unidadBase: '$_id.unidadBase',
                     cantidadTotal: 1,
+                    cantidadFisicaTotal: 1,
                     montoTotal: 1,
                     precioPromedio: {
                         $cond: [
-                            { $gt: ['$cantidadTotal', 0] },
-                            { $divide: ['$montoTotal', '$cantidadTotal'] },
+                            { $gt: ['$cantidadFisicaTotal', 0] },
+                            { $divide: ['$montoTotal', '$cantidadFisicaTotal'] },
                             0
                         ]
                     },
                     cantidadRegistros: 1
                 }
             },
-            { $sort: { montoTotal: -1, cantidadTotal: -1 } }
+            { $sort: { montoTotal: -1, cantidadFisicaTotal: -1 } }
         ]);
 
         res.json(productos);
@@ -1083,10 +1143,11 @@ reporteCtrl.getProductosPorCategoria = async (req, res) => {
         const filtro = crearFiltroProductos(req.query);
         const categorias = await MovimientoFinanciero.aggregate([
             { $match: filtro },
+            ...agregarCantidadProductoPipeline,
             {
                 $group: {
                     _id: '$categoria',
-                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    cantidadTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' },
                     productosIncluidos: { $addToSet: '$producto' },
                     cantidadRegistros: { $sum: 1 }
@@ -1138,10 +1199,11 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
         const [general, consumoPorMes, proveedores] = await Promise.all([
             MovimientoFinanciero.aggregate([
                 { $match: filtro },
+                ...agregarCantidadProductoPipeline,
                 {
                     $group: {
                         _id: null,
-                        litrosTotales: { $sum: { $ifNull: ['$cantidad', 0] } },
+                        litrosTotales: { $sum: '$cantidadFisica' },
                         montoTotal: { $sum: '$monto' },
                         registros: { $sum: 1 }
                     }
@@ -1164,13 +1226,14 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
             ]),
             MovimientoFinanciero.aggregate([
                 { $match: filtro },
+                ...agregarCantidadProductoPipeline,
                 {
                     $group: {
                         _id: {
                             anio: { $year: '$fecha' },
                             mes: { $month: '$fecha' }
                         },
-                        litros: { $sum: { $ifNull: ['$cantidad', 0] } },
+                        litros: { $sum: '$cantidadFisica' },
                         montoTotal: { $sum: '$monto' },
                         registros: { $sum: 1 }
                     }
@@ -1219,15 +1282,16 @@ reporteCtrl.getProductosPrecioPromedio = async (req, res) => {
         const filtro = crearFiltroProductos(req.query);
         const precios = await MovimientoFinanciero.aggregate([
             { $match: filtro },
+            ...agregarCantidadProductoPipeline,
             {
                 $group: {
                     _id: {
                         anio: { $year: '$fecha' },
                         mes: { $month: '$fecha' },
                         producto: '$producto',
-                        unidadMedida: normalizarUnidadPipeline
+                        unidadMedida: '$unidadBase'
                     },
-                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    cantidadTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' }
                 }
             },
@@ -1296,6 +1360,7 @@ reporteCtrl.getProductosDestinos = async (req, res) => {
         const filtro = crearFiltroProductos(req.query);
         const destinos = await MovimientoFinanciero.aggregate([
             { $match: filtro },
+            ...agregarCantidadProductoPipeline,
             {
                 $addFields: {
                     destino: pipelineDestinoUso
@@ -1305,7 +1370,7 @@ reporteCtrl.getProductosDestinos = async (req, res) => {
                 $group: {
                     _id: '$destino',
                     productos: { $addToSet: '$producto' },
-                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    cantidadTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' },
                     cantidadRegistros: { $sum: 1 }
                 }
@@ -1335,14 +1400,17 @@ reporteCtrl.getProductosTop = async (req, res) => {
         const filtro = crearFiltroProductos(req.query);
         const productos = await MovimientoFinanciero.aggregate([
             { $match: filtro },
+            ...agregarCantidadProductoPipeline,
             {
                 $group: {
                     _id: {
                         producto: '$producto',
                         categoria: '$categoria',
-                        unidadMedida: normalizarUnidadPipeline
+                        unidadMedida: '$unidadNormalizada',
+                        unidadBase: '$unidadBase'
                     },
-                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    cantidadTotal: { $sum: '$cantidadCompra' },
+                    cantidadFisicaTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' },
                     cantidadRegistros: { $sum: 1 }
                 }
@@ -1353,12 +1421,14 @@ reporteCtrl.getProductosTop = async (req, res) => {
                     producto: '$_id.producto',
                     categoria: { $ifNull: ['$_id.categoria', 'Otros'] },
                     unidadMedida: '$_id.unidadMedida',
+                    unidadBase: '$_id.unidadBase',
                     cantidadTotal: 1,
+                    cantidadFisicaTotal: 1,
                     montoTotal: 1,
                     cantidadRegistros: 1
                 }
             },
-            { $sort: { cantidadTotal: -1, montoTotal: -1, cantidadRegistros: -1 } },
+            { $sort: { cantidadFisicaTotal: -1, montoTotal: -1, cantidadRegistros: -1 } },
             { $limit: limite }
         ]);
 

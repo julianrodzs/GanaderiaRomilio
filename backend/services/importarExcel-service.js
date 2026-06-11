@@ -135,32 +135,114 @@ const aFecha = (valor) => {
     const texto = limpiarTexto(valor);
     if (!texto || texto === '-') return undefined;
 
-    const fechaCompacta = texto.match(/^(\d{1,2})[/-](\d{1,2})(\d{4})$/);
-    if (fechaCompacta) {
-        const fecha = new Date(Date.UTC(Number(fechaCompacta[3]), Number(fechaCompacta[2]) - 1, Number(fechaCompacta[1])));
-        return Number.isNaN(fecha.getTime()) ? undefined : fecha;
-    }
-
-    const partes = texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-    if (partes) {
-        let primero = Number(partes[1]);
-        let segundo = Number(partes[2]);
-        let anio = Number(partes[3]);
-
-        if (anio < 100) anio += 2000;
-
-        const diaPrimero = primero > 12;
-        const dia = diaPrimero ? primero : segundo;
-        const mes = diaPrimero ? segundo : primero;
-        if (anio < 1900) return undefined;
+    const crearFechaUtc = (anio, mes, dia) => {
+        if (anio < 1900 || mes < 1 || mes > 12 || dia < 1 || dia > 31) return undefined;
 
         const fecha = new Date(Date.UTC(anio, mes - 1, dia));
 
-        return Number.isNaN(fecha.getTime()) ? undefined : fecha;
+        if (Number.isNaN(fecha.getTime())) return undefined;
+        if (fecha.getUTCFullYear() !== anio || fecha.getUTCMonth() !== mes - 1 || fecha.getUTCDate() !== dia) return undefined;
+
+        return fecha;
+    };
+
+    const normalizarAnio = (textoAnio) => {
+        if (!textoAnio) return undefined;
+        if (textoAnio.length === 2) return Number(textoAnio) + 2000;
+        if (textoAnio.length === 3 && textoAnio.startsWith('20')) {
+            return Number(`20${textoAnio.slice(2)}`);
+        }
+        return Number(textoAnio);
+    };
+
+    const fechaCompacta = texto.match(/^(\d{1,2})[/-](\d{1,2})(\d{4})$/);
+    if (fechaCompacta) {
+        return crearFechaUtc(Number(fechaCompacta[3]), Number(fechaCompacta[2]), Number(fechaCompacta[1]));
+    }
+
+    const partes = texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/) || texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{3})$/);
+    if (partes) {
+        const primero = Number(partes[1]);
+        const segundo = Number(partes[2]);
+        const anio = normalizarAnio(partes[3]);
+
+        if (!anio) return undefined;
+
+        if (primero > 12 && segundo <= 12) return crearFechaUtc(anio, segundo, primero);
+        if (segundo > 12 && primero <= 12) return crearFechaUtc(anio, primero, segundo);
+
+        return crearFechaUtc(anio, segundo, primero) || crearFechaUtc(anio, primero, segundo);
     }
 
     const fecha = new Date(texto);
     return Number.isNaN(fecha.getTime()) ? undefined : fecha;
+};
+
+const mesDesdeTexto = (valor) => {
+    const texto = normalizar(valor);
+    const meses = [
+        ['ENERO', 1],
+        ['FEBRERO', 2],
+        ['MARZO', 3],
+        ['ABRIL', 4],
+        ['MAYO', 5],
+        ['JUNIO', 6],
+        ['JULIO', 7],
+        ['AGOSTO', 8],
+        ['SETIEMBRE', 9],
+        ['SEPTIEMBRE', 9],
+        ['OCTUBRE', 10],
+        ['NOVIEMBRE', 11],
+        ['DICIEMBRE', 12]
+    ];
+    const encontrados = meses.filter(([nombre]) => texto.includes(nombre)).map(([, mes]) => mes);
+    const unicos = [...new Set(encontrados)];
+
+    return unicos.length === 1 ? unicos[0] : undefined;
+};
+
+const aFechaCompra = (valor, titulo = '') => {
+    if (!valor) return undefined;
+    if (valor instanceof Date && !Number.isNaN(valor.getTime())) return valor;
+    if (typeof valor === 'number') return aFecha(valor);
+
+    const texto = limpiarTexto(valor);
+    const partes = texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/) || texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{3})$/);
+
+    if (!partes) return aFecha(valor);
+
+    const primero = Number(partes[1]);
+    const segundo = Number(partes[2]);
+    let anio = Number(partes[3]);
+
+    if (partes[3].length === 2) anio += 2000;
+    if (partes[3].length === 3 && partes[3].startsWith('20')) {
+        anio = Number(`20${partes[3].slice(2)}`);
+    }
+
+    const crear = (mes, dia) => {
+        if (anio < 1900 || mes < 1 || mes > 12 || dia < 1 || dia > 31) return undefined;
+        const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+
+        if (Number.isNaN(fecha.getTime())) return undefined;
+        if (fecha.getUTCFullYear() !== anio || fecha.getUTCMonth() !== mes - 1 || fecha.getUTCDate() !== dia) return undefined;
+
+        return fecha;
+    };
+
+    const dmy = crear(segundo, primero);
+    const mdy = crear(primero, segundo);
+    const mesTitulo = mesDesdeTexto(titulo);
+
+    if (mesTitulo) {
+        if (dmy && dmy.getUTCMonth() + 1 === mesTitulo) return dmy;
+        if (mdy && mdy.getUTCMonth() + 1 === mesTitulo) return mdy;
+    }
+
+    if (segundo > 12 && mdy) return mdy;
+    if (primero > 12 && dmy) return dmy;
+
+    return dmy || mdy;
 };
 
 const serializarFecha = (fecha) => {
@@ -549,6 +631,11 @@ const fechaDesdeCorte = (texto) => {
 
 const fechaHoyImportacion = () => new Date();
 
+const celdaTieneValor = (valor) => {
+    if (valor === null || valor === undefined) return false;
+    return limpiarTexto(valor) !== '';
+};
+
 const fechaFinMes = (fecha) => {
     if (!fecha) return undefined;
     return new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth() + 1, 0));
@@ -721,11 +808,12 @@ const mapearComprasFinancieras = ({ hoja, filas, acumulador }) => {
 
             const titulo = buscarTituloBloque(filas, indice, columna);
             const categoria = categoriaCosto(titulo);
+            let ultimaFechaDetectada = null;
 
             for (let filaIndice = indice + 1; filaIndice < filas.length; filaIndice += 1) {
                 const filaDatos = filas[filaIndice];
-                const fechaDetectada = aFecha(filaDatos[idx.fecha]);
-                const fecha = fechaDetectada || fechaHoyImportacion();
+                const fechaDetectada = aFechaCompra(filaDatos[idx.fecha], titulo);
+                const fecha = fechaDetectada || ultimaFechaDetectada || fechaHoyImportacion();
                 const descripcion = limpiarTexto(filaDatos[idx.item]);
                 const cantidad = idx.cantidad >= 0 ? aNumero(filaDatos[idx.cantidad]) : undefined;
                 const unidad = idx.unidad >= 0 ? limpiarTexto(filaDatos[idx.unidad]) : undefined;
@@ -737,9 +825,13 @@ const mapearComprasFinancieras = ({ hoja, filas, acumulador }) => {
                 if (!fechaDetectada && !descripcion && !monto) break;
                 if (!descripcion || !monto || normalizar(descripcion).includes('TOTAL')) continue;
 
+                if (fechaDetectada) {
+                    ultimaFechaDetectada = fechaDetectada;
+                }
+
                 detectada = true;
                 agregar(acumulador, 'MovimientoFinanciero', crearMovimiento({
-                    fecha: fechaDetectada,
+                    fecha,
                     tipoMovimiento: 'Compra',
                     categoria,
                     descripcion,

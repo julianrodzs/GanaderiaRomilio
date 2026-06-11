@@ -40,6 +40,17 @@ const formatearCantidad = (valor, unidad) => {
   return `${numero}${unidad && unidad !== 'sin unidad' ? ` ${unidad}` : ''}`;
 };
 
+const formatearCantidadCompra = (cantidad, unidad) => {
+  const numero = new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(cantidad || 0);
+  if (!unidad || unidad === 'sin unidad') return numero;
+  return `${numero} x ${unidad}`;
+};
+
+const formatearCantidadFisica = (cantidad, unidadBase) => {
+  if (!cantidad || !unidadBase || unidadBase === 'sin unidad') return '';
+  return formatearCantidad(cantidad, unidadBase);
+};
+
 const formatearEdadMeses = (meses) => {
   if (meses === null || meses === undefined) return '--';
   const anios = Math.floor(meses / 12);
@@ -686,7 +697,12 @@ const Reportes = () => {
                 <article>
                   <span>Producto más usado</span>
                   <strong>{productosReporte.resumen?.productosMasRegistrados?.[0]?.producto || '--'}</strong>
-                  <small>{formatearCantidad(productosReporte.resumen?.productosMasRegistrados?.[0]?.cantidadTotal, productosReporte.resumen?.productosMasRegistrados?.[0]?.unidadMedida)}</small>
+                  <small>
+                    {formatearCantidadCompra(productosReporte.resumen?.productosMasRegistrados?.[0]?.cantidadTotal, productosReporte.resumen?.productosMasRegistrados?.[0]?.unidadMedida)}
+                    {productosReporte.resumen?.productosMasRegistrados?.[0]?.cantidadFisicaTotal
+                      ? ` · ${formatearCantidadFisica(productosReporte.resumen?.productosMasRegistrados?.[0]?.cantidadFisicaTotal, productosReporte.resumen?.productosMasRegistrados?.[0]?.unidadBase)}`
+                      : ''}
+                  </small>
                 </article>
                 <article>
                   <span>Categoría principal</span>
@@ -703,16 +719,14 @@ const Reportes = () => {
               <div className="productos-reportes-grid">
                 <article>
                   <h3>Por producto</h3>
-                  <div className="tabla-scroll tabla-dinamica">
+                  <div className="tabla-scroll tabla-dinamica tabla-productos-compacta">
                     <table>
                       <thead>
                         <tr>
                           <th>Producto</th>
                           <th>Categoría</th>
-                          <th>Unidad</th>
-                          <th>Cantidad total</th>
+                          <th>Cantidad</th>
                           <th>Monto total</th>
-                          <th>Precio promedio</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -720,10 +734,16 @@ const Reportes = () => {
                           <tr key={`${item.producto}-${item.categoria}-${item.unidadMedida}`}>
                             <td>{item.producto}</td>
                             <td>{item.categoria}</td>
-                            <td>{item.unidadMedida}</td>
-                            <td>{formatearCantidad(item.cantidadTotal, item.unidadMedida)}</td>
-                            <td>{formatearMoneda(item.montoTotal)}</td>
-                            <td>{formatearMoneda(item.precioPromedio)}</td>
+                            <td>
+                              <strong>{formatearCantidadCompra(item.cantidadTotal, item.unidadMedida)}</strong>
+                              {item.cantidadFisicaTotal > 0 && item.unidadBase !== item.unidadMedida && (
+                                <small>Total: {formatearCantidadFisica(item.cantidadFisicaTotal, item.unidadBase)}</small>
+                              )}
+                            </td>
+                            <td>
+                              <strong>{formatearMoneda(item.montoTotal)}</strong>
+                              <small>Prom: {formatearMoneda(item.precioPromedio)}</small>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

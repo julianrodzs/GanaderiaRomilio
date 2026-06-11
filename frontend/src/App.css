@@ -1609,6 +1609,22 @@
   font-size: 18px;
 }
 
+.tabla-productos-compacta td {
+  vertical-align: top;
+}
+
+.tabla-productos-compacta td strong,
+.tabla-productos-compacta td small {
+  display: block;
+}
+
+.tabla-productos-compacta td small {
+  margin-top: 4px;
+  color: #6e766f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .combustible-resumen {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

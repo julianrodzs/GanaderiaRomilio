@@ -47,7 +47,7 @@ const formatearNumero = (valor, moneda = 'CRC') => {
 const formatearCantidad = (valor, unidad) => {
   if (valor === null || valor === undefined || valor === '') return '--';
   const cantidad = new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(valor || 0);
-  return `${cantidad}${unidad ? ` ${unidad}` : ''}`;
+  return unidad ? `${cantidad} x ${unidad}` : cantidad;
 };
 
 const detalleOperativo = (movimiento) => {
@@ -74,9 +74,7 @@ const columnas = [
     ].join(' ')
   },
   { id: 'tipoMovimiento', label: 'Tipo', accessor: (movimiento) => movimiento.tipoMovimiento },
-  { id: 'naturaleza', label: 'Naturaleza', accessor: (movimiento) => movimiento.naturaleza },
   { id: 'categoria', label: 'Categoria', accessor: (movimiento) => movimiento.categoria },
-  { id: 'detalleOperativo', label: 'Detalle operativo', accessor: detalleOperativo },
   { id: 'producto', label: 'Producto', accessor: (movimiento) => movimiento.producto },
   {
     id: 'cantidad',
@@ -101,6 +99,8 @@ const columnas = [
     sortAccessor: (movimiento) => movimiento.precioUnitario ?? null
   },
   { id: 'proveedor', label: 'Proveedor/Lugar', accessor: (movimiento) => movimiento.proveedor },
+  { id: 'naturaleza', label: 'Naturaleza', accessor: (movimiento) => movimiento.naturaleza },
+  { id: 'detalleOperativo', label: 'Detalle operativo', accessor: detalleOperativo },
   { id: 'observaciones', label: 'Observaciones', accessor: (movimiento) => movimiento.observaciones }
 ];
 

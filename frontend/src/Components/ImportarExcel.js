@@ -65,6 +65,10 @@ const ImportarExcel = () => {
     });
   };
 
+  const resumenModelo = (modelo) => resultado?.resultado?.[modelo] || {};
+  const detectadosModelo = (modelo) => resultado?.resumenDetectado?.[modelo] || 0;
+  const erroresModelo = (modelo) => resumenModelo(modelo).errores?.length || 0;
+
   return (
     <section className="importar-page">
       <div className="panel-title importar-title">
@@ -187,7 +191,15 @@ const ImportarExcel = () => {
             </article>
             <article>
               <span>Movimientos financieros</span>
-              <strong>{resultado.resultado?.MovimientoFinanciero?.creados || 0}</strong>
+              <strong>{resumenModelo('MovimientoFinanciero').creados || 0}</strong>
+              <small>
+                {detectadosModelo('MovimientoFinanciero') || 0} detectados / {resumenModelo('MovimientoFinanciero').duplicados || 0} duplicados
+              </small>
+            </article>
+            <article>
+              <span>Finanzas omitidos</span>
+              <strong>{resumenModelo('MovimientoFinanciero').omitidos || 0}</strong>
+              <small>{erroresModelo('MovimientoFinanciero')} errores registrados</small>
             </article>
             <article>
               <span>Registros omitidos</span>
