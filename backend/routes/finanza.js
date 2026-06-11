@@ -5,6 +5,9 @@ const {
     getMovimientos,
     createMovimiento,
     getResumen,
+    getResumenConsumo,
+    getResumenPlanilla,
+    getResumenInversiones,
     getMovimientosPorTipo,
     updateMovimiento,
     deleteMovimiento
@@ -15,6 +18,9 @@ router.route('/')
     .post(createMovimiento);
 
 router.get('/resumen', getResumen);
+router.get('/consumo', getResumenConsumo);
+router.get('/planilla-resumen', getResumenPlanilla);
+router.get('/inversiones-resumen', getResumenInversiones);
 router.get('/tipo/:tipoMovimiento', getMovimientosPorTipo);
 
 router.route('/:id')

@@ -19,6 +19,18 @@ const leerModulos = (req) => {
     }
 };
 
+const leerFiltroFinanzas = (req) => {
+    const fechaInicio = req.body?.finanzasFechaInicio || req.body?.filtroFinanzas?.fechaInicio;
+    const fechaFin = req.body?.finanzasFechaFin || req.body?.filtroFinanzas?.fechaFin;
+
+    if (!fechaInicio && !fechaFin) return undefined;
+
+    return {
+        fechaInicio,
+        fechaFin
+    };
+};
+
 importarCtrl.previewExcel = async (req, res) => {
     try {
         if (!req.file) {
@@ -37,7 +49,10 @@ importarCtrl.previewExcel = async (req, res) => {
 
 importarCtrl.confirmarExcel = async (req, res) => {
     try {
-        const resultado = await confirmarImportacionExcel(req.body, { modulos: req.body?.modulos });
+        const resultado = await confirmarImportacionExcel(req.body, {
+            modulos: req.body?.modulos,
+            filtroFinanzas: leerFiltroFinanzas(req)
+        });
         res.status(201).json(resultado);
     } catch (error) {
         res.status(400).json({
@@ -57,7 +72,8 @@ importarCtrl.importarExcelDirecto = async (req, res) => {
         const vistaPrevia = procesarExcelPreview(req.file.buffer, { modulos });
         const resultado = await confirmarImportacionExcel({
             registros: vistaPrevia.registros,
-            modulos: vistaPrevia.modulosSeleccionados
+            modulos: vistaPrevia.modulosSeleccionados,
+            filtroFinanzas: leerFiltroFinanzas(req)
         });
 
         await ImportacionExcel.create({
@@ -76,6 +92,7 @@ importarCtrl.importarExcelDirecto = async (req, res) => {
             hojasDetectadas: vistaPrevia.hojasDetectadas,
             resumenDetectado: vistaPrevia.resumen,
             resultado: resultado.resultado,
+            filtroFinanzas: leerFiltroFinanzas(req) || null,
             advertencias: vistaPrevia.advertencias
         });
     } catch (error) {

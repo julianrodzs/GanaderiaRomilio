@@ -178,11 +178,17 @@ export const previsualizarExcel = (archivo, modulos = []) => {
   });
 };
 
-export const importarExcel = (archivo, modulos = []) => {
+export const importarExcel = (archivo, modulos = [], opciones = {}) => {
   const formData = new FormData();
   formData.append('archivo', archivo);
   if (modulos.length > 0) {
     formData.append('modulos', JSON.stringify(modulos));
+  }
+  if (opciones.finanzasFechaInicio) {
+    formData.append('finanzasFechaInicio', opciones.finanzasFechaInicio);
+  }
+  if (opciones.finanzasFechaFin) {
+    formData.append('finanzasFechaFin', opciones.finanzasFechaFin);
   }
 
   return request('/importar/excel/importar', {
@@ -411,6 +417,33 @@ export const obtenerMovimientosFinancieros = () => request('/finanzas');
 
 export const obtenerResumenFinanciero = () => request('/finanzas/resumen');
 
+export const obtenerResumenConsumoFinanciero = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/finanzas/consumo${query ? `?${query}` : ''}`);
+};
+
+export const obtenerResumenPlanillaFinanciera = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/finanzas/planilla-resumen${query ? `?${query}` : ''}`);
+};
+
+export const obtenerResumenInversionesFinancieras = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/finanzas/inversiones-resumen${query ? `?${query}` : ''}`);
+};
+
 export const obtenerMovimientosPorTipo = (tipoMovimiento) => request(`/finanzas/tipo/${tipoMovimiento}`);
 
 export const crearMovimientoFinanciero = (movimiento) => {
@@ -619,6 +652,47 @@ export const obtenerReporteCrecimientoPesajes = ({ fechaInicio, fechaFin, animal
   const query = params.toString();
 
   return request(`/reportes/crecimiento-pesajes${query ? `?${query}` : ''}`);
+};
+
+const construirQueryProductos = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return query ? `?${query}` : '';
+};
+
+export const obtenerReporteProductosResumen = (filtros = {}) => {
+  return request(`/reportes/productos/resumen${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteProductosPorProducto = (filtros = {}) => {
+  return request(`/reportes/productos/por-producto${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteProductosPorCategoria = (filtros = {}) => {
+  return request(`/reportes/productos/por-categoria${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteProductosCombustibles = (filtros = {}) => {
+  return request(`/reportes/productos/combustibles${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteProductosPrecioPromedio = (filtros = {}) => {
+  return request(`/reportes/productos/precio-promedio${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteProductosProveedores = (filtros = {}) => {
+  return request(`/reportes/productos/proveedores${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteProductosDestinos = (filtros = {}) => {
+  return request(`/reportes/productos/destinos${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteProductosTop = (filtros = {}) => {
+  return request(`/reportes/productos/top${construirQueryProductos(filtros)}`);
 };
 
 export { API_URL };

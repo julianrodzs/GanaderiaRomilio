@@ -671,6 +671,51 @@
   line-height: 1.35;
 }
 
+.filtro-finanzas-importacion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.75fr);
+  gap: 16px;
+  align-items: end;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 18px;
+}
+
+.filtro-finanzas-importacion h3 {
+  margin: 4px 0 6px;
+  color: #071d10;
+  font-size: 24px;
+}
+
+.filtro-finanzas-importacion small {
+  color: #667069;
+  line-height: 1.45;
+}
+
+.filtro-finanzas-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.filtro-finanzas-grid label {
+  display: grid;
+  gap: 8px;
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.filtro-finanzas-grid input {
+  min-height: 42px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 0 12px;
+  background: #f8f9f5;
+  color: #09160e;
+}
+
 .estado-importacion {
   border: 1px solid #dfe3dc;
   background: #fffdf7;
@@ -1061,6 +1106,32 @@
   color: #09160e;
   font-size: 1.15rem;
   margin: 4px 0 0;
+}
+
+.form-subsection {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+  padding: 16px;
+}
+
+.form-subsection h3 {
+  color: #09160e;
+  font-size: 1.05rem;
+  margin: 2px 0 0;
+}
+
+.form-card .checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.form-card .checkbox-line input {
+  width: 18px;
+  min-height: 18px;
 }
 
 .form-card input:focus,
@@ -1510,6 +1581,60 @@
   gap: 12px;
 }
 
+.productos-reportes-panel {
+  gap: 18px;
+}
+
+.productos-filtros {
+  align-items: end;
+}
+
+.productos-reportes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.productos-reportes-grid > article {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dfe3dc;
+  background: #f8f9f5;
+  padding: 14px;
+}
+
+.productos-reportes-grid h3 {
+  margin: 0;
+  color: #09160e;
+  font-size: 18px;
+}
+
+.combustible-resumen {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.combustible-resumen div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 12px;
+}
+
+.combustible-resumen span {
+  color: #6e766f;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.combustible-resumen strong {
+  color: #0b3b21;
+  font-size: 18px;
+}
+
 .partos-resumen-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -1847,6 +1972,36 @@
 .finanzas-subresumen strong {
   color: #0b3b21;
   font-size: 24px;
+}
+
+.finanzas-consumo-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.finanzas-consumo-grid article {
+  background: #f8f9f5;
+  border: 1px solid #dfe3dc;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.finanzas-consumo-grid span {
+  color: #6e766f;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.finanzas-consumo-grid strong {
+  color: #09160e;
+  font-size: 18px;
+}
+
+.finanzas-consumo-grid small {
+  color: #314137;
 }
 
 .conteo-drone-grid {
@@ -2359,7 +2514,8 @@
 
   .form-grid,
   .evaluar-cruce-form,
-  .dashboard-content {
+  .dashboard-content,
+  .productos-reportes-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2409,6 +2565,8 @@
 
   .importar-grid,
   .importar-resumen,
+  .filtro-finanzas-importacion,
+  .filtro-finanzas-grid,
   .modulos-importacion-grid,
   .confirmacion-grid,
   .venta-totales,

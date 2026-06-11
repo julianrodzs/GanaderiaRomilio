@@ -14,6 +14,10 @@ const ImportarExcel = () => {
   const [archivo, setArchivo] = useState(null);
   const [archivoPendiente, setArchivoPendiente] = useState(null);
   const [modulosSeleccionados, setModulosSeleccionados] = useState(['inventario', 'potreros', 'pesajes', 'finanzas', 'rotaciones']);
+  const [filtroFinanzas, setFiltroFinanzas] = useState({
+    fechaInicio: '',
+    fechaFin: ''
+  });
   const [resultado, setResultado] = useState(null);
   const [modal, setModal] = useState(null);
   const [error, setError] = useState('');
@@ -38,7 +42,10 @@ const ImportarExcel = () => {
     setCargando(true);
 
     try {
-      const data = await importarExcel(archivoSeleccionado, modulosSeleccionados);
+      const data = await importarExcel(archivoSeleccionado, modulosSeleccionados, {
+        finanzasFechaInicio: filtroFinanzas.fechaInicio,
+        finanzasFechaFin: filtroFinanzas.fechaFin
+      });
       setResultado(data);
       setModal('exito');
     } catch (err) {
@@ -114,6 +121,34 @@ const ImportarExcel = () => {
               </span>
             </label>
           ))}
+        </div>
+      </section>
+
+      <section className="filtro-finanzas-importacion">
+        <div>
+          <p className="eyebrow">Filtro opcional de finanzas</p>
+          <h3>Importar movimientos por fecha</h3>
+          <small>Si dejas estas fechas vacías, Finanzas leerá todo el Excel. Si usas el filtro, los movimientos financieros sin fecha real se omiten.</small>
+        </div>
+        <div className="filtro-finanzas-grid">
+          <label>
+            Desde
+            <input
+              type="date"
+              value={filtroFinanzas.fechaInicio}
+              onChange={(evento) => setFiltroFinanzas((actual) => ({ ...actual, fechaInicio: evento.target.value }))}
+              disabled={!modulosSeleccionados.includes('finanzas')}
+            />
+          </label>
+          <label>
+            Hasta
+            <input
+              type="date"
+              value={filtroFinanzas.fechaFin}
+              onChange={(evento) => setFiltroFinanzas((actual) => ({ ...actual, fechaFin: evento.target.value }))}
+              disabled={!modulosSeleccionados.includes('finanzas')}
+            />
+          </label>
         </div>
       </section>
 
@@ -205,6 +240,13 @@ const ImportarExcel = () => {
             <h2>Subir este Excel</h2>
             <p>{archivoPendiente?.name}</p>
             <p>Se procesarán estos módulos: {modulosSeleccionados.map((modulo) => MODULOS_IMPORTACION.find((item) => item.id === modulo)?.nombre || modulo).join(', ') || 'ninguno'}.</p>
+            {modulosSeleccionados.includes('finanzas') && (filtroFinanzas.fechaInicio || filtroFinanzas.fechaFin) && (
+              <p>
+                Finanzas se importará
+                {filtroFinanzas.fechaInicio ? ` desde ${filtroFinanzas.fechaInicio}` : ''}
+                {filtroFinanzas.fechaFin ? ` hasta ${filtroFinanzas.fechaFin}` : ''}.
+              </p>
+            )}
             <div className="modal-actions">
               <button className="boton-link" type="button" onClick={() => setModal(null)}>
                 Cancelar

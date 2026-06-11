@@ -25,6 +25,84 @@ const crearFiltroFechas = (campo, fechaInicio, fechaFin) => {
     return filtro;
 };
 
+const crearFiltroMesActual = (campo) => {
+    const hoy = new Date();
+    const inicio = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1));
+    const fin = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+
+    return {
+        [campo]: {
+            $gte: inicio,
+            $lte: fin
+        }
+    };
+};
+
+const crearFiltroProductos = ({ fechaInicio, fechaFin, producto, categoria, proveedor } = {}) => {
+    const filtro = {
+        producto: { $exists: true, $nin: [null, ''] }
+    };
+    const filtroFechas = fechaInicio || fechaFin
+        ? crearFiltroFechas('fecha', fechaInicio, fechaFin)
+        : crearFiltroMesActual('fecha');
+
+    Object.assign(filtro, filtroFechas);
+
+    if (producto) filtro.producto = { $regex: producto, $options: 'i' };
+    if (categoria) filtro.categoria = { $regex: categoria, $options: 'i' };
+    if (proveedor) filtro.proveedor = { $regex: proveedor, $options: 'i' };
+
+    return filtro;
+};
+
+const normalizarUnidadPipeline = {
+    $ifNull: [
+        {
+            $cond: [
+                { $eq: ['$unidad', ''] },
+                'sin unidad',
+                '$unidad'
+            ]
+        },
+        'sin unidad'
+    ]
+};
+
+const pipelineDestinoUso = {
+    $let: {
+        vars: {
+            texto: {
+                $toLower: {
+                    $concat: [
+                        { $ifNull: ['$producto', ''] },
+                        ' ',
+                        { $ifNull: ['$categoria', ''] },
+                        ' ',
+                        { $ifNull: ['$descripcion', ''] },
+                        ' ',
+                        { $ifNull: ['$tipoTrabajo', ''] },
+                        ' ',
+                        { $ifNull: ['$observaciones', ''] }
+                    ]
+                }
+            }
+        },
+        in: {
+            $switch: {
+                branches: [
+                    { case: { $regexMatch: { input: '$$texto', regex: /chapia/ } }, then: 'Chapia' },
+                    { case: { $regexMatch: { input: '$$texto', regex: /tractor|gasolina|diesel|diésel|combustible/ } }, then: 'Tractor' },
+                    { case: { $regexMatch: { input: '$$texto', regex: /sanidad|vacuna|desparasit|medicamento|garrapata/ } }, then: 'Sanidad' },
+                    { case: { $regexMatch: { input: '$$texto', regex: /potrero|cerca|port[oó]n/ } }, then: 'Potrero' },
+                    { case: { $regexMatch: { input: '$$texto', regex: /manten|repar|aceite|repuesto/ } }, then: 'Mantenimiento' },
+                    { case: { $regexMatch: { input: '$$texto', regex: /alimento|sal|melaza|concentrado|pasto/ } }, then: 'Alimentación' }
+                ],
+                default: 'Otro'
+            }
+        }
+    }
+};
+
 const agruparPorCampo = async (Modelo, campo, filtro = {}) => {
     return Modelo.aggregate([
         { $match: filtro },
@@ -852,6 +930,441 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener vacas a revisar', error: error.message });
+    }
+};
+
+reporteCtrl.getProductosResumen = async (req, res) => {
+    try {
+        const filtro = crearFiltroProductos(req.query);
+
+        const [general, productosMasRegistrados, categoriasMasRegistradas, proveedoresMasUsados, totalPorCategoria] = await Promise.all([
+            MovimientoFinanciero.aggregate([
+                { $match: filtro },
+                {
+                    $group: {
+                        _id: null,
+                        montoTotal: { $sum: '$monto' },
+                        cantidadMovimientos: { $sum: 1 }
+                    }
+                }
+            ]),
+            MovimientoFinanciero.aggregate([
+                { $match: filtro },
+                {
+                    $group: {
+                        _id: '$producto',
+                        cantidadRegistros: { $sum: 1 },
+                        cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                        montoTotal: { $sum: '$monto' },
+                        categoria: { $first: '$categoria' },
+                        unidadMedida: { $first: normalizarUnidadPipeline }
+                    }
+                },
+                { $sort: { cantidadTotal: -1, cantidadRegistros: -1, montoTotal: -1 } },
+                { $limit: 8 }
+            ]),
+            MovimientoFinanciero.aggregate([
+                { $match: filtro },
+                {
+                    $group: {
+                        _id: '$categoria',
+                        cantidadRegistros: { $sum: 1 },
+                        montoTotal: { $sum: '$monto' }
+                    }
+                },
+                { $sort: { cantidadRegistros: -1, montoTotal: -1 } },
+                { $limit: 8 }
+            ]),
+            MovimientoFinanciero.aggregate([
+                { $match: { ...filtro, proveedor: { $exists: true, $nin: [null, ''] } } },
+                {
+                    $group: {
+                        _id: '$proveedor',
+                        cantidadRegistros: { $sum: 1 },
+                        montoTotal: { $sum: '$monto' },
+                        ultimaCompra: { $max: '$fecha' }
+                    }
+                },
+                { $sort: { cantidadRegistros: -1, montoTotal: -1 } },
+                { $limit: 8 }
+            ]),
+            MovimientoFinanciero.aggregate([
+                { $match: filtro },
+                {
+                    $group: {
+                        _id: '$categoria',
+                        total: { $sum: '$monto' },
+                        cantidad: { $sum: 1 }
+                    }
+                },
+                { $sort: { total: -1 } }
+            ])
+        ]);
+
+        res.json({
+            montoTotal: general[0]?.montoTotal || 0,
+            cantidadMovimientos: general[0]?.cantidadMovimientos || 0,
+            productosMasRegistrados: productosMasRegistrados.map((item) => ({
+                producto: item._id || 'Sin producto',
+                categoria: item.categoria || 'Otros',
+                unidadMedida: item.unidadMedida || 'sin unidad',
+                cantidadTotal: item.cantidadTotal || 0,
+                montoTotal: item.montoTotal || 0,
+                cantidadRegistros: item.cantidadRegistros || 0
+            })),
+            categoriasMasRegistradas: categoriasMasRegistradas.map((item) => ({
+                categoria: item._id || 'Otros',
+                cantidadRegistros: item.cantidadRegistros || 0,
+                montoTotal: item.montoTotal || 0
+            })),
+            proveedoresMasUsados: proveedoresMasUsados.map((item) => ({
+                proveedor: item._id || 'Sin proveedor',
+                cantidadRegistros: item.cantidadRegistros || 0,
+                montoTotal: item.montoTotal || 0,
+                ultimaCompra: item.ultimaCompra || null
+            })),
+            totalPorCategoria: totalPorCategoria.map((item) => ({
+                categoria: item._id || 'Otros',
+                total: item.total || 0,
+                cantidad: item.cantidad || 0
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener resumen de productos', error: error.message });
+    }
+};
+
+reporteCtrl.getProductosPorProducto = async (req, res) => {
+    try {
+        const filtro = crearFiltroProductos(req.query);
+        const productos = await MovimientoFinanciero.aggregate([
+            { $match: filtro },
+            {
+                $group: {
+                    _id: {
+                        producto: '$producto',
+                        categoria: '$categoria',
+                        unidadMedida: normalizarUnidadPipeline
+                    },
+                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    montoTotal: { $sum: '$monto' },
+                    cantidadRegistros: { $sum: 1 }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    producto: '$_id.producto',
+                    categoria: { $ifNull: ['$_id.categoria', 'Otros'] },
+                    unidadMedida: '$_id.unidadMedida',
+                    cantidadTotal: 1,
+                    montoTotal: 1,
+                    precioPromedio: {
+                        $cond: [
+                            { $gt: ['$cantidadTotal', 0] },
+                            { $divide: ['$montoTotal', '$cantidadTotal'] },
+                            0
+                        ]
+                    },
+                    cantidadRegistros: 1
+                }
+            },
+            { $sort: { montoTotal: -1, cantidadTotal: -1 } }
+        ]);
+
+        res.json(productos);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener productos agrupados', error: error.message });
+    }
+};
+
+reporteCtrl.getProductosPorCategoria = async (req, res) => {
+    try {
+        const filtro = crearFiltroProductos(req.query);
+        const categorias = await MovimientoFinanciero.aggregate([
+            { $match: filtro },
+            {
+                $group: {
+                    _id: '$categoria',
+                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    montoTotal: { $sum: '$monto' },
+                    productosIncluidos: { $addToSet: '$producto' },
+                    cantidadRegistros: { $sum: 1 }
+                }
+            },
+            {
+                $setWindowFields: {
+                    output: {
+                        totalGeneral: { $sum: '$montoTotal' }
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    categoria: { $ifNull: ['$_id', 'Otros'] },
+                    cantidadTotal: 1,
+                    montoTotal: 1,
+                    productosIncluidos: 1,
+                    cantidadRegistros: 1,
+                    porcentajeDelTotal: {
+                        $cond: [
+                            { $gt: ['$totalGeneral', 0] },
+                            { $multiply: [{ $divide: ['$montoTotal', '$totalGeneral'] }, 100] },
+                            0
+                        ]
+                    }
+                }
+            },
+            { $sort: { montoTotal: -1 } }
+        ]);
+
+        res.json(categorias);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener productos por categoria', error: error.message });
+    }
+};
+
+reporteCtrl.getProductosCombustibles = async (req, res) => {
+    try {
+        const filtro = {
+            ...crearFiltroProductos(req.query),
+            $or: [
+                { categoria: { $regex: 'combustible', $options: 'i' } },
+                { producto: { $regex: 'gasolina|di[eé]sel|diesel', $options: 'i' } }
+            ]
+        };
+
+        const [general, consumoPorMes, proveedores] = await Promise.all([
+            MovimientoFinanciero.aggregate([
+                { $match: filtro },
+                {
+                    $group: {
+                        _id: null,
+                        litrosTotales: { $sum: { $ifNull: ['$cantidad', 0] } },
+                        montoTotal: { $sum: '$monto' },
+                        registros: { $sum: 1 }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        litrosTotales: 1,
+                        montoTotal: 1,
+                        registros: 1,
+                        precioPromedioLitro: {
+                            $cond: [
+                                { $gt: ['$litrosTotales', 0] },
+                                { $divide: ['$montoTotal', '$litrosTotales'] },
+                                0
+                            ]
+                        }
+                    }
+                }
+            ]),
+            MovimientoFinanciero.aggregate([
+                { $match: filtro },
+                {
+                    $group: {
+                        _id: {
+                            anio: { $year: '$fecha' },
+                            mes: { $month: '$fecha' }
+                        },
+                        litros: { $sum: { $ifNull: ['$cantidad', 0] } },
+                        montoTotal: { $sum: '$monto' },
+                        registros: { $sum: 1 }
+                    }
+                },
+                { $sort: { '_id.anio': 1, '_id.mes': 1 } },
+                {
+                    $project: {
+                        _id: 0,
+                        anio: '$_id.anio',
+                        mes: '$_id.mes',
+                        litros: 1,
+                        montoTotal: 1,
+                        registros: 1
+                    }
+                }
+            ]),
+            MovimientoFinanciero.aggregate([
+                { $match: { ...filtro, proveedor: { $exists: true, $nin: [null, ''] } } },
+                {
+                    $group: {
+                        _id: '$proveedor',
+                        registros: { $sum: 1 },
+                        montoTotal: { $sum: '$monto' }
+                    }
+                },
+                { $sort: { registros: -1, montoTotal: -1 } },
+                { $limit: 1 }
+            ])
+        ]);
+
+        res.json({
+            litrosTotales: general[0]?.litrosTotales || 0,
+            montoTotal: general[0]?.montoTotal || 0,
+            precioPromedioLitro: general[0]?.precioPromedioLitro || 0,
+            registros: general[0]?.registros || 0,
+            consumoPorMes,
+            proveedorMasUsado: proveedores[0]?._id || null
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener reporte de combustibles', error: error.message });
+    }
+};
+
+reporteCtrl.getProductosPrecioPromedio = async (req, res) => {
+    try {
+        const filtro = crearFiltroProductos(req.query);
+        const precios = await MovimientoFinanciero.aggregate([
+            { $match: filtro },
+            {
+                $group: {
+                    _id: {
+                        anio: { $year: '$fecha' },
+                        mes: { $month: '$fecha' },
+                        producto: '$producto',
+                        unidadMedida: normalizarUnidadPipeline
+                    },
+                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    montoTotal: { $sum: '$monto' }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    anio: '$_id.anio',
+                    mes: '$_id.mes',
+                    producto: '$_id.producto',
+                    unidadMedida: '$_id.unidadMedida',
+                    cantidadTotal: 1,
+                    montoTotal: 1,
+                    precioPromedio: {
+                        $cond: [
+                            { $gt: ['$cantidadTotal', 0] },
+                            { $divide: ['$montoTotal', '$cantidadTotal'] },
+                            0
+                        ]
+                    }
+                }
+            },
+            { $sort: { anio: 1, mes: 1, producto: 1 } }
+        ]);
+
+        res.json(precios);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener precio promedio de productos', error: error.message });
+    }
+};
+
+reporteCtrl.getProductosProveedores = async (req, res) => {
+    try {
+        const filtro = crearFiltroProductos(req.query);
+        const proveedores = await MovimientoFinanciero.aggregate([
+            { $match: { ...filtro, proveedor: { $exists: true, $nin: [null, ''] } } },
+            {
+                $group: {
+                    _id: '$proveedor',
+                    montoTotal: { $sum: '$monto' },
+                    cantidadRegistros: { $sum: 1 },
+                    productosComprados: { $addToSet: '$producto' },
+                    ultimaCompra: { $max: '$fecha' }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    proveedor: '$_id',
+                    montoTotal: 1,
+                    cantidadRegistros: 1,
+                    productosComprados: 1,
+                    ultimaCompra: 1
+                }
+            },
+            { $sort: { montoTotal: -1, cantidadRegistros: -1 } }
+        ]);
+
+        res.json(proveedores);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener proveedores de productos', error: error.message });
+    }
+};
+
+reporteCtrl.getProductosDestinos = async (req, res) => {
+    try {
+        const filtro = crearFiltroProductos(req.query);
+        const destinos = await MovimientoFinanciero.aggregate([
+            { $match: filtro },
+            {
+                $addFields: {
+                    destino: pipelineDestinoUso
+                }
+            },
+            {
+                $group: {
+                    _id: '$destino',
+                    productos: { $addToSet: '$producto' },
+                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    montoTotal: { $sum: '$monto' },
+                    cantidadRegistros: { $sum: 1 }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    destino: '$_id',
+                    productos: 1,
+                    cantidadTotal: 1,
+                    montoTotal: 1,
+                    cantidadRegistros: 1
+                }
+            },
+            { $sort: { montoTotal: -1 } }
+        ]);
+
+        res.json(destinos);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener destinos de productos', error: error.message });
+    }
+};
+
+reporteCtrl.getProductosTop = async (req, res) => {
+    try {
+        const limite = Math.max(Number(req.query.limite) || 10, 1);
+        const filtro = crearFiltroProductos(req.query);
+        const productos = await MovimientoFinanciero.aggregate([
+            { $match: filtro },
+            {
+                $group: {
+                    _id: {
+                        producto: '$producto',
+                        categoria: '$categoria',
+                        unidadMedida: normalizarUnidadPipeline
+                    },
+                    cantidadTotal: { $sum: { $ifNull: ['$cantidad', 0] } },
+                    montoTotal: { $sum: '$monto' },
+                    cantidadRegistros: { $sum: 1 }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    producto: '$_id.producto',
+                    categoria: { $ifNull: ['$_id.categoria', 'Otros'] },
+                    unidadMedida: '$_id.unidadMedida',
+                    cantidadTotal: 1,
+                    montoTotal: 1,
+                    cantidadRegistros: 1
+                }
+            },
+            { $sort: { cantidadTotal: -1, montoTotal: -1, cantidadRegistros: -1 } },
+            { $limit: limite }
+        ]);
+
+        res.json(productos);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener top de productos', error: error.message });
     }
 };
 

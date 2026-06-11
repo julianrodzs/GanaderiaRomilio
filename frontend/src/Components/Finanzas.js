@@ -4,7 +4,10 @@ import {
   crearMovimientoFinanciero,
   eliminarMovimientoFinanciero,
   obtenerMovimientosFinancieros,
-  obtenerResumenFinanciero
+  obtenerResumenConsumoFinanciero,
+  obtenerResumenFinanciero,
+  obtenerResumenInversionesFinancieras,
+  obtenerResumenPlanillaFinanciera
 } from '../services/api';
 import FormularioMovimientoFinanciero from './FormularioMovimientoFinanciero';
 import TablaDinamica from './TablaDinamica';
@@ -41,6 +44,24 @@ const formatearNumero = (valor, moneda = 'CRC') => {
   }).format(valor || 0);
 };
 
+const formatearCantidad = (valor, unidad) => {
+  if (valor === null || valor === undefined || valor === '') return '--';
+  const cantidad = new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(valor || 0);
+  return `${cantidad}${unidad ? ` ${unidad}` : ''}`;
+};
+
+const detalleOperativo = (movimiento) => {
+  if (movimiento.tipoMovimiento === 'Planilla') {
+    return movimiento.tipoTrabajo || movimiento.empleado || 'Mano de obra';
+  }
+
+  if (movimiento.tipoMovimiento === 'Inversion') {
+    return [movimiento.tipoInversion, movimiento.activoAsociado].filter(Boolean).join(' · ') || movimiento.categoria;
+  }
+
+  return movimiento.producto || movimiento.proveedor || '--';
+};
+
 const columnas = [
   {
     id: 'fecha',
@@ -55,6 +76,15 @@ const columnas = [
   { id: 'tipoMovimiento', label: 'Tipo', accessor: (movimiento) => movimiento.tipoMovimiento },
   { id: 'naturaleza', label: 'Naturaleza', accessor: (movimiento) => movimiento.naturaleza },
   { id: 'categoria', label: 'Categoria', accessor: (movimiento) => movimiento.categoria },
+  { id: 'detalleOperativo', label: 'Detalle operativo', accessor: detalleOperativo },
+  { id: 'producto', label: 'Producto', accessor: (movimiento) => movimiento.producto },
+  {
+    id: 'cantidad',
+    label: 'Cantidad',
+    accessor: (movimiento) => formatearCantidad(movimiento.cantidad, movimiento.unidad),
+    sortAccessor: (movimiento) => movimiento.cantidad ?? null,
+    searchAccessor: (movimiento) => `${movimiento.cantidad ?? ''} ${movimiento.unidad || ''}`
+  },
   { id: 'descripcion', label: 'Descripcion', accessor: (movimiento) => movimiento.descripcion },
   {
     id: 'monto',
@@ -64,6 +94,12 @@ const columnas = [
     searchAccessor: (movimiento) => `${formatearMonto(movimiento)} ${movimiento.monto ?? ''}`
   },
   { id: 'moneda', label: 'Moneda', accessor: (movimiento) => movimiento.moneda || 'CRC' },
+  {
+    id: 'precioUnitario',
+    label: 'Precio unit.',
+    accessor: (movimiento) => movimiento.precioUnitario ? formatearNumero(movimiento.precioUnitario, movimiento.moneda || 'CRC') : '--',
+    sortAccessor: (movimiento) => movimiento.precioUnitario ?? null
+  },
   { id: 'proveedor', label: 'Proveedor/Lugar', accessor: (movimiento) => movimiento.proveedor },
   { id: 'observaciones', label: 'Observaciones', accessor: (movimiento) => movimiento.observaciones }
 ];
@@ -94,6 +130,9 @@ const sumarPorTipoYMoneda = (movimientos) => {
 const Finanzas = () => {
   const [movimientos, setMovimientos] = useState([]);
   const [resumen, setResumen] = useState(null);
+  const [consumo, setConsumo] = useState([]);
+  const [resumenPlanilla, setResumenPlanilla] = useState(null);
+  const [resumenInversiones, setResumenInversiones] = useState(null);
   const [tipoActivo, setTipoActivo] = useState('Todos');
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -106,13 +145,19 @@ const Finanzas = () => {
     try {
       setCargando(true);
       setError('');
-      const [movimientosData, resumenData] = await Promise.all([
+      const [movimientosData, resumenData, consumoData, planillaData, inversionesData] = await Promise.all([
         obtenerMovimientosFinancieros(),
-        obtenerResumenFinanciero()
+        obtenerResumenFinanciero(),
+        obtenerResumenConsumoFinanciero(),
+        obtenerResumenPlanillaFinanciera(),
+        obtenerResumenInversionesFinancieras()
       ]);
 
       setMovimientos(movimientosData);
       setResumen(resumenData);
+      setConsumo(consumoData);
+      setResumenPlanilla(planillaData);
+      setResumenInversiones(inversionesData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -254,6 +299,63 @@ const Finanzas = () => {
           {renderizarDetalleTipo('Planilla')}
         </article>
       </section>
+
+      {consumo.length > 0 && (
+        <section className="finanzas-panel">
+          <div className="panel-title">
+            <div>
+              <p className="eyebrow">Consumo físico</p>
+              <h2>Productos comprados</h2>
+            </div>
+          </div>
+          <div className="finanzas-consumo-grid">
+            {consumo.slice(0, 6).map((item) => (
+              <article key={`${item.producto}-${item.unidad}-${item.categoria}`}>
+                <span>{item.categoria || 'Sin categoría'}</span>
+                <strong>{item.producto}</strong>
+                <small>
+                  {formatearCantidad(item.cantidadTotal, item.unidad)} · {formatearNumero(item.montoTotal, 'CRC')}
+                </small>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(resumenPlanilla?.registros > 0 || resumenInversiones?.registros > 0) && (
+        <section className="finanzas-panel">
+          <div className="panel-title">
+            <div>
+              <p className="eyebrow">Control interno</p>
+              <h2>Planilla e inversiones</h2>
+            </div>
+          </div>
+          <div className="finanzas-consumo-grid">
+            <article>
+              <span>Planilla registrada</span>
+              <strong>{formatearNumero(resumenPlanilla?.total, 'CRC')}</strong>
+              <small>
+                {resumenPlanilla?.registros || 0} registros · {resumenPlanilla?.totalDias || 0} dias · {resumenPlanilla?.totalHoras || 0} horas
+              </small>
+            </article>
+            <article>
+              <span>Principal tipo de trabajo</span>
+              <strong>{resumenPlanilla?.porTipoTrabajo?.[0]?.tipoTrabajo || '--'}</strong>
+              <small>{formatearNumero(resumenPlanilla?.porTipoTrabajo?.[0]?.total, 'CRC')}</small>
+            </article>
+            <article>
+              <span>Inversion acumulada</span>
+              <strong>{formatearNumero(resumenInversiones?.total, 'CRC')}</strong>
+              <small>{resumenInversiones?.registros || 0} registros de inversion</small>
+            </article>
+            <article>
+              <span>Depreciacion mensual</span>
+              <strong>{formatearNumero(resumenInversiones?.depreciacionMensual, 'CRC')}</strong>
+              <small>{resumenInversiones?.depreciables?.registros || 0} activos depreciables</small>
+            </article>
+          </div>
+        </section>
+      )}
 
       <section className="finanzas-panel">
         <div className="finanzas-tabs" role="tablist" aria-label="Tipos de movimiento financiero">

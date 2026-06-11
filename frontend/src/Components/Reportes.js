@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   obtenerFinanzasCria,
   obtenerProductividadCria,
+  obtenerReporteProductosCombustibles,
+  obtenerReporteProductosPorCategoria,
+  obtenerReporteProductosPorProducto,
+  obtenerReporteProductosProveedores,
+  obtenerReporteProductosResumen,
   obtenerReporteCrecimientoPesajes,
   obtenerResumenVentas,
   obtenerResumenReportes,
@@ -28,6 +33,11 @@ const formatearFecha = (fecha) => {
     month: '2-digit',
     day: '2-digit'
   });
+};
+
+const formatearCantidad = (valor, unidad) => {
+  const numero = new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(valor || 0);
+  return `${numero}${unidad && unidad !== 'sin unidad' ? ` ${unidad}` : ''}`;
 };
 
 const formatearEdadMeses = (meses) => {
@@ -104,7 +114,10 @@ const Reportes = () => {
     mesesSinParto: '12',
     diasAbiertos: '120',
     pesoDesteteMin: '140',
-    diasSinPesaje: '60'
+    diasSinPesaje: '60',
+    productoFiltro: '',
+    categoriaProducto: '',
+    proveedorProducto: ''
   });
   const [reporte, setReporte] = useState(null);
   const [productividad, setProductividad] = useState(null);
@@ -113,6 +126,7 @@ const Reportes = () => {
   const [vacasImproductivas, setVacasImproductivas] = useState(null);
   const [crecimientoPesajes, setCrecimientoPesajes] = useState(null);
   const [ventasReporte, setVentasReporte] = useState(null);
+  const [productosReporte, setProductosReporte] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
@@ -137,7 +151,27 @@ const Reportes = () => {
         diasAbiertos: filtros.diasAbiertos,
         pesoDesteteMin: filtros.pesoDesteteMin
       };
-      const [data, productividadData, finanzasCriaData, sustentabilidadData, vacasImproductivasData, crecimientoData, ventasData] = await Promise.all([
+      const filtrosProductos = {
+        fechaInicio: filtros.fechaInicio,
+        fechaFin: filtros.fechaFin,
+        producto: filtros.productoFiltro,
+        categoria: filtros.categoriaProducto,
+        proveedor: filtros.proveedorProducto
+      };
+      const [
+        data,
+        productividadData,
+        finanzasCriaData,
+        sustentabilidadData,
+        vacasImproductivasData,
+        crecimientoData,
+        ventasData,
+        productosResumenData,
+        productosPorProductoData,
+        productosPorCategoriaData,
+        productosCombustiblesData,
+        productosProveedoresData
+      ] = await Promise.all([
         obtenerResumenReportes(filtrosPartos),
         obtenerProductividadCria(filtrosGenerales),
         obtenerFinanzasCria(filtrosGenerales),
@@ -147,7 +181,12 @@ const Reportes = () => {
           ...filtrosGenerales,
           diasSinPesaje: filtros.diasSinPesaje
         }),
-        obtenerResumenVentas(filtrosGenerales)
+        obtenerResumenVentas(filtrosGenerales),
+        obtenerReporteProductosResumen(filtrosProductos),
+        obtenerReporteProductosPorProducto(filtrosProductos),
+        obtenerReporteProductosPorCategoria(filtrosProductos),
+        obtenerReporteProductosCombustibles(filtrosProductos),
+        obtenerReporteProductosProveedores(filtrosProductos)
       ]);
       setReporte(data);
       setProductividad(productividadData);
@@ -156,6 +195,13 @@ const Reportes = () => {
       setVacasImproductivas(vacasImproductivasData);
       setCrecimientoPesajes(crecimientoData);
       setVentasReporte(ventasData);
+      setProductosReporte({
+        resumen: productosResumenData,
+        porProducto: productosPorProductoData,
+        porCategoria: productosPorCategoriaData,
+        combustibles: productosCombustiblesData,
+        proveedores: productosProveedoresData
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -588,6 +634,174 @@ const Reportes = () => {
                   </div>
                 </div>
               )}
+            </section>
+          )}
+
+          {productosReporte && (
+            <section className="reporte-panel reporte-panel-amplio productos-reportes-panel">
+              <div className="partos-panel-header">
+                <div>
+                  <p className="eyebrow">Productos e insumos</p>
+                  <h2>Cantidades y costos registrados</h2>
+                </div>
+                <div className="partos-filtros productos-filtros">
+                  <label>
+                    Producto
+                    <input
+                      value={filtros.productoFiltro}
+                      onChange={(evento) => setFiltros((actual) => ({ ...actual, productoFiltro: evento.target.value }))}
+                      placeholder="Gasolina, sal, vacuna..."
+                    />
+                  </label>
+                  <label>
+                    Categoría
+                    <input
+                      value={filtros.categoriaProducto}
+                      onChange={(evento) => setFiltros((actual) => ({ ...actual, categoriaProducto: evento.target.value }))}
+                      placeholder="Combustible, sanidad..."
+                    />
+                  </label>
+                  <label>
+                    Proveedor
+                    <input
+                      value={filtros.proveedorProducto}
+                      onChange={(evento) => setFiltros((actual) => ({ ...actual, proveedorProducto: evento.target.value }))}
+                      placeholder="Proveedor"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="reportes-metricas finanzas-cria-metricas">
+                <article>
+                  <span>Monto total</span>
+                  <strong>{formatearMoneda(productosReporte.resumen?.montoTotal)}</strong>
+                  <small>Productos con cantidad/costo en el rango</small>
+                </article>
+                <article>
+                  <span>Registros</span>
+                  <strong>{formatearNumero(productosReporte.resumen?.cantidadMovimientos)}</strong>
+                  <small>Movimientos de productos</small>
+                </article>
+                <article>
+                  <span>Producto más usado</span>
+                  <strong>{productosReporte.resumen?.productosMasRegistrados?.[0]?.producto || '--'}</strong>
+                  <small>{formatearCantidad(productosReporte.resumen?.productosMasRegistrados?.[0]?.cantidadTotal, productosReporte.resumen?.productosMasRegistrados?.[0]?.unidadMedida)}</small>
+                </article>
+                <article>
+                  <span>Categoría principal</span>
+                  <strong>{productosReporte.resumen?.categoriasMasRegistradas?.[0]?.categoria || '--'}</strong>
+                  <small>{formatearMoneda(productosReporte.resumen?.categoriasMasRegistradas?.[0]?.montoTotal)}</small>
+                </article>
+                <article>
+                  <span>Proveedor principal</span>
+                  <strong>{productosReporte.resumen?.proveedoresMasUsados?.[0]?.proveedor || '--'}</strong>
+                  <small>{formatearNumero(productosReporte.resumen?.proveedoresMasUsados?.[0]?.cantidadRegistros)} registros</small>
+                </article>
+              </div>
+
+              <div className="productos-reportes-grid">
+                <article>
+                  <h3>Por producto</h3>
+                  <div className="tabla-scroll tabla-dinamica">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th>Categoría</th>
+                          <th>Unidad</th>
+                          <th>Cantidad total</th>
+                          <th>Monto total</th>
+                          <th>Precio promedio</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(productosReporte.porProducto || []).slice(0, 12).map((item) => (
+                          <tr key={`${item.producto}-${item.categoria}-${item.unidadMedida}`}>
+                            <td>{item.producto}</td>
+                            <td>{item.categoria}</td>
+                            <td>{item.unidadMedida}</td>
+                            <td>{formatearCantidad(item.cantidadTotal, item.unidadMedida)}</td>
+                            <td>{formatearMoneda(item.montoTotal)}</td>
+                            <td>{formatearMoneda(item.precioPromedio)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {(productosReporte.porProducto || []).length === 0 && <span className="reporte-vacio">Sin productos para este rango.</span>}
+                </article>
+
+                <article>
+                  <h3>Por categoría</h3>
+                  <div className="tabla-scroll tabla-dinamica">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Categoría</th>
+                          <th>Cantidad total</th>
+                          <th>Monto total</th>
+                          <th>% total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(productosReporte.porCategoria || []).map((item) => (
+                          <tr key={item.categoria}>
+                            <td>{item.categoria}</td>
+                            <td>{formatearNumero(item.cantidadTotal)}</td>
+                            <td>{formatearMoneda(item.montoTotal)}</td>
+                            <td>{formatearPorcentaje(item.porcentajeDelTotal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {(productosReporte.porCategoria || []).length === 0 && <span className="reporte-vacio">Sin categorías para este rango.</span>}
+                </article>
+
+                <article>
+                  <h3>Combustibles</h3>
+                  <div className="combustible-resumen">
+                    <div>
+                      <span>Litros totales</span>
+                      <strong>{formatearCantidad(productosReporte.combustibles?.litrosTotales, 'litros')}</strong>
+                    </div>
+                    <div>
+                      <span>Monto total</span>
+                      <strong>{formatearMoneda(productosReporte.combustibles?.montoTotal)}</strong>
+                    </div>
+                    <div>
+                      <span>Promedio/litro</span>
+                      <strong>{formatearMoneda(productosReporte.combustibles?.precioPromedioLitro)}</strong>
+                    </div>
+                    <div>
+                      <span>Proveedor más usado</span>
+                      <strong>{productosReporte.combustibles?.proveedorMasUsado || '--'}</strong>
+                    </div>
+                  </div>
+                  {(productosReporte.combustibles?.consumoPorMes || []).map((item) => (
+                    <BarraReporte
+                      key={`${item.anio}-${item.mes}`}
+                      label={`${nombreMes(item.mes)} ${item.anio}`}
+                      valor={item.litros}
+                      detalle={`${formatearCantidad(item.litros, 'litros')} · ${formatearMoneda(item.montoTotal)}`}
+                      maximo={obtenerMaximo(productosReporte.combustibles?.consumoPorMes || [], 'litros')}
+                    />
+                  ))}
+                  {(productosReporte.combustibles?.consumoPorMes || []).length === 0 && <span className="reporte-vacio">Sin combustibles registrados.</span>}
+                </article>
+
+                <article>
+                  <h3>Por proveedor</h3>
+                  {(productosReporte.proveedores || []).slice(0, 10).map((item) => (
+                    <div className="reporte-lista-item" key={item.proveedor}>
+                      <strong>{item.proveedor}</strong>
+                      <span>{formatearMoneda(item.montoTotal)} · {item.productosComprados.slice(0, 4).join(', ')} · Última: {formatearFecha(item.ultimaCompra)}</span>
+                    </div>
+                  ))}
+                  {(productosReporte.proveedores || []).length === 0 && <span className="reporte-vacio">Sin proveedores para este rango.</span>}
+                </article>
+              </div>
             </section>
           )}
 

@@ -1,9 +1,15 @@
 const AlertaCorreo = require('../models/AlertaCorreo');
 const { PlanSanitario } = require('../models/PlanSanitario');
 const { RegistroReproductivo, completarFechasYEstado } = require('../models/RegistroReproductivo');
+const { Tarea } = require('../models/Tarea');
 const { enviarCorreoAdministradores } = require('./correoElectronico-service');
 
 const MS_DIA = 1000 * 60 * 60 * 24;
+const FRECUENCIA_PROXIMA_DIAS = 6;
+const FRECUENCIA_VENCIDA_DIAS = 2;
+const FRECUENCIA_CRITICA_DIAS = 1;
+const DIAS_SANIDAD_CRITICA = 15;
+const DIAS_PARTO_CRITICO = 3;
 
 const normalizarDia = (fecha = new Date()) => {
     const dia = new Date(fecha);
@@ -44,9 +50,18 @@ const obtenerNombreAnimal = (animal) => {
     return animal.diio || animal.identificadorFinca || 'DIIO no disponible';
 };
 
-const debeEnviarAlerta = async ({ clave, tipo, referenciaModelo, referenciaId, fechaObjetivo, frecuenciaDias }) => {
+const debeEnviarAlerta = async ({
+    clave,
+    tipo,
+    referenciaModelo,
+    referenciaId,
+    fechaObjetivo,
+    frecuenciaDias,
+    enviarEnDiaObjetivo = false
+}) => {
     const fechaObjetivoKey = formatearFechaKey(fechaObjetivo);
     const estado = await AlertaCorreo.findOne({ clave });
+    const diasObjetivo = diasHasta(fechaObjetivo);
 
     if (!estado) {
         return {
@@ -56,6 +71,13 @@ const debeEnviarAlerta = async ({ clave, tipo, referenciaModelo, referenciaId, f
     }
 
     if (estado.fechaObjetivoKey !== fechaObjetivoKey) {
+        return {
+            enviar: true,
+            datosEstado: { clave, tipo, referenciaModelo, referenciaId, fechaObjetivoKey }
+        };
+    }
+
+    if (enviarEnDiaObjetivo && diasObjetivo === 0 && diasDesde(estado.ultimoEnvio) >= 1) {
         return {
             enviar: true,
             datosEstado: { clave, tipo, referenciaModelo, referenciaId, fechaObjetivoKey }
@@ -105,7 +127,8 @@ const obtenerAlertasSanidad = async () => {
                 referenciaModelo: 'PlanSanitario',
                 referenciaId: plan._id,
                 fechaObjetivo: plan.proximaAplicacion,
-                frecuenciaDias: 2
+                frecuenciaDias: FRECUENCIA_PROXIMA_DIAS,
+                enviarEnDiaObjetivo: true
             });
 
             if (revision.enviar) {
@@ -122,22 +145,24 @@ const obtenerAlertasSanidad = async () => {
         }
 
         if (dias < 0) {
-            const clave = `sanidad-vencida:${plan._id}`;
+            const diasVencida = Math.abs(dias);
+            const esCritica = diasVencida >= DIAS_SANIDAD_CRITICA;
+            const clave = `${esCritica ? 'sanidad-critica' : 'sanidad-vencida'}:${plan._id}`;
             const revision = await debeEnviarAlerta({
                 clave,
-                tipo: 'Sanidad vencida',
+                tipo: esCritica ? 'Sanidad crítica' : 'Sanidad vencida',
                 referenciaModelo: 'PlanSanitario',
                 referenciaId: plan._id,
                 fechaObjetivo: plan.proximaAplicacion,
-                frecuenciaDias: 1
+                frecuenciaDias: esCritica ? FRECUENCIA_CRITICA_DIAS : FRECUENCIA_VENCIDA_DIAS
             });
 
             if (revision.enviar) {
                 alertas.push({
                     ...revision.datosEstado,
                     categoria: 'Sanidad',
-                    estadoAlerta: 'Vencida',
-                    asunto: 'Alertas de sanidad vencidas',
+                    estadoAlerta: esCritica ? 'Crítica' : 'Vencida',
+                    asunto: esCritica ? 'Alertas críticas de sanidad' : 'Alertas de sanidad vencidas',
                     detalle: `${plan.grupoGanado}${plan.animalDiio ? ` - DIIO ${plan.animalDiio}` : ''}: ${plan.actividad} / ${plan.producto}`,
                     fecha: plan.proximaAplicacion,
                     dias
@@ -169,7 +194,8 @@ const obtenerAlertasReproduccion = async () => {
                 referenciaModelo: 'RegistroReproductivo',
                 referenciaId: registro._id,
                 fechaObjetivo: fechaProximoCelo,
-                frecuenciaDias: 1
+                frecuenciaDias: FRECUENCIA_PROXIMA_DIAS,
+                enviarEnDiaObjetivo: true
             });
 
             if (revision.enviar) {
@@ -188,22 +214,24 @@ const obtenerAlertasReproduccion = async () => {
         const fechaPartoEstimada = datos.fechaPartoEstimada;
         const diasParto = diasHasta(fechaPartoEstimada);
         if (!datos.fechaPartoReal && fechaPartoEstimada && diasParto !== null && diasParto <= 15) {
-            const clave = `reproduccion-parto-estimado:${registro._id}`;
+            const esCritica = diasParto <= DIAS_PARTO_CRITICO;
+            const clave = `${esCritica ? 'reproduccion-parto-critico' : 'reproduccion-parto-estimado'}:${registro._id}`;
             const revision = await debeEnviarAlerta({
                 clave,
-                tipo: 'Parto estimado',
+                tipo: esCritica ? 'Parto crítico' : 'Parto estimado',
                 referenciaModelo: 'RegistroReproductivo',
                 referenciaId: registro._id,
                 fechaObjetivo: fechaPartoEstimada,
-                frecuenciaDias: 1
+                frecuenciaDias: esCritica ? FRECUENCIA_CRITICA_DIAS : FRECUENCIA_PROXIMA_DIAS,
+                enviarEnDiaObjetivo: true
             });
 
             if (revision.enviar) {
                 alertas.push({
                     ...revision.datosEstado,
                     categoria: 'Reproducción',
-                    estadoAlerta: 'Parto próximo',
-                    asunto: 'Alertas de reproducción: parto próximo',
+                    estadoAlerta: esCritica ? 'Crítica' : 'Parto próximo',
+                    asunto: esCritica ? 'Alertas críticas de reproducción' : 'Alertas de reproducción: parto próximo',
                     detalle: `${animalNombre} tiene parto estimado cercano`,
                     fecha: fechaPartoEstimada,
                     dias: diasParto
@@ -214,27 +242,70 @@ const obtenerAlertasReproduccion = async () => {
         const fechaDestete = datos.fechaDestete;
         const diasDestete = diasHasta(fechaDestete);
         if (fechaDestete && diasDestete !== null && diasDestete <= 15) {
-            const clave = `reproduccion-destete-proximo:${registro._id}`;
+            const esVencida = diasDestete < 0;
+            const clave = `${esVencida ? 'reproduccion-destete-vencido' : 'reproduccion-destete-proximo'}:${registro._id}`;
             const revision = await debeEnviarAlerta({
                 clave,
-                tipo: 'Destete próximo',
+                tipo: esVencida ? 'Destete vencido' : 'Destete próximo',
                 referenciaModelo: 'RegistroReproductivo',
                 referenciaId: registro._id,
                 fechaObjetivo: fechaDestete,
-                frecuenciaDias: 1
+                frecuenciaDias: esVencida ? FRECUENCIA_VENCIDA_DIAS : FRECUENCIA_PROXIMA_DIAS,
+                enviarEnDiaObjetivo: true
             });
 
             if (revision.enviar) {
                 alertas.push({
                     ...revision.datosEstado,
                     categoria: 'Reproducción',
-                    estadoAlerta: 'Destete próximo',
-                    asunto: 'Alertas de reproducción: destete próximo',
-                    detalle: `${animalNombre} tiene destete próximo`,
+                    estadoAlerta: esVencida ? 'Vencida' : 'Destete próximo',
+                    asunto: esVencida ? 'Alertas de reproducción vencidas' : 'Alertas de reproducción: destete próximo',
+                    detalle: `${animalNombre} tiene ${esVencida ? 'destete vencido' : 'destete próximo'}`,
                     fecha: fechaDestete,
                     dias: diasDestete
                 });
             }
+        }
+    }
+
+    return alertas;
+};
+
+const obtenerAlertasTareas = async () => {
+    const tareas = await Tarea.find({
+        estado: { $nin: ['Completada', 'Cancelada'] },
+        fechaLimite: { $exists: true, $ne: null }
+    }).populate('asignadoA', 'nombre apellido correo rol').lean();
+    const alertas = [];
+
+    for (const tarea of tareas) {
+        const dias = diasHasta(tarea.fechaLimite);
+        if (dias === null || dias >= 0) continue;
+
+        const esCritica = tarea.prioridad === 'Urgente';
+        const clave = `${esCritica ? 'tarea-critica' : 'tarea-vencida'}:${tarea._id}`;
+        const responsable = tarea.asignadoA
+            ? `${tarea.asignadoA.nombre || ''} ${tarea.asignadoA.apellido || ''}`.trim()
+            : 'Sin responsable';
+        const revision = await debeEnviarAlerta({
+            clave,
+            tipo: esCritica ? 'Tarea crítica' : 'Tarea vencida',
+            referenciaModelo: 'Tarea',
+            referenciaId: tarea._id,
+            fechaObjetivo: tarea.fechaLimite,
+            frecuenciaDias: esCritica ? FRECUENCIA_CRITICA_DIAS : FRECUENCIA_VENCIDA_DIAS
+        });
+
+        if (revision.enviar) {
+            alertas.push({
+                ...revision.datosEstado,
+                categoria: 'Tareas',
+                estadoAlerta: esCritica ? 'Crítica' : 'Vencida',
+                asunto: esCritica ? 'Alertas críticas de tareas' : 'Alertas de tareas vencidas',
+                detalle: `${tarea.titulo} (${tarea.prioridad}) - Responsable: ${responsable || 'Sin responsable'}`,
+                fecha: tarea.fechaLimite,
+                dias
+            });
         }
     }
 
@@ -281,7 +352,8 @@ const crearTextoAlertas = (titulo, alertas) => {
 const enviarAlertasCorreo = async () => {
     const alertas = [
         ...(await obtenerAlertasSanidad()),
-        ...(await obtenerAlertasReproduccion())
+        ...(await obtenerAlertasReproduccion()),
+        ...(await obtenerAlertasTareas())
     ];
 
     if (alertas.length === 0) {
@@ -341,5 +413,6 @@ module.exports = {
     enviarAlertasCorreo,
     iniciarProgramadorAlertasCorreo,
     obtenerAlertasReproduccion,
-    obtenerAlertasSanidad
+    obtenerAlertasSanidad,
+    obtenerAlertasTareas
 };
