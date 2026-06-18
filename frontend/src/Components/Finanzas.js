@@ -50,16 +50,17 @@ const formatearCantidad = (valor, unidad) => {
   return unidad ? `${cantidad} x ${unidad}` : cantidad;
 };
 
-const detalleOperativo = (movimiento) => {
-  if (movimiento.tipoMovimiento === 'Planilla') {
-    return movimiento.tipoTrabajo || movimiento.empleado || 'Mano de obra';
-  }
+const rangoMesActual = () => {
+  const hoy = new Date();
+  const anio = hoy.getFullYear();
+  const mes = hoy.getMonth();
+  const ultimoDia = new Date(anio, mes + 1, 0).getDate();
+  const mesTexto = String(mes + 1).padStart(2, '0');
 
-  if (movimiento.tipoMovimiento === 'Inversion') {
-    return [movimiento.tipoInversion, movimiento.activoAsociado].filter(Boolean).join(' · ') || movimiento.categoria;
-  }
-
-  return movimiento.producto || movimiento.proveedor || '--';
+  return {
+    fechaInicio: `${anio}-${mesTexto}-01`,
+    fechaFin: `${anio}-${mesTexto}-${String(ultimoDia).padStart(2, '0')}`
+  };
 };
 
 const columnas = [
@@ -75,7 +76,15 @@ const columnas = [
   },
   { id: 'tipoMovimiento', label: 'Tipo', accessor: (movimiento) => movimiento.tipoMovimiento },
   { id: 'categoria', label: 'Categoria', accessor: (movimiento) => movimiento.categoria },
-  { id: 'producto', label: 'Producto', accessor: (movimiento) => movimiento.producto },
+  {
+    id: 'producto',
+    label: 'Producto',
+    accessor: (movimiento) => movimiento.producto,
+    className: 'columna-producto-finanzas',
+    render: (movimiento) => (
+      <span title={movimiento.producto || '--'}>{movimiento.producto || '--'}</span>
+    )
+  },
   {
     id: 'cantidad',
     label: 'Cantidad',
@@ -83,7 +92,6 @@ const columnas = [
     sortAccessor: (movimiento) => movimiento.cantidad ?? null,
     searchAccessor: (movimiento) => `${movimiento.cantidad ?? ''} ${movimiento.unidad || ''}`
   },
-  { id: 'descripcion', label: 'Descripcion', accessor: (movimiento) => movimiento.descripcion },
   {
     id: 'monto',
     label: 'Monto',
@@ -91,7 +99,6 @@ const columnas = [
     sortAccessor: (movimiento) => movimiento.monto ?? null,
     searchAccessor: (movimiento) => `${formatearMonto(movimiento)} ${movimiento.monto ?? ''}`
   },
-  { id: 'moneda', label: 'Moneda', accessor: (movimiento) => movimiento.moneda || 'CRC' },
   {
     id: 'precioUnitario',
     label: 'Precio unit.',
@@ -99,8 +106,6 @@ const columnas = [
     sortAccessor: (movimiento) => movimiento.precioUnitario ?? null
   },
   { id: 'proveedor', label: 'Proveedor/Lugar', accessor: (movimiento) => movimiento.proveedor },
-  { id: 'naturaleza', label: 'Naturaleza', accessor: (movimiento) => movimiento.naturaleza },
-  { id: 'detalleOperativo', label: 'Detalle operativo', accessor: detalleOperativo },
   { id: 'observaciones', label: 'Observaciones', accessor: (movimiento) => movimiento.observaciones }
 ];
 
@@ -140,6 +145,7 @@ const Finanzas = () => {
   const [errorFormulario, setErrorFormulario] = useState('');
   const [movimientoSeleccionado, setMovimientoSeleccionado] = useState(null);
   const [modoFormulario, setModoFormulario] = useState(false);
+  const [rangoFechas, setRangoFechas] = useState(rangoMesActual);
 
   const cargarFinanzas = async () => {
     try {
@@ -170,9 +176,17 @@ const Finanzas = () => {
   }, []);
 
   const movimientosFiltrados = useMemo(() => {
-    if (tipoActivo === 'Todos') return movimientos;
-    return movimientos.filter((movimiento) => movimiento.tipoMovimiento === tipoActivo);
-  }, [movimientos, tipoActivo]);
+    return movimientos.filter((movimiento) => {
+      if (tipoActivo !== 'Todos' && movimiento.tipoMovimiento !== tipoActivo) return false;
+
+      const fecha = movimiento.fecha ? new Date(movimiento.fecha).toISOString().slice(0, 10) : '';
+      if (!fecha) return false;
+      if (rangoFechas.fechaInicio && fecha < rangoFechas.fechaInicio) return false;
+      if (rangoFechas.fechaFin && fecha > rangoFechas.fechaFin) return false;
+
+      return true;
+    });
+  }, [movimientos, rangoFechas, tipoActivo]);
 
   const totalPorMoneda = useMemo(() => {
     return movimientosFiltrados.reduce((acumulado, movimiento) => {
@@ -369,6 +383,27 @@ const Finanzas = () => {
               {tipo === 'Inversion' ? 'Inversiones' : tipo}
             </button>
           ))}
+        </div>
+
+        <div className="finanzas-rango-fechas">
+          <label>
+            Desde
+            <input
+              type="date"
+              value={rangoFechas.fechaInicio}
+              onChange={(evento) => setRangoFechas((actual) => ({ ...actual, fechaInicio: evento.target.value }))}
+              max={rangoFechas.fechaFin || undefined}
+            />
+          </label>
+          <label>
+            Hasta
+            <input
+              type="date"
+              value={rangoFechas.fechaFin}
+              onChange={(evento) => setRangoFechas((actual) => ({ ...actual, fechaFin: evento.target.value }))}
+              min={rangoFechas.fechaInicio || undefined}
+            />
+          </label>
         </div>
 
         <div className="finanzas-subresumen">

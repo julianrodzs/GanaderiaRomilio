@@ -136,7 +136,7 @@ const TablaDinamica = ({
           <thead>
             <tr>
               {columnas.map((columna) => (
-                <th key={columna.id}>
+                <th key={columna.id} className={columna.className || undefined}>
                   <button type="button" onClick={() => cambiarOrden(columna.id)}>
                     {columna.label}
                     {orden.campo === columna.id ? (orden.direccion === 'asc' ? ' ↑' : ' ↓') : ''}
@@ -150,7 +150,7 @@ const TablaDinamica = ({
             {datosFiltrados.map((fila) => (
               <tr key={fila._id || fila.id}>
                 {columnas.map((columna) => (
-                  <td key={columna.id}>{renderizarValor(fila, columna)}</td>
+                  <td key={columna.id} className={columna.className || undefined}>{renderizarValor(fila, columna)}</td>
                 ))}
                 {mostrarAcciones && (
                   <td>
