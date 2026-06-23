@@ -9,6 +9,7 @@ import {
   obtenerVentas,
   API_URL
 } from '../services/api';
+import { obtenerRangoMesActual } from '../utils/fechas';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
@@ -60,7 +61,7 @@ const Ventas = () => {
   const [ventas, setVentas] = useState([]);
   const [animales, setAnimales] = useState([]);
   const [resumen, setResumen] = useState(null);
-  const [filtros, setFiltros] = useState({ fechaInicio: '', fechaFin: '', comprador: '', estado: '' });
+  const [filtros, setFiltros] = useState({ ...obtenerRangoMesActual(), comprador: '', estado: '' });
   const [formulario, setFormulario] = useState(estadoInicial);
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
   const [detalle, setDetalle] = useState(null);

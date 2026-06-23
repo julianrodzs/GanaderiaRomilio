@@ -8,6 +8,7 @@ import {
   obtenerResumenCompras,
   API_URL
 } from '../services/api';
+import { obtenerRangoMesActual } from '../utils/fechas';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
@@ -29,6 +30,7 @@ const estadoInicial = {
   identificacionProveedor: '',
   telefonoProveedor: '',
   observaciones: '',
+  montoFinal: '',
   animales: [{ ...animalInicial }],
   comprobante: null
 };
@@ -52,6 +54,7 @@ const normalizarCompraFormulario = (compra) => ({
   identificacionProveedor: compra.identificacionProveedor || '',
   telefonoProveedor: compra.telefonoProveedor || '',
   observaciones: compra.observaciones || '',
+  montoFinal: compra.montoFinal ?? '',
   animales: (compra.animales || []).map((item) => ({
     identificadorFinca: item.identificadorFinca || item.animal?.identificadorFinca || '',
     diio: item.diio || item.animal?.diio || '',
@@ -69,7 +72,7 @@ const normalizarCompraFormulario = (compra) => ({
 const Compras = () => {
   const [compras, setCompras] = useState([]);
   const [resumen, setResumen] = useState(null);
-  const [filtros, setFiltros] = useState({ fechaInicio: '', fechaFin: '', proveedor: '', estado: '' });
+  const [filtros, setFiltros] = useState({ ...obtenerRangoMesActual(), proveedor: '', estado: '' });
   const [formulario, setFormulario] = useState(estadoInicial);
   const [compraSeleccionada, setCompraSeleccionada] = useState(null);
   const [detalle, setDetalle] = useState(null);
@@ -100,9 +103,17 @@ const Compras = () => {
     cargarDatos();
   }, [filtros.fechaInicio, filtros.fechaFin, filtros.proveedor, filtros.estado]);
 
-  const totalFormulario = useMemo(() => {
+  const totalCalculadoFormulario = useMemo(() => {
     return formulario.animales.reduce((total, item) => total + (Number(item.pesoCompraKg || 0) * Number(item.precioKg || 0)), 0);
   }, [formulario.animales]);
+
+  const totalFormulario = useMemo(() => {
+    if (formulario.montoFinal !== '' && formulario.montoFinal !== null && formulario.montoFinal !== undefined) {
+      return Number(formulario.montoFinal || 0);
+    }
+
+    return totalCalculadoFormulario;
+  }, [formulario.montoFinal, totalCalculadoFormulario]);
 
   const pesoFormulario = useMemo(() => {
     return formulario.animales.reduce((total, item) => total + Number(item.pesoCompraKg || 0), 0);
@@ -160,7 +171,10 @@ const Compras = () => {
           fechaNacimiento: item.fechaNacimiento || null,
           pesoCompraKg: Number(item.pesoCompraKg),
           precioKg: Number(item.precioKg)
-        }))
+        })),
+        montoFinal: formulario.montoFinal === '' || formulario.montoFinal === null || formulario.montoFinal === undefined
+          ? undefined
+          : Number(formulario.montoFinal)
       };
 
       if (compraSeleccionada?._id) {
@@ -284,7 +298,20 @@ const Compras = () => {
             <div className="venta-totales">
               <article><span>Animales</span><strong>{formulario.animales.length}</strong></article>
               <article><span>Peso total</span><strong>{formatearNumero(pesoFormulario)} kg</strong></article>
-              <article><span>Total</span><strong>{formatearMoneda(totalFormulario)}</strong></article>
+              <article><span>Total calculado</span><strong>{formatearMoneda(totalCalculadoFormulario)}</strong></article>
+              <article>
+                <span>Monto final</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formulario.montoFinal}
+                  onChange={(evento) => setFormulario((actual) => ({ ...actual, montoFinal: evento.target.value }))}
+                  placeholder={String(Math.round(totalCalculadoFormulario || 0))}
+                />
+              </article>
+              <article><span>Total oficial</span><strong>{formatearMoneda(totalFormulario)}</strong></article>
+              <article><span>Ajuste</span><strong>{formatearMoneda(totalFormulario - totalCalculadoFormulario)}</strong></article>
             </div>
           </section>
 
@@ -384,7 +411,9 @@ const Compras = () => {
               <article><span>Teléfono</span><strong>{detalle.telefonoProveedor || '--'}</strong></article>
               <article><span>Identificación</span><strong>{detalle.identificacionProveedor || '--'}</strong></article>
               <article><span>Peso total</span><strong>{formatearNumero(detalle.pesoTotalKg)} kg</strong></article>
-              <article><span>Total</span><strong>{formatearMoneda(detalle.montoTotal)}</strong></article>
+              <article><span>Total calculado</span><strong>{formatearMoneda(detalle.montoCalculado)}</strong></article>
+              <article><span>Total final</span><strong>{formatearMoneda(detalle.montoTotal)}</strong></article>
+              <article><span>Ajuste</span><strong>{formatearMoneda(detalle.ajusteMonto)}</strong></article>
             </div>
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
             {detalle.comprobanteUrl && (

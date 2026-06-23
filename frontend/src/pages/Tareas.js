@@ -20,6 +20,7 @@ import {
   obtenerCambiosPendientes,
   obtenerTareasOffline
 } from '../services/offlineStorage';
+import { obtenerRangoMesActual } from '../utils/fechas';
 
 const tipos = [
   'Chapia',
@@ -40,6 +41,7 @@ const estadoInicial = {
   titulo: '',
   descripcion: '',
   tipo: 'Otro',
+  estado: 'Pendiente',
   prioridad: 'Media',
   fechaProgramada: new Date().toISOString().slice(0, 10),
   fechaLimite: '',
@@ -101,7 +103,7 @@ const Tareas = ({ usuario }) => {
   const [usuarios, setUsuarios] = useState([]);
   const [potreros, setPotreros] = useState([]);
   const [animales, setAnimales] = useState([]);
-  const [filtros, setFiltros] = useState({ estado: '', prioridad: '', tipo: '', asignadoA: '' });
+  const [filtros, setFiltros] = useState({ ...obtenerRangoMesActual(), estado: '', prioridad: '', tipo: '', asignadoA: '' });
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -182,7 +184,7 @@ const Tareas = ({ usuario }) => {
 
   useEffect(() => {
     cargarDatos();
-  }, [filtros.estado, filtros.prioridad, filtros.tipo, filtros.asignadoA, usuario?.rol]);
+  }, [filtros.fechaInicio, filtros.fechaFin, filtros.estado, filtros.prioridad, filtros.tipo, filtros.asignadoA, usuario?.rol]);
 
   useEffect(() => {
     window.addEventListener('online', sincronizarCambiosPendientes);
@@ -251,10 +253,14 @@ const Tareas = ({ usuario }) => {
 
   const cambiarEstado = async (tarea, estado) => {
     try {
+      setGuardando(true);
       await cambiarEstadoTarea(tarea._id, estado);
       await cargarDatos();
+      setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, estado } : actual));
     } catch (err) {
       setError(err.message);
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -339,27 +345,40 @@ const Tareas = ({ usuario }) => {
         <article><span>Vencidas</span><strong>{resumen.vencidas}</strong></article>
       </section>
 
-      <div className="tabla-toolbar">
-        <select name="estado" value={filtros.estado} onChange={actualizarFiltro}>
-          <option value="">Todos los estados</option>
-          {estados.map((estado) => <option key={estado} value={estado}>{estado}</option>)}
-        </select>
-        <select name="prioridad" value={filtros.prioridad} onChange={actualizarFiltro}>
-          <option value="">Todas las prioridades</option>
-          {prioridades.map((prioridad) => <option key={prioridad} value={prioridad}>{prioridad}</option>)}
-        </select>
-        <select name="tipo" value={filtros.tipo} onChange={actualizarFiltro}>
-          <option value="">Todos los tipos</option>
-          {tipos.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
-        </select>
-        {esAdmin && (
-          <select name="asignadoA" value={filtros.asignadoA} onChange={actualizarFiltro}>
-            <option value="">Todos los responsables</option>
-            {usuarios.map((usuarioItem) => (
-              <option key={usuarioItem._id} value={usuarioItem._id}>{nombreUsuario(usuarioItem)}</option>
-            ))}
+      <div className="tareas-filtros">
+        <div className="finanzas-rango-fechas tareas-rango-fechas">
+          <label>
+            Desde
+            <input type="date" name="fechaInicio" value={filtros.fechaInicio} onChange={actualizarFiltro} />
+          </label>
+          <label>
+            Hasta
+            <input type="date" name="fechaFin" value={filtros.fechaFin} onChange={actualizarFiltro} />
+          </label>
+        </div>
+
+        <div className="tabla-toolbar tareas-filtros-secundarios">
+          <select name="estado" value={filtros.estado} onChange={actualizarFiltro}>
+            <option value="">Todos los estados</option>
+            {estados.map((estado) => <option key={estado} value={estado}>{estado}</option>)}
           </select>
-        )}
+          <select name="prioridad" value={filtros.prioridad} onChange={actualizarFiltro}>
+            <option value="">Todas las prioridades</option>
+            {prioridades.map((prioridad) => <option key={prioridad} value={prioridad}>{prioridad}</option>)}
+          </select>
+          <select name="tipo" value={filtros.tipo} onChange={actualizarFiltro}>
+            <option value="">Todos los tipos</option>
+            {tipos.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
+          </select>
+          {esAdmin && (
+            <select name="asignadoA" value={filtros.asignadoA} onChange={actualizarFiltro}>
+              <option value="">Todos los responsables</option>
+              {usuarios.map((usuarioItem) => (
+                <option key={usuarioItem._id} value={usuarioItem._id}>{nombreUsuario(usuarioItem)}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {error && <div className="alerta-formulario">{error}</div>}
@@ -400,8 +419,9 @@ const Tareas = ({ usuario }) => {
                   <div className="acciones-tabla acciones-tabla-amplia">
                     <button type="button" title="Ver detalle" onClick={() => setDetalle(tarea)}>⊙</button>
                     {esAdmin && <button type="button" title="Editar" onClick={() => abrirEdicion(tarea)}>✎</button>}
-                    {tarea.estado === 'Pendiente' && <button type="button" title="En proceso" onClick={() => cambiarEstado(tarea, 'En proceso')}>▶</button>}
+                    {tarea.estado === 'Pendiente' && <button type="button" title="En proceso" onClick={() => cambiarEstado(tarea, 'En proceso')} disabled={guardando}>▶</button>}
                     {tarea.estado !== 'Completada' && <button type="button" title="Completar" onClick={() => completar(tarea)} disabled={guardando}>✓</button>}
+                    {esAdmin && ['En proceso', 'Completada'].includes(tarea.estado) && <button type="button" title="Reabrir como pendiente" onClick={() => cambiarEstado(tarea, 'Pendiente')} disabled={guardando}>↶</button>}
                     {esAdmin && <button type="button" title="Eliminar" onClick={() => borrar(tarea)}>⌫</button>}
                   </div>
                 </td>
@@ -413,7 +433,7 @@ const Tareas = ({ usuario }) => {
 
       {modoFormulario && (
         <div className="modal-backdrop">
-          <form className="modal-panel usuario-modal" onSubmit={guardar}>
+          <form className="modal-panel usuario-modal tarea-form-modal" onSubmit={guardar}>
             <div className="panel-title">
               <div>
                 <p className="eyebrow">Tareas</p>
@@ -422,22 +442,19 @@ const Tareas = ({ usuario }) => {
               <button className="boton-link" type="button" onClick={() => setModoFormulario(false)}>Cerrar</button>
             </div>
             {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
-            <label>Titulo<input name="titulo" value={formulario.titulo} onChange={actualizarCampo} required /></label>
-            <label>Descripcion<textarea name="descripcion" rows="3" value={formulario.descripcion} onChange={actualizarCampo} /></label>
-            <div className="form-grid">
+            <div className="tarea-form-grid">
+              <label className="campo-completo">Titulo<input name="titulo" value={formulario.titulo} onChange={actualizarCampo} required /></label>
+              <label>Estado<select name="estado" value={formulario.estado} onChange={actualizarCampo}>{estados.map((estado) => <option key={estado} value={estado}>{estado}</option>)}</select></label>
               <label>Tipo<select name="tipo" value={formulario.tipo} onChange={actualizarCampo}>{tipos.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
               <label>Prioridad<select name="prioridad" value={formulario.prioridad} onChange={actualizarCampo}>{prioridades.map((prioridad) => <option key={prioridad} value={prioridad}>{prioridad}</option>)}</select></label>
-            </div>
-            <div className="form-grid">
               <label>Fecha programada<input name="fechaProgramada" type="date" value={formulario.fechaProgramada} onChange={actualizarCampo} required /></label>
               <label>Fecha limite<input name="fechaLimite" type="date" value={formulario.fechaLimite} onChange={actualizarCampo} /></label>
-            </div>
-            <label>Asignado a<select name="asignadoA" value={formulario.asignadoA} onChange={actualizarCampo} required>{usuarios.map((usuarioItem) => <option key={usuarioItem._id} value={usuarioItem._id}>{nombreUsuario(usuarioItem)}</option>)}</select></label>
-            <div className="form-grid">
+              <label>Asignado a<select name="asignadoA" value={formulario.asignadoA} onChange={actualizarCampo} required>{usuarios.map((usuarioItem) => <option key={usuarioItem._id} value={usuarioItem._id}>{nombreUsuario(usuarioItem)}</option>)}</select></label>
               <label>Potrero<select name="potrero" value={formulario.potrero} onChange={actualizarCampo}><option value="">Sin potrero</option>{potreros.map((potrero) => <option key={potrero._id} value={potrero._id}>{potrero.codigo} - {potrero.nombre}</option>)}</select></label>
               <label>Animal<select name="animal" value={formulario.animal} onChange={actualizarCampo}><option value="">Sin animal</option>{animales.map((animal) => <option key={animal._id} value={animal._id}>{animal.diio || animal.identificadorFinca}</option>)}</select></label>
+              <label className="campo-completo">Descripcion<textarea name="descripcion" rows="3" value={formulario.descripcion} onChange={actualizarCampo} /></label>
+              <label className="campo-completo">Observaciones<textarea name="observaciones" rows="3" value={formulario.observaciones} onChange={actualizarCampo} /></label>
             </div>
-            <label>Observaciones<textarea name="observaciones" rows="3" value={formulario.observaciones} onChange={actualizarCampo} /></label>
             <div className="form-actions">
               <button className="boton-link" type="button" onClick={() => setModoFormulario(false)}>Cancelar</button>
               <button className="boton-primario compacto" type="submit" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar tarea'}</button>
@@ -474,6 +491,11 @@ const Tareas = ({ usuario }) => {
                 <label>Evidencia<input type="file" accept="image/*" onChange={(evento) => setEvidencia(evento.target.files?.[0] || null)} /></label>
                 <button className="boton-primario compacto" type="button" onClick={() => completar(detalle)} disabled={guardando}>{guardando ? 'Completando...' : 'Completar tarea'}</button>
               </div>
+            )}
+            {esAdmin && ['En proceso', 'Completada'].includes(detalle.estado) && (
+              <button className="boton-link" type="button" onClick={() => cambiarEstado(detalle, 'Pendiente')} disabled={guardando}>
+                Reabrir como pendiente
+              </button>
             )}
 
             <form className="form-card" onSubmit={agregarComentario}>

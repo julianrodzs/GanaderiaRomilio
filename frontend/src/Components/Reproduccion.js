@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   actualizarRegistroReproductivo,
   crearRegistroReproductivo,
@@ -9,6 +9,7 @@ import {
   registrarTerneroDesdeParto
 } from '../services/api';
 import { guardarGestacionOffline, obtenerGestacionOffline } from '../services/offlineStorage';
+import { fechaEnRango, obtenerRangoUltimosAnios } from '../utils/fechas';
 import FormularioReproduccion from './FormularioReproduccion';
 import TablaDinamica from './TablaDinamica';
 
@@ -70,6 +71,14 @@ const filtros = [
   { id: 'estado', accessor: (registro) => registro.estado }
 ];
 
+const fechasRegistro = (registro) => [
+  registro.fechaMonta,
+  registro.fechaPartoEstimada,
+  registro.fechaPartoReal,
+  registro.fechaProximoCelo || registro.fechaListaMonta,
+  registro.fechaDestete
+].filter(Boolean);
+
 const Reproduccion = ({ soloLectura = false }) => {
   const [registros, setRegistros] = useState([]);
   const [animales, setAnimales] = useState([]);
@@ -84,6 +93,15 @@ const Reproduccion = ({ soloLectura = false }) => {
   const [cruce, setCruce] = useState({ macho: '', hembra: '' });
   const [resultadoCruce, setResultadoCruce] = useState(null);
   const [evaluandoCruce, setEvaluandoCruce] = useState(false);
+  const [filtroFechas, setFiltroFechas] = useState(() => obtenerRangoUltimosAnios(2));
+
+  const registrosFiltrados = useMemo(() => {
+    return registros.filter((registro) => {
+      const fechas = fechasRegistro(registro);
+      if (fechas.length === 0) return true;
+      return fechas.some((fecha) => fechaEnRango(fecha, filtroFechas));
+    });
+  }, [filtroFechas, registros]);
 
   const cargarDatos = async () => {
     try {
@@ -285,24 +303,47 @@ const Reproduccion = ({ soloLectura = false }) => {
         )}
       </section>
 
-      <TablaDinamica
-        titulo="Gestión Reproductiva"
-        subtitulo="Reproduccion"
-        columnas={columnas}
-        datos={registros.map((registro) => ({
-          ...registro,
-          abrirTernero: abrirFormularioTernero,
-          soloLectura
-        }))}
-        cargando={cargando}
-        error={error}
-        filtros={filtros}
-        textoAgregar="Nuevo registro"
-        onAgregar={soloLectura ? undefined : abrirNuevoRegistro}
-        onEditar={soloLectura ? undefined : abrirEdicionRegistro}
-        onEliminar={soloLectura ? undefined : borrarRegistro}
-        mostrarAcciones={!soloLectura}
-      />
+      <section className="reproduccion-tabla-panel">
+        <div className="finanzas-rango-fechas reproduccion-rango-fechas">
+          <label>
+            Desde
+            <input
+              type="date"
+              value={filtroFechas.fechaInicio}
+              onChange={(evento) => setFiltroFechas((actual) => ({ ...actual, fechaInicio: evento.target.value }))}
+              max={filtroFechas.fechaFin || undefined}
+            />
+          </label>
+          <label>
+            Hasta
+            <input
+              type="date"
+              value={filtroFechas.fechaFin}
+              onChange={(evento) => setFiltroFechas((actual) => ({ ...actual, fechaFin: evento.target.value }))}
+              min={filtroFechas.fechaInicio || undefined}
+            />
+          </label>
+        </div>
+
+        <TablaDinamica
+          titulo="Gestión Reproductiva"
+          subtitulo="Reproduccion"
+          columnas={columnas}
+          datos={registrosFiltrados.map((registro) => ({
+              ...registro,
+              abrirTernero: abrirFormularioTernero,
+              soloLectura
+            }))}
+          cargando={cargando}
+          error={error}
+          filtros={filtros}
+          textoAgregar="Nuevo registro"
+          onAgregar={soloLectura ? undefined : abrirNuevoRegistro}
+          onEditar={soloLectura ? undefined : abrirEdicionRegistro}
+          onEliminar={soloLectura ? undefined : borrarRegistro}
+          mostrarAcciones={!soloLectura}
+        />
+      </section>
 
       {registroTernero && (
         <div className="modal-backdrop">

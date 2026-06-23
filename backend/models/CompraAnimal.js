@@ -33,7 +33,10 @@ const compraAnimalSchema = new Schema(
         },
         totalAnimales: { type: Number, default: 0, min: 0 },
         pesoTotalKg: { type: Number, default: 0, min: 0 },
+        montoCalculado: { type: Number, default: 0, min: 0 },
+        montoFinal: { type: Number, min: 0 },
         montoTotal: { type: Number, default: 0, min: 0 },
+        ajusteMonto: { type: Number, default: 0 },
         comprobanteUrl: { type: String, trim: true },
         estado: {
             type: String,
@@ -48,22 +51,32 @@ const compraAnimalSchema = new Schema(
 );
 
 compraAnimalSchema.pre('validate', function calcularTotales(next) {
-    this.animales = (this.animales || []).map((item) => ({
-        animal: item.animal,
-        identificadorFinca: item.identificadorFinca,
-        diio: item.diio,
-        nombre: item.nombre,
-        sexo: item.sexo,
-        raza: item.raza,
-        fechaNacimiento: item.fechaNacimiento,
-        pesoCompraKg: item.pesoCompraKg,
-        precioKg: item.precioKg,
-        subtotal: Number(item.pesoCompraKg || 0) * Number(item.precioKg || 0),
-        observaciones: item.observaciones
-    }));
+    this.animales = (this.animales || []).map((item) => {
+        const subtotal = Number(item.pesoCompraKg || 0) * Number(item.precioKg || 0);
+
+        return {
+            animal: item.animal,
+            identificadorFinca: item.identificadorFinca,
+            diio: item.diio,
+            nombre: item.nombre,
+            sexo: item.sexo,
+            raza: item.raza,
+            fechaNacimiento: item.fechaNacimiento,
+            pesoCompraKg: item.pesoCompraKg,
+            precioKg: item.precioKg,
+            subtotal,
+            observaciones: item.observaciones
+        };
+    });
     this.totalAnimales = this.animales.length;
     this.pesoTotalKg = this.animales.reduce((total, item) => total + Number(item.pesoCompraKg || 0), 0);
-    this.montoTotal = this.animales.reduce((total, item) => total + Number(item.subtotal || 0), 0);
+    this.montoCalculado = this.animales.reduce((total, item) => total + Number(item.subtotal || 0), 0);
+    const montoFinal = this.montoFinal === undefined || this.montoFinal === null || this.montoFinal === ''
+        ? undefined
+        : Number(this.montoFinal);
+    this.montoFinal = Number.isFinite(montoFinal) ? montoFinal : undefined;
+    this.montoTotal = Number.isFinite(montoFinal) ? montoFinal : this.montoCalculado;
+    this.ajusteMonto = this.montoTotal - this.montoCalculado;
     next();
 });
 

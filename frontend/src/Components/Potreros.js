@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   actualizarPotrero,
   actualizarRotacion,
@@ -13,6 +13,7 @@ import { guardarPotrerosOffline, obtenerPotrerosOffline } from '../services/offl
 import FormularioPotrero from './FormularioPotrero';
 import FormularioRotacion from './FormularioRotacion';
 import TablaDinamica from './TablaDinamica';
+import { fechaEnRango, obtenerRangoMesActual } from '../utils/fechas';
 
 const formatearFecha = (fecha) => {
   if (!fecha) return '--';
@@ -69,6 +70,7 @@ const Potreros = ({ soloLectura = false }) => {
   const [tipoFormulario, setTipoFormulario] = useState('potrero');
   const [potreroSeleccionado, setPotreroSeleccionado] = useState(null);
   const [rotacionSeleccionada, setRotacionSeleccionada] = useState(null);
+  const [filtroRotacionesFecha, setFiltroRotacionesFecha] = useState(obtenerRangoMesActual);
 
   const cargarDatos = async () => {
     try {
@@ -99,6 +101,10 @@ const Potreros = ({ soloLectura = false }) => {
   useEffect(() => {
     cargarDatos();
   }, []);
+
+  const rotacionesFiltradas = useMemo(() => {
+    return rotaciones.filter((rotacion) => fechaEnRango(rotacion.fechaEntrada, filtroRotacionesFecha));
+  }, [filtroRotacionesFecha, rotaciones]);
 
   const guardarPotrero = async (potrero) => {
     try {
@@ -258,20 +264,43 @@ const Potreros = ({ soloLectura = false }) => {
         mostrarAcciones={!soloLectura}
       />
 
-      <TablaDinamica
-        titulo="Rotaciones"
-        subtitulo="Movimientos de potreros"
-        columnas={columnasRotaciones}
-        datos={rotaciones}
-        cargando={cargando}
-        error={error}
-        filtros={filtrosRotaciones}
-        textoAgregar="Nueva rotacion"
-        onAgregar={soloLectura ? undefined : abrirNuevaRotacion}
-        onEditar={soloLectura ? undefined : abrirEdicionRotacion}
-        onEliminar={soloLectura ? undefined : borrarRotacion}
-        mostrarAcciones={!soloLectura}
-      />
+      <section className="finanzas-panel">
+        <div className="finanzas-rango-fechas">
+          <label>
+            Desde
+            <input
+              type="date"
+              value={filtroRotacionesFecha.fechaInicio}
+              onChange={(evento) => setFiltroRotacionesFecha((actual) => ({ ...actual, fechaInicio: evento.target.value }))}
+              max={filtroRotacionesFecha.fechaFin || undefined}
+            />
+          </label>
+          <label>
+            Hasta
+            <input
+              type="date"
+              value={filtroRotacionesFecha.fechaFin}
+              onChange={(evento) => setFiltroRotacionesFecha((actual) => ({ ...actual, fechaFin: evento.target.value }))}
+              min={filtroRotacionesFecha.fechaInicio || undefined}
+            />
+          </label>
+        </div>
+
+        <TablaDinamica
+          titulo="Rotaciones"
+          subtitulo="Movimientos de potreros"
+          columnas={columnasRotaciones}
+          datos={rotacionesFiltradas}
+          cargando={cargando}
+          error={error}
+          filtros={filtrosRotaciones}
+          textoAgregar="Nueva rotacion"
+          onAgregar={soloLectura ? undefined : abrirNuevaRotacion}
+          onEditar={soloLectura ? undefined : abrirEdicionRotacion}
+          onEliminar={soloLectura ? undefined : borrarRotacion}
+          mostrarAcciones={!soloLectura}
+        />
+      </section>
     </section>
   );
 };

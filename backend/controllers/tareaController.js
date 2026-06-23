@@ -25,7 +25,11 @@ const construirFiltros = (query = {}) => {
     if (fechaInicio || fechaFin) {
         filtros.fechaProgramada = {};
         if (fechaInicio) filtros.fechaProgramada.$gte = new Date(fechaInicio);
-        if (fechaFin) filtros.fechaProgramada.$lte = new Date(fechaFin);
+        if (fechaFin) {
+            const fin = new Date(fechaFin);
+            fin.setUTCHours(23, 59, 59, 999);
+            filtros.fechaProgramada.$lte = fin;
+        }
     }
 
     return filtros;
@@ -43,6 +47,20 @@ const limpiarDatosTarea = (datos) => {
     });
 
     return datosLimpios;
+};
+
+const aplicarFechaCompletadaPorEstado = (datos) => {
+    const datosConEstado = { ...datos };
+
+    if (datosConEstado.estado === 'Completada' && !datosConEstado.fechaCompletada) {
+        datosConEstado.fechaCompletada = new Date();
+    }
+
+    if (datosConEstado.estado && datosConEstado.estado !== 'Completada') {
+        datosConEstado.fechaCompletada = null;
+    }
+
+    return datosConEstado;
 };
 
 tareaCtrl.getTareas = async (req, res) => {
@@ -103,7 +121,7 @@ tareaCtrl.crearTarea = async (req, res) => {
         }
 
         const nuevaTarea = new Tarea({
-            ...limpiarDatosTarea(req.body),
+            ...aplicarFechaCompletadaPorEstado(limpiarDatosTarea(req.body)),
             creadoPor: req.usuario.id
         });
         const tareaGuardada = await nuevaTarea.save();
@@ -123,7 +141,7 @@ tareaCtrl.actualizarTarea = async (req, res) => {
 
         const tarea = await Tarea.findByIdAndUpdate(
             req.params.id,
-            limpiarDatosTarea(req.body),
+            aplicarFechaCompletadaPorEstado(limpiarDatosTarea(req.body)),
             { new: true, runValidators: true }
         ).populate(POPULATE_TAREA);
 

@@ -1227,6 +1227,18 @@
   font-size: 22px;
 }
 
+.venta-totales input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 0 10px;
+  background: #fffdf7;
+  color: #09160e;
+  font: inherit;
+  font-weight: 800;
+}
+
 .venta-comprobante-link {
   width: fit-content;
   display: inline-flex;
@@ -1436,6 +1448,73 @@
   padding: 14px;
 }
 
+.tareas-filtros {
+  display: grid;
+  gap: 12px;
+}
+
+.tareas-rango-fechas {
+  width: fit-content;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 12px;
+}
+
+.tareas-filtros-secundarios {
+  justify-content: end;
+  padding-top: 0;
+}
+
+.tarea-form-modal {
+  width: min(100%, 980px);
+  gap: 18px;
+}
+
+.tarea-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tarea-form-grid label {
+  display: grid;
+  gap: 8px;
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tarea-form-grid input,
+.tarea-form-grid select,
+.tarea-form-grid textarea {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 0 12px;
+  background: #f8f9f5;
+  color: #09160e;
+  outline: none;
+}
+
+.tarea-form-grid textarea {
+  min-height: 96px;
+  padding-top: 12px;
+  resize: vertical;
+}
+
+.tarea-form-grid input:focus,
+.tarea-form-grid select:focus,
+.tarea-form-grid textarea:focus {
+  border-color: #204b32;
+  box-shadow: 0 0 0 3px rgba(32, 75, 50, 0.12);
+}
+
+.tarea-form-grid .campo-completo {
+  grid-column: 1 / -1;
+}
+
 .tarea-comentarios {
   display: grid;
   gap: 10px;
@@ -1484,6 +1563,19 @@
   padding: 0 12px;
   background: #f8f9f5;
   color: #09160e;
+}
+
+.reproduccion-tabla-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.reproduccion-rango-fechas {
+  width: fit-content;
+  justify-self: end;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 12px;
 }
 
 .reportes-metricas {

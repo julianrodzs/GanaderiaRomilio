@@ -1,6 +1,7 @@
 const rotacionCtrl = {};
 
 const RotacionPotrero = require('../models/RotacionPotrero');
+const Potrero = require('../models/Potrero');
 
 const MILISEGUNDOS_DIA = 1000 * 60 * 60 * 24;
 
@@ -38,6 +39,66 @@ const prepararDatosRotacion = async (datos, rotacionId = null) => {
     }
 
     return datosPreparados;
+};
+
+const validarRotacionActivaUnica = async ({ potrero, estado }, rotacionId = null) => {
+    if (estado !== 'Activa' || !potrero) return;
+
+    const filtro = {
+        potrero,
+        estado: 'Activa'
+    };
+
+    if (rotacionId) {
+        filtro._id = { $ne: rotacionId };
+    }
+
+    const rotacionActiva = await RotacionPotrero.findOne(filtro).select('_id');
+
+    if (rotacionActiva) {
+        const error = new Error('Este potrero ya tiene una rotacion activa');
+        error.statusCode = 409;
+        throw error;
+    }
+};
+
+const actualizarEstadoPotrero = async (potreroId, estado) => {
+    if (!potreroId) return;
+
+    const potrero = await Potrero.findById(potreroId);
+
+    if (!potrero || potrero.estado === 'Mantenimiento') return;
+    if (potrero.estado === estado) return;
+
+    potrero.estado = estado;
+    await potrero.save();
+};
+
+const sincronizarPotreroPorRotacion = async ({ potreroId, estadoRotacion }) => {
+    if (estadoRotacion === 'Activa') {
+        await actualizarEstadoPotrero(potreroId, 'Ocupado');
+        return;
+    }
+
+    if (estadoRotacion === 'Finalizada') {
+        await actualizarEstadoPotrero(potreroId, 'Descanso');
+    }
+};
+
+const sincronizarPotreroAnterior = async (potreroId) => {
+    if (!potreroId) return;
+
+    const activa = await RotacionPotrero.findOne({
+        potrero: potreroId,
+        estado: 'Activa'
+    }).select('_id');
+
+    if (activa) {
+        await actualizarEstadoPotrero(potreroId, 'Ocupado');
+        return;
+    }
+
+    await actualizarEstadoPotrero(potreroId, 'Descanso');
 };
 
 const obtenerPotreroId = (rotacion) => {
@@ -84,13 +145,18 @@ rotacionCtrl.getRotaciones = async (req, res) => {
 rotacionCtrl.createRotacion = async (req, res) => {
     try {
         const datosRotacion = await prepararDatosRotacion(req.body);
+        await validarRotacionActivaUnica(datosRotacion);
         const nuevaRotacion = new RotacionPotrero(datosRotacion);
         const rotacionGuardada = await nuevaRotacion.save();
+        await sincronizarPotreroPorRotacion({
+            potreroId: rotacionGuardada.potrero,
+            estadoRotacion: rotacionGuardada.estado
+        });
         const rotacion = await RotacionPotrero.findById(rotacionGuardada._id).populate('potrero');
 
         res.status(201).json(rotacion);
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al crear rotacion', error: error.message });
+        res.status(error.statusCode || 400).json({ mensaje: 'Error al crear rotacion', error: error.message });
     }
 };
 
@@ -128,14 +194,41 @@ rotacionCtrl.updateRotacion = async (req, res) => {
         delete datosRotacion.createdAt;
         delete datosRotacion.updatedAt;
 
+        await validarRotacionActivaUnica(datosRotacion, req.params.id);
+
         const rotacion = await RotacionPotrero.findByIdAndUpdate(req.params.id, datosRotacion, {
             new: true,
             runValidators: true
         }).populate('potrero');
 
+        const potreroAnteriorId = obtenerPotreroId(rotacionExistente);
+        const potreroActualId = obtenerPotreroId(rotacion);
+
+        const estadoAnterior = rotacionExistente.estado;
+        const estadoActual = rotacion.estado;
+        const cambioPotrero = potreroAnteriorId && potreroAnteriorId !== potreroActualId;
+
+        if (cambioPotrero && estadoAnterior === 'Activa') {
+            await sincronizarPotreroAnterior(potreroAnteriorId);
+        }
+
+        if (estadoActual === 'Activa') {
+            await sincronizarPotreroPorRotacion({
+                potreroId: potreroActualId,
+                estadoRotacion: 'Activa'
+            });
+        } else if (estadoAnterior === 'Activa' && estadoActual === 'Finalizada') {
+            await sincronizarPotreroPorRotacion({
+                potreroId: potreroActualId,
+                estadoRotacion: 'Finalizada'
+            });
+        } else if (estadoAnterior === 'Activa' && estadoActual !== 'Activa') {
+            await sincronizarPotreroAnterior(potreroActualId);
+        }
+
         res.json(rotacion);
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al actualizar rotacion', error: error.message });
+        res.status(error.statusCode || 400).json({ mensaje: 'Error al actualizar rotacion', error: error.message });
     }
 };
 
@@ -145,6 +238,10 @@ rotacionCtrl.deleteRotacion = async (req, res) => {
 
         if (!rotacion) {
             return res.status(404).json({ mensaje: 'Rotacion no encontrada' });
+        }
+
+        if (rotacion.estado === 'Activa') {
+            await sincronizarPotreroAnterior(rotacion.potrero);
         }
 
         res.json({ mensaje: 'Rotacion eliminada' });

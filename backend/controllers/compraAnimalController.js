@@ -77,6 +77,9 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
     const animalesActualizados = [];
 
     for (const item of compra.animales || []) {
+        const proporcion = compra.montoCalculado ? Number(item.subtotal || 0) / compra.montoCalculado : 0;
+        const montoAsignado = compra.montoTotal ? compra.montoTotal * proporcion : item.subtotal;
+
         if (item.animal) {
             animalesActualizados.push(item);
             continue;
@@ -93,7 +96,7 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
             pesoCompra: item.pesoCompraKg,
             pesoActual: item.pesoCompraKg,
             precioCompraPorKg: item.precioKg,
-            montoCompra: item.subtotal,
+            montoCompra: montoAsignado,
             fechaCompra: compra.fechaCompra,
             proveedorCompra: compra.proveedor,
             compraId: compra._id,
@@ -110,7 +113,7 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
             tipoEvento: 'Compra',
             fecha: compra.fechaCompra,
             titulo: 'Animal comprado',
-            descripcion: `Compra registrada por ₡${Number(item.subtotal || 0).toLocaleString('es-CR')} con peso de ${item.pesoCompraKg} kg.`,
+            descripcion: `Compra registrada por ₡${Number(montoAsignado || 0).toLocaleString('es-CR')} con peso de ${item.pesoCompraKg} kg.`,
             moduloOrigen: 'Finanzas',
             referenciaId: compra._id,
             creadoPor: usuarioId,
@@ -119,6 +122,9 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
                 pesoCompraKg: item.pesoCompraKg,
                 precioKg: item.precioKg,
                 subtotal: item.subtotal,
+                montoAsignado,
+                montoFinalCompra: compra.montoFinal,
+                ajusteMontoCompra: compra.ajusteMonto,
                 compraAnimal: compra._id
             }
         });
