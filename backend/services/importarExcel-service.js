@@ -271,11 +271,31 @@ const buscarIndice = (fila, opciones) => {
     return fila.findIndex((celda) => normalizadas.includes(normalizar(celda)));
 };
 
+const buscarIndiceFlexible = (fila, opciones) => {
+    const normalizadas = opciones.map(normalizar);
+    const valoresFila = fila.map(normalizar);
+    const exacto = valoresFila.findIndex((valor) => normalizadas.includes(valor));
+
+    if (exacto >= 0) return exacto;
+
+    return valoresFila.findIndex((valor) => (
+        valor && normalizadas.some((opcion) => (
+            valor.includes(opcion) || (valor.length >= 6 && opcion.includes(valor))
+        ))
+    ));
+};
+
 const buscarFilaEncabezado = (filas, columnasRequeridas) => {
     return filas.findIndex((fila) => {
         const textoFila = fila.map(normalizar);
         return columnasRequeridas.every((columna) => textoFila.includes(normalizar(columna)));
     });
+};
+
+const buscarFilaEncabezadoFlexible = (filas, columnasRequeridas) => {
+    return filas.findIndex((fila) => (
+        columnasRequeridas.every((opciones) => buscarIndiceFlexible(fila, Array.isArray(opciones) ? opciones : [opciones]) >= 0)
+    ));
 };
 
 const crearAcumulador = () => ({
@@ -300,38 +320,42 @@ const agregarAdvertencia = (advertencias, hoja, mensaje) => {
     advertencias.push({ hoja, mensaje });
 };
 
-const mapearControlPesoDiio = ({ hoja, filas, acumulador, advertencias }) => {
-    const indiceEncabezado = buscarFilaEncabezado(filas, ['DIIO', 'Sexo']);
+const mapearInventarioGenerico = ({ hoja, filas, acumulador, advertencias }) => {
+    const indiceEncabezado = buscarFilaEncabezadoFlexible(filas, [
+        ['DIIO', 'Arete', 'Numero DIIO', 'Número DIIO'],
+        ['Sexo', 'Genero', 'Género']
+    ]);
 
     if (indiceEncabezado === -1) return false;
 
     const encabezado = filas[indiceEncabezado];
     const idx = {
-        numero: buscarIndice(encabezado, ['No.']),
-        diio: buscarIndice(encabezado, ['DIIO']),
-        identificadorFinca: buscarIndice(encabezado, ['ID de finca']),
-        fechaNacimiento: buscarIndice(encabezado, ['Fecha de Nacimiento']),
-        sexo: buscarIndice(encabezado, ['Sexo']),
-        madreDiio: buscarIndice(encabezado, ['Madre DIIO', 'Madre', 'DIIO Madre']),
-        padreDiio: buscarIndice(encabezado, ['Padre DIIO', 'Padre', 'DIIO Padre']),
-        raza: buscarIndice(encabezado, ['Raza']),
-        fechaCompra: buscarIndice(encabezado, ['Fecha Compra', 'Fecha de Compra']),
-        pesoNacimiento: buscarIndice(encabezado, ['Peso Nacimiento', 'Peso al Nacer']),
-        pesoDestete: buscarIndice(encabezado, ['Peso Destete', 'Peso al Destete']),
-        fechaDestete: buscarIndice(encabezado, ['Fecha Destete']),
-        pesoCompra: buscarIndice(encabezado, ['Peso Compra']),
-        precioCompraPorKg: buscarIndice(encabezado, ['Precio Compra Kg', 'Precio Compra por Kg', 'Precio de Compra por kilo']),
-        precioVentaPorKg: buscarIndice(encabezado, ['Precio Venta Kg', 'Precio Venta por Kg', 'Precio de venta por kilo']),
-        montoCompra: buscarIndice(encabezado, ['Monto Compra', 'Total compra']),
-        montoVenta: buscarIndice(encabezado, ['Monto Venta', 'Total venta']),
-        fechaVenta: buscarIndice(encabezado, ['Fecha Venta']),
-        fechaMuerte: buscarIndice(encabezado, ['Fecha Muerte']),
-        peso1: buscarIndice(encabezado, ['Pesa #1']),
-        fecha1: buscarIndice(encabezado, ['Fecha']),
-        peso2: buscarIndice(encabezado.slice(buscarIndice(encabezado, ['Pesa #2'])), ['Pesa #2'])
+        diio: buscarIndiceFlexible(encabezado, ['DIIO', 'Arete', 'Numero DIIO', 'Número DIIO']),
+        nombre: buscarIndiceFlexible(encabezado, ['ID de finca', 'ID Finca', 'Nombre animal', 'Alias']),
+        fechaNacimiento: buscarIndiceFlexible(encabezado, ['Fecha de Nacimiento', 'Fecha Nacimiento', 'Nacimiento', 'Fecha de Nac.', 'F. Nacimiento', 'Fecha de']),
+        sexo: buscarIndiceFlexible(encabezado, ['Sexo', 'Genero', 'Género']),
+        raza: buscarIndiceFlexible(encabezado, ['Raza']),
+        madreDiio: buscarIndiceFlexible(encabezado, ['Madre DIIO', 'DIIO Madre']),
+        padreDiio: buscarIndiceFlexible(encabezado, ['Padre DIIO', 'DIIO Padre']),
+        fechaCompra: buscarIndiceFlexible(encabezado, ['Fecha Compra', 'Fecha de Compra']),
+        fechaVenta: buscarIndiceFlexible(encabezado, ['Fecha Venta', 'Fecha de Venta']),
+        fechaMuerte: buscarIndiceFlexible(encabezado, ['Fecha Muerte', 'Fecha de Muerte']),
+        fechaDestete: buscarIndiceFlexible(encabezado, ['Fecha Destete', 'Fecha de Destete']),
+        pesoNacimiento: buscarIndiceFlexible(encabezado, ['Peso Nacimiento', 'Peso al Nacer']),
+        pesoDestete: buscarIndiceFlexible(encabezado, ['Peso Destete', 'Peso al Destete']),
+        pesoActual: buscarIndiceFlexible(encabezado, ['Peso Actual', 'Peso']),
+        pesoCompra: buscarIndiceFlexible(encabezado, ['Peso Compra', 'Peso de Compra']),
+        precioCompraPorKg: buscarIndiceFlexible(encabezado, ['Precio Compra Kg', 'Precio Compra por Kg', 'Precio de Compra por kilo']),
+        precioVentaPorKg: buscarIndiceFlexible(encabezado, ['Precio Venta Kg', 'Precio Venta por Kg', 'Precio de venta por kilo']),
+        montoCompra: buscarIndiceFlexible(encabezado, ['Monto Compra', 'Total compra']),
+        montoVenta: buscarIndiceFlexible(encabezado, ['Monto Venta', 'Total venta']),
+        estado: buscarIndiceFlexible(encabezado, ['Estado', 'Status'])
     };
-    const idxPesa2 = buscarIndice(encabezado, ['Pesa #2']);
-    const idxFecha2 = idxPesa2 >= 0 ? buscarIndice(encabezado.slice(idxPesa2 + 1), ['Fecha']) + idxPesa2 + 1 : -1;
+    const diiosEnHoja = new Set();
+    let detectados = 0;
+    let omitidosSinDiio = 0;
+    let omitidosSinSexo = 0;
+    let duplicadosHoja = 0;
 
     filas.slice(indiceEncabezado + 1).forEach((fila, offset) => {
         if (!tieneDatos(fila)) return;
@@ -339,17 +363,28 @@ const mapearControlPesoDiio = ({ hoja, filas, acumulador, advertencias }) => {
         const diio = limpiarTexto(fila[idx.diio]);
         const sexo = mapearSexo(fila[idx.sexo]);
 
-        if (!diio || !sexo) return;
+        if (!diio) {
+            omitidosSinDiio += 1;
+            return;
+        }
 
-        const peso1 = aNumero(fila[idx.peso1]);
-        const peso2 = idxPesa2 >= 0 ? aNumero(fila[idxPesa2]) : undefined;
-        const fecha1 = aFecha(fila[idx.fecha1]);
-        const fecha2 = idxFecha2 >= 0 ? aFecha(fila[idxFecha2]) : undefined;
+        if (!sexo) {
+            omitidosSinSexo += 1;
+            return;
+        }
+
+        if (diiosEnHoja.has(diio)) {
+            duplicadosHoja += 1;
+            return;
+        }
+
+        diiosEnHoja.add(diio);
+        detectados += 1;
 
         agregar(acumulador, 'Animal', {
             identificadorFinca: diio,
             diio,
-            nombre: limpiarTexto(fila[idx.identificadorFinca]) || undefined,
+            nombre: limpiarTexto(fila[idx.nombre]) || undefined,
             sexo,
             raza: limpiarTexto(fila[idx.raza]) || undefined,
             madreDiio: limpiarTexto(fila[idx.madreDiio]) || undefined,
@@ -366,31 +401,20 @@ const mapearControlPesoDiio = ({ hoja, filas, acumulador, advertencias }) => {
             precioVentaPorKg: aNumero(fila[idx.precioVentaPorKg]),
             montoCompra: aNumero(fila[idx.montoCompra]),
             montoVenta: aNumero(fila[idx.montoVenta]),
-            pesoActual: peso2 || peso1,
+            pesoActual: aNumero(fila[idx.pesoActual]),
             estado: 'Activo',
-            observaciones: `Importado desde hoja ${hoja}`
+            observaciones: [
+                `Importado desde hoja ${hoja}`,
+                limpiarTexto(fila[idx.estado]) ? `Status Excel: ${limpiarTexto(fila[idx.estado])}` : ''
+            ].filter(Boolean).join('. ')
         }, { hoja, fila: indiceEncabezado + offset + 2 });
-
-        if (peso1) {
-            agregar(acumulador, 'Pesaje', {
-                animal: diio,
-                fecha: serializarFecha(fecha1),
-                peso: peso1,
-                observaciones: `Pesa #1 importada desde ${hoja}`
-            }, { hoja, fila: indiceEncabezado + offset + 2, referenciaAnimal: 'diio' });
-        }
-
-        if (peso2) {
-            agregar(acumulador, 'Pesaje', {
-                animal: diio,
-                fecha: serializarFecha(fecha2),
-                peso: peso2,
-                observaciones: `Pesa #2 importada desde ${hoja}`
-            }, { hoja, fila: indiceEncabezado + offset + 2, referenciaAnimal: 'diio' });
-        }
     });
 
-    agregarAdvertencia(advertencias, hoja, 'Los pesajes referencian animales por DIIO en la vista previa; al insertar se deberan resolver a ObjectId.');
+    agregarAdvertencia(
+        advertencias,
+        hoja,
+        `Inventario detectado por encabezados. Animales listos: ${detectados}. Omitidos sin DIIO: ${omitidosSinDiio}. Omitidos sin sexo: ${omitidosSinSexo}. Duplicados dentro del Excel omitidos: ${duplicadosHoja}.`
+    );
     return true;
 };
 
@@ -1056,7 +1080,7 @@ const filtrarAcumuladorPorModelos = (acumulador, modelosPermitidos) => {
 
 const obtenerModuloHoja = (nombreHoja) => {
     const nombre = normalizar(nombreHoja);
-    if (nombre.includes('CONTROL DE PESO')) return 'inventario';
+    if (nombre.includes('CONTROL DE PESO') || nombre.includes('INVENTARIO')) return 'inventario';
     if (nombre.includes('ROTACION') || nombre.includes('ROTACIÓN')) return 'rotaciones';
     if (nombre.includes('POTRERO')) return 'potreros';
     if (nombre.includes('REGISTRO SANITARIO')) return 'sanidad';
@@ -1132,11 +1156,11 @@ const procesarExcelPreview = (buffer, opciones = {}) => {
             return;
         }
 
-        if (nombre.includes('CONTROL DE PESO')) {
-            reconocida = mapearControlPesoDiio({ hoja, filas, acumulador, advertencias });
+        if (nombre.includes('CONTROL DE PESO') || nombre.includes('INVENTARIO')) {
+            reconocida = mapearInventarioGenerico({ hoja, filas, acumulador, advertencias });
 
             if (!reconocida) {
-                agregarAdvertencia(advertencias, hoja, 'Hoja de peso omitida porque no trae columna DIIO. Se importaran solo animales con DIIO.');
+                agregarAdvertencia(advertencias, hoja, 'Hoja de inventario omitida porque no trae encabezados minimos DIIO y Sexo.');
             }
         } else if (nombre.includes('ROTACION') || nombre.includes('ROTACIÓN')) {
             reconocida = mapearRotaciones({ hoja, filas, acumulador, advertencias });
@@ -1155,6 +1179,10 @@ const procesarExcelPreview = (buffer, opciones = {}) => {
 
         if (!reconocida && modulosSeleccionados.includes('potreros')) {
             reconocida = mapearPotrerosGenerico({ hoja, filas, acumulador, advertencias });
+        }
+
+        if (!reconocida && modulosSeleccionados.includes('inventario')) {
+            reconocida = mapearInventarioGenerico({ hoja, filas, acumulador, advertencias });
         }
 
         const modelosDespues = obtenerResumen(acumulador);

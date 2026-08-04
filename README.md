@@ -332,11 +332,62 @@ Reglas:
 - El usuario elige que modulos procesar.
 - El Excel puede tener varias hojas o ser especifico de un modulo.
 - Los campos opcionales vacios no borran datos existentes.
+- Inventario se detecta por hojas que contengan `INVENTARIO` en el nombre o por hojas con encabezados minimos `DIIO` y `Sexo`.
 - Animales sin DIIO se omiten.
+- Animales sin sexo se omiten.
+- DIIO repetido dentro del mismo Excel se omite despues de la primera aparicion.
 - Potreros sin codigo/nombre se omiten.
 - Finanzas sin datos minimos se omite.
-- Si un registro ya existe, se actualizan solo campos con valor.
+- Si un animal ya existe por DIIO o identificador de finca, se actualizan solo campos con valor.
+- Si un animal no existe, se crea.
 - Se guarda historial en `ImportacionExcel`.
+
+#### Inventario Excel
+
+El importador de inventario ya no depende de la hoja antigua de control de peso. El formato principal esperado es una tabla de inventario con encabezados.
+
+Deteccion de hoja:
+
+- Nombre de hoja que incluya `INVENTARIO`.
+- O cualquier hoja que tenga columnas reconocibles para `DIIO` y `Sexo`.
+
+Campos minimos por fila:
+
+- `DIIO`.
+- `Sexo`.
+
+Columnas aceptadas:
+
+| Campo en Animal | Nombres de columna aceptados |
+| --- | --- |
+| `diio` | `DIIO`, `Arete`, `Numero DIIO`, `Número DIIO` |
+| `nombre` | `ID de finca`, `ID Finca`, `Nombre animal`, `Alias` |
+| `sexo` | `Sexo`, `Genero`, `Género` |
+| `fechaNacimiento` | `Fecha de Nacimiento`, `Fecha Nacimiento`, `Nacimiento`, `Fecha de Nac.`, `F. Nacimiento`, `Fecha de` |
+| `raza` | `Raza` |
+| `madreDiio` | `Madre DIIO`, `DIIO Madre` |
+| `padreDiio` | `Padre DIIO`, `DIIO Padre` |
+| `fechaCompra` | `Fecha Compra`, `Fecha de Compra` |
+| `fechaVenta` | `Fecha Venta`, `Fecha de Venta` |
+| `fechaMuerte` | `Fecha Muerte`, `Fecha de Muerte` |
+| `fechaDestete` | `Fecha Destete`, `Fecha de Destete` |
+| `pesoNacimiento` | `Peso Nacimiento`, `Peso al Nacer` |
+| `pesoDestete` | `Peso Destete`, `Peso al Destete` |
+| `pesoActual` | `Peso Actual`, `Peso` |
+| `pesoCompra` | `Peso Compra`, `Peso de Compra` |
+| `precioCompraPorKg` | `Precio Compra Kg`, `Precio Compra por Kg`, `Precio de Compra por kilo` |
+| `precioVentaPorKg` | `Precio Venta Kg`, `Precio Venta por Kg`, `Precio de venta por kilo` |
+| `montoCompra` | `Monto Compra`, `Total compra` |
+| `montoVenta` | `Monto Venta`, `Total venta` |
+| observacion de importacion | `Estado`, `Status` |
+
+Notas:
+
+- `ID de finca` se interpreta como nombre o alias del animal.
+- La columna generica `Nombre` del formato oficial se ignora para evitar confundirla con el nombre del propietario, criador u operador.
+- `Status` no cambia automaticamente el estado del animal; se guarda como observacion para revision manual.
+- La fecha de baja no cambia el estado automaticamente por ahora; se revisa manualmente.
+- En la vista previa se reportan animales listos, omitidos sin DIIO, omitidos sin sexo y duplicados dentro del Excel.
 
 ### Drone
 
