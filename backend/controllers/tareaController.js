@@ -5,7 +5,7 @@ const POPULATE_TAREA = [
     { path: 'asignadoA', select: 'nombre apellido correo rol estado' },
     { path: 'creadoPor', select: 'nombre apellido correo rol' },
     { path: 'potrero', select: 'codigo nombre area estado' },
-    { path: 'animal', select: 'diio nombre sexo estado' },
+    { path: 'animal', select: 'diio identificadorFinca nombre sexo estado especie categoria' },
     { path: 'comentarios.usuario', select: 'nombre apellido correo rol' }
 ];
 
@@ -14,13 +14,19 @@ const esAsignado = (req, tarea) => String(tarea.asignadoA?._id || tarea.asignado
 
 const construirFiltros = (query = {}) => {
     const filtros = {};
-    const { estado, prioridad, tipo, asignadoA, potrero, fechaInicio, fechaFin } = query;
+    const { estado, prioridad, tipo, asignadoA, potrero, fechaInicio, fechaFin, especie, moduloOrigen, creadoAutomaticamente, categoriaAutomatica } = query;
 
     if (estado) filtros.estado = estado;
     if (prioridad) filtros.prioridad = prioridad;
     if (tipo) filtros.tipo = tipo;
     if (asignadoA) filtros.asignadoA = asignadoA;
     if (potrero) filtros.potrero = potrero;
+    if (especie) filtros.especie = especie;
+    if (moduloOrigen) filtros.moduloOrigen = moduloOrigen;
+    if (categoriaAutomatica) filtros.categoriaAutomatica = categoriaAutomatica;
+    if (creadoAutomaticamente !== undefined && creadoAutomaticamente !== '') {
+        filtros.creadoAutomaticamente = creadoAutomaticamente === 'true';
+    }
 
     if (fechaInicio || fechaFin) {
         filtros.fechaProgramada = {};
@@ -169,13 +175,18 @@ tareaCtrl.cambiarEstadoTarea = async (req, res) => {
                 return res.status(403).json({ mensaje: 'No puedes modificar tareas de otros usuarios' });
             }
 
-            if (!['En proceso', 'Completada'].includes(estado)) {
-                return res.status(403).json({ mensaje: 'Solo puedes cambiar a En proceso o Completada' });
+            if (!['Pendiente', 'En proceso', 'Completada'].includes(estado)) {
+                return res.status(403).json({ mensaje: 'Solo puedes cambiar a Pendiente, En proceso o Completada' });
             }
         }
 
         tarea.estado = estado;
         tarea.fechaCompletada = estado === 'Completada' ? new Date() : null;
+
+        if (req.body.observaciones) {
+            tarea.observaciones = req.body.observaciones;
+        }
+
         const tareaActualizada = await tarea.save();
         res.json(await obtenerTareaPoblada(tareaActualizada._id));
     } catch (error) {

@@ -73,6 +73,8 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   const [vistaActiva, setVistaActiva] = useState('Dashboard');
   const [metricas, setMetricas] = useState({
     animales: 0,
+    bovinos: 0,
+    porcinos: 0,
     potreros: 0,
     vacasReproductivas: 0,
     vacasPrenadas: 0,
@@ -110,6 +112,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           obtenerSustentabilidadCria(obtenerRangoMesActual())
         ]);
         const animalesActivos = animales.filter((animal) => !['Muerto', 'Vendido'].includes(animal.estado));
+        const ciclosActivos = reproduccion.filter((registro) => (registro.estadoCiclo || 'Activo') === 'Activo' && registro.activoParaAlertas !== false);
         const animalesConRegistroReproductivo = new Set(
           reproduccion.map((registro) => registro.animal?._id || registro.animal).filter(Boolean)
         );
@@ -118,16 +121,18 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           const edadMeses = calcularEdadMeses(animal.fechaNacimiento);
           return (edadMeses !== null && edadMeses >= 24) || animalesConRegistroReproductivo.has(animal._id);
         }).length;
-        const vacasPrenadas = reproduccion.filter((registro) => ['Gestante', 'Próxima a parto'].includes(registro.estado)).length;
+        const vacasPrenadas = ciclosActivos.filter((registro) => ['Gestante', 'Próxima a parto'].includes(registro.estado)).length;
 
         setMetricas({
           animales: animalesActivos.length,
+          bovinos: animalesActivos.filter((animal) => (animal.especie || 'Bovino') === 'Bovino').length,
+          porcinos: animalesActivos.filter((animal) => animal.especie === 'Porcino').length,
           potreros: potreros.length,
           vacasReproductivas,
           vacasPrenadas,
-          proximosPartos: reproduccion.filter((registro) => registro.estado === 'Próxima a parto').length,
-          proximosCelos: reproduccion.filter((registro) => registro.estado === 'Próximo celo estimado').length,
-          destetesProximos: reproduccion.filter((registro) => registro.estado === 'Destete próximo').length,
+          proximosPartos: ciclosActivos.filter((registro) => registro.estado === 'Próxima a parto').length,
+          proximosCelos: ciclosActivos.filter((registro) => registro.estado === 'Próximo celo estimado').length,
+          destetesProximos: ciclosActivos.filter((registro) => registro.estado === 'Destete próximo').length,
           hembras: animalesActivos.filter((animal) => animal.sexo === 'Hembra').length,
           machos: animalesActivos.filter((animal) => animal.sexo === 'Macho').length,
           gastosOperativosMes: sustentabilidadMes?.gastosOperativosPeriodo || 0,
@@ -345,6 +350,11 @@ const ListaUsuario = ({ usuario, onLogout }) => {
         <article className="metric-card">
           <span>Total cabezas</span>
           <strong>{metricas.animales}</strong>
+          <small>{metricas.bovinos} bovinos / {metricas.porcinos} porcinos</small>
+        </article>
+        <article className="metric-card">
+          <span>Sexo del hato</span>
+          <strong>{metricas.hembras}</strong>
           <small>{metricas.hembras} hembras / {metricas.machos} machos</small>
         </article>
         <article className="metric-card">

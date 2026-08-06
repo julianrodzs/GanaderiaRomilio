@@ -26,6 +26,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/usuarios', require('./routes/usuario'));
 app.use('/api/tareas', require('./routes/tareaRoutes'));
 app.use('/api/animales', auth, require('./routes/animal'));
+app.use('/api/camadas', auth, require('./routes/camadaRoutes'));
 app.use('/api/genealogia', auth, require('./routes/genealogiaRoutes'));
 app.use('/api/eventos-animal', auth, require('./routes/eventoAnimalRoutes'));
 app.use('/api/potreros', auth, require('./routes/potrero'));

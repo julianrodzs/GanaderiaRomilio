@@ -1,18 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import {
   actualizarAnimal,
+  actualizarCamada,
+  cancelarCamada,
+  cerrarCamada,
+  crearCamada,
   crearAnimal,
   crearEventoAnimal,
   eliminarAnimal,
+  eliminarCamada,
   obtenerAnimales,
   obtenerArbolGenealogico,
+  obtenerCamadas,
   obtenerDescendenciaAnimal,
   obtenerEventosAnimal,
-  obtenerPesajesPorAnimal
+  obtenerPesajesPorAnimal,
+  registrarDesteteCamada
 } from '../services/api';
 import { guardarInventarioOffline, obtenerInventarioOffline } from '../services/offlineStorage';
 import FormularioAnimal from './FormularioAnimal';
+import FormularioCamada from './FormularioCamada';
+import SelectorEspecie from './SelectorEspecie';
 import TablaDinamica from './TablaDinamica';
+
+const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
 const calcularEdadMeses = (fechaNacimiento) => {
   if (!fechaNacimiento) return null;
@@ -48,6 +59,17 @@ const estaListaMontaPorEdad = (animal) => animal.sexo === 'Hembra' && (calcularE
 const obtenerEstadoMontaEdad = (animal) => {
   if (animal.sexo !== 'Hembra') return 'No aplica';
   return estaListaMontaPorEdad(animal) ? 'Lista' : 'Esperar';
+};
+
+const obtenerCategoriaAnimal = (animal) => {
+  if (animal.categoria) return animal.categoria;
+  if (animal.especie === 'Porcino') return animal.sexo === 'Macho' ? 'Verraco' : 'Chancha';
+
+  const meses = calcularEdadMeses(animal.fechaNacimiento);
+  if (meses !== null && meses < 12) return 'Ternero';
+  if (animal.sexo === 'Hembra') return meses !== null && meses >= 24 ? 'Vaca' : 'Novilla';
+  if (animal.sexo === 'Macho') return meses !== null && meses >= 24 ? 'Toro' : 'Novillo';
+  return '--';
 };
 
 const formatearFecha = (fecha) => {
@@ -120,6 +142,7 @@ const columnas = [
     )
   },
   { id: 'nombre', label: 'Nombre', accessor: (animal) => animal.nombre },
+  { id: 'categoria', label: 'Categoría', accessor: obtenerCategoriaAnimal },
   { id: 'sexo', label: 'Sexo', accessor: (animal) => animal.sexo },
   { id: 'edad', label: 'Edad', accessor: (animal) => formatearEdad(animal.fechaNacimiento) },
   {
@@ -137,18 +160,66 @@ const columnas = [
 ];
 
 const filtros = [
+  { id: 'categoria', accessor: obtenerCategoriaAnimal },
   { id: 'sexo', accessor: (animal) => animal.sexo },
   { id: 'estado', accessor: (animal) => animal.estado }
 ];
 
+const columnasCamadas = [
+  {
+    id: 'codigoCamada',
+    label: 'Camada',
+    accessor: (camada) => camada.codigoCamada,
+    render: (camada) => (
+      <button className="tabla-link" type="button" onClick={() => camada.abrirDetalle?.(camada)}>
+        {camada.codigoCamada || '--'}
+      </button>
+    )
+  },
+  { id: 'madre', label: 'Madre', accessor: (camada) => etiquetaAnimal(camada.madre) },
+  { id: 'fechaNacimiento', label: 'Nacimiento', accessor: (camada) => formatearFecha(camada.fechaNacimiento), sortAccessor: (camada) => new Date(camada.fechaNacimiento || 0).getTime() },
+  { id: 'nacidosVivos', label: 'Nacidos vivos', accessor: (camada) => camada.nacidosVivos },
+  { id: 'destetados', label: 'Destetados', accessor: (camada) => camada.destetados },
+  { id: 'destino', label: 'Destino', accessor: (camada) => camada.destino },
+  {
+    id: 'estado',
+    label: 'Estado',
+    accessor: (camada) => camada.estado,
+    render: (camada) => <span className={`estado-badge estado-camada-${camada.estado}`}>{camada.estado}</span>
+  },
+  {
+    id: 'manejo',
+    label: 'Manejo',
+    accessor: (camada) => camada.estado,
+    render: (camada) => camada.soloLectura ? '--' : (
+      <div className="acciones-ciclo">
+        <button type="button" onClick={() => camada.destetar?.(camada)} disabled={camada.estado !== 'Activa'}>Destetar</button>
+        <button type="button" onClick={() => camada.cerrar?.(camada)} disabled={camada.estado === 'Cerrada'}>Cerrar</button>
+        <button type="button" onClick={() => camada.cancelar?.(camada)} disabled={camada.estado === 'Cancelada'}>Cancelar</button>
+      </div>
+    )
+  }
+];
+
+const filtrosCamadas = [
+  { id: 'estado', accessor: (camada) => camada.estado },
+  { id: 'destino', accessor: (camada) => camada.destino }
+];
+
 const Animales = ({ soloLectura = false }) => {
   const [animales, setAnimales] = useState([]);
+  const [camadas, setCamadas] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [cargandoCamadas, setCargandoCamadas] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [errorCamadas, setErrorCamadas] = useState('');
   const [errorFormulario, setErrorFormulario] = useState('');
   const [modoFormulario, setModoFormulario] = useState(false);
+  const [modoFormularioCamada, setModoFormularioCamada] = useState(false);
   const [animalSeleccionado, setAnimalSeleccionado] = useState(null);
+  const [camadaSeleccionada, setCamadaSeleccionada] = useState(null);
+  const [camadaDetalle, setCamadaDetalle] = useState(null);
   const [animalDetalle, setAnimalDetalle] = useState(null);
   const [eventosAnimal, setEventosAnimal] = useState([]);
   const [pesajesAnimal, setPesajesAnimal] = useState([]);
@@ -162,11 +233,20 @@ const Animales = ({ soloLectura = false }) => {
   const [errorGenealogia, setErrorGenealogia] = useState('');
   const [observacionManual, setObservacionManual] = useState('');
   const [guardandoEvento, setGuardandoEvento] = useState(false);
+  const [especie, setEspecie] = useState(obtenerEspecieInicial);
+  const [vistaPorcina, setVistaPorcina] = useState('Animales');
+  const etiquetaId = 'DIIO';
+
+  const cambiarEspecie = (valor) => {
+    localStorage.setItem('ganaderiaEspecie', valor);
+    setEspecie(valor);
+    setVistaPorcina('Animales');
+  };
 
   const cargarAnimales = async () => {
     try {
       setError('');
-      const data = await obtenerAnimales();
+      const data = await obtenerAnimales({ especie });
       setAnimales(data);
       if (soloLectura) {
         await guardarInventarioOffline(data);
@@ -184,9 +264,32 @@ const Animales = ({ soloLectura = false }) => {
     }
   };
 
+  const cargarCamadas = async () => {
+    if (especie !== 'Porcino') {
+      setCamadas([]);
+      return;
+    }
+
+    try {
+      setCargandoCamadas(true);
+      setErrorCamadas('');
+      const data = await obtenerCamadas();
+      setCamadas(data);
+    } catch (err) {
+      setErrorCamadas(err.message);
+    } finally {
+      setCargandoCamadas(false);
+    }
+  };
+
   useEffect(() => {
+    setCargando(true);
     cargarAnimales();
-  }, []);
+  }, [especie]);
+
+  useEffect(() => {
+    cargarCamadas();
+  }, [especie]);
 
   const guardarAnimal = async (animal) => {
     try {
@@ -201,6 +304,25 @@ const Animales = ({ soloLectura = false }) => {
       setModoFormulario(false);
       setCargando(true);
       await cargarAnimales();
+    } catch (err) {
+      setErrorFormulario(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const guardarCamada = async (camada) => {
+    try {
+      setGuardando(true);
+      setErrorFormulario('');
+      if (camadaSeleccionada?._id) {
+        await actualizarCamada(camadaSeleccionada._id, camada);
+      } else {
+        await crearCamada(camada);
+      }
+      setCamadaSeleccionada(null);
+      setModoFormularioCamada(false);
+      await cargarCamadas();
     } catch (err) {
       setErrorFormulario(err.message);
     } finally {
@@ -226,6 +348,18 @@ const Animales = ({ soloLectura = false }) => {
     setAnimalSeleccionado(null);
     setErrorFormulario('');
     setModoFormulario(true);
+  };
+
+  const abrirNuevaCamada = () => {
+    setCamadaSeleccionada(null);
+    setErrorFormulario('');
+    setModoFormularioCamada(true);
+  };
+
+  const abrirEdicionCamada = (camada) => {
+    setCamadaSeleccionada(camada);
+    setErrorFormulario('');
+    setModoFormularioCamada(true);
   };
 
   const abrirEdicionAnimal = (animal) => {
@@ -332,6 +466,65 @@ const Animales = ({ soloLectura = false }) => {
     setModoFormulario(false);
   };
 
+  const cancelarFormularioCamada = () => {
+    setCamadaSeleccionada(null);
+    setModoFormularioCamada(false);
+  };
+
+  const borrarCamada = async (camada) => {
+    const confirmar = window.confirm(`¿Eliminar la camada ${camada.codigoCamada || ''}? Esta accion no se puede deshacer.`);
+    if (!confirmar) return;
+
+    try {
+      await eliminarCamada(camada._id);
+      window.alert('Camada eliminada correctamente.');
+      await cargarCamadas();
+    } catch (err) {
+      setErrorCamadas(err.message);
+    }
+  };
+
+  const destetarCamada = async (camada) => {
+    const destetados = window.prompt('Cantidad de crías destetadas:', camada.destetados || camada.nacidosVivos || '');
+    if (destetados === null) return;
+    const fechaDesteteReal = window.prompt('Fecha real de destete (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
+    if (fechaDesteteReal === null) return;
+
+    try {
+      await registrarDesteteCamada(camada._id, {
+        destetados,
+        fechaDesteteReal
+      });
+      await cargarCamadas();
+    } catch (err) {
+      setErrorCamadas(err.message);
+    }
+  };
+
+  const cerrarRegistroCamada = async (camada) => {
+    const observaciones = window.prompt('Observaciones de cierre:', 'Camada cerrada');
+    if (observaciones === null) return;
+
+    try {
+      await cerrarCamada(camada._id, observaciones);
+      await cargarCamadas();
+    } catch (err) {
+      setErrorCamadas(err.message);
+    }
+  };
+
+  const cancelarRegistroCamada = async (camada) => {
+    const observaciones = window.prompt('Motivo de cancelación:', 'Camada cancelada');
+    if (observaciones === null) return;
+
+    try {
+      await cancelarCamada(camada._id, observaciones);
+      await cargarCamadas();
+    } catch (err) {
+      setErrorCamadas(err.message);
+    }
+  };
+
   const pesajesConDiferencia = [...pesajesAnimal]
     .sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0))
     .map((pesaje, indice, lista) => ({
@@ -360,22 +553,118 @@ const Animales = ({ soloLectura = false }) => {
     );
   }
 
+  if (modoFormularioCamada) {
+    return (
+      <FormularioCamada
+        madres={animales.filter((animal) => animal.especie === 'Porcino' && animal.sexo === 'Hembra')}
+        camadaInicial={camadaSeleccionada}
+        modo={camadaSeleccionada ? 'editar' : 'crear'}
+        onCancelar={cancelarFormularioCamada}
+        onGuardar={guardarCamada}
+        guardando={guardando}
+        error={errorFormulario}
+      />
+    );
+  }
+
   return (
     <>
-      <TablaDinamica
-        titulo="Animales"
-        subtitulo="Inventario"
-        columnas={columnas}
-        datos={animales.map((animal) => ({ ...animal, abrirDetalle: abrirDetalleAnimal }))}
-        cargando={cargando}
-        error={error}
-        filtros={filtros}
-        textoAgregar="Nuevo animal"
-        onAgregar={soloLectura ? undefined : abrirNuevoAnimal}
-        onEditar={soloLectura ? undefined : abrirEdicionAnimal}
-        onEliminar={soloLectura ? undefined : borrarAnimal}
-        mostrarAcciones={!soloLectura}
-      />
+      <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
+      {especie === 'Porcino' && (
+        <div className="inventario-tabs">
+          <button className={vistaPorcina === 'Animales' ? 'activo' : ''} type="button" onClick={() => setVistaPorcina('Animales')}>
+            Animales
+          </button>
+          <button className={vistaPorcina === 'Camadas' ? 'activo' : ''} type="button" onClick={() => setVistaPorcina('Camadas')}>
+            Camadas
+          </button>
+        </div>
+      )}
+
+      {especie === 'Porcino' && vistaPorcina === 'Camadas' ? (
+        <TablaDinamica
+          titulo="Camadas porcinas"
+          subtitulo="Inventario"
+          columnas={columnasCamadas}
+          datos={camadas.map((camada) => ({
+            ...camada,
+            abrirDetalle: setCamadaDetalle,
+            destetar: destetarCamada,
+            cerrar: cerrarRegistroCamada,
+            cancelar: cancelarRegistroCamada,
+            soloLectura
+          }))}
+          cargando={cargandoCamadas}
+          error={errorCamadas}
+          filtros={filtrosCamadas}
+          textoAgregar="Nueva camada"
+          onAgregar={soloLectura ? undefined : abrirNuevaCamada}
+          onEditar={soloLectura ? undefined : abrirEdicionCamada}
+          onEliminar={soloLectura ? undefined : borrarCamada}
+          mostrarAcciones={!soloLectura}
+        />
+      ) : (
+        <TablaDinamica
+          titulo={especie === 'Porcino' ? 'Porcinos' : 'Bovinos'}
+          subtitulo="Inventario"
+          columnas={columnas.map((columna) => columna.id === 'diio' ? { ...columna, label: etiquetaId } : columna)}
+          datos={animales.map((animal) => ({ ...animal, abrirDetalle: abrirDetalleAnimal }))}
+          cargando={cargando}
+          error={error}
+          filtros={filtros}
+          textoAgregar="Nuevo animal"
+          onAgregar={soloLectura ? undefined : abrirNuevoAnimal}
+          onEditar={soloLectura ? undefined : abrirEdicionAnimal}
+          onEliminar={soloLectura ? undefined : borrarAnimal}
+          mostrarAcciones={!soloLectura}
+        />
+      )}
+
+      {camadaDetalle && (
+        <div className="modal-backdrop">
+          <section className="modal-panel detalle-animal-panel">
+            <div className="panel-title">
+              <div>
+                <p className="eyebrow">Detalle camada</p>
+                <h2>{camadaDetalle.codigoCamada}</h2>
+              </div>
+              <button className="boton-link" type="button" onClick={() => setCamadaDetalle(null)}>Cerrar</button>
+            </div>
+
+            <div className="detalle-animal-grid">
+              <article><span>Madre</span><strong>{etiquetaAnimal(camadaDetalle.madre)}</strong></article>
+              <article><span>Estado</span><strong>{camadaDetalle.estado || '--'}</strong></article>
+              <article><span>Destino</span><strong>{camadaDetalle.destino || '--'}</strong></article>
+              <article><span>Nacimiento</span><strong>{formatearFecha(camadaDetalle.fechaNacimiento)}</strong></article>
+              <article><span>Destete estimado</span><strong>{formatearFecha(camadaDetalle.fechaDesteteEstimada)}</strong></article>
+              <article><span>Destete real</span><strong>{formatearFecha(camadaDetalle.fechaDesteteReal)}</strong></article>
+              <article><span>Nacidos totales</span><strong>{camadaDetalle.nacidosTotales ?? '--'}</strong></article>
+              <article><span>Nacidos vivos</span><strong>{camadaDetalle.nacidosVivos ?? '--'}</strong></article>
+              <article><span>Nacidos muertos</span><strong>{camadaDetalle.nacidosMuertos ?? '--'}</strong></article>
+              <article><span>Momias</span><strong>{camadaDetalle.momias ?? '--'}</strong></article>
+              <article><span>Destetados</span><strong>{camadaDetalle.destetados ?? '--'}</strong></article>
+              <article><span>Muertos pre-destete</span><strong>{camadaDetalle.muertosPreDestete ?? '--'}</strong></article>
+              <article><span>Peso prom. nacimiento</span><strong>{formatearPeso(camadaDetalle.pesoPromedioNacimiento)}</strong></article>
+              <article><span>Peso prom. destete</span><strong>{formatearPeso(camadaDetalle.pesoPromedioDestete)}</strong></article>
+              <article><span>Peso total destete</span><strong>{formatearPeso(camadaDetalle.pesoTotalDestete)}</strong></article>
+            </div>
+
+            {camadaDetalle.observaciones && (
+              <div className="detalle-observaciones">
+                <span>Observaciones</span>
+                <p>{camadaDetalle.observaciones}</p>
+              </div>
+            )}
+
+            {(camadaDetalle.tareasGeneradas || []).length > 0 && (
+              <div className="detalle-observaciones">
+                <span>Tareas generadas</span>
+                <p>{camadaDetalle.tareasGeneradas.length} tareas automáticas asociadas a esta camada.</p>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       {animalDetalle && (
         <div className="modal-backdrop">
@@ -389,6 +678,10 @@ const Animales = ({ soloLectura = false }) => {
             </div>
 
             <div className="detalle-animal-grid">
+              <article>
+                <span>Categoría</span>
+                <strong>{obtenerCategoriaAnimal(animalDetalle)}</strong>
+              </article>
               <article>
                 <span>Edad</span>
                 <strong>{formatearEdad(animalDetalle.fechaNacimiento)}</strong>

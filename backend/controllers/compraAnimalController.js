@@ -20,6 +20,12 @@ const codigosCompra = (animales = [], campo) => animales
     .map((item) => normalizarTexto(item[campo]))
     .filter(Boolean);
 
+const crearFiltroEspecie = (especie) => {
+    if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
+    if (especie === 'Porcino') return { especie };
+    return {};
+};
+
 const validarAnimalesCompra = async (animales = [], compraIdIgnorada = null) => {
     if (!Array.isArray(animales) || animales.length === 0) {
         return { valido: false, status: 400, mensaje: 'Debe agregar al menos un animal' };
@@ -89,6 +95,7 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
         const animal = await Animal.create({
             identificadorFinca: identificador,
             diio: normalizarTexto(item.diio) || undefined,
+            especie: compra.especie || 'Bovino',
             nombre: item.nombre,
             sexo: item.sexo,
             raza: item.raza,
@@ -193,8 +200,8 @@ const revertirCompra = async (compra) => {
 
 compraAnimalCtrl.getCompras = async (req, res) => {
     try {
-        const { fechaInicio, fechaFin, proveedor, estado } = req.query;
-        const filtro = {};
+        const { fechaInicio, fechaFin, proveedor, estado, especie } = req.query;
+        const filtro = crearFiltroEspecie(especie);
 
         if (fechaInicio || fechaFin) {
             filtro.fechaCompra = {};
@@ -306,8 +313,8 @@ compraAnimalCtrl.deleteCompra = async (req, res) => {
 
 compraAnimalCtrl.getResumenCompras = async (req, res) => {
     try {
-        const { fechaInicio, fechaFin } = req.query;
-        const filtro = { estado: 'Confirmada' };
+        const { fechaInicio, fechaFin, especie } = req.query;
+        const filtro = { estado: 'Confirmada', ...crearFiltroEspecie(especie) };
         if (fechaInicio || fechaFin) {
             filtro.fechaCompra = {};
             if (fechaInicio) filtro.fechaCompra.$gte = new Date(fechaInicio);

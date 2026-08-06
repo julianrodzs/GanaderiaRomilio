@@ -4,6 +4,24 @@ const animalSchema = new Schema(
     {
         identificadorFinca: { type: String, required: true, unique: true, trim: true },
         diio: { type: String, unique: true, sparse: true, trim: true },
+        especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino', index: true },
+        categoria: {
+            type: String,
+            enum: [
+                'Ternero',
+                'Novillo',
+                'Novilla',
+                'Toro',
+                'Vaca',
+                'Chancha',
+                'Verraco',
+                'Lechón',
+                'Engorde',
+                'Reemplazo',
+                'Otro'
+            ],
+            trim: true
+        },
         nombre: { type: String, trim: true },
         sexo: { type: String, enum: ['Macho', 'Hembra'], required: true },
         raza: { type: String, trim: true },
@@ -55,6 +73,8 @@ const animalSchema = new Schema(
 animalSchema.index({ estado: 1 });
 animalSchema.index({ sexo: 1 });
 animalSchema.index({ potreroActual: 1 });
+animalSchema.index({ especie: 1, estado: 1 });
+animalSchema.index({ especie: 1, categoria: 1 });
 animalSchema.index({ estado: 1, potreroActual: 1 });
 
 module.exports = model('Animal', animalSchema);

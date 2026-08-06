@@ -19,6 +19,7 @@ const detalleCompraAnimalSchema = new Schema(
 
 const compraAnimalSchema = new Schema(
     {
+        especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino' },
         fechaCompra: { type: Date, required: true },
         proveedor: { type: String, required: true, trim: true },
         identificacionProveedor: { type: String, trim: true },
@@ -81,6 +82,7 @@ compraAnimalSchema.pre('validate', function calcularTotales(next) {
 });
 
 compraAnimalSchema.index({ estado: 1, fechaCompra: -1 });
+compraAnimalSchema.index({ especie: 1, estado: 1, fechaCompra: -1 });
 compraAnimalSchema.index({ proveedor: 1 });
 compraAnimalSchema.index({ 'animales.animal': 1 });
 

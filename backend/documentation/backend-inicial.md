@@ -191,6 +191,7 @@ CRUD completo:
 
 Campos relevantes:
 
+- `especie`
 - `identificadorFinca`
 - `diio`
 - `nombre`
@@ -221,6 +222,18 @@ Estados:
 - `Vendido`
 - `Muerto`
 - `En tratamiento`
+
+Especies:
+
+- `Bovino`
+- `Porcino`
+
+La mayoria de endpoints de animales aceptan filtro:
+
+```txt
+GET /api/animales?especie=Bovino
+GET /api/animales?especie=Porcino
+```
 
 ### Eventos de animal
 
@@ -306,6 +319,14 @@ Guarda:
 
 Se usa para medir ocupacion y descanso.
 
+Reglas de estado de potrero:
+
+- Rotacion activa pone el potrero en `Ocupado`.
+- Rotacion finalizada pone el potrero en `Descanso`.
+- Rotaciones viejas quedan como historial.
+- Solo se permite una rotacion activa por potrero.
+- Si el potrero esta en `Mantenimiento`, ese estado tiene prioridad.
+
 ### Plan Sanitario
 
 Base:
@@ -364,6 +385,174 @@ Reglas:
   - no muestra celos pasados.
 - Calcula estado reproductivo.
 - Permite crear ternero desde parto y asociarlo a la madre.
+
+#### Ciclos reproductivos
+
+Cada registro reproductivo funciona como ciclo.
+
+Campos de control:
+
+- `estadoCiclo`: `Activo`, `Cerrado`, `Cancelado`, `No preñada`.
+- `fechaCierre`.
+- `motivoCierre`.
+- `activoParaAlertas`.
+- `tareasGeneradas`.
+
+Reglas:
+
+- Solo un ciclo activo por animal.
+- Solo ciclos con `estadoCiclo: Activo` y `activoParaAlertas: true` generan alertas.
+- Al cerrar, cancelar o marcar como no preñada se cancelan tareas automaticas pendientes.
+- Los ciclos historicos no se borran.
+
+Endpoints adicionales:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| PATCH | `/:id/cerrar-ciclo` | Cierra ciclo |
+| PATCH | `/:id/cancelar-ciclo` | Cancela ciclo |
+| PATCH | `/:id/no-prenada` | Marca ciclo como no preñada |
+
+#### Reproduccion porcina
+
+El mismo modelo `RegistroReproductivo` soporta porcinos usando `especie: Porcino`.
+
+Campos porcinos:
+
+- `fechaInseminacion`.
+- `destinoCrias`.
+- `cantidadCriasEstimada`.
+- `diasDestetePorcino`.
+- `diasCeloPostDestetePorcino`.
+- `fechaRevisionCelo`.
+- `fechaInicioVentanaParto`.
+- `fechaFinVentanaParto`.
+- `fechaDesparasitacionAntesParto`.
+- `fechaAlimentoLactancia`.
+- `fechaNuevaInseminacion`.
+- `fechaRevisionCeloPosterior`.
+
+Configuracion:
+
+```txt
+backend/config/reproduccionPorcinaConfig.js
+```
+
+Reglas base:
+
+- revisar celo post inseminacion: 21 dias.
+- gestacion: 118 dias.
+- margen de parto: 3 dias.
+- desparasitar antes del parto: 30 dias antes.
+- alimento lactancia: 15 dias antes.
+- destete post parto: 31 dias.
+- nueva monta post destete: 21 dias.
+- revision de celo posterior: 21 dias.
+
+Al crear o actualizar un registro porcino se generan tareas automaticas para la chancha mediante:
+
+```txt
+backend/services/reproduccionPorcina-service.js
+```
+
+Las tareas de crias ya no se generan desde el parto estimado; se generan desde `Camada`.
+
+### Camadas porcinas
+
+Base:
+
+```txt
+/api/camadas
+```
+
+Modelo: `Camada`.
+
+Campos:
+
+- `madre`
+- `registroReproductivo`
+- `codigoCamada`
+- `fechaNacimiento`
+- `fechaDesteteEstimada`
+- `fechaDesteteReal`
+- `nacidosTotales`
+- `nacidosVivos`
+- `nacidosMuertos`
+- `momias`
+- `destetados`
+- `muertosPreDestete`
+- `destino`
+- `estado`
+- `pesoPromedioNacimiento`
+- `pesoPromedioDestete`
+- `pesoTotalDestete`
+- `tareasGeneradas`
+- `observaciones`
+
+Estados:
+
+- `Activa`
+- `Destetada`
+- `Vendida`
+- `Cerrada`
+- `Cancelada`
+
+Destinos:
+
+- `Se quedan`
+- `Se venden`
+- `Engorde`
+- `Mixto`
+- `No definido`
+
+Endpoints:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Lista camadas |
+| POST | `/` | Crea camada |
+| GET | `/madre/:madreId` | Camadas de una madre |
+| GET | `/:id` | Detalle de camada |
+| PUT | `/:id` | Actualiza camada |
+| PATCH | `/:id/destete` | Registra destete real |
+| PATCH | `/:id/cerrar` | Cierra camada |
+| PATCH | `/:id/cancelar` | Cancela camada |
+| DELETE | `/:id` | Elimina camada |
+
+Permisos:
+
+- `Administrador` crea, edita, desteta, cierra, cancela y elimina.
+- `Administrador` y `Encargado` pueden listar/ver.
+
+Servicio:
+
+```txt
+backend/services/camada-service.js
+```
+
+Responsabilidades:
+
+- generar codigo automatico `CAM-YYYY-###`.
+- calcular fechas desde nacimiento.
+- sincronizar tareas automaticas por camada.
+- cancelar tareas automaticas al cerrar/cancelar/eliminar.
+- completar tareas de destete al registrar destete real.
+- registrar evento en bitacora de la madre.
+
+Tareas generadas desde camada:
+
+- hierro a crias.
+- vitaminizar/desparasitar crias.
+- destetar camada.
+- desparasitar en destete.
+- vitamina con selenio.
+- nueva inseminacion/monta de la madre.
+- revisar celo posterior de la madre.
+- alimento inicio/desarrollo/engorde segun destino.
+- circovirus porcino segun destino.
+- primera monta si las crias se quedan.
+- venta estimada si se venden.
+- sacrificio si son de engorde.
 
 ### Pesajes
 
@@ -514,6 +703,22 @@ Reglas:
 - Encargado puede pasar sus tareas a `En proceso` o `Completada`.
 - Encargado no elimina ni reasigna.
 
+Campos automaticos usados por reproduccion/camadas:
+
+- `moduloOrigen`
+- `referenciaId`
+- `creadoAutomaticamente`
+- `especie`
+- `categoriaAutomatica`
+- `claveAutomatica`
+
+Reglas automaticas:
+
+- Las tareas automaticas pendientes pueden actualizarse si cambia la fecha base.
+- Las tareas automaticas completadas se conservan como historial.
+- Las tareas automaticas pendientes se cancelan si se cierra/cancela el ciclo o camada.
+- Las tareas manuales no se modifican por servicios automaticos.
+
 ### Importacion Excel
 
 Base:
@@ -632,6 +837,20 @@ Reportes principales:
 - vacas improductivas.
 - crecimiento por pesajes.
 - partos por vaca y ano.
+- productos e insumos.
+- camadas porcinas.
+- reproduccion porcina.
+- tareas por camada.
+- economia por camada.
+
+Endpoints porcinos:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/porcinos/camadas` | Reporte productivo de camadas |
+| GET | `/porcinos/reproduccion` | Reporte reproductivo porcino por madre |
+| GET | `/porcinos/tareas-camadas` | Reporte de actividades/tareas por camada |
+| GET | `/porcinos/economia-camadas` | Reporte economico por camada |
 
 Indicador IPG:
 
@@ -705,6 +924,18 @@ EMAIL_ALERTS_INTERVAL_MS=
 
 Crea eventos de bitacora desde modulos.
 
+### `reproduccion-service.js`
+
+Centraliza cierre/cancelacion de ciclos reproductivos y reglas para que solo un ciclo activo genere alertas y tareas.
+
+### `reproduccionPorcina-service.js`
+
+Genera y sincroniza tareas automaticas desde registros reproductivos porcinos.
+
+### `camada-service.js`
+
+Genera codigo de camada, calcula fechas desde nacimiento, sincroniza tareas automaticas por camada, cancela tareas pendientes y registra eventos de camada.
+
 ### `iaConteoService.js`
 
 Simula o conecta con el servicio IA.
@@ -725,9 +956,11 @@ IA_SERVICE_URL=
 - `PlanSanitario`
 - `RegistroSanitario`
 - `RegistroReproductivo`
+- `Camada`
 - `Pesaje`
 - `MovimientoFinanciero`
 - `Costo`
+- `CompraAnimal`
 - `VentaAnimal`
 - `Tarea`
 - `ConteoDrone`

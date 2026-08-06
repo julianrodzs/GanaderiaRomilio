@@ -6,8 +6,23 @@ const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const ConteoDrone = require('../models/ConteoDrone');
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const Pesaje = require('../models/Pesaje');
+const Camada = require('../models/Camada');
+const { Tarea } = require('../models/Tarea');
 
 const reporteCtrl = {};
+
+const crearFiltroEspecieAnimal = (especie) => {
+    if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
+    if (especie === 'Porcino') return { especie };
+    return {};
+};
+
+const obtenerIdsAnimalesPorEspecie = async (especie) => {
+    const filtro = crearFiltroEspecieAnimal(especie);
+    if (!Object.keys(filtro).length) return null;
+    const animales = await Animal.find(filtro).select('_id').lean();
+    return animales.map((animal) => animal._id);
+};
 
 const crearFiltroFechas = (campo, fechaInicio, fechaFin) => {
     const filtro = {};
@@ -312,26 +327,28 @@ const esVacaReproductora = (animal, animalesConRegistroReproductivo = new Set())
     return edadMeses >= 24 || animalesConRegistroReproductivo.has(animal._id.toString());
 };
 
-const obtenerVacasReproductoras = async () => {
+const obtenerVacasReproductoras = async (especie) => {
+    const filtroEspecie = crearFiltroEspecieAnimal(especie);
     const [hembras, registros] = await Promise.all([
-        Animal.find({ sexo: 'Hembra' }),
-        RegistroReproductivo.find().select('animal')
+        Animal.find({ sexo: 'Hembra', ...filtroEspecie }),
+        RegistroReproductivo.find().populate({ path: 'animal', match: filtroEspecie, select: '_id' }).select('animal')
     ]);
-    const animalesConRegistro = new Set(registros.map((registro) => registro.animal?.toString()).filter(Boolean));
+    const animalesConRegistro = new Set(registros.map((registro) => registro.animal?._id?.toString()).filter(Boolean));
 
     return hembras.filter((animal) => esVacaReproductora(animal, animalesConRegistro));
 };
 
-const obtenerVacasGestantes = async () => {
+const obtenerVacasGestantes = async (especie) => {
+    const filtroEspecie = crearFiltroEspecieAnimal(especie);
     const registros = await RegistroReproductivo.find({
         fechaPartoEstimada: { $exists: true, $ne: null },
         $or: [
             { fechaPartoReal: { $exists: false } },
             { fechaPartoReal: null }
         ]
-    }).select('animal');
+    }).populate({ path: 'animal', match: filtroEspecie, select: '_id' }).select('animal');
 
-    return new Set(registros.map((registro) => registro.animal?.toString()).filter(Boolean)).size;
+    return new Set(registros.map((registro) => registro.animal?._id?.toString()).filter(Boolean)).size;
 };
 
 const crearRecomendacionesProductividad = ({
@@ -410,7 +427,8 @@ const esMovimientoGastoOperativo = (movimiento) => {
 
 reporteCtrl.getProductividadCria = async (req, res) => {
     try {
-        const { fechaInicio, fechaFin } = req.query;
+        const { fechaInicio, fechaFin, especie } = req.query;
+        const idsEspecie = await obtenerIdsAnimalesPorEspecie(especie);
         const filtroPartos = crearFiltroFechas('fechaPartoReal', fechaInicio, fechaFin);
         filtroPartos.fechaPartoReal = {
             ...(filtroPartos.fechaPartoReal || {}),
@@ -426,9 +444,13 @@ reporteCtrl.getProductividadCria = async (req, res) => {
         };
 
         const periodoMuertes = crearFiltroPeriodo('updatedAt', fechaInicio, fechaFin);
-        const filtroMuertes = { estado: 'Muerto' };
+        const filtroMuertes = { estado: 'Muerto', ...crearFiltroEspecieAnimal(especie) };
         if (Object.keys(periodoMuertes).length) {
             filtroMuertes.updatedAt = periodoMuertes;
+        }
+        if (idsEspecie) {
+            filtroPartos.animal = { $in: idsEspecie };
+            filtroDestetes.animal = { $in: idsEspecie };
         }
 
         const [
@@ -439,12 +461,12 @@ reporteCtrl.getProductividadCria = async (req, res) => {
             muertesPeriodo,
             totalAnimales
         ] = await Promise.all([
-            obtenerVacasReproductoras(),
+            obtenerVacasReproductoras(especie),
             RegistroReproductivo.countDocuments(filtroPartos),
             RegistroReproductivo.countDocuments(filtroDestetes),
-            obtenerVacasGestantes(),
+            obtenerVacasGestantes(especie),
             Animal.countDocuments(filtroMuertes),
-            Animal.countDocuments()
+            Animal.countDocuments(crearFiltroEspecieAnimal(especie))
         ]);
 
         const vacasReproductoras = vacasReproductorasLista.length;
@@ -635,7 +657,7 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
 };
 
 
-const crearReportePartos = async ({ fechaInicio, fechaFin, diio }) => {
+const crearReportePartos = async ({ fechaInicio, fechaFin, diio, filtroExtra = {} }) => {
     const filtroPartos = crearFiltroFechas('fechaPartoReal', fechaInicio, fechaFin);
     filtroPartos.fechaPartoReal = {
         ...(filtroPartos.fechaPartoReal || {}),
@@ -651,7 +673,12 @@ const crearReportePartos = async ({ fechaInicio, fechaFin, diio }) => {
             ]
         }).select('_id');
 
-        filtroPartos.animal = { $in: animales.map((animal) => animal._id) };
+        const idsDiio = animales.map((animal) => animal._id);
+        filtroPartos.animal = filtroExtra.animal?.$in
+            ? { $in: idsDiio.filter((id) => filtroExtra.animal.$in.some((otroId) => String(otroId) === String(id))) }
+            : { $in: idsDiio };
+    } else if (filtroExtra.animal) {
+        filtroPartos.animal = filtroExtra.animal;
     }
 
     const registros = await RegistroReproductivo.find(filtroPartos)
@@ -1438,11 +1465,369 @@ reporteCtrl.getProductosTop = async (req, res) => {
     }
 };
 
+const crearFiltroTextoPorcino = () => ({
+    $or: [
+        { categoria: { $regex: 'porc|chan|cerd|lech', $options: 'i' } },
+        { descripcion: { $regex: 'porc|chan|cerd|lech|camada', $options: 'i' } },
+        { producto: { $regex: 'porc|chan|cerd|lech|camada', $options: 'i' } },
+        { observaciones: { $regex: 'porc|chan|cerd|lech|camada', $options: 'i' } },
+        { referenciaModelo: 'Camada' }
+    ]
+});
+
+const crearFiltroCamadasPeriodo = (fechaInicio, fechaFin) => crearFiltroFechas('fechaNacimiento', fechaInicio, fechaFin);
+
+const mapearCamadaResumen = (camada) => ({
+    _id: camada._id,
+    codigoCamada: camada.codigoCamada,
+    madre: camada.madre ? {
+        _id: camada.madre._id,
+        diio: camada.madre.diio,
+        identificadorFinca: camada.madre.identificadorFinca,
+        nombre: camada.madre.nombre
+    } : null,
+    fechaNacimiento: camada.fechaNacimiento,
+    fechaDesteteEstimada: camada.fechaDesteteEstimada,
+    fechaDesteteReal: camada.fechaDesteteReal,
+    nacidosTotales: camada.nacidosTotales || 0,
+    nacidosVivos: camada.nacidosVivos || 0,
+    nacidosMuertos: camada.nacidosMuertos || 0,
+    momias: camada.momias || 0,
+    destetados: camada.destetados || 0,
+    muertosPreDestete: camada.muertosPreDestete || 0,
+    destino: camada.destino,
+    estado: camada.estado,
+    tasaDestete: redondear(porcentaje(camada.destetados || 0, camada.nacidosVivos || 0)),
+    mortalidadPreDestete: redondear(porcentaje(camada.muertosPreDestete || 0, camada.nacidosVivos || 0)),
+    pesoPromedioNacimiento: camada.pesoPromedioNacimiento || 0,
+    pesoPromedioDestete: camada.pesoPromedioDestete || 0,
+    pesoTotalDestete: camada.pesoTotalDestete || 0
+});
+
+reporteCtrl.getReporteCamadas = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const filtro = crearFiltroCamadasPeriodo(fechaInicio, fechaFin);
+
+        const [camadas, porEstado, porDestino] = await Promise.all([
+            Camada.find(filtro).populate('madre', 'diio identificadorFinca nombre').sort({ fechaNacimiento: -1 }).lean(),
+            Camada.aggregate([
+                { $match: filtro },
+                { $group: { _id: '$estado', cantidad: { $sum: 1 } } },
+                { $sort: { cantidad: -1 } }
+            ]),
+            Camada.aggregate([
+                { $match: filtro },
+                { $group: { _id: '$destino', cantidad: { $sum: 1 } } },
+                { $sort: { cantidad: -1 } }
+            ])
+        ]);
+
+        const totales = camadas.reduce((acc, camada) => ({
+            nacidosTotales: acc.nacidosTotales + (camada.nacidosTotales || 0),
+            nacidosVivos: acc.nacidosVivos + (camada.nacidosVivos || 0),
+            nacidosMuertos: acc.nacidosMuertos + (camada.nacidosMuertos || 0),
+            momias: acc.momias + (camada.momias || 0),
+            destetados: acc.destetados + (camada.destetados || 0),
+            muertosPreDestete: acc.muertosPreDestete + (camada.muertosPreDestete || 0)
+        }), {
+            nacidosTotales: 0,
+            nacidosVivos: 0,
+            nacidosMuertos: 0,
+            momias: 0,
+            destetados: 0,
+            muertosPreDestete: 0
+        });
+
+        res.json({
+            resumen: {
+                totalCamadas: camadas.length,
+                camadasActivas: camadas.filter((camada) => camada.estado === 'Activa').length,
+                camadasDestetadas: camadas.filter((camada) => camada.estado === 'Destetada').length,
+                ...totales,
+                promedioVivosPorCamada: redondear(camadas.length ? totales.nacidosVivos / camadas.length : 0),
+                promedioDestetadosPorCamada: redondear(camadas.length ? totales.destetados / camadas.length : 0),
+                tasaDestete: redondear(porcentaje(totales.destetados, totales.nacidosVivos)),
+                mortalidadPreDestete: redondear(porcentaje(totales.muertosPreDestete, totales.nacidosVivos))
+            },
+            porEstado: mapearGrupo(porEstado, 'estado'),
+            porDestino: mapearGrupo(porDestino, 'destino'),
+            camadas: camadas.map(mapearCamadaResumen)
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener reporte de camadas', error: error.message });
+    }
+};
+
+reporteCtrl.getReporteReproductivoPorcino = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const filtroRegistros = {
+            especie: 'Porcino',
+            ...crearFiltroFechas('fechaInseminacion', fechaInicio, fechaFin)
+        };
+        const filtroCamadas = crearFiltroCamadasPeriodo(fechaInicio, fechaFin);
+
+        const [registros, camadas] = await Promise.all([
+            RegistroReproductivo.find(filtroRegistros).populate('animal', 'diio identificadorFinca nombre estado').sort({ fechaInseminacion: -1 }).lean(),
+            Camada.find(filtroCamadas).populate('madre', 'diio identificadorFinca nombre').lean()
+        ]);
+
+        const camadasPorMadre = new Map();
+        camadas.forEach((camada) => {
+            const madreId = camada.madre?._id?.toString();
+            if (!madreId) return;
+            const actual = camadasPorMadre.get(madreId) || [];
+            actual.push(camada);
+            camadasPorMadre.set(madreId, actual);
+        });
+
+        const madres = new Map();
+        registros.forEach((registro) => {
+            const animal = registro.animal;
+            if (!animal?._id) return;
+            const id = animal._id.toString();
+            const actual = madres.get(id) || {
+                animal,
+                ciclos: 0,
+                activos: 0,
+                cerrados: 0,
+                noPrenada: 0,
+                partos: 0,
+                nacidosVivos: 0,
+                destetados: 0,
+                ultimoParto: null
+            };
+            actual.ciclos += 1;
+            if ((registro.estadoCiclo || 'Activo') === 'Activo') actual.activos += 1;
+            if (registro.estadoCiclo === 'Cerrado') actual.cerrados += 1;
+            if (registro.estadoCiclo === 'No preñada') actual.noPrenada += 1;
+            madres.set(id, actual);
+        });
+
+        camadas.forEach((camada) => {
+            const madre = camada.madre;
+            if (!madre?._id) return;
+            const id = madre._id.toString();
+            const actual = madres.get(id) || {
+                animal: madre,
+                ciclos: 0,
+                activos: 0,
+                cerrados: 0,
+                noPrenada: 0,
+                partos: 0,
+                nacidosVivos: 0,
+                destetados: 0,
+                ultimoParto: null
+            };
+            actual.partos += 1;
+            actual.nacidosVivos += camada.nacidosVivos || 0;
+            actual.destetados += camada.destetados || 0;
+            if (!actual.ultimoParto || new Date(camada.fechaNacimiento) > new Date(actual.ultimoParto)) {
+                actual.ultimoParto = camada.fechaNacimiento;
+            }
+            madres.set(id, actual);
+        });
+
+        const totalNacidosVivos = camadas.reduce((total, camada) => total + (camada.nacidosVivos || 0), 0);
+        const totalDestetados = camadas.reduce((total, camada) => total + (camada.destetados || 0), 0);
+
+        res.json({
+            resumen: {
+                ciclosRegistrados: registros.length,
+                ciclosActivos: registros.filter((registro) => (registro.estadoCiclo || 'Activo') === 'Activo').length,
+                ciclosNoPrenada: registros.filter((registro) => registro.estadoCiclo === 'No preñada').length,
+                partosRegistrados: camadas.length,
+                nacidosVivos: totalNacidosVivos,
+                destetados: totalDestetados,
+                tasaPartoPorCiclo: redondear(porcentaje(camadas.length, registros.length)),
+                tasaDestete: redondear(porcentaje(totalDestetados, totalNacidosVivos))
+            },
+            madres: Array.from(madres.values()).map((item) => ({
+                animalId: item.animal._id,
+                diio: item.animal.diio || item.animal.identificadorFinca,
+                nombre: item.animal.nombre,
+                ciclos: item.ciclos,
+                activos: item.activos,
+                cerrados: item.cerrados,
+                noPrenada: item.noPrenada,
+                partos: item.partos,
+                nacidosVivos: item.nacidosVivos,
+                destetados: item.destetados,
+                tasaDestete: redondear(porcentaje(item.destetados, item.nacidosVivos)),
+                ultimoParto: item.ultimoParto,
+                camadas: (camadasPorMadre.get(item.animal._id.toString()) || []).map(mapearCamadaResumen)
+            })).sort((a, b) => b.partos - a.partos || b.nacidosVivos - a.nacidosVivos)
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener reporte reproductivo porcino', error: error.message });
+    }
+};
+
+reporteCtrl.getReporteTareasCamadas = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const filtroCamadas = crearFiltroCamadasPeriodo(fechaInicio, fechaFin);
+        const camadas = await Camada.find(filtroCamadas).populate('madre', 'diio identificadorFinca nombre').lean();
+        const camadaIds = camadas.map((camada) => camada._id);
+        const filtroTareas = {
+            referenciaId: { $in: camadaIds },
+            moduloOrigen: 'Reproduccion',
+            creadoAutomaticamente: true
+        };
+
+        const tareas = await Tarea.find(filtroTareas).sort({ fechaProgramada: 1 }).lean();
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        const tareasPorCamada = new Map();
+        tareas.forEach((tarea) => {
+            const key = tarea.referenciaId?.toString();
+            const actual = tareasPorCamada.get(key) || [];
+            actual.push(tarea);
+            tareasPorCamada.set(key, actual);
+        });
+
+        const contarEstado = (estado) => tareas.filter((tarea) => tarea.estado === estado).length;
+        const vencidas = tareas.filter((tarea) => {
+            if (['Completada', 'Cancelada'].includes(tarea.estado) || !tarea.fechaProgramada) return false;
+            const fecha = new Date(tarea.fechaProgramada);
+            fecha.setHours(0, 0, 0, 0);
+            return fecha < hoy;
+        }).length;
+
+        res.json({
+            resumen: {
+                camadasConTareas: camadas.filter((camada) => (tareasPorCamada.get(camada._id.toString()) || []).length > 0).length,
+                totalTareas: tareas.length,
+                pendientes: contarEstado('Pendiente'),
+                enProceso: contarEstado('En proceso'),
+                completadas: contarEstado('Completada'),
+                canceladas: contarEstado('Cancelada'),
+                vencidas
+            },
+            porCategoria: mapearGrupo(
+                await Tarea.aggregate([
+                    { $match: filtroTareas },
+                    { $group: { _id: '$categoriaAutomatica', cantidad: { $sum: 1 } } },
+                    { $sort: { cantidad: -1 } }
+                ]),
+                'categoria'
+            ),
+            camadas: camadas.map((camada) => {
+                const tareasCamada = tareasPorCamada.get(camada._id.toString()) || [];
+                return {
+                    ...mapearCamadaResumen(camada),
+                    tareas: tareasCamada.map((tarea) => ({
+                        _id: tarea._id,
+                        titulo: tarea.titulo,
+                        tipo: tarea.tipo,
+                        estado: tarea.estado,
+                        prioridad: tarea.prioridad,
+                        fechaProgramada: tarea.fechaProgramada,
+                        categoriaAutomatica: tarea.categoriaAutomatica,
+                        claveAutomatica: tarea.claveAutomatica
+                    })),
+                    resumenTareas: {
+                        total: tareasCamada.length,
+                        pendientes: tareasCamada.filter((tarea) => tarea.estado === 'Pendiente').length,
+                        completadas: tareasCamada.filter((tarea) => tarea.estado === 'Completada').length,
+                        canceladas: tareasCamada.filter((tarea) => tarea.estado === 'Cancelada').length
+                    }
+                };
+            })
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener tareas por camada', error: error.message });
+    }
+};
+
+reporteCtrl.getReporteEconomicoCamadas = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const filtroCamadas = crearFiltroCamadasPeriodo(fechaInicio, fechaFin);
+        const camadas = await Camada.find(filtroCamadas).populate('madre', 'diio identificadorFinca nombre').lean();
+        const camadaIds = camadas.map((camada) => camada._id);
+        const filtroFinanzasPeriodo = crearFiltroFechas('fecha', fechaInicio, fechaFin);
+        const filtroPorcino = {
+            ...filtroFinanzasPeriodo,
+            ...crearFiltroTextoPorcino()
+        };
+        const filtroDirecto = {
+            ...filtroFinanzasPeriodo,
+            referenciaId: { $in: camadaIds }
+        };
+
+        const [movimientosPorcinos, movimientosDirectos] = await Promise.all([
+            MovimientoFinanciero.find(filtroPorcino).lean(),
+            MovimientoFinanciero.find(filtroDirecto).lean()
+        ]);
+
+        const idsDirectos = new Set(movimientosDirectos.map((movimiento) => movimiento._id.toString()));
+        const movimientos = [
+            ...movimientosDirectos,
+            ...movimientosPorcinos.filter((movimiento) => !idsDirectos.has(movimiento._id.toString()))
+        ];
+        const ingresos = movimientos.filter((movimiento) => movimiento.naturaleza === 'Ingreso');
+        const egresos = movimientos.filter((movimiento) => movimiento.naturaleza === 'Egreso');
+        const totalIngresos = sumarMovimientos(ingresos);
+        const totalEgresos = sumarMovimientos(egresos);
+        const egresoProrrateado = camadas.length ? totalEgresos / camadas.length : 0;
+        const ingresoProrrateado = camadas.length ? totalIngresos / camadas.length : 0;
+
+        const movimientosPorCamada = new Map();
+        movimientosDirectos.forEach((movimiento) => {
+            const key = movimiento.referenciaId?.toString();
+            const actual = movimientosPorCamada.get(key) || [];
+            actual.push(movimiento);
+            movimientosPorCamada.set(key, actual);
+        });
+
+        res.json({
+            resumen: {
+                camadasEvaluadas: camadas.length,
+                movimientosPorcinos: movimientos.length,
+                ingresosPorcinos: totalIngresos,
+                egresosPorcinos: totalEgresos,
+                balancePorcino: totalIngresos - totalEgresos,
+                costoPromedioPorCamada: redondear(egresoProrrateado),
+                ingresoPromedioPorCamada: redondear(ingresoProrrateado),
+                costoPorCriaViva: redondear(totalEgresos / Math.max(camadas.reduce((total, camada) => total + (camada.nacidosVivos || 0), 0), 1)),
+                costoPorCriaDestetada: redondear(totalEgresos / Math.max(camadas.reduce((total, camada) => total + (camada.destetados || 0), 0), 1))
+            },
+            camadas: camadas.map((camada) => {
+                const directos = movimientosPorCamada.get(camada._id.toString()) || [];
+                const ingresosDirectos = sumarMovimientos(directos.filter((movimiento) => movimiento.naturaleza === 'Ingreso'));
+                const egresosDirectos = sumarMovimientos(directos.filter((movimiento) => movimiento.naturaleza === 'Egreso'));
+                const costoEstimado = egresosDirectos || egresoProrrateado;
+                const ingresoEstimado = ingresosDirectos || ingresoProrrateado;
+
+                return {
+                    ...mapearCamadaResumen(camada),
+                    ingresosDirectos,
+                    egresosDirectos,
+                    costoEstimado,
+                    ingresoEstimado,
+                    margenEstimado: ingresoEstimado - costoEstimado,
+                    costoPorCriaViva: redondear(costoEstimado / Math.max(camada.nacidosVivos || 0, 1)),
+                    costoPorCriaDestetada: redondear(costoEstimado / Math.max(camada.destetados || 0, 1)),
+                    movimientosDirectos: directos.length
+                };
+            })
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener reporte economico por camada', error: error.message });
+    }
+};
+
 reporteCtrl.getResumenReportes = async (req, res) => {
     try {
-        const { fechaInicio, fechaFin, diio } = req.query;
+        const { fechaInicio, fechaFin, diio, especie } = req.query;
         const filtroFinanzas = crearFiltroFechas('fecha', fechaInicio, fechaFin);
         const filtroDrone = crearFiltroFechas('fechaVuelo', fechaInicio, fechaFin);
+        const filtroAnimales = crearFiltroEspecieAnimal(especie);
+        const idsEspecie = await obtenerIdsAnimalesPorEspecie(especie);
+        const filtroReproduccion = idsEspecie ? { animal: { $in: idsEspecie } } : {};
+        const filtroSanidad = crearFiltroEspecieAnimal(especie);
 
         const [
             totalAnimales,
@@ -1462,11 +1847,11 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             conteosDronePorEstado,
             reportePartos
         ] = await Promise.all([
-            Animal.countDocuments(),
-            agruparPorCampo(Animal, 'sexo'),
-            agruparPorCampo(Animal, 'estado'),
+            Animal.countDocuments(filtroAnimales),
+            agruparPorCampo(Animal, 'sexo', filtroAnimales),
+            agruparPorCampo(Animal, 'estado', filtroAnimales),
             Animal.aggregate([
-                { $match: { pesoActual: { $gt: 0 } } },
+                { $match: { ...filtroAnimales, pesoActual: { $gt: 0 } } },
                 {
                     $group: {
                         _id: null,
@@ -1477,8 +1862,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             ]),
             Potrero.countDocuments(),
             agruparPorCampo(Potrero, 'estado'),
-            agruparPorCampo(PlanSanitario, 'estado'),
-            PlanSanitario.find({ estado: { $in: ['Próximo', 'Vencido'] } })
+            agruparPorCampo(PlanSanitario, 'estado', filtroSanidad),
+            PlanSanitario.find({ ...filtroSanidad, estado: { $in: ['Próximo', 'Vencido'] } })
                 .sort({ proximaAplicacion: 1 })
                 .limit(8),
             RotacionPotrero.find({ estado: 'Activa' })
@@ -1535,14 +1920,15 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             ]),
             ConteoDrone.countDocuments(filtroDrone),
             agruparPorCampo(ConteoDrone, 'estado', filtroDrone),
-            crearReportePartos({ fechaInicio, fechaFin, diio })
+            crearReportePartos({ fechaInicio, fechaFin, diio, filtroExtra: filtroReproduccion })
         ]);
 
         res.json({
             filtros: {
                 fechaInicio: fechaInicio || null,
                 fechaFin: fechaFin || null,
-                diio: diio || null
+                diio: diio || null,
+                especie: especie || null
             },
             inventario: {
                 totalAnimales,

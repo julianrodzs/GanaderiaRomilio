@@ -1,6 +1,6 @@
 # GanaderiaRomilio
 
-Aplicacion web fullstack para administrar una finca ganadera orientada a cria: inventario, reproduccion, sanidad, potreros, tareas, finanzas, ventas, reportes, importacion Excel, conteo por drone y alertas por correo.
+Aplicacion web fullstack para administrar una finca ganadera orientada a cria, ahora preparada para manejar bovinos y porcinos sin duplicar el menu principal: inventario, reproduccion, camadas, sanidad, potreros, tareas, finanzas, compras, ventas, reportes, importacion Excel, conteo por drone y alertas por correo.
 
 ## Estado actual
 
@@ -11,13 +11,16 @@ La aplicacion ya cuenta con:
 - Recuperacion segura de contrasena por correo con token temporal.
 - Administracion de usuarios.
 - Inventario de animales con detalle, genealogia basica, datos productivos y bitacora.
+- Selector interno de especie `Bovino` / `Porcino` en modulos animales.
+- Inventario porcino con camadas.
 - Potreros con area, estado, actividades recientes y rotaciones.
-- Reproduccion/Gestacion con parto estimado, parto real, destete y proximo celo estimado.
+- Reproduccion/Gestacion bovina con parto estimado, parto real, destete y proximo celo estimado.
+- Reproduccion porcina con inseminacion/monta, fechas calculadas y tareas automaticas.
 - Plan Sanitario centralizado con alertas.
 - Pesajes historicos por animal.
 - Finanzas unificadas con movimientos financieros.
 - Ventas formales de animales.
-- Reportes de cria, productividad, finanzas, ventas, partos, vacas improductivas y crecimiento por pesajes.
+- Reportes de cria, productividad, finanzas, ventas, partos, vacas improductivas, crecimiento por pesajes, productos/insumos y porcinos/camadas.
 - Tareas asignadas por usuario.
 - Importacion Excel por modulos.
 - Conteo por drone con backend Node y servicio IA separado en Python/FastAPI.
@@ -133,17 +136,42 @@ VITE_API_URL=http://localhost:4000/api
   - Expira en 30 minutos.
   - Se invalida tras el primer uso.
 
+### Especies
+
+La aplicacion mantiene el menu principal limpio y usa un selector interno de especie donde aplica:
+
+- `Bovino`
+- `Porcino`
+
+La especie por defecto es `Bovino`. Los modulos que usan selector son:
+
+- Inventario
+- Pesajes
+- Sanidad
+- Reproduccion
+- Compras
+- Ventas
+- Reportes
+
+En porcinos, el identificador visual se presenta como DIIO o identificador interno segun la pantalla.
+
 ### Inventario
 
 Administra animales con:
 
 - DIIO e identificador de finca.
+- especie.
 - sexo, raza, estado.
 - madre y padre por DIIO.
 - fecha nacimiento, compra, venta, muerte y destete.
 - peso nacimiento, peso destete, peso actual, peso compra y peso venta.
 - precios por kilo de compra/venta.
 - detalle con bitacora e historial de pesajes.
+
+En porcinos, Inventario permite alternar entre:
+
+- Lista de animales porcinos.
+- Camadas porcinas.
 
 ### Bitacora animal
 
@@ -177,7 +205,7 @@ Potreros incluyen:
 
 Rotaciones guardan historico de entrada/salida, dias de ocupacion y descanso.
 
-### Reproduccion/Gestacion
+### Reproduccion/Gestacion bovina
 
 Gestiona registros reproductivos por animal:
 
@@ -196,6 +224,85 @@ luego ciclos de 21 dias hasta encontrar el siguiente celo futuro
 ```
 
 Tambien permite crear terneros desde un parto y relacionarlos con la madre.
+
+### Reproduccion porcina
+
+Para porcinos, el mismo modulo de Reproduccion permite registrar inseminacion/monta de una chancha.
+
+Campos principales:
+
+- animal.
+- especie `Porcino`.
+- fecha de inseminacion/monta.
+- destino de crias:
+  - `Se quedan`
+  - `Se venden`
+  - `Engorde`
+  - `No definido`
+- cantidad estimada de crias.
+- observaciones.
+
+Fechas calculadas desde la inseminacion:
+
+- revisar celo: +21 dias.
+- parto estimado: +118 dias.
+- ventana de parto: parto estimado +/- 3 dias.
+- desparasitar antes del parto: parto estimado -30 dias.
+- alimento de lactancia: parto estimado -15 dias.
+- destete estimado: parto +31 dias.
+- nueva inseminacion/monta: destete +21 dias.
+- revisar celo posterior: nueva inseminacion +21 dias.
+
+Al crear o actualizar un ciclo porcino se generan tareas automaticas para la chancha. Las tareas de crias ahora nacen desde la camada, no desde el parto estimado, para que dependan de nacimientos reales.
+
+### Camadas porcinas
+
+Modelo `Camada`.
+
+Se puede crear desde:
+
+- Reproduccion, al registrar parto o parto estimado de una chancha.
+- Inventario, en la vista de porcinos > camadas.
+
+Campos principales:
+
+- madre.
+- registro reproductivo relacionado.
+- codigo de camada.
+- fecha nacimiento.
+- fecha destete estimada y real.
+- nacidos totales.
+- nacidos vivos.
+- nacidos muertos.
+- momias.
+- destetados.
+- muertos pre-destete.
+- destino.
+- estado.
+- pesos promedio de nacimiento/destete.
+- tareas generadas.
+
+Estados:
+
+- `Activa`
+- `Destetada`
+- `Vendida`
+- `Cerrada`
+- `Cancelada`
+
+Cuando se crea una camada, se generan tareas automaticas segun destino:
+
+- base: hierro, vitaminizar/desparasitar, destete, desparasitar en destete, vitamina con selenio, nueva inseminacion de la madre y revision de celo posterior.
+- `Se quedan`: alimento inicio, desarrollo, engorde, circovirus y primera monta.
+- `Se venden`: venta estimada.
+- `Engorde`: alimento inicio, desarrollo, engorde y sacrificio.
+- `Mixto`: combina reglas de crias que se quedan y se venden.
+
+Al registrar destete real:
+
+- la camada pasa a `Destetada`.
+- se completan tareas automaticas relacionadas con destete.
+- se recalculan tareas posteriores usando la fecha real de destete.
 
 ### Sanidad
 
@@ -302,6 +409,11 @@ Incluye:
 - ventas por mes.
 - ventas por origen.
 - rotacion de inventario vendido.
+- productos e insumos.
+- reporte de camadas porcinas.
+- reporte reproductivo porcino.
+- reporte de tareas por camada.
+- reporte economico por camada.
 
 ### Tareas
 
@@ -316,6 +428,17 @@ Permite asignar tareas a usuarios:
 - comentarios y evidencia.
 
 Administrador puede gestionar todas. Encargado ve y actualiza sus tareas.
+
+Las tareas automaticas de reproduccion/camadas usan:
+
+- `moduloOrigen: Reproduccion`
+- `referenciaId`: id del registro reproductivo o camada.
+- `creadoAutomaticamente: true`
+- `especie: Porcino`
+- `categoriaAutomatica`
+- `claveAutomatica`
+
+Esto permite actualizarlas o cancelarlas sin tocar tareas manuales.
 
 ### Importacion Excel
 

@@ -30,6 +30,12 @@ const validarDiioDisponible = async (diio, animalId = null) => {
     }
 };
 
+const crearFiltroEspecie = (especie) => {
+    if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
+    if (especie === 'Porcino') return { especie };
+    return {};
+};
+
 const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId }) => {
     const referenciaId = animal._id;
     const creadoPor = usuarioId;
@@ -139,10 +145,10 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
 
 animalCtrl.getAnimales = async (req, res) => {
     try {
-        const animales = await Animal.find()
+        const animales = await Animal.find(crearFiltroEspecie(req.query.especie))
             .populate('potreroActual')
-            .populate('padre', 'diio identificadorFinca nombre sexo')
-            .populate('madre', 'diio identificadorFinca nombre sexo')
+            .populate('padre', 'diio identificadorFinca nombre sexo especie')
+            .populate('madre', 'diio identificadorFinca nombre sexo especie')
             .sort({ createdAt: -1 });
         res.json(animales);
     } catch (error) {

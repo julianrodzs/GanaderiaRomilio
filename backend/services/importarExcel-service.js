@@ -384,6 +384,7 @@ const mapearInventarioGenerico = ({ hoja, filas, acumulador, advertencias }) => 
         agregar(acumulador, 'Animal', {
             identificadorFinca: diio,
             diio,
+            especie: 'Bovino',
             nombre: limpiarTexto(fila[idx.nombre]) || undefined,
             sexo,
             raza: limpiarTexto(fila[idx.raza]) || undefined,
@@ -449,6 +450,7 @@ const mapearControlPesoArete = ({ hoja, filas, acumulador, advertencias }) => {
 
         agregar(acumulador, 'Animal', {
             identificadorFinca: arete,
+            especie: 'Bovino',
             nombre: limpiarTexto(fila[idx.subasta]),
             sexo: 'Macho',
             fechaNacimiento: serializarFecha(aFecha(fila[idx.nacimiento])),

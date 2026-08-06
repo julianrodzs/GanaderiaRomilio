@@ -26,6 +26,15 @@ const obtenerOrigenAnimal = (animal = {}) => animal.fechaCompra ? 'Comprado' : '
 
 const obtenerFechaIngresoAnimal = (animal = {}) => animal.fechaCompra || animal.fechaNacimiento || animal.createdAt;
 
+const crearFiltroEspecieAnimal = async (especie) => {
+    if (!['Bovino', 'Porcino'].includes(especie)) return {};
+    const filtroEspecie = especie === 'Bovino'
+        ? { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] }
+        : { especie };
+    const animales = await Animal.find(filtroEspecie).select('_id');
+    return { 'animales.animal': { $in: animales.map((animal) => animal._id) } };
+};
+
 const validarAnimalesVenta = async (animales = [], ventaIdIgnorada = null) => {
     if (!Array.isArray(animales) || animales.length === 0) {
         return { valido: false, status: 400, mensaje: 'Debe agregar al menos un animal' };
@@ -143,8 +152,8 @@ const revertirVenta = async (venta) => {
 
 ventaAnimalCtrl.getVentas = async (req, res) => {
     try {
-        const { fechaInicio, fechaFin, comprador, estado } = req.query;
-        const filtro = {};
+        const { fechaInicio, fechaFin, comprador, estado, especie } = req.query;
+        const filtro = await crearFiltroEspecieAnimal(especie);
 
         if (fechaInicio || fechaFin) {
             filtro.fechaVenta = {};
@@ -259,8 +268,8 @@ ventaAnimalCtrl.deleteVenta = async (req, res) => {
 
 ventaAnimalCtrl.getResumenVentas = async (req, res) => {
     try {
-        const { fechaInicio, fechaFin } = req.query;
-        const filtro = { estado: 'Confirmada' };
+        const { fechaInicio, fechaFin, especie } = req.query;
+        const filtro = { estado: 'Confirmada', ...(await crearFiltroEspecieAnimal(especie)) };
         if (fechaInicio || fechaFin) {
             filtro.fechaVenta = {};
             if (fechaInicio) filtro.fechaVenta.$gte = new Date(fechaInicio);

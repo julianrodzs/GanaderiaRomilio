@@ -175,7 +175,12 @@ const obtenerAlertasSanidad = async () => {
 };
 
 const obtenerAlertasReproduccion = async () => {
-    const registros = await RegistroReproductivo.find().populate('animal').lean();
+    const registros = await RegistroReproductivo.find({
+        $and: [
+            { $or: [{ estadoCiclo: 'Activo' }, { estadoCiclo: { $exists: false } }] },
+            { $or: [{ activoParaAlertas: true }, { activoParaAlertas: { $exists: false } }] }
+        ]
+    }).populate('animal').lean();
     const alertas = [];
 
     for (const registro of registros) {

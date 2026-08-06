@@ -10,6 +10,9 @@ import {
   API_URL
 } from '../services/api';
 import { obtenerRangoMesActual } from '../utils/fechas';
+import SelectorEspecie from './SelectorEspecie';
+
+const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
@@ -45,7 +48,7 @@ const obtenerCategoria = (animal) => {
   return '--';
 };
 
-const nombreAnimal = (animal) => `${animal?.diio || animal?.identificadorFinca || 'Sin DIIO'}${animal?.nombre ? ` - ${animal.nombre}` : ''}`;
+const nombreAnimal = (animal) => `${animal?.diio || animal?.identificadorFinca || 'Sin ID'}${animal?.nombre ? ` - ${animal.nombre}` : ''}`;
 
 const estadoInicial = {
   fechaVenta: fechaHoy(),
@@ -70,15 +73,22 @@ const Ventas = () => {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [errorFormulario, setErrorFormulario] = useState('');
+  const [especie, setEspecie] = useState(obtenerEspecieInicial);
+  const etiquetaId = 'DIIO';
+
+  const cambiarEspecie = (valor) => {
+    localStorage.setItem('ganaderiaEspecie', valor);
+    setEspecie(valor);
+  };
 
   const cargarDatos = async () => {
     try {
       setCargando(true);
       setError('');
       const [ventasData, animalesData, resumenData] = await Promise.all([
-        obtenerVentas(filtros),
-        obtenerAnimales(),
-        obtenerResumenVentas({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin })
+        obtenerVentas({ ...filtros, especie }),
+        obtenerAnimales({ especie }),
+        obtenerResumenVentas({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie })
       ]);
       setVentas(ventasData);
       setAnimales(animalesData);
@@ -92,7 +102,7 @@ const Ventas = () => {
 
   useEffect(() => {
     cargarDatos();
-  }, [filtros.fechaInicio, filtros.fechaFin, filtros.comprador, filtros.estado]);
+  }, [filtros.fechaInicio, filtros.fechaFin, filtros.comprador, filtros.estado, especie]);
 
   const animalesDisponibles = useMemo(() => {
     const seleccionados = new Set(formulario.animales.map((item) => item.animal));
@@ -264,7 +274,7 @@ const Ventas = () => {
               <table>
                 <thead>
                   <tr>
-                    <th>DIIO</th>
+                    <th>{etiquetaId}</th>
                     <th>Nombre</th>
                     <th>Sexo</th>
                     <th>Categoría</th>
@@ -324,6 +334,8 @@ const Ventas = () => {
         </div>
         <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva venta</button>
       </div>
+
+      <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
 
       <section className="reportes-metricas">
         <article><span>Total vendido</span><strong>{formatearMoneda(resumen?.totalVendido)}</strong></article>
@@ -411,7 +423,7 @@ const Ventas = () => {
             <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
               <table>
                 <thead>
-                  <tr><th>DIIO</th><th>Animal</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
+                  <tr><th>{etiquetaId}</th><th>Animal</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
                 </thead>
                 <tbody>
                   {detalle.animales?.map((item) => (

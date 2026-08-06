@@ -57,6 +57,7 @@ const calcularEstadoPlanSanitario = (proximaAplicacion) => {
 const planSanitarioSchema = new Schema(
     {
         grupoGanado: { type: String, required: true, trim: true },
+        especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino' },
         animalDiio: { type: String, trim: true },
         actividad: { type: String, required: true, trim: true },
         producto: { type: String, required: true, trim: true },
@@ -117,6 +118,7 @@ planSanitarioSchema.pre('findOneAndUpdate', function calcularProximaEnUpdate(nex
 
 planSanitarioSchema.index({ estado: 1, proximaAplicacion: 1 });
 planSanitarioSchema.index({ grupoGanado: 1 });
+planSanitarioSchema.index({ especie: 1, estado: 1 });
 
 const PlanSanitario = model('PlanSanitario', planSanitarioSchema);
 

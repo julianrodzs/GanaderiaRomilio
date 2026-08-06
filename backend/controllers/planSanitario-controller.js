@@ -7,19 +7,32 @@ const {
 const Animal = require('../models/Animal');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 
+const crearFiltroEspecie = (especie) => {
+    if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
+    if (especie === 'Porcino') return { especie };
+    return {};
+};
+
 const obtenerAnimalesParaPlan = async (plan) => {
     if (plan.animalDiio) {
-        const animal = await Animal.findOne({
-            $or: [
+        const filtros = [
+            crearFiltroEspecie(plan.especie),
+            {
+                $or: [
                 { diio: plan.animalDiio },
                 { identificadorFinca: plan.animalDiio }
-            ]
-        });
+                ]
+            }
+        ].filter((filtro) => Object.keys(filtro).length);
+        const animal = await Animal.findOne(filtros.length ? { $and: filtros } : {});
         return animal ? [animal] : [];
     }
 
     if (plan.grupoGanado === 'Todo el ganado') {
-        return Animal.find({ estado: { $nin: ['Muerto', 'Vendido'] } });
+        return Animal.find({
+            ...crearFiltroEspecie(plan.especie),
+            estado: { $nin: ['Muerto', 'Vendido'] }
+        });
     }
 
     return [];
@@ -66,7 +79,7 @@ const refrescarEstado = async (plan) => {
 
 planSanitarioCtrl.getPlanesSanitarios = async (req, res) => {
     try {
-        const planes = await PlanSanitario.find().sort({ proximaAplicacion: 1 });
+        const planes = await PlanSanitario.find(crearFiltroEspecie(req.query.especie)).sort({ proximaAplicacion: 1 });
         const planesActualizados = await Promise.all(planes.map(refrescarEstado));
         res.json(planesActualizados);
     } catch (error) {
@@ -87,7 +100,10 @@ planSanitarioCtrl.createPlanSanitario = async (req, res) => {
 
 planSanitarioCtrl.getAlertasPlanSanitario = async (req, res) => {
     try {
-        const planes = await PlanSanitario.find({ estado: { $ne: 'Aplicado' } }).sort({ proximaAplicacion: 1 });
+        const planes = await PlanSanitario.find({
+            ...crearFiltroEspecie(req.query.especie),
+            estado: { $ne: 'Aplicado' }
+        }).sort({ proximaAplicacion: 1 });
         const actualizados = await Promise.all(planes.map(refrescarEstado));
         const alertas = actualizados.filter((plan) => ['Vencido', 'Próximo'].includes(plan.estado));
 

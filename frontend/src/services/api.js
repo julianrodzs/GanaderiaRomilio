@@ -44,7 +44,10 @@ const request = async (ruta, opciones = {}) => {
       window.dispatchEvent(new Event('ganaderiaSesionExpirada'));
     }
 
-    throw new Error(data.mensaje || data.message || 'Error en la solicitud');
+    const error = new Error(data.mensaje || data.message || 'Error en la solicitud');
+    error.status = respuesta.status;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -134,10 +137,10 @@ export const actualizarTarea = (id, tarea) => {
   });
 };
 
-export const cambiarEstadoTarea = (id, estado) => {
+export const cambiarEstadoTarea = (id, estado, observaciones = '') => {
   return request(`/tareas/${id}/estado`, {
     method: 'PATCH',
-    body: JSON.stringify({ estado })
+    body: JSON.stringify({ estado, observaciones })
   });
 };
 
@@ -204,7 +207,16 @@ export const confirmarImportacionExcel = (registros) => {
   });
 };
 
-export const obtenerAnimales = () => request('/animales');
+const construirQuery = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return query ? `?${query}` : '';
+};
+
+export const obtenerAnimales = (filtros = {}) => request(`/animales${construirQuery(filtros)}`);
 
 export const crearAnimal = (animal) => {
   return request('/animales', {
@@ -222,6 +234,51 @@ export const actualizarAnimal = (id, animal) => {
 
 export const eliminarAnimal = (id) => {
   return request(`/animales/${id}`, {
+    method: 'DELETE'
+  });
+};
+
+export const obtenerCamadas = (filtros = {}) => request(`/camadas${construirQuery(filtros)}`);
+
+export const obtenerCamadasPorMadre = (madreId) => request(`/camadas/madre/${madreId}`);
+
+export const crearCamada = (camada) => {
+  return request('/camadas', {
+    method: 'POST',
+    body: JSON.stringify(camada)
+  });
+};
+
+export const actualizarCamada = (id, camada) => {
+  return request(`/camadas/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(camada)
+  });
+};
+
+export const registrarDesteteCamada = (id, datos) => {
+  return request(`/camadas/${id}/destete`, {
+    method: 'PATCH',
+    body: JSON.stringify(datos)
+  });
+};
+
+export const cerrarCamada = (id, observaciones = '') => {
+  return request(`/camadas/${id}/cerrar`, {
+    method: 'PATCH',
+    body: JSON.stringify({ observaciones })
+  });
+};
+
+export const cancelarCamada = (id, observaciones = '') => {
+  return request(`/camadas/${id}/cancelar`, {
+    method: 'PATCH',
+    body: JSON.stringify({ observaciones })
+  });
+};
+
+export const eliminarCamada = (id) => {
+  return request(`/camadas/${id}`, {
     method: 'DELETE'
   });
 };
@@ -255,7 +312,7 @@ export const evaluarRiesgoCruce = ({ macho, hembra }) => {
   return request(`/genealogia/riesgo-cruce?${params.toString()}`);
 };
 
-export const obtenerPesajes = () => request('/pesajes');
+export const obtenerPesajes = (filtros = {}) => request(`/pesajes${construirQuery(filtros)}`);
 
 export const obtenerPesajesPorAnimal = (animalId) => request(`/pesajes/animal/${animalId}`);
 
@@ -345,7 +402,7 @@ export const eliminarRotacion = (id) => {
   });
 };
 
-export const obtenerPlanesSanitarios = () => request('/plan-sanitario');
+export const obtenerPlanesSanitarios = (filtros = {}) => request(`/plan-sanitario${construirQuery(filtros)}`);
 
 export const crearPlanSanitario = (plan) => {
   return request('/plan-sanitario', {
@@ -367,7 +424,7 @@ export const eliminarPlanSanitario = (id) => {
   });
 };
 
-export const obtenerRegistrosReproductivos = () => request('/reproduccion');
+export const obtenerRegistrosReproductivos = (filtros = {}) => request(`/reproduccion${construirQuery(filtros)}`);
 
 export const crearRegistroReproductivo = (registro) => {
   return request('/reproduccion', {
@@ -380,6 +437,27 @@ export const actualizarRegistroReproductivo = (id, registro) => {
   return request(`/reproduccion/${id}`, {
     method: 'PUT',
     body: JSON.stringify(registro)
+  });
+};
+
+export const cerrarCicloReproductivo = (id, motivo = '') => {
+  return request(`/reproduccion/${id}/cerrar-ciclo`, {
+    method: 'PATCH',
+    body: JSON.stringify({ motivo })
+  });
+};
+
+export const cancelarCicloReproductivo = (id, motivo = '') => {
+  return request(`/reproduccion/${id}/cancelar-ciclo`, {
+    method: 'PATCH',
+    body: JSON.stringify({ motivo })
+  });
+};
+
+export const marcarCicloNoPrenada = (id, motivo = '') => {
+  return request(`/reproduccion/${id}/no-prenada`, {
+    method: 'PATCH',
+    body: JSON.stringify({ motivo })
   });
 };
 
@@ -491,10 +569,11 @@ export const obtenerVentas = (filtros = {}) => {
   return request(`/ventas${query ? `?${query}` : ''}`);
 };
 
-export const obtenerResumenVentas = ({ fechaInicio, fechaFin } = {}) => {
+export const obtenerResumenVentas = ({ fechaInicio, fechaFin, especie } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
+  if (especie) params.append('especie', especie);
   const query = params.toString();
   return request(`/ventas/resumen${query ? `?${query}` : ''}`);
 };
@@ -551,10 +630,11 @@ export const obtenerCompras = (filtros = {}) => {
   return request(`/compras${query ? `?${query}` : ''}`);
 };
 
-export const obtenerResumenCompras = ({ fechaInicio, fechaFin } = {}) => {
+export const obtenerResumenCompras = ({ fechaInicio, fechaFin, especie } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
+  if (especie) params.append('especie', especie);
   const query = params.toString();
   return request(`/compras/resumen${query ? `?${query}` : ''}`);
 };
@@ -586,38 +666,42 @@ export const eliminarCompraAnimal = (id) => {
   });
 };
 
-export const obtenerResumenReportes = ({ fechaInicio, fechaFin, diio } = {}) => {
+export const obtenerResumenReportes = ({ fechaInicio, fechaFin, diio, especie } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
   if (diio) params.append('diio', diio);
+  if (especie) params.append('especie', especie);
   const query = params.toString();
 
   return request(`/reportes/resumen${query ? `?${query}` : ''}`);
 };
 
-export const obtenerProductividadCria = ({ fechaInicio, fechaFin } = {}) => {
+export const obtenerProductividadCria = ({ fechaInicio, fechaFin, especie } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
+  if (especie) params.append('especie', especie);
   const query = params.toString();
 
   return request(`/reportes/productividad${query ? `?${query}` : ''}`);
 };
 
-export const obtenerFinanzasCria = ({ fechaInicio, fechaFin } = {}) => {
+export const obtenerFinanzasCria = ({ fechaInicio, fechaFin, especie } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
+  if (especie) params.append('especie', especie);
   const query = params.toString();
 
   return request(`/reportes/finanzas-cria${query ? `?${query}` : ''}`);
 };
 
-export const obtenerSustentabilidadCria = ({ fechaInicio, fechaFin } = {}) => {
+export const obtenerSustentabilidadCria = ({ fechaInicio, fechaFin, especie } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
+  if (especie) params.append('especie', especie);
   const query = params.toString();
 
   return request(`/reportes/sustentabilidad-cria${query ? `?${query}` : ''}`);
@@ -629,7 +713,8 @@ export const obtenerVacasImproductivas = ({
   diio,
   mesesSinParto,
   diasAbiertos,
-  pesoDesteteMin
+  pesoDesteteMin,
+  especie
 } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
@@ -638,17 +723,19 @@ export const obtenerVacasImproductivas = ({
   if (mesesSinParto) params.append('mesesSinParto', mesesSinParto);
   if (diasAbiertos) params.append('diasAbiertos', diasAbiertos);
   if (pesoDesteteMin) params.append('pesoDesteteMin', pesoDesteteMin);
+  if (especie) params.append('especie', especie);
   const query = params.toString();
 
   return request(`/reportes/vacas-improductivas${query ? `?${query}` : ''}`);
 };
 
-export const obtenerReporteCrecimientoPesajes = ({ fechaInicio, fechaFin, animalId, diasSinPesaje } = {}) => {
+export const obtenerReporteCrecimientoPesajes = ({ fechaInicio, fechaFin, animalId, diasSinPesaje, especie } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
   if (animalId) params.append('animalId', animalId);
   if (diasSinPesaje) params.append('diasSinPesaje', diasSinPesaje);
+  if (especie) params.append('especie', especie);
   const query = params.toString();
 
   return request(`/reportes/crecimiento-pesajes${query ? `?${query}` : ''}`);
@@ -693,6 +780,22 @@ export const obtenerReporteProductosDestinos = (filtros = {}) => {
 
 export const obtenerReporteProductosTop = (filtros = {}) => {
   return request(`/reportes/productos/top${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteCamadas = (filtros = {}) => {
+  return request(`/reportes/porcinos/camadas${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteReproductivoPorcino = (filtros = {}) => {
+  return request(`/reportes/porcinos/reproduccion${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteTareasCamadas = (filtros = {}) => {
+  return request(`/reportes/porcinos/tareas-camadas${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteEconomicoCamadas = (filtros = {}) => {
+  return request(`/reportes/porcinos/economia-camadas${construirQueryProductos(filtros)}`);
 };
 
 export { API_URL };

@@ -7,6 +7,9 @@ import {
   obtenerPesajes,
   obtenerPotreros
 } from '../services/api';
+import SelectorEspecie from './SelectorEspecie';
+
+const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
@@ -38,6 +41,8 @@ const calcularEdadMeses = (fechaNacimiento) => {
 
 const obtenerCategoriaAnimal = (animal) => {
   if (!animal) return '--';
+  if (animal.categoria) return animal.categoria;
+  if (animal.especie === 'Porcino') return animal.sexo === 'Macho' ? 'Verraco' : 'Chancha';
   const meses = calcularEdadMeses(animal.fechaNacimiento);
   if (meses !== null && meses < 12) return 'Ternero';
   if (animal.sexo === 'Hembra') return meses !== null && meses >= 24 ? 'Vaca' : 'Novilla';
@@ -47,7 +52,7 @@ const obtenerCategoriaAnimal = (animal) => {
 
 const formatearAnimal = (animal) => {
   if (!animal) return '--';
-  return `${animal.diio || 'Sin DIIO'}${animal.nombre ? ` - ${animal.nombre}` : ''}`;
+  return `${animal.diio || animal.identificadorFinca || 'Sin ID'}${animal.nombre ? ` - ${animal.nombre}` : ''}`;
 };
 
 const valorInicial = {
@@ -77,14 +82,21 @@ const Pesajes = () => {
     sexo: 'Todos',
     categoria: 'Todos'
   });
+  const [especie, setEspecie] = useState(obtenerEspecieInicial);
+  const etiquetaId = 'DIIO';
+
+  const cambiarEspecie = (valor) => {
+    localStorage.setItem('ganaderiaEspecie', valor);
+    setEspecie(valor);
+  };
 
   const cargarDatos = async () => {
     try {
       setCargando(true);
       setError('');
       const [pesajesData, animalesData, potrerosData] = await Promise.all([
-        obtenerPesajes(),
-        obtenerAnimales(),
+        obtenerPesajes({ especie }),
+        obtenerAnimales({ especie }),
         obtenerPotreros()
       ]);
       setPesajes(pesajesData);
@@ -99,7 +111,7 @@ const Pesajes = () => {
 
   useEffect(() => {
     cargarDatos();
-  }, []);
+  }, [especie]);
 
   const pesajesFiltrados = useMemo(() => {
     const texto = filtros.busqueda.trim().toLowerCase();
@@ -305,11 +317,13 @@ const Pesajes = () => {
         <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nuevo pesaje</button>
       </div>
 
+      <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
+
       <div className="tabla-toolbar pesajes-toolbar">
         <input
           value={filtros.busqueda}
           onChange={(evento) => setFiltros((actual) => ({ ...actual, busqueda: evento.target.value }))}
-          placeholder="Buscar animal, DIIO u observación..."
+          placeholder={`Buscar animal, ${etiquetaId.toLowerCase()} u observación...`}
         />
         <input
           type="date"
@@ -362,7 +376,7 @@ const Pesajes = () => {
           <thead>
             <tr>
               <th><button type="button" onClick={() => cambiarOrden('animal')}>Animal{etiquetaOrden('animal')}</button></th>
-              <th>DIIO</th>
+              <th>{etiquetaId}</th>
               <th><button type="button" onClick={() => cambiarOrden('fecha')}>Fecha{etiquetaOrden('fecha')}</button></th>
               <th><button type="button" onClick={() => cambiarOrden('peso')}>Peso{etiquetaOrden('peso')}</button></th>
               <th>Observaciones</th>

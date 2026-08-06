@@ -6,7 +6,10 @@ import {
   obtenerPlanesSanitarios
 } from '../services/api';
 import FormularioPlanSanitario from './FormularioPlanSanitario';
+import SelectorEspecie from './SelectorEspecie';
 import TablaDinamica from './TablaDinamica';
+
+const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
 const formatearFecha = (fecha) => {
   if (!fecha) return '--';
@@ -59,11 +62,18 @@ const PlanSanitario = () => {
   const [errorFormulario, setErrorFormulario] = useState('');
   const [modoFormulario, setModoFormulario] = useState(false);
   const [planSeleccionado, setPlanSeleccionado] = useState(null);
+  const [especie, setEspecie] = useState(obtenerEspecieInicial);
+  const etiquetaId = 'DIIO';
+
+  const cambiarEspecie = (valor) => {
+    localStorage.setItem('ganaderiaEspecie', valor);
+    setEspecie(valor);
+  };
 
   const cargarPlanes = async () => {
     try {
       setError('');
-      const data = await obtenerPlanesSanitarios();
+      const data = await obtenerPlanesSanitarios({ especie });
       setPlanes(data);
     } catch (err) {
       setError(err.message);
@@ -73,8 +83,9 @@ const PlanSanitario = () => {
   };
 
   useEffect(() => {
+    setCargando(true);
     cargarPlanes();
-  }, []);
+  }, [especie]);
 
   const guardarPlan = async (plan) => {
     try {
@@ -136,24 +147,28 @@ const PlanSanitario = () => {
         onGuardar={guardarPlan}
         guardando={guardando}
         error={errorFormulario}
+        especie={especie}
       />
     );
   }
 
   return (
-    <TablaDinamica
-      titulo="Plan Sanitario"
-      subtitulo="Sanidad"
-      columnas={columnas}
-      datos={planes}
-      cargando={cargando}
-      error={error}
-      filtros={filtros}
-      textoAgregar="Nuevo plan"
-      onAgregar={abrirNuevoPlan}
-      onEditar={abrirEdicionPlan}
-      onEliminar={borrarPlan}
-    />
+    <>
+      <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
+      <TablaDinamica
+        titulo="Plan Sanitario"
+        subtitulo="Sanidad"
+        columnas={columnas.map((columna) => columna.id === 'animalDiio' ? { ...columna, label: etiquetaId } : columna)}
+        datos={planes}
+        cargando={cargando}
+        error={error}
+        filtros={filtros}
+        textoAgregar="Nuevo plan"
+        onAgregar={abrirNuevoPlan}
+        onEditar={abrirEdicionPlan}
+        onEliminar={borrarPlan}
+      />
+    </>
   );
 };
 

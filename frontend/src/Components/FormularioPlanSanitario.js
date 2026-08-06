@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 const estadoInicial = {
   grupoGanado: 'Todo el ganado',
+  especie: 'Bovino',
   animalDiio: '',
   actividad: '',
   producto: '',
@@ -37,8 +38,12 @@ const normalizarPlan = (plan) => ({
   frecuenciaCantidad: plan?.frecuenciaCantidad ?? 1
 });
 
-const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error, planInicial, modo = 'crear' }) => {
-  const [formulario, setFormulario] = useState(() => normalizarPlan(planInicial));
+const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error, planInicial, modo = 'crear', especie = 'Bovino' }) => {
+  const [formulario, setFormulario] = useState(() => ({
+    ...normalizarPlan(planInicial),
+    especie: planInicial?.especie || especie
+  }));
+  const etiquetaId = 'DIIO';
   const mostrarAnimalDiio = formulario.grupoGanado !== 'Todo el ganado' || Boolean(formulario.animalDiio);
 
   const actualizarCampo = (evento) => {
@@ -69,6 +74,14 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error, plan
 
         <div className="form-grid">
           <label>
+            Especie
+            <select name="especie" value={formulario.especie} onChange={actualizarCampo} required>
+              <option value="Bovino">Bovino</option>
+              <option value="Porcino">Porcino</option>
+            </select>
+          </label>
+
+          <label>
             Grupo de ganado
             <select name="grupoGanado" value={formulario.grupoGanado} onChange={actualizarCampo} required>
               {grupos.map((grupo) => (
@@ -91,7 +104,7 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error, plan
 
         {mostrarAnimalDiio && (
           <label>
-            DIIO de la vaca
+            {etiquetaId} del animal
             <input
               name="animalDiio"
               value={formulario.animalDiio}

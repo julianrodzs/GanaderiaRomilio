@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 const estadoInicial = {
   identificadorFinca: '',
   diio: '',
+  especie: 'Bovino',
+  categoria: '',
   nombre: '',
   sexo: 'Hembra',
   raza: '',
@@ -69,6 +71,10 @@ const obtenerEtiquetaAnimal = (animal) => {
 
 const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInicial, modo = 'crear', animales = [] }) => {
   const [formulario, setFormulario] = useState(() => normalizarAnimal(animalInicial));
+  const etiquetaId = 'DIIO';
+  const categoriasPorEspecie = formulario.especie === 'Porcino'
+    ? ['Chancha', 'Verraco', 'Lechón', 'Engorde', 'Reemplazo', 'Otro']
+    : ['Ternero', 'Novillo', 'Novilla', 'Toro', 'Vaca', 'Otro'];
 
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
@@ -106,8 +112,8 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
     });
   };
 
-  const machos = animales.filter((animal) => animal.sexo === 'Macho' && animal._id !== animalInicial?._id);
-  const hembras = animales.filter((animal) => animal.sexo === 'Hembra' && animal._id !== animalInicial?._id);
+  const machos = animales.filter((animal) => animal.sexo === 'Macho' && animal.especie === formulario.especie && animal._id !== animalInicial?._id);
+  const hembras = animales.filter((animal) => animal.sexo === 'Hembra' && animal.especie === formulario.especie && animal._id !== animalInicial?._id);
 
   return (
     <section className="form-page">
@@ -124,13 +130,33 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
 
         <div className="form-grid">
           <label>
-            DIIO
-            <input name="diio" value={formulario.diio} onChange={actualizarCampo} required />
+            Especie
+            <select name="especie" value={formulario.especie} onChange={actualizarCampo} required>
+              <option value="Bovino">Bovino</option>
+              <option value="Porcino">Porcino</option>
+            </select>
           </label>
 
           <label>
+            {etiquetaId}
+            <input name="diio" value={formulario.diio} onChange={actualizarCampo} required />
+          </label>
+        </div>
+
+        <div className="form-grid">
+          <label>
             Nombre
             <input name="nombre" value={formulario.nombre} onChange={actualizarCampo} />
+          </label>
+
+          <label>
+            Categoría
+            <select name="categoria" value={formulario.categoria} onChange={actualizarCampo}>
+              <option value="">Sin categoría</option>
+              {categoriasPorEspecie.map((categoria) => (
+                <option key={categoria} value={categoria}>{categoria}</option>
+              ))}
+            </select>
           </label>
         </div>
 
@@ -203,12 +229,12 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
 
           <div className="form-grid">
             <label>
-              Padre DIIO anterior
+              Padre {etiquetaId} anterior
               <input name="padreDiio" value={formulario.padreDiio} onChange={actualizarCampo} placeholder="Dato historico si existe" />
             </label>
 
             <label>
-              Madre DIIO anterior
+              Madre {etiquetaId} anterior
               <input name="madreDiio" value={formulario.madreDiio} onChange={actualizarCampo} placeholder="Dato historico si existe" />
             </label>
           </div>
@@ -311,7 +337,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
               name="identificadorFinca"
               value={formulario.identificadorFinca}
               onChange={actualizarCampo}
-              placeholder="Si se deja vacio usa el DIIO"
+              placeholder={`Si se deja vacio usa el ${etiquetaId.toLowerCase()}`}
             />
           </label>
         </div>

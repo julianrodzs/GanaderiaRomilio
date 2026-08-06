@@ -15,7 +15,11 @@ const {
     getProductosPrecioPromedio,
     getProductosProveedores,
     getProductosDestinos,
-    getProductosTop
+    getProductosTop,
+    getReporteCamadas,
+    getReporteReproductivoPorcino,
+    getReporteTareasCamadas,
+    getReporteEconomicoCamadas
 } = require('../controllers/reporte-controller');
 
 router.get('/resumen', getResumenReportes);
@@ -32,5 +36,9 @@ router.get('/productos/precio-promedio', getProductosPrecioPromedio);
 router.get('/productos/proveedores', getProductosProveedores);
 router.get('/productos/destinos', getProductosDestinos);
 router.get('/productos/top', getProductosTop);
+router.get('/porcinos/camadas', getReporteCamadas);
+router.get('/porcinos/reproduccion', getReporteReproductivoPorcino);
+router.get('/porcinos/tareas-camadas', getReporteTareasCamadas);
+router.get('/porcinos/economia-camadas', getReporteEconomicoCamadas);
 
 module.exports = router;

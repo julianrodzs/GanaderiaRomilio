@@ -1373,6 +1373,480 @@ menorDuracion = minimo(mesesEnFinca)
 mayorDuracion = maximo(mesesEnFinca)
 ```
 
+## Reporte de camadas porcinas
+
+Endpoint:
+
+```txt
+GET /api/reportes/porcinos/camadas
+```
+
+Query:
+
+- `fechaInicio`
+- `fechaFin`
+
+Frontend:
+
+```js
+obtenerReporteCamadas({ fechaInicio, fechaFin })
+```
+
+### Origen de datos
+
+- `Camada`
+- `Animal` poblado en `madre`
+
+### Filtro
+
+Usa:
+
+```js
+crearFiltroFechas('fechaNacimiento', fechaInicio, fechaFin)
+```
+
+Es decir, el periodo se evalua por `Camada.fechaNacimiento`.
+
+### Variables de salida
+
+```js
+resumen.totalCamadas
+resumen.camadasActivas
+resumen.camadasDestetadas
+resumen.nacidosTotales
+resumen.nacidosVivos
+resumen.nacidosMuertos
+resumen.momias
+resumen.destetados
+resumen.muertosPreDestete
+resumen.promedioVivosPorCamada
+resumen.promedioDestetadosPorCamada
+resumen.tasaDestete
+resumen.mortalidadPreDestete
+porEstado
+porDestino
+camadas
+```
+
+### Transformaciones
+
+Totales:
+
+```txt
+nacidosTotales = suma(Camada.nacidosTotales)
+nacidosVivos = suma(Camada.nacidosVivos)
+nacidosMuertos = suma(Camada.nacidosMuertos)
+momias = suma(Camada.momias)
+destetados = suma(Camada.destetados)
+muertosPreDestete = suma(Camada.muertosPreDestete)
+```
+
+Promedios:
+
+```txt
+promedioVivosPorCamada = nacidosVivos / totalCamadas
+promedioDestetadosPorCamada = destetados / totalCamadas
+```
+
+Porcentajes:
+
+```txt
+tasaDestete = destetados / nacidosVivos * 100
+mortalidadPreDestete = muertosPreDestete / nacidosVivos * 100
+```
+
+Agrupaciones:
+
+- `porEstado`: agrupa por `Camada.estado`.
+- `porDestino`: agrupa por `Camada.destino`.
+
+Por cada camada se devuelve:
+
+```js
+codigoCamada
+madre
+fechaNacimiento
+fechaDesteteEstimada
+fechaDesteteReal
+nacidosTotales
+nacidosVivos
+nacidosMuertos
+momias
+destetados
+muertosPreDestete
+destino
+estado
+tasaDestete
+mortalidadPreDestete
+pesoPromedioNacimiento
+pesoPromedioDestete
+pesoTotalDestete
+```
+
+## Reporte reproductivo porcino
+
+Endpoint:
+
+```txt
+GET /api/reportes/porcinos/reproduccion
+```
+
+Query:
+
+- `fechaInicio`
+- `fechaFin`
+
+Frontend:
+
+```js
+obtenerReporteReproductivoPorcino({ fechaInicio, fechaFin })
+```
+
+### Origen de datos
+
+- `RegistroReproductivo`
+- `Camada`
+- `Animal` poblado en `animal` o `madre`
+
+### Filtros
+
+Registros reproductivos:
+
+```js
+especie: 'Porcino'
+fechaInseminacion dentro del periodo
+```
+
+Camadas:
+
+```js
+fechaNacimiento dentro del periodo
+```
+
+### Variables de salida
+
+```js
+resumen.ciclosRegistrados
+resumen.ciclosActivos
+resumen.ciclosNoPrenada
+resumen.partosRegistrados
+resumen.nacidosVivos
+resumen.destetados
+resumen.tasaPartoPorCiclo
+resumen.tasaDestete
+madres
+```
+
+### Transformaciones
+
+`ciclosRegistrados`:
+
+```txt
+cantidad de RegistroReproductivo con especie Porcino e inseminacion en el periodo
+```
+
+`ciclosActivos`:
+
+```txt
+cantidad de registros donde estadoCiclo es Activo o no existe
+```
+
+`ciclosNoPrenada`:
+
+```txt
+cantidad de registros con estadoCiclo = No preñada
+```
+
+`partosRegistrados`:
+
+```txt
+cantidad de Camada con fechaNacimiento en el periodo
+```
+
+`nacidosVivos` y `destetados`:
+
+```txt
+suma de Camada.nacidosVivos y Camada.destetados del periodo
+```
+
+Formulas:
+
+```txt
+tasaPartoPorCiclo = partosRegistrados / ciclosRegistrados * 100
+tasaDestete = destetados / nacidosVivos * 100
+```
+
+### Por madre
+
+El reporte une ciclos reproductivos y camadas por madre.
+
+Por cada madre devuelve:
+
+```js
+animalId
+diio
+nombre
+ciclos
+activos
+cerrados
+noPrenada
+partos
+nacidosVivos
+destetados
+tasaDestete
+ultimoParto
+camadas
+```
+
+`ultimoParto`:
+
+```txt
+fechaNacimiento mas reciente entre camadas de esa madre
+```
+
+Orden:
+
+- primero madres con mas partos.
+- luego madres con mas nacidos vivos.
+
+## Reporte de actividades/tareas por camada
+
+Endpoint:
+
+```txt
+GET /api/reportes/porcinos/tareas-camadas
+```
+
+Query:
+
+- `fechaInicio`
+- `fechaFin`
+
+Frontend:
+
+```js
+obtenerReporteTareasCamadas({ fechaInicio, fechaFin })
+```
+
+### Origen de datos
+
+- `Camada`
+- `Tarea`
+
+### Filtros
+
+Primero selecciona camadas por:
+
+```js
+Camada.fechaNacimiento dentro del periodo
+```
+
+Luego busca tareas con:
+
+```js
+referenciaId: { $in: camadaIds }
+moduloOrigen: 'Reproduccion'
+creadoAutomaticamente: true
+```
+
+### Variables de salida
+
+```js
+resumen.camadasConTareas
+resumen.totalTareas
+resumen.pendientes
+resumen.enProceso
+resumen.completadas
+resumen.canceladas
+resumen.vencidas
+porCategoria
+camadas
+```
+
+### Transformaciones
+
+`camadasConTareas`:
+
+```txt
+camadas del periodo que tienen al menos una tarea automatica asociada
+```
+
+Estados:
+
+```txt
+pendientes = tareas con estado Pendiente
+enProceso = tareas con estado En proceso
+completadas = tareas con estado Completada
+canceladas = tareas con estado Cancelada
+```
+
+`vencidas`:
+
+```txt
+tareas cuya fechaProgramada es anterior a hoy
+y cuyo estado no es Completada ni Cancelada
+```
+
+`porCategoria`:
+
+```txt
+agrupa por Tarea.categoriaAutomatica
+```
+
+Por cada camada:
+
+```js
+camada resumida
+tareas
+resumenTareas.total
+resumenTareas.pendientes
+resumenTareas.completadas
+resumenTareas.canceladas
+```
+
+Cada tarea incluye:
+
+```js
+titulo
+tipo
+estado
+prioridad
+fechaProgramada
+categoriaAutomatica
+claveAutomatica
+```
+
+## Reporte economico por camada
+
+Endpoint:
+
+```txt
+GET /api/reportes/porcinos/economia-camadas
+```
+
+Query:
+
+- `fechaInicio`
+- `fechaFin`
+
+Frontend:
+
+```js
+obtenerReporteEconomicoCamadas({ fechaInicio, fechaFin })
+```
+
+### Origen de datos
+
+- `Camada`
+- `MovimientoFinanciero`
+
+### Filtros
+
+Camadas:
+
+```js
+fechaNacimiento dentro del periodo
+```
+
+Movimientos financieros directos:
+
+```js
+MovimientoFinanciero.fecha dentro del periodo
+referenciaId en ids de camadas
+```
+
+Movimientos porcinos por texto:
+
+```js
+MovimientoFinanciero.fecha dentro del periodo
+y alguno de estos campos contiene porc/chan/cerd/lech/camada:
+  categoria
+  descripcion
+  producto
+  observaciones
+o referenciaModelo = 'Camada'
+```
+
+Los movimientos directos y los detectados por texto se deduplican por `_id`.
+
+### Variables de salida
+
+```js
+resumen.camadasEvaluadas
+resumen.movimientosPorcinos
+resumen.ingresosPorcinos
+resumen.egresosPorcinos
+resumen.balancePorcino
+resumen.costoPromedioPorCamada
+resumen.ingresoPromedioPorCamada
+resumen.costoPorCriaViva
+resumen.costoPorCriaDestetada
+camadas
+```
+
+### Transformaciones
+
+Ingresos:
+
+```txt
+movimientos donde naturaleza = Ingreso
+```
+
+Egresos:
+
+```txt
+movimientos donde naturaleza = Egreso
+```
+
+Totales:
+
+```txt
+ingresosPorcinos = suma monto de ingresos
+egresosPorcinos = suma monto de egresos
+balancePorcino = ingresosPorcinos - egresosPorcinos
+```
+
+Prorrateos:
+
+```txt
+costoPromedioPorCamada = egresosPorcinos / camadasEvaluadas
+ingresoPromedioPorCamada = ingresosPorcinos / camadasEvaluadas
+costoPorCriaViva = egresosPorcinos / total nacidos vivos
+costoPorCriaDestetada = egresosPorcinos / total destetados
+```
+
+Si el denominador es `0`, se usa `1` internamente para evitar division invalida y devolver un valor estable.
+
+### Por camada
+
+Para cada camada:
+
+```js
+ingresosDirectos
+egresosDirectos
+costoEstimado
+ingresoEstimado
+margenEstimado
+costoPorCriaViva
+costoPorCriaDestetada
+movimientosDirectos
+```
+
+Reglas:
+
+- Si hay movimientos directos ligados por `referenciaId`, usa esos valores.
+- Si no hay movimientos directos, usa el ingreso/costo prorrateado del periodo.
+
+Formulas:
+
+```txt
+costoEstimado = egresosDirectos || costoPromedioPorCamada
+ingresoEstimado = ingresosDirectos || ingresoPromedioPorCamada
+margenEstimado = ingresoEstimado - costoEstimado
+costoPorCriaViva = costoEstimado / nacidosVivos
+costoPorCriaDestetada = costoEstimado / destetados
+```
+
 ## Como se usan en el frontend
 
 Archivo:
@@ -1391,12 +1865,22 @@ obtenerSustentabilidadCria(filtrosGenerales)
 obtenerVacasImproductivas(filtrosImproductivas)
 obtenerReporteCrecimientoPesajes(...)
 obtenerResumenVentas(filtrosGenerales)
+obtenerReporteProductosResumen(filtrosProductos)
+obtenerReporteProductosPorProducto(filtrosProductos)
+obtenerReporteProductosPorCategoria(filtrosProductos)
+obtenerReporteProductosCombustibles(filtrosProductos)
+obtenerReporteProductosProveedores(filtrosProductos)
+obtenerReporteCamadas(filtrosGenerales)
+obtenerReporteReproductivoPorcino(filtrosGenerales)
+obtenerReporteTareasCamadas(filtrosGenerales)
+obtenerReporteEconomicoCamadas(filtrosGenerales)
 ```
 
 Filtros generales:
 
 - `fechaInicio`
 - `fechaFin`
+- `especie`
 
 Filtros de partos:
 
@@ -1419,6 +1903,24 @@ Filtros de crecimiento:
 - `fechaFin`
 - `diasSinPesaje`
 
+Filtros de productos:
+
+- `fechaInicio`
+- `fechaFin`
+- `producto`
+- `categoria`
+- `proveedor`
+
+Filtros porcinos:
+
+- `fechaInicio`
+- `fechaFin`
+
+Nota:
+
+- Los reportes porcinos de camadas usan `fechaNacimiento` como fecha principal.
+- El reporte reproductivo porcino combina ciclos por `fechaInseminacion` y camadas por `fechaNacimiento`.
+
 ## Riesgos o puntos a vigilar
 
 - `valorEstimadoHato` depende de campos estimados que no siempre existen en el modelo actual.
@@ -1428,3 +1930,6 @@ Filtros de crecimiento:
 - `precioKg.minimo` puede tomar `0` si algun item vendido no trae precio por kg.
 - `animalesInicioPeriodo` usa `createdAt`, no fecha nacimiento/compra.
 - El reporte de gastos operativos depende de clasificacion por texto; conviene estandarizar categorias cada vez mas.
+- El reporte economico por camada es mas exacto cuando los movimientos financieros se ligan directamente a la camada con `referenciaId`.
+- Si los gastos porcinos no estan ligados a camada, el reporte economico los detecta por texto y los prorratea entre camadas del periodo.
+- El reporte de tareas por camada solo considera tareas automaticas con `referenciaId` de camada; no incluye tareas manuales sueltas.

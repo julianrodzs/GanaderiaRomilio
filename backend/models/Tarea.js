@@ -10,6 +10,10 @@ const TIPOS_TAREA = [
     'Revisión de cerca',
     'Conteo de ganado',
     'Limpieza',
+    'Alimentación',
+    'Reproducción',
+    'Venta',
+    'Sacrificio',
     'Otro'
 ];
 
@@ -30,6 +34,12 @@ const tareaSchema = new Schema(
         creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
         potrero: { type: Schema.Types.ObjectId, ref: 'Potrero' },
         animal: { type: Schema.Types.ObjectId, ref: 'Animal' },
+        moduloOrigen: { type: String, trim: true },
+        referenciaId: { type: Schema.Types.ObjectId },
+        creadoAutomaticamente: { type: Boolean, default: false },
+        especie: { type: String, enum: ['Bovino', 'Porcino'] },
+        categoriaAutomatica: { type: String, trim: true },
+        claveAutomatica: { type: String, trim: true },
         evidenciaUrl: { type: String, trim: true },
         observaciones: { type: String, trim: true },
         comentarios: [
@@ -48,6 +58,8 @@ const tareaSchema = new Schema(
 tareaSchema.index({ asignadoA: 1, estado: 1, fechaProgramada: 1 });
 tareaSchema.index({ fechaProgramada: 1 });
 tareaSchema.index({ prioridad: 1 });
+tareaSchema.index({ referenciaId: 1, moduloOrigen: 1, creadoAutomaticamente: 1 });
+tareaSchema.index({ especie: 1, estado: 1, fechaProgramada: 1 });
 
 module.exports = {
     Tarea: model('Tarea', tareaSchema),

@@ -32,10 +32,21 @@ const tipos = [
   'Revisión de cerca',
   'Conteo de ganado',
   'Limpieza',
+  'Alimentación',
+  'Reproducción',
+  'Venta',
+  'Sacrificio',
   'Otro'
 ];
 const estados = ['Pendiente', 'En proceso', 'Completada', 'Cancelada'];
 const prioridades = ['Baja', 'Media', 'Alta', 'Urgente'];
+const especies = ['Bovino', 'Porcino'];
+const categoriasAutomaticas = [
+  'Reproducción porcina',
+  'Crías porcinas',
+  'Sanidad porcina',
+  'Alimentación porcina'
+];
 
 const estadoInicial = {
   titulo: '',
@@ -72,7 +83,8 @@ const nombreUsuario = (usuario) => {
 
 const nombrePotreroAnimal = (tarea) => {
   const potrero = tarea.potrero ? `${tarea.potrero.codigo || ''} ${tarea.potrero.nombre || ''}`.trim() : '';
-  const animal = tarea.animal ? `${tarea.animal.diio || ''} ${tarea.animal.nombre || ''}`.trim() : '';
+  const codigoAnimal = tarea.animal?.diio || tarea.animal?.identificadorFinca || '';
+  const animal = tarea.animal ? `${codigoAnimal} ${tarea.animal.nombre || ''}`.trim() : '';
   return [potrero, animal].filter(Boolean).join(' / ') || '--';
 };
 
@@ -83,6 +95,33 @@ const estaVencida = (tarea) => {
   const limite = new Date(tarea.fechaLimite);
   limite.setHours(0, 0, 0, 0);
   return limite < hoy;
+};
+
+const esTareaDeHoy = (tarea) => {
+  if (!tarea.fechaProgramada || ['Completada', 'Cancelada'].includes(tarea.estado)) return false;
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const fecha = new Date(tarea.fechaProgramada);
+  fecha.setHours(0, 0, 0, 0);
+  return fecha.getTime() === hoy.getTime();
+};
+
+const diasParaTarea = (tarea) => {
+  if (!tarea.fechaProgramada) return null;
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const fecha = new Date(tarea.fechaProgramada);
+  fecha.setHours(0, 0, 0, 0);
+  return Math.round((fecha - hoy) / (1000 * 60 * 60 * 24));
+};
+
+const textoTiempoTarea = (tarea) => {
+  const dias = diasParaTarea(tarea);
+  if (dias === null) return '--';
+  if (dias < 0) return `${Math.abs(dias)} días vencida`;
+  if (dias === 0) return 'Hoy';
+  if (dias === 1) return 'Mañana';
+  return `En ${dias} días`;
 };
 
 const normalizarTarea = (tarea) => ({
@@ -103,7 +142,16 @@ const Tareas = ({ usuario }) => {
   const [usuarios, setUsuarios] = useState([]);
   const [potreros, setPotreros] = useState([]);
   const [animales, setAnimales] = useState([]);
-  const [filtros, setFiltros] = useState({ ...obtenerRangoMesActual(), estado: '', prioridad: '', tipo: '', asignadoA: '' });
+  const [filtros, setFiltros] = useState({
+    ...obtenerRangoMesActual(),
+    estado: '',
+    prioridad: '',
+    tipo: '',
+    asignadoA: '',
+    especie: '',
+    categoriaAutomatica: '',
+    creadoAutomaticamente: ''
+  });
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -184,7 +232,18 @@ const Tareas = ({ usuario }) => {
 
   useEffect(() => {
     cargarDatos();
-  }, [filtros.fechaInicio, filtros.fechaFin, filtros.estado, filtros.prioridad, filtros.tipo, filtros.asignadoA, usuario?.rol]);
+  }, [
+    filtros.fechaInicio,
+    filtros.fechaFin,
+    filtros.estado,
+    filtros.prioridad,
+    filtros.tipo,
+    filtros.asignadoA,
+    filtros.especie,
+    filtros.categoriaAutomatica,
+    filtros.creadoAutomaticamente,
+    usuario?.rol
+  ]);
 
   useEffect(() => {
     window.addEventListener('online', sincronizarCambiosPendientes);
@@ -197,8 +256,45 @@ const Tareas = ({ usuario }) => {
     pendientes: tareas.filter((tarea) => tarea.estado === 'Pendiente').length,
     enProceso: tareas.filter((tarea) => tarea.estado === 'En proceso').length,
     completadas: tareas.filter((tarea) => tarea.estado === 'Completada').length,
-    vencidas: tareas.filter(estaVencida).length
+    vencidas: tareas.filter(estaVencida).length,
+    automaticasPorcinas: tareas.filter((tarea) => tarea.especie === 'Porcino' && tarea.creadoAutomaticamente).length,
+    porcinasHoy: tareas.filter((tarea) => tarea.especie === 'Porcino' && esTareaDeHoy(tarea)).length
   }), [tareas]);
+
+  const proximasPorcinas = useMemo(() => {
+    return tareas
+      .filter((tarea) => tarea.especie === 'Porcino' && !['Completada', 'Cancelada'].includes(tarea.estado))
+      .sort((a, b) => new Date(a.fechaProgramada || 0) - new Date(b.fechaProgramada || 0))
+      .slice(0, 6);
+  }, [tareas]);
+
+  const verTareasPorcinas = () => {
+    setFiltros((actual) => ({
+      ...actual,
+      especie: 'Porcino',
+      creadoAutomaticamente: 'true'
+    }));
+  };
+
+  const verTareasAutomaticas = () => {
+    setFiltros((actual) => ({
+      ...actual,
+      creadoAutomaticamente: 'true'
+    }));
+  };
+
+  const limpiarFiltros = () => {
+    setFiltros({
+      ...obtenerRangoMesActual(),
+      estado: '',
+      prioridad: '',
+      tipo: '',
+      asignadoA: '',
+      especie: '',
+      categoriaAutomatica: '',
+      creadoAutomaticamente: ''
+    });
+  };
 
   const actualizarFiltro = (evento) => {
     const { name, value } = evento.target;
@@ -251,12 +347,35 @@ const Tareas = ({ usuario }) => {
     }
   };
 
-  const cambiarEstado = async (tarea, estado) => {
+  const cambiarEstado = async (tarea, estado, observaciones = '') => {
     try {
       setGuardando(true);
-      await cambiarEstadoTarea(tarea._id, estado);
+      await cambiarEstadoTarea(tarea._id, estado, observaciones);
       await cargarDatos();
-      setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, estado } : actual));
+      setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, estado, observaciones: observaciones || actual.observaciones } : actual));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const cancelarTarea = async (tarea) => {
+    const observaciones = window.prompt('Motivo para cancelar la tarea:', 'Tarea cancelada manualmente');
+    if (observaciones === null) return;
+    await cambiarEstado(tarea, 'Cancelada', observaciones);
+  };
+
+  const reprogramarTarea = async (tarea) => {
+    if (!esAdmin) return;
+    const nuevaFecha = window.prompt('Nueva fecha programada (YYYY-MM-DD):', fechaInput(tarea.fechaProgramada));
+    if (!nuevaFecha) return;
+
+    try {
+      setGuardando(true);
+      await actualizarTarea(tarea._id, { fechaProgramada: nuevaFecha });
+      await cargarDatos();
+      setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, fechaProgramada: nuevaFecha } : actual));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -343,6 +462,34 @@ const Tareas = ({ usuario }) => {
         <article><span>En proceso</span><strong>{resumen.enProceso}</strong></article>
         <article><span>Completadas</span><strong>{resumen.completadas}</strong></article>
         <article><span>Vencidas</span><strong>{resumen.vencidas}</strong></article>
+        <article><span>Automáticas porcinas</span><strong>{resumen.automaticasPorcinas}</strong></article>
+        <article><span>Porcinas hoy</span><strong>{resumen.porcinasHoy}</strong></article>
+      </section>
+
+      <section className="tareas-porcinas-panel">
+        <div className="panel-title">
+          <div>
+            <p className="eyebrow">Porcinos</p>
+            <h2>Próximas tareas porcinas</h2>
+          </div>
+          <div className="tareas-panel-actions">
+            <button className="boton-link" type="button" onClick={verTareasPorcinas}>Ver porcinas pendientes</button>
+            <button className="boton-link" type="button" onClick={verTareasAutomaticas}>Ver automáticas</button>
+          </div>
+        </div>
+        {proximasPorcinas.length === 0 ? (
+          <div className="reporte-vacio">No hay tareas porcinas pendientes en el rango seleccionado.</div>
+        ) : (
+          <div className="tareas-porcinas-grid">
+            {proximasPorcinas.map((tarea) => (
+              <article key={tarea._id}>
+                <span>{formatearFecha(tarea.fechaProgramada)}</span>
+                <strong>{tarea.titulo}</strong>
+                <small>{tarea.categoriaAutomatica || tarea.tipo} · {textoTiempoTarea(tarea)} · {tarea.estado}</small>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <div className="tareas-filtros">
@@ -358,6 +505,9 @@ const Tareas = ({ usuario }) => {
         </div>
 
         <div className="tabla-toolbar tareas-filtros-secundarios">
+          <button className="boton-link filtro-rapido" type="button" onClick={limpiarFiltros}>Mes actual</button>
+          <button className="boton-link filtro-rapido" type="button" onClick={verTareasPorcinas}>Porcinas pendientes</button>
+          <button className="boton-link filtro-rapido" type="button" onClick={verTareasAutomaticas}>Automáticas</button>
           <select name="estado" value={filtros.estado} onChange={actualizarFiltro}>
             <option value="">Todos los estados</option>
             {estados.map((estado) => <option key={estado} value={estado}>{estado}</option>)}
@@ -369,6 +519,19 @@ const Tareas = ({ usuario }) => {
           <select name="tipo" value={filtros.tipo} onChange={actualizarFiltro}>
             <option value="">Todos los tipos</option>
             {tipos.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
+          </select>
+          <select name="especie" value={filtros.especie} onChange={actualizarFiltro}>
+            <option value="">Todas las especies</option>
+            {especies.map((especie) => <option key={especie} value={especie}>{especie}</option>)}
+          </select>
+          <select name="categoriaAutomatica" value={filtros.categoriaAutomatica} onChange={actualizarFiltro}>
+            <option value="">Todas las categorías automáticas</option>
+            {categoriasAutomaticas.map((categoria) => <option key={categoria} value={categoria}>{categoria}</option>)}
+          </select>
+          <select name="creadoAutomaticamente" value={filtros.creadoAutomaticamente} onChange={actualizarFiltro}>
+            <option value="">Manual y automática</option>
+            <option value="true">Solo automáticas</option>
+            <option value="false">Solo manuales</option>
           </select>
           {esAdmin && (
             <select name="asignadoA" value={filtros.asignadoA} onChange={actualizarFiltro}>
@@ -390,6 +553,7 @@ const Tareas = ({ usuario }) => {
             <tr>
               <th>Titulo</th>
               <th>Tipo</th>
+              <th>Categoría</th>
               <th>Responsable</th>
               <th>Potrero/Animal</th>
               <th>Fecha programada</th>
@@ -402,8 +566,15 @@ const Tareas = ({ usuario }) => {
           <tbody>
             {tareas.map((tarea) => (
               <tr key={tarea._id} className={estaVencida(tarea) ? 'tarea-vencida' : ''}>
-                <td>{tarea.titulo}</td>
+                <td>
+                  <div className="tarea-titulo-celda">
+                    <span>{tarea.titulo}</span>
+                    {tarea.creadoAutomaticamente && <small className="tarea-auto-badge">Automática</small>}
+                    {tarea.especie && <small className={`tarea-especie-badge especie-${slug(tarea.especie)}`}>{tarea.especie}</small>}
+                  </div>
+                </td>
                 <td>{tarea.tipo}</td>
+                <td>{tarea.categoriaAutomatica || '--'}</td>
                 <td>{nombreUsuario(tarea.asignadoA)}</td>
                 <td>{nombrePotreroAnimal(tarea)}</td>
                 <td>{formatearFecha(tarea.fechaProgramada)}</td>
@@ -419,9 +590,11 @@ const Tareas = ({ usuario }) => {
                   <div className="acciones-tabla acciones-tabla-amplia">
                     <button type="button" title="Ver detalle" onClick={() => setDetalle(tarea)}>⊙</button>
                     {esAdmin && <button type="button" title="Editar" onClick={() => abrirEdicion(tarea)}>✎</button>}
+                    {esAdmin && <button type="button" title="Reprogramar" onClick={() => reprogramarTarea(tarea)} disabled={guardando}>↷</button>}
                     {tarea.estado === 'Pendiente' && <button type="button" title="En proceso" onClick={() => cambiarEstado(tarea, 'En proceso')} disabled={guardando}>▶</button>}
                     {tarea.estado !== 'Completada' && <button type="button" title="Completar" onClick={() => completar(tarea)} disabled={guardando}>✓</button>}
-                    {esAdmin && ['En proceso', 'Completada'].includes(tarea.estado) && <button type="button" title="Reabrir como pendiente" onClick={() => cambiarEstado(tarea, 'Pendiente')} disabled={guardando}>↶</button>}
+                    {['En proceso', 'Completada'].includes(tarea.estado) && <button type="button" title="Reabrir como pendiente" onClick={() => cambiarEstado(tarea, 'Pendiente')} disabled={guardando}>↶</button>}
+                    {esAdmin && !['Completada', 'Cancelada'].includes(tarea.estado) && <button type="button" title="Cancelar tarea" onClick={() => cancelarTarea(tarea)} disabled={guardando}>×</button>}
                     {esAdmin && <button type="button" title="Eliminar" onClick={() => borrar(tarea)}>⌫</button>}
                   </div>
                 </td>
@@ -480,6 +653,13 @@ const Tareas = ({ usuario }) => {
               <article><span>Limite</span><strong>{formatearFecha(detalle.fechaLimite)}</strong></article>
               <article><span>Prioridad</span><strong>{detalle.prioridad}</strong></article>
               <article><span>Estado</span><strong>{detalle.estado}</strong></article>
+              <article><span>Tiempo</span><strong>{textoTiempoTarea(detalle)}</strong></article>
+              {detalle.especie && <article><span>Especie</span><strong>{detalle.especie}</strong></article>}
+              {detalle.creadoAutomaticamente && <article><span>Origen</span><strong>Automática</strong></article>}
+              {detalle.moduloOrigen && <article><span>Módulo</span><strong>{detalle.moduloOrigen}</strong></article>}
+              {detalle.categoriaAutomatica && <article><span>Categoría</span><strong>{detalle.categoriaAutomatica}</strong></article>}
+              {detalle.claveAutomatica && <article><span>Regla</span><strong>{detalle.claveAutomatica}</strong></article>}
+              {detalle.referenciaId && <article><span>Referencia</span><strong>{detalle.referenciaId}</strong></article>}
             </div>
             {detalle.descripcion && <div className="detalle-observaciones"><span>Descripcion</span><p>{detalle.descripcion}</p></div>}
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
@@ -492,11 +672,28 @@ const Tareas = ({ usuario }) => {
                 <button className="boton-primario compacto" type="button" onClick={() => completar(detalle)} disabled={guardando}>{guardando ? 'Completando...' : 'Completar tarea'}</button>
               </div>
             )}
-            {esAdmin && ['En proceso', 'Completada'].includes(detalle.estado) && (
-              <button className="boton-link" type="button" onClick={() => cambiarEstado(detalle, 'Pendiente')} disabled={guardando}>
-                Reabrir como pendiente
-              </button>
-            )}
+            <div className="tarea-detalle-acciones">
+              {detalle.estado === 'Pendiente' && (
+                <button className="boton-link" type="button" onClick={() => cambiarEstado(detalle, 'En proceso')} disabled={guardando}>
+                  Pasar a en proceso
+                </button>
+              )}
+              {['En proceso', 'Completada'].includes(detalle.estado) && (
+                <button className="boton-link" type="button" onClick={() => cambiarEstado(detalle, 'Pendiente')} disabled={guardando}>
+                  Reabrir como pendiente
+                </button>
+              )}
+              {esAdmin && (
+                <button className="boton-link" type="button" onClick={() => reprogramarTarea(detalle)} disabled={guardando}>
+                  Reprogramar
+                </button>
+              )}
+              {esAdmin && !['Completada', 'Cancelada'].includes(detalle.estado) && (
+                <button className="boton-link danger-link" type="button" onClick={() => cancelarTarea(detalle)} disabled={guardando}>
+                  Cancelar tarea
+                </button>
+              )}
+            </div>
 
             <form className="form-card" onSubmit={agregarComentario}>
               <label>Comentario<textarea rows="3" value={comentario} onChange={(evento) => setComentario(evento.target.value)} /></label>

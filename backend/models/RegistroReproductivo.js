@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const reproduccionPorcinaConfig = require('../config/reproduccionPorcinaConfig');
 
 const ESTADOS_REPRODUCTIVOS = [
     'Vacía',
@@ -9,12 +10,21 @@ const ESTADOS_REPRODUCTIVOS = [
     'Destete próximo'
 ];
 
+const ESTADOS_CICLO = [
+    'Activo',
+    'Cerrado',
+    'Cancelado',
+    'No preñada'
+];
+
 const sumarDias = (fecha, dias) => {
     if (!fecha) return undefined;
     const nuevaFecha = new Date(fecha);
     nuevaFecha.setUTCDate(nuevaFecha.getUTCDate() + dias);
     return nuevaFecha;
 };
+
+const restarDias = (fecha, dias) => sumarDias(fecha, -dias);
 
 const sumarMeses = (fecha, meses) => {
     if (!fecha) return undefined;
@@ -77,6 +87,12 @@ const calcularProximoCelo = (fechaPartoReal) => {
     return proximoCelo;
 };
 
+const calcularProximoCeloPorcino = (fechaDestete, diasCeloPostDestete = 5) => {
+    const destete = normalizarDiaUtc(fechaDestete);
+    if (!destete) return undefined;
+    return sumarDias(destete, Number(diasCeloPostDestete) || 5);
+};
+
 const calcularEstadoReproductivo = ({
     fechaMonta,
     fechaPartoEstimada,
@@ -113,6 +129,21 @@ const calcularEstadoReproductivo = ({
 const registroReproductivoSchema = new Schema(
     {
         animal: { type: Schema.Types.ObjectId, ref: 'Animal', required: true },
+        especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino' },
+        diasDestetePorcino: { type: Number, min: 1, default: 28 },
+        diasCeloPostDestetePorcino: { type: Number, min: 1, default: 5 },
+        tipoRegistro: { type: String, enum: ['Inseminación/Monta', 'Monta', 'Inseminación'], default: 'Inseminación/Monta' },
+        destinoCrias: { type: String, enum: ['Se quedan', 'Se venden', 'Engorde', 'No definido'], default: 'No definido' },
+        cantidadCriasEstimada: { type: Number, min: 0 },
+        cantidadCrias: { type: Number, min: 0 },
+        fechaInseminacion: { type: Date },
+        fechaRevisionCelo: { type: Date },
+        fechaInicioVentanaParto: { type: Date },
+        fechaFinVentanaParto: { type: Date },
+        fechaDesparasitacionAntesParto: { type: Date },
+        fechaAlimentoLactancia: { type: Date },
+        fechaNuevaInseminacion: { type: Date },
+        fechaRevisionCeloPosterior: { type: Date },
         fechaMonta: { type: Date },
         fechaPartoEstimada: { type: Date },
         fechaPartoReal: { type: Date },
@@ -120,6 +151,20 @@ const registroReproductivoSchema = new Schema(
         // Campo legado: se mantiene para leer registros viejos, pero la UI usa fechaProximoCelo.
         fechaListaMonta: { type: Date },
         fechaDestete: { type: Date },
+        estadoCiclo: {
+            type: String,
+            enum: ESTADOS_CICLO,
+            default: 'Activo'
+        },
+        fechaCierre: { type: Date },
+        motivoCierre: { type: String, trim: true },
+        activoParaAlertas: { type: Boolean, default: true },
+        tareasGeneradas: [
+            {
+                tarea: { type: Schema.Types.ObjectId, ref: 'Tarea' },
+                tipoTarea: { type: String, trim: true }
+            }
+        ],
         estado: {
             type: String,
             enum: ESTADOS_REPRODUCTIVOS,
@@ -133,17 +178,57 @@ const registroReproductivoSchema = new Schema(
 );
 
 const completarFechasYEstado = (datos, opciones = {}) => {
+    const especie = datos.especie || 'Bovino';
+
+    if (datos.estadoCiclo && datos.estadoCiclo !== 'Activo') {
+        datos.activoParaAlertas = false;
+    } else {
+        datos.estadoCiclo = datos.estadoCiclo || 'Activo';
+        datos.activoParaAlertas = true;
+    }
+
+    if (especie === 'Porcino') {
+        datos.fechaInseminacion = datos.fechaInseminacion || datos.fechaMonta;
+        datos.fechaMonta = datos.fechaMonta || datos.fechaInseminacion;
+
+        if (datos.fechaInseminacion) {
+            datos.fechaRevisionCelo = sumarDias(datos.fechaInseminacion, reproduccionPorcinaConfig.diasRevisionCeloPostInseminacion);
+            datos.fechaPartoEstimada = sumarDias(datos.fechaInseminacion, reproduccionPorcinaConfig.diasGestacion);
+        }
+
+        if (datos.fechaPartoEstimada) {
+            datos.fechaInicioVentanaParto = restarDias(datos.fechaPartoEstimada, reproduccionPorcinaConfig.margenPartoDias);
+            datos.fechaFinVentanaParto = sumarDias(datos.fechaPartoEstimada, reproduccionPorcinaConfig.margenPartoDias);
+            datos.fechaDesparasitacionAntesParto = restarDias(datos.fechaPartoEstimada, reproduccionPorcinaConfig.diasDesparasitacionAntesParto);
+            datos.fechaAlimentoLactancia = restarDias(datos.fechaPartoEstimada, reproduccionPorcinaConfig.diasAlimentoLactanciaAntesParto);
+            datos.fechaDestete = sumarDias(datos.fechaPartoEstimada, reproduccionPorcinaConfig.diasDestetePostParto);
+            datos.fechaNuevaInseminacion = sumarDias(datos.fechaDestete, reproduccionPorcinaConfig.diasNuevaMontaPostDestete);
+            datos.fechaRevisionCeloPosterior = sumarDias(datos.fechaNuevaInseminacion, reproduccionPorcinaConfig.diasRevisionCeloPostNuevaMonta);
+            datos.fechaProximoCelo = datos.fechaNuevaInseminacion;
+        }
+
+        datos.estado = calcularEstadoReproductivo(datos);
+        return;
+    }
+
     if (datos.fechaMonta && !datos.fechaPartoEstimada) {
-        datos.fechaPartoEstimada = sumarDias(datos.fechaMonta, 283);
+        datos.fechaPartoEstimada = sumarDias(datos.fechaMonta, especie === 'Porcino' ? 114 : 283);
     }
 
     if (datos.fechaPartoReal) {
-        datos.fechaProximoCelo = calcularProximoCelo(datos.fechaPartoReal);
+        if (especie === 'Porcino') {
+            if (opciones.recalcularDesdePartoReal || !datos.fechaDestete) {
+                datos.fechaDestete = sumarDias(datos.fechaPartoReal, Number(datos.diasDestetePorcino) || 28);
+            }
+            datos.fechaProximoCelo = calcularProximoCeloPorcino(datos.fechaDestete, datos.diasCeloPostDestetePorcino);
+        } else {
+            datos.fechaProximoCelo = calcularProximoCelo(datos.fechaPartoReal);
+        }
     } else if (!datos.fechaProximoCelo && datos.fechaListaMonta) {
         datos.fechaProximoCelo = datos.fechaListaMonta;
     }
 
-    if (datos.fechaPartoReal && (opciones.recalcularDesdePartoReal || !datos.fechaDestete)) {
+    if (especie !== 'Porcino' && datos.fechaPartoReal && (opciones.recalcularDesdePartoReal || !datos.fechaDestete)) {
         datos.fechaDestete = sumarMeses(datos.fechaPartoReal, 7);
     }
 
@@ -170,10 +255,27 @@ registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesD
         recalcularDesdePartoReal: fechaPartoRealCambio && esFechaValida(datos.fechaPartoReal)
     });
 
-    datosUpdate.fechaPartoEstimada = datos.fechaPartoEstimada;
-    datosUpdate.fechaProximoCelo = datos.fechaProximoCelo;
-    datosUpdate.fechaDestete = datos.fechaDestete;
-    datosUpdate.estado = datos.estado;
+    [
+        'fechaInseminacion',
+        'fechaMonta',
+        'fechaRevisionCelo',
+        'fechaPartoEstimada',
+        'fechaInicioVentanaParto',
+        'fechaFinVentanaParto',
+        'fechaDesparasitacionAntesParto',
+        'fechaAlimentoLactancia',
+        'fechaDestete',
+        'fechaNuevaInseminacion',
+        'fechaRevisionCeloPosterior',
+        'fechaProximoCelo',
+        'estadoCiclo',
+        'activoParaAlertas',
+        'fechaCierre',
+        'motivoCierre',
+        'estado'
+    ].forEach((campo) => {
+        datosUpdate[campo] = datos[campo];
+    });
 
     if (update.$set) {
         update.$set = datosUpdate;
@@ -183,10 +285,13 @@ registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesD
 });
 
 registroReproductivoSchema.index({ animal: 1, fechaMonta: -1 });
+registroReproductivoSchema.index({ especie: 1, estado: 1 });
 registroReproductivoSchema.index({ estado: 1 });
 registroReproductivoSchema.index({ fechaProximoCelo: 1 });
 registroReproductivoSchema.index({ fechaPartoEstimada: 1 });
 registroReproductivoSchema.index({ fechaPartoReal: 1 });
+registroReproductivoSchema.index({ especie: 1, fechaInseminacion: 1 });
+registroReproductivoSchema.index({ animal: 1, estadoCiclo: 1, activoParaAlertas: 1 });
 
 module.exports = {
     RegistroReproductivo: model('RegistroReproductivo', registroReproductivoSchema),

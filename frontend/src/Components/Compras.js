@@ -9,6 +9,9 @@ import {
   API_URL
 } from '../services/api';
 import { obtenerRangoMesActual } from '../utils/fechas';
+import SelectorEspecie from './SelectorEspecie';
+
+const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
@@ -25,6 +28,7 @@ const animalInicial = {
 };
 
 const estadoInicial = {
+  especie: 'Bovino',
   fechaCompra: fechaHoy(),
   proveedor: '',
   identificacionProveedor: '',
@@ -49,6 +53,7 @@ const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(valor || 0);
 
 const normalizarCompraFormulario = (compra) => ({
+  especie: compra.especie || 'Bovino',
   fechaCompra: compra.fechaCompra ? new Date(compra.fechaCompra).toISOString().slice(0, 10) : fechaHoy(),
   proveedor: compra.proveedor || '',
   identificacionProveedor: compra.identificacionProveedor || '',
@@ -81,14 +86,21 @@ const Compras = () => {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [errorFormulario, setErrorFormulario] = useState('');
+  const [especie, setEspecie] = useState(obtenerEspecieInicial);
+  const etiquetaId = 'DIIO';
+
+  const cambiarEspecie = (valor) => {
+    localStorage.setItem('ganaderiaEspecie', valor);
+    setEspecie(valor);
+  };
 
   const cargarDatos = async () => {
     try {
       setCargando(true);
       setError('');
       const [comprasData, resumenData] = await Promise.all([
-        obtenerCompras(filtros),
-        obtenerResumenCompras({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin })
+        obtenerCompras({ ...filtros, especie }),
+        obtenerResumenCompras({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie })
       ]);
       setCompras(comprasData);
       setResumen(resumenData);
@@ -101,7 +113,7 @@ const Compras = () => {
 
   useEffect(() => {
     cargarDatos();
-  }, [filtros.fechaInicio, filtros.fechaFin, filtros.proveedor, filtros.estado]);
+  }, [filtros.fechaInicio, filtros.fechaFin, filtros.proveedor, filtros.estado, especie]);
 
   const totalCalculadoFormulario = useMemo(() => {
     return formulario.animales.reduce((total, item) => total + (Number(item.pesoCompraKg || 0) * Number(item.precioKg || 0)), 0);
@@ -121,7 +133,7 @@ const Compras = () => {
 
   const abrirNuevo = () => {
     setCompraSeleccionada(null);
-    setFormulario(estadoInicial);
+    setFormulario({ ...estadoInicial, especie });
     setErrorFormulario('');
     setModoFormulario(true);
   };
@@ -232,6 +244,7 @@ const Compras = () => {
 
         <form className="form-card venta-form" onSubmit={guardarCompra}>
           {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
+          <SelectorEspecie valor={formulario.especie} onChange={(valor) => setFormulario((actual) => ({ ...actual, especie: valor }))} />
           <div className="form-grid">
             <label>Fecha<input type="date" name="fechaCompra" value={formulario.fechaCompra} onChange={actualizarCampo} required /></label>
             <label>Proveedor<input name="proveedor" value={formulario.proveedor} onChange={actualizarCampo} required /></label>
@@ -336,6 +349,8 @@ const Compras = () => {
         <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva compra</button>
       </div>
 
+      <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
+
       <section className="reportes-metricas">
         <article><span>Total comprado</span><strong>{formatearMoneda(resumen?.totalComprado)}</strong></article>
         <article><span>Kg comprados</span><strong>{formatearNumero(resumen?.totalKgComprados)} kg</strong></article>
@@ -424,7 +439,7 @@ const Compras = () => {
             <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
               <table>
                 <thead>
-                  <tr><th>DIIO</th><th>Animal</th><th>Sexo</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
+                  <tr><th>{etiquetaId}</th><th>Animal</th><th>Sexo</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
                 </thead>
                 <tbody>
                   {detalle.animales?.map((item, indice) => (

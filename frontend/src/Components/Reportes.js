@@ -2,17 +2,22 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   obtenerFinanzasCria,
   obtenerProductividadCria,
+  obtenerReporteCamadas,
+  obtenerReporteEconomicoCamadas,
   obtenerReporteProductosCombustibles,
   obtenerReporteProductosPorCategoria,
   obtenerReporteProductosPorProducto,
   obtenerReporteProductosProveedores,
   obtenerReporteProductosResumen,
   obtenerReporteCrecimientoPesajes,
+  obtenerReporteReproductivoPorcino,
+  obtenerReporteTareasCamadas,
   obtenerResumenVentas,
   obtenerResumenReportes,
   obtenerSustentabilidadCria,
   obtenerVacasImproductivas
 } from '../services/api';
+import SelectorEspecie from './SelectorEspecie';
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR').format(Math.round(valor || 0));
 
@@ -130,6 +135,7 @@ const Reportes = () => {
     categoriaProducto: '',
     proveedorProducto: ''
   });
+  const [especie, setEspecie] = useState('Todos');
   const [reporte, setReporte] = useState(null);
   const [productividad, setProductividad] = useState(null);
   const [finanzasCria, setFinanzasCria] = useState(null);
@@ -138,8 +144,10 @@ const Reportes = () => {
   const [crecimientoPesajes, setCrecimientoPesajes] = useState(null);
   const [ventasReporte, setVentasReporte] = useState(null);
   const [productosReporte, setProductosReporte] = useState(null);
+  const [porcinosReporte, setPorcinosReporte] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const etiquetaId = 'DIIO';
 
   const cargarReportes = useCallback(async () => {
     try {
@@ -147,12 +155,14 @@ const Reportes = () => {
       setError('');
       const filtrosGenerales = {
         fechaInicio: filtros.fechaInicio,
-        fechaFin: filtros.fechaFin
+        fechaFin: filtros.fechaFin,
+        especie: especie === 'Todos' ? '' : especie
       };
       const filtrosPartos = {
         ...filtros,
         fechaInicio: filtros.partosFechaInicio || filtros.fechaInicio,
-        fechaFin: filtros.partosFechaFin || filtros.fechaFin
+        fechaFin: filtros.partosFechaFin || filtros.fechaFin,
+        especie: especie === 'Todos' ? '' : especie
       };
       const filtrosImproductivas = {
         fechaInicio: filtros.partosFechaInicio || filtros.fechaInicio,
@@ -160,7 +170,8 @@ const Reportes = () => {
         diio: filtros.diio,
         mesesSinParto: filtros.mesesSinParto,
         diasAbiertos: filtros.diasAbiertos,
-        pesoDesteteMin: filtros.pesoDesteteMin
+        pesoDesteteMin: filtros.pesoDesteteMin,
+        especie: especie === 'Todos' ? '' : especie
       };
       const filtrosProductos = {
         fechaInicio: filtros.fechaInicio,
@@ -181,7 +192,11 @@ const Reportes = () => {
         productosPorProductoData,
         productosPorCategoriaData,
         productosCombustiblesData,
-        productosProveedoresData
+        productosProveedoresData,
+        camadasData,
+        reproduccionPorcinaData,
+        tareasCamadasData,
+        economiaCamadasData
       ] = await Promise.all([
         obtenerResumenReportes(filtrosPartos),
         obtenerProductividadCria(filtrosGenerales),
@@ -197,7 +212,11 @@ const Reportes = () => {
         obtenerReporteProductosPorProducto(filtrosProductos),
         obtenerReporteProductosPorCategoria(filtrosProductos),
         obtenerReporteProductosCombustibles(filtrosProductos),
-        obtenerReporteProductosProveedores(filtrosProductos)
+        obtenerReporteProductosProveedores(filtrosProductos),
+        obtenerReporteCamadas(filtrosGenerales),
+        obtenerReporteReproductivoPorcino(filtrosGenerales),
+        obtenerReporteTareasCamadas(filtrosGenerales),
+        obtenerReporteEconomicoCamadas(filtrosGenerales)
       ]);
       setReporte(data);
       setProductividad(productividadData);
@@ -213,12 +232,18 @@ const Reportes = () => {
         combustibles: productosCombustiblesData,
         proveedores: productosProveedoresData
       });
+      setPorcinosReporte({
+        camadas: camadasData,
+        reproduccion: reproduccionPorcinaData,
+        tareasCamadas: tareasCamadasData,
+        economia: economiaCamadasData
+      });
     } catch (err) {
       setError(err.message);
     } finally {
       setCargando(false);
     }
-  }, [filtros]);
+  }, [filtros, especie]);
 
   useEffect(() => {
     cargarReportes();
@@ -246,6 +271,8 @@ const Reportes = () => {
           {cargando ? 'Actualizando...' : 'Actualizar'}
         </button>
       </div>
+
+      <SelectorEspecie valor={especie} onChange={setEspecie} incluirTodos />
 
       <section className="reportes-filtros">
         <label>
@@ -456,7 +483,7 @@ const Reportes = () => {
                   <table>
                     <thead>
                       <tr>
-                        <th>DIIO</th>
+                        <th>{etiquetaId}</th>
                         <th>Origen</th>
                         <th>Venta kg</th>
                         <th>Compra kg</th>
@@ -617,7 +644,7 @@ const Reportes = () => {
                     <table>
                       <thead>
                         <tr>
-                          <th>DIIO</th>
+                          <th>{etiquetaId}</th>
                           <th>Nombre</th>
                           <th>Origen</th>
                           <th>Comprador</th>
@@ -820,6 +847,100 @@ const Reportes = () => {
                     </div>
                   ))}
                   {(productosReporte.proveedores || []).length === 0 && <span className="reporte-vacio">Sin proveedores para este rango.</span>}
+                </article>
+              </div>
+            </section>
+          )}
+
+          {porcinosReporte && (
+            <section className="reporte-panel reporte-panel-amplio porcinos-reportes-panel">
+              <div className="partos-panel-header">
+                <div>
+                  <p className="eyebrow">Porcinos</p>
+                  <h2>Camadas y reproducción porcina</h2>
+                </div>
+              </div>
+
+              <div className="reportes-metricas finanzas-cria-metricas">
+                <article>
+                  <span>Camadas</span>
+                  <strong>{formatearNumero(porcinosReporte.camadas?.resumen?.totalCamadas)}</strong>
+                  <small>{formatearNumero(porcinosReporte.camadas?.resumen?.camadasActivas)} activas · {formatearNumero(porcinosReporte.camadas?.resumen?.camadasDestetadas)} destetadas</small>
+                </article>
+                <article>
+                  <span>Nacidos vivos</span>
+                  <strong>{formatearNumero(porcinosReporte.camadas?.resumen?.nacidosVivos)}</strong>
+                  <small>{formatearNumero(porcinosReporte.camadas?.resumen?.promedioVivosPorCamada)} promedio por camada</small>
+                </article>
+                <article>
+                  <span>Tasa de destete</span>
+                  <strong>{formatearPorcentaje(porcinosReporte.camadas?.resumen?.tasaDestete)}</strong>
+                  <small>{formatearNumero(porcinosReporte.camadas?.resumen?.destetados)} destetados</small>
+                </article>
+                <article>
+                  <span>Ciclos porcinos</span>
+                  <strong>{formatearNumero(porcinosReporte.reproduccion?.resumen?.ciclosRegistrados)}</strong>
+                  <small>{formatearNumero(porcinosReporte.reproduccion?.resumen?.ciclosActivos)} activos · {formatearNumero(porcinosReporte.reproduccion?.resumen?.ciclosNoPrenada)} no preñada</small>
+                </article>
+                <article>
+                  <span>Tareas por camada</span>
+                  <strong>{formatearNumero(porcinosReporte.tareasCamadas?.resumen?.totalTareas)}</strong>
+                  <small>{formatearNumero(porcinosReporte.tareasCamadas?.resumen?.pendientes)} pendientes · {formatearNumero(porcinosReporte.tareasCamadas?.resumen?.vencidas)} vencidas</small>
+                </article>
+                <article className={(porcinosReporte.economia?.resumen?.balancePorcino || 0) >= 0 ? 'sustentabilidad-positiva' : 'sustentabilidad-negativa'}>
+                  <span>Balance porcino</span>
+                  <strong>{formatearMoneda(porcinosReporte.economia?.resumen?.balancePorcino)}</strong>
+                  <small>{formatearMoneda(porcinosReporte.economia?.resumen?.costoPromedioPorCamada)} costo prom/camada</small>
+                </article>
+              </div>
+
+              <div className="crecimiento-grid porcinos-reportes-grid">
+                <article>
+                  <h3>Reporte de camadas</h3>
+                  {(porcinosReporte.camadas?.camadas || []).slice(0, 10).map((camada) => (
+                    <div className="reporte-lista-item" key={camada._id}>
+                      <strong>{camada.codigoCamada || 'Camada sin código'} · {camada.estado || '--'}</strong>
+                      <span>Madre: {camada.madre?.diio || camada.madre?.identificadorFinca || '--'} · Nacimiento: {formatearFecha(camada.fechaNacimiento)}</span>
+                      <span>{formatearNumero(camada.nacidosVivos)} vivos · {formatearNumero(camada.destetados)} destetados · {formatearPorcentaje(camada.tasaDestete)} destete</span>
+                    </div>
+                  ))}
+                  {(porcinosReporte.camadas?.camadas || []).length === 0 && <span className="reporte-vacio">Sin camadas para este rango.</span>}
+                </article>
+
+                <article>
+                  <h3>Reproductivo porcino</h3>
+                  {(porcinosReporte.reproduccion?.madres || []).slice(0, 10).map((madre) => (
+                    <div className="reporte-lista-item" key={madre.animalId}>
+                      <strong>{madre.diio || '--'} {madre.nombre || ''}</strong>
+                      <span>{formatearNumero(madre.ciclos)} ciclos · {formatearNumero(madre.partos)} partos · último parto: {formatearFecha(madre.ultimoParto)}</span>
+                      <span>{formatearNumero(madre.nacidosVivos)} vivos · {formatearNumero(madre.destetados)} destetados · {formatearPorcentaje(madre.tasaDestete)} destete</span>
+                    </div>
+                  ))}
+                  {(porcinosReporte.reproduccion?.madres || []).length === 0 && <span className="reporte-vacio">Sin madres porcinas con datos en el rango.</span>}
+                </article>
+
+                <article>
+                  <h3>Actividades por camada</h3>
+                  {(porcinosReporte.tareasCamadas?.camadas || []).slice(0, 10).map((camada) => (
+                    <div className="reporte-lista-item" key={camada._id}>
+                      <strong>{camada.codigoCamada || 'Camada sin código'}</strong>
+                      <span>{formatearNumero(camada.resumenTareas?.total)} tareas · {formatearNumero(camada.resumenTareas?.pendientes)} pendientes · {formatearNumero(camada.resumenTareas?.completadas)} completadas</span>
+                      <span>{(camada.tareas || []).slice(0, 3).map((tarea) => tarea.titulo).join(' · ') || 'Sin tareas automáticas'}</span>
+                    </div>
+                  ))}
+                  {(porcinosReporte.tareasCamadas?.camadas || []).length === 0 && <span className="reporte-vacio">Sin tareas automáticas por camada.</span>}
+                </article>
+
+                <article>
+                  <h3>Económico por camada</h3>
+                  {(porcinosReporte.economia?.camadas || []).slice(0, 10).map((camada) => (
+                    <div className="reporte-lista-item" key={camada._id}>
+                      <strong>{camada.codigoCamada || 'Camada sin código'} · {camada.destino || '--'}</strong>
+                      <span>Costo: {formatearMoneda(camada.costoEstimado)} · Ingreso: {formatearMoneda(camada.ingresoEstimado)}</span>
+                      <span>Margen: {formatearMoneda(camada.margenEstimado)} · Costo/destetado: {formatearMoneda(camada.costoPorCriaDestetada)}</span>
+                    </div>
+                  ))}
+                  {(porcinosReporte.economia?.camadas || []).length === 0 && <span className="reporte-vacio">Sin camadas para estimación económica.</span>}
                 </article>
               </div>
             </section>
@@ -1032,11 +1153,11 @@ const Reportes = () => {
                     />
                   </label>
                   <label>
-                    DIIO
+                    {etiquetaId}
                     <input
                       value={filtros.diio}
                       onChange={(evento) => setFiltros((actual) => ({ ...actual, diio: evento.target.value }))}
-                      placeholder="Filtrar por DIIO"
+                      placeholder={`Filtrar por ${etiquetaId.toLowerCase()}`}
                     />
                   </label>
                 </div>
@@ -1069,7 +1190,7 @@ const Reportes = () => {
                   <table>
                     <thead>
                       <tr>
-                        <th>DIIO</th>
+                        <th>{etiquetaId}</th>
                         <th>Nombre</th>
                         <th>Edad</th>
                         {reporte.reproduccion.partos.anios.map((anio) => <th key={anio}>{anio}</th>)}
@@ -1181,7 +1302,7 @@ const Reportes = () => {
                     <table>
                       <thead>
                         <tr>
-                          <th>DIIO</th>
+                          <th>{etiquetaId}</th>
                           <th>Nombre</th>
                           <th>Edad</th>
                           <th>Último parto</th>

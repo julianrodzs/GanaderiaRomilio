@@ -11,7 +11,10 @@ const {
     getRegistrosPorAnimal,
     registrarTerneroDesdeParto,
     updateRegistro,
-    deleteRegistro
+    deleteRegistro,
+    cerrarCiclo,
+    cancelarCiclo,
+    marcarNoPrenada
 } = require('../controllers/reproduccionController');
 
 router.route('/')
@@ -20,6 +23,9 @@ router.route('/')
 
 router.get('/animal/:animalId', puedeVer, getRegistrosPorAnimal);
 router.post('/:id/ternero', soloAdministrador, registrarTerneroDesdeParto);
+router.patch('/:id/cerrar-ciclo', soloAdministrador, cerrarCiclo);
+router.patch('/:id/cancelar-ciclo', soloAdministrador, cancelarCiclo);
+router.patch('/:id/no-prenada', soloAdministrador, marcarNoPrenada);
 
 router.route('/:id')
     .get(puedeVer, getRegistro)

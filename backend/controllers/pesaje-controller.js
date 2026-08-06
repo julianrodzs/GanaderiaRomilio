@@ -45,9 +45,19 @@ const validarPesaje = async ({ animal, peso }) => {
     return { valido: true, animal: animalEncontrado };
 };
 
+const obtenerFiltroPesajes = async (especie) => {
+    if (!['Bovino', 'Porcino'].includes(especie)) return {};
+    const filtro = especie === 'Bovino'
+        ? { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] }
+        : { especie };
+    const animales = await Animal.find(filtro).select('_id');
+    return { animal: { $in: animales.map((animal) => animal._id) } };
+};
+
 pesajeCtrl.getPesajes = async (req, res) => {
     try {
-        const pesajes = await poblarPesaje(Pesaje.find().sort({ fecha: -1, createdAt: -1 }));
+        const filtro = await obtenerFiltroPesajes(req.query.especie);
+        const pesajes = await poblarPesaje(Pesaje.find(filtro).sort({ fecha: -1, createdAt: -1 }));
         res.json(pesajes);
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener pesajes', error: error.message });
