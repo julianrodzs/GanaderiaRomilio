@@ -481,6 +481,9 @@ Campos:
 - `momias`
 - `destetados`
 - `muertosPreDestete`
+- `criasParaFinca`
+- `criasParaVenta`
+- `criasParaEngorde`
 - `destino`
 - `estado`
 - `pesoPromedioNacimiento`
@@ -504,6 +507,14 @@ Destinos:
 - `Engorde`
 - `Mixto`
 - `No definido`
+
+Uso de destino mixto:
+
+- `criasParaFinca` indica cuantas crias se quedan para reemplazo o crecimiento de finca.
+- `criasParaVenta` indica cuantas crias se planea vender.
+- `criasParaEngorde` indica cuantas crias pasan a manejo de engorde.
+- En `Mixto`, estas cantidades definen que tareas automaticas se crean.
+- Si una camada mixta no tiene cantidades, se mantiene compatibilidad y se generan tareas amplias de finca, venta y engorde.
 
 Endpoints:
 

@@ -878,6 +878,11 @@ const Reportes = () => {
                   <small>{formatearNumero(porcinosReporte.camadas?.resumen?.destetados)} destetados</small>
                 </article>
                 <article>
+                  <span>Distribución crías</span>
+                  <strong>{formatearNumero(porcinosReporte.camadas?.resumen?.criasParaFinca)} / {formatearNumero(porcinosReporte.camadas?.resumen?.criasParaVenta)} / {formatearNumero(porcinosReporte.camadas?.resumen?.criasParaEngorde)}</strong>
+                  <small>Finca / venta / engorde</small>
+                </article>
+                <article>
                   <span>Ciclos porcinos</span>
                   <strong>{formatearNumero(porcinosReporte.reproduccion?.resumen?.ciclosRegistrados)}</strong>
                   <small>{formatearNumero(porcinosReporte.reproduccion?.resumen?.ciclosActivos)} activos · {formatearNumero(porcinosReporte.reproduccion?.resumen?.ciclosNoPrenada)} no preñada</small>
@@ -902,6 +907,7 @@ const Reportes = () => {
                       <strong>{camada.codigoCamada || 'Camada sin código'} · {camada.estado || '--'}</strong>
                       <span>Madre: {camada.madre?.diio || camada.madre?.identificadorFinca || '--'} · Nacimiento: {formatearFecha(camada.fechaNacimiento)}</span>
                       <span>{formatearNumero(camada.nacidosVivos)} vivos · {formatearNumero(camada.destetados)} destetados · {formatearPorcentaje(camada.tasaDestete)} destete</span>
+                      <span>Finca {formatearNumero(camada.criasParaFinca)} · Venta {formatearNumero(camada.criasParaVenta)} · Engorde {formatearNumero(camada.criasParaEngorde)}</span>
                     </div>
                   ))}
                   {(porcinosReporte.camadas?.camadas || []).length === 0 && <span className="reporte-vacio">Sin camadas para este rango.</span>}

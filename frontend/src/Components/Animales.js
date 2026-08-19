@@ -182,6 +182,16 @@ const columnasCamadas = [
   { id: 'destetados', label: 'Destetados', accessor: (camada) => camada.destetados },
   { id: 'destino', label: 'Destino', accessor: (camada) => camada.destino },
   {
+    id: 'distribucion',
+    label: 'Distribución',
+    accessor: (camada) => `${camada.criasParaFinca || 0}/${camada.criasParaVenta || 0}/${camada.criasParaEngorde || 0}`,
+    render: (camada) => (
+      <span className="distribucion-camada">
+        Finca {camada.criasParaFinca || 0} · Venta {camada.criasParaVenta || 0} · Engorde {camada.criasParaEngorde || 0}
+      </span>
+    )
+  },
+  {
     id: 'estado',
     label: 'Estado',
     accessor: (camada) => camada.estado,
@@ -644,6 +654,9 @@ const Animales = ({ soloLectura = false }) => {
               <article><span>Momias</span><strong>{camadaDetalle.momias ?? '--'}</strong></article>
               <article><span>Destetados</span><strong>{camadaDetalle.destetados ?? '--'}</strong></article>
               <article><span>Muertos pre-destete</span><strong>{camadaDetalle.muertosPreDestete ?? '--'}</strong></article>
+              <article><span>Crías para finca</span><strong>{camadaDetalle.criasParaFinca ?? 0}</strong></article>
+              <article><span>Crías para venta</span><strong>{camadaDetalle.criasParaVenta ?? 0}</strong></article>
+              <article><span>Crías para engorde</span><strong>{camadaDetalle.criasParaEngorde ?? 0}</strong></article>
               <article><span>Peso prom. nacimiento</span><strong>{formatearPeso(camadaDetalle.pesoPromedioNacimiento)}</strong></article>
               <article><span>Peso prom. destete</span><strong>{formatearPeso(camadaDetalle.pesoPromedioDestete)}</strong></article>
               <article><span>Peso total destete</span><strong>{formatearPeso(camadaDetalle.pesoTotalDestete)}</strong></article>

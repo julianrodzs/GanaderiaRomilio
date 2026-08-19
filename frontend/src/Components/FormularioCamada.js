@@ -12,6 +12,9 @@ const estadoInicial = {
   momias: '',
   destetados: '',
   muertosPreDestete: '',
+  criasParaFinca: '',
+  criasParaVenta: '',
+  criasParaEngorde: '',
   destino: 'No definido',
   estado: 'Activa',
   pesoPromedioNacimiento: '',
@@ -46,6 +49,9 @@ const normalizarCamada = (camada) => ({
   momias: camada?.momias ?? '',
   destetados: camada?.destetados ?? '',
   muertosPreDestete: camada?.muertosPreDestete ?? '',
+  criasParaFinca: camada?.criasParaFinca ?? '',
+  criasParaVenta: camada?.criasParaVenta ?? '',
+  criasParaEngorde: camada?.criasParaEngorde ?? '',
   pesoPromedioNacimiento: camada?.pesoPromedioNacimiento ?? '',
   pesoPromedioDestete: camada?.pesoPromedioDestete ?? '',
   pesoTotalDestete: camada?.pesoTotalDestete ?? ''
@@ -95,6 +101,9 @@ const FormularioCamada = ({
       momias: numeroOpcional(formulario.momias),
       destetados: numeroOpcional(formulario.destetados),
       muertosPreDestete: numeroOpcional(formulario.muertosPreDestete),
+      criasParaFinca: numeroOpcional(formulario.criasParaFinca),
+      criasParaVenta: numeroOpcional(formulario.criasParaVenta),
+      criasParaEngorde: numeroOpcional(formulario.criasParaEngorde),
       pesoPromedioNacimiento: numeroOpcional(formulario.pesoPromedioNacimiento),
       pesoPromedioDestete: numeroOpcional(formulario.pesoPromedioDestete),
       pesoTotalDestete: numeroOpcional(formulario.pesoTotalDestete),
@@ -155,6 +164,20 @@ const FormularioCamada = ({
         <label>Destete estimado<input name="fechaDesteteEstimada" type="date" value={formulario.fechaDesteteEstimada} onChange={actualizarCampo} /></label>
         <label>Destetados<input name="destetados" type="number" min="0" value={formulario.destetados} onChange={actualizarCampo} /></label>
         <label>Muertos pre-destete<input name="muertosPreDestete" type="number" min="0" value={formulario.muertosPreDestete} onChange={actualizarCampo} /></label>
+      </div>
+
+      <div className="form-section-mini">
+        <p className="eyebrow">Destino operativo</p>
+        <div className="form-grid">
+          <label>Crías para finca<input name="criasParaFinca" type="number" min="0" value={formulario.criasParaFinca} onChange={actualizarCampo} /></label>
+          <label>Crías para venta<input name="criasParaVenta" type="number" min="0" value={formulario.criasParaVenta} onChange={actualizarCampo} /></label>
+          <label>Crías para engorde<input name="criasParaEngorde" type="number" min="0" value={formulario.criasParaEngorde} onChange={actualizarCampo} /></label>
+        </div>
+        {formulario.destino === 'Mixto' && (
+          <small className="texto-ayuda-formulario">
+            En destino mixto estas cantidades permiten separar cuántas crías se quedan, se venden o van a engorde.
+          </small>
+        )}
       </div>
 
       <div className="form-grid">

@@ -53,6 +53,17 @@ const prepararDatosCamada = async (body) => {
         ...body,
         fechaNacimiento
     });
+    const criasParaFinca = normalizarNumero(body.criasParaFinca);
+    const criasParaVenta = normalizarNumero(body.criasParaVenta);
+    const criasParaEngorde = normalizarNumero(body.criasParaEngorde);
+    const nacidosVivos = normalizarNumero(body.nacidosVivos);
+    const totalDestino = criasParaFinca + criasParaVenta + criasParaEngorde;
+
+    if (nacidosVivos > 0 && totalDestino > nacidosVivos) {
+        const error = new Error('La suma de crias por destino no puede superar los nacidos vivos');
+        error.status = 400;
+        throw error;
+    }
 
     return {
         ...body,
@@ -60,11 +71,14 @@ const prepararDatosCamada = async (body) => {
         fechaNacimiento,
         fechaDesteteEstimada: body.fechaDesteteEstimada || fechas.fechaDesteteEstimada,
         nacidosTotales: normalizarNumero(body.nacidosTotales),
-        nacidosVivos: normalizarNumero(body.nacidosVivos),
+        nacidosVivos,
         nacidosMuertos: normalizarNumero(body.nacidosMuertos),
         momias: normalizarNumero(body.momias),
         destetados: normalizarNumero(body.destetados),
         muertosPreDestete: normalizarNumero(body.muertosPreDestete),
+        criasParaFinca,
+        criasParaVenta,
+        criasParaEngorde,
         pesoPromedioNacimiento: body.pesoPromedioNacimiento === '' ? null : body.pesoPromedioNacimiento,
         pesoPromedioDestete: body.pesoPromedioDestete === '' ? null : body.pesoPromedioDestete,
         pesoTotalDestete: body.pesoTotalDestete === '' ? null : body.pesoTotalDestete

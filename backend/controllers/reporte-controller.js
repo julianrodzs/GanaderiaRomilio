@@ -1495,6 +1495,9 @@ const mapearCamadaResumen = (camada) => ({
     momias: camada.momias || 0,
     destetados: camada.destetados || 0,
     muertosPreDestete: camada.muertosPreDestete || 0,
+    criasParaFinca: camada.criasParaFinca || 0,
+    criasParaVenta: camada.criasParaVenta || 0,
+    criasParaEngorde: camada.criasParaEngorde || 0,
     destino: camada.destino,
     estado: camada.estado,
     tasaDestete: redondear(porcentaje(camada.destetados || 0, camada.nacidosVivos || 0)),
@@ -1529,14 +1532,20 @@ reporteCtrl.getReporteCamadas = async (req, res) => {
             nacidosMuertos: acc.nacidosMuertos + (camada.nacidosMuertos || 0),
             momias: acc.momias + (camada.momias || 0),
             destetados: acc.destetados + (camada.destetados || 0),
-            muertosPreDestete: acc.muertosPreDestete + (camada.muertosPreDestete || 0)
+            muertosPreDestete: acc.muertosPreDestete + (camada.muertosPreDestete || 0),
+            criasParaFinca: acc.criasParaFinca + (camada.criasParaFinca || 0),
+            criasParaVenta: acc.criasParaVenta + (camada.criasParaVenta || 0),
+            criasParaEngorde: acc.criasParaEngorde + (camada.criasParaEngorde || 0)
         }), {
             nacidosTotales: 0,
             nacidosVivos: 0,
             nacidosMuertos: 0,
             momias: 0,
             destetados: 0,
-            muertosPreDestete: 0
+            muertosPreDestete: 0,
+            criasParaFinca: 0,
+            criasParaVenta: 0,
+            criasParaEngorde: 0
         });
 
         res.json({

@@ -278,6 +278,9 @@ Campos principales:
 - destetados.
 - muertos pre-destete.
 - destino.
+- crias para finca.
+- crias para venta.
+- crias para engorde.
 - estado.
 - pesos promedio de nacimiento/destete.
 - tareas generadas.
@@ -296,7 +299,7 @@ Cuando se crea una camada, se generan tareas automaticas segun destino:
 - `Se quedan`: alimento inicio, desarrollo, engorde, circovirus y primera monta.
 - `Se venden`: venta estimada.
 - `Engorde`: alimento inicio, desarrollo, engorde y sacrificio.
-- `Mixto`: combina reglas de crias que se quedan y se venden.
+- `Mixto`: usa las cantidades `criasParaFinca`, `criasParaVenta` y `criasParaEngorde` para crear solo las tareas que correspondan. Si una camada mixta vieja no tiene cantidades, conserva el comportamiento amplio y genera tareas de finca, venta y engorde.
 
 Al registrar destete real:
 

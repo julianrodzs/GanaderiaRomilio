@@ -1419,6 +1419,9 @@ resumen.nacidosMuertos
 resumen.momias
 resumen.destetados
 resumen.muertosPreDestete
+resumen.criasParaFinca
+resumen.criasParaVenta
+resumen.criasParaEngorde
 resumen.promedioVivosPorCamada
 resumen.promedioDestetadosPorCamada
 resumen.tasaDestete
@@ -1439,6 +1442,9 @@ nacidosMuertos = suma(Camada.nacidosMuertos)
 momias = suma(Camada.momias)
 destetados = suma(Camada.destetados)
 muertosPreDestete = suma(Camada.muertosPreDestete)
+criasParaFinca = suma(Camada.criasParaFinca)
+criasParaVenta = suma(Camada.criasParaVenta)
+criasParaEngorde = suma(Camada.criasParaEngorde)
 ```
 
 Promedios:
@@ -1474,6 +1480,9 @@ nacidosMuertos
 momias
 destetados
 muertosPreDestete
+criasParaFinca
+criasParaVenta
+criasParaEngorde
 destino
 estado
 tasaDestete

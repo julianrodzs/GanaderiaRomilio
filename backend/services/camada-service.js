@@ -80,6 +80,11 @@ const crearDefinicionesTareasCamada = ({ camada, madre, usuarioId }) => {
     const fechas = calcularFechasCamada(camada);
     const destino = camada.destino || 'No definido';
     const codigoMadre = obtenerCodigoMadre(madre);
+    const totalDistribuido = (camada.criasParaFinca || 0) + (camada.criasParaVenta || 0) + (camada.criasParaEngorde || 0);
+    const mixtoSinDistribucion = destino === 'Mixto' && totalDistribuido === 0;
+    const manejarComoFinca = destino === 'Se quedan' || (destino === 'Mixto' && (mixtoSinDistribucion || (camada.criasParaFinca || 0) > 0));
+    const manejarComoVenta = destino === 'Se venden' || (destino === 'Mixto' && (mixtoSinDistribucion || (camada.criasParaVenta || 0) > 0));
+    const manejarComoEngorde = destino === 'Engorde' || (destino === 'Mixto' && (mixtoSinDistribucion || (camada.criasParaEngorde || 0) > 0));
     const base = [
         ['hierro', 'Aplicar hierro a crías', 'Sanidad', fechas.fechaHierro, 'Sanidad porcina'],
         ['vitamina-desparasitacion', 'Vitaminizar y desparasitar crías', 'Sanidad', fechas.fechaVitaminaDesparasitacion, 'Sanidad porcina'],
@@ -91,7 +96,7 @@ const crearDefinicionesTareasCamada = ({ camada, madre, usuarioId }) => {
     ];
     const porDestino = [];
 
-    if (['Se quedan', 'Engorde', 'Mixto'].includes(destino)) {
+    if (manejarComoFinca || manejarComoEngorde) {
         porDestino.push(
             ['alimento-inicio', 'Dar alimento inicio a crías', 'Alimentación', fechas.fechaAlimentoInicio, 'Alimentación porcina'],
             ['alimento-desarrollo', 'Dar alimento de desarrollo a crías', 'Alimentación', fechas.fechaAlimentoDesarrollo, 'Alimentación porcina'],
@@ -99,19 +104,19 @@ const crearDefinicionesTareasCamada = ({ camada, madre, usuarioId }) => {
         );
     }
 
-    if (['Se quedan', 'Mixto'].includes(destino)) {
+    if (manejarComoFinca) {
         porDestino.push(
             ['circovirus', 'Aplicar circovirus porcino', 'Sanidad', fechas.fechaCircovirus, 'Sanidad porcina'],
             ['primera-monta', 'Primera inseminación/monta de crías', 'Reproducción', fechas.fechaPrimeraMonta, 'Crías porcinas']
         );
     }
 
-    if (['Se venden', 'Mixto'].includes(destino)) {
+    if (manejarComoVenta) {
         porDestino.push(['venta', 'Vender crías', 'Venta', fechas.fechaVentaEstimada || sumarDias(camada.fechaNacimiento, 30), 'Crías porcinas']);
     }
 
-    if (destino === 'Engorde') {
-        porDestino.push(['sacrificio', 'Sacrificio de cerdos de engorde', 'Sacrificio', fechas.fechaSacrificioEstimada, 'Crías porcinas']);
+    if (manejarComoEngorde) {
+        porDestino.push(['sacrificio', 'Sacrificio de cerdos de engorde', 'Sacrificio', fechas.fechaSacrificioEstimada || sumarDias(camada.fechaNacimiento, 270), 'Crías porcinas']);
     }
 
     return [...base, ...porDestino]

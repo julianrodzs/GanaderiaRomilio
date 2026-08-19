@@ -2931,6 +2931,27 @@
   margin-top: 18px;
 }
 
+.form-section-mini {
+  display: grid;
+  gap: 8px;
+}
+
+.texto-ayuda-formulario {
+  color: #657267;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.distribucion-camada {
+  display: inline-block;
+  max-width: 220px;
+  color: #4f5d53;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+  white-space: normal;
+}
+
 .estado-camada-Activa {
   background: #e4f1e8;
   color: #073d23;
