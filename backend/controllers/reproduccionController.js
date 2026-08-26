@@ -2,13 +2,15 @@ const { RegistroReproductivo, completarFechasYEstado } = require('../models/Regi
 const Animal = require('../models/Animal');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const { prepararDatosGenealogia, validarRelacionGenealogica } = require('../services/genealogiaService');
-const { sincronizarTareasPorcinas, cancelarTareasPorcinas } = require('../services/reproduccionPorcina-service');
+const { sincronizarTareasPorcinas } = require('../services/reproduccionPorcina-service');
+const { sincronizarTareasBovinas } = require('../services/reproduccionBovina-service');
 const {
     crearNuevoCicloReproductivo,
     cerrarCicloReproductivo,
     cancelarCicloReproductivo,
     marcarCicloNoPrenada,
-    obtenerCicloActivoPorAnimal
+    obtenerCicloActivoPorAnimal,
+    cancelarTareasAutomaticasDelCiclo
 } = require('../services/reproduccion-service');
 
 const reproduccionCtrl = {};
@@ -115,12 +117,16 @@ const registrarEventoReproduccion = async (registro, usuarioId) => {
     });
 };
 
-const sincronizarAutomatizacionPorcina = async ({ registro, animal, usuarioId }) => {
+const sincronizarAutomatizacionReproductiva = async ({ registro, animal, usuarioId }) => {
     const cicloActivo = (registro.estadoCiclo || 'Activo') === 'Activo' && registro.activoParaAlertas !== false;
-    if ((registro.especie || animal?.especie) === 'Porcino' && cicloActivo) {
+    const especie = registro.especie || animal?.especie || 'Bovino';
+
+    if (especie === 'Porcino' && cicloActivo) {
         await sincronizarTareasPorcinas({ registro, animal, usuarioId });
+    } else if (especie === 'Bovino' && cicloActivo) {
+        await sincronizarTareasBovinas({ registro, animal, usuarioId });
     } else {
-        await cancelarTareasPorcinas(registro._id);
+        await cancelarTareasAutomaticasDelCiclo(registro._id);
     }
 };
 
@@ -154,7 +160,7 @@ reproduccionCtrl.createRegistro = async (req, res) => {
             cerrarCicloAnterior: req.body.cerrarCicloAnterior === true
         });
         await registrarEventoReproduccion(registroGuardado, req.usuario?.id);
-        await sincronizarAutomatizacionPorcina({
+        await sincronizarAutomatizacionReproductiva({
             registro: registroGuardado,
             animal: validacion.animal,
             usuarioId: req.usuario?.id
@@ -334,7 +340,7 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
         }
 
         await registrarEventoReproduccion(registroActualizado, req.usuario?.id);
-        await sincronizarAutomatizacionPorcina({
+        await sincronizarAutomatizacionReproductiva({
             registro: registroActualizado,
             animal: animalValidado || await Animal.findById(registroActualizado.animal),
             usuarioId: req.usuario?.id
@@ -356,7 +362,7 @@ reproduccionCtrl.deleteRegistro = async (req, res) => {
         }
 
         await eliminarEventosPorReferencia({ moduloOrigen: 'Reproduccion', referenciaId: registro._id });
-        await cancelarTareasPorcinas(registro._id);
+        await cancelarTareasAutomaticasDelCiclo(registro._id, 'Cancelada por eliminación del registro reproductivo');
 
         res.json({ mensaje: 'Registro reproductivo eliminado' });
     } catch (error) {

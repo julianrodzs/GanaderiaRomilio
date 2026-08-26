@@ -12,6 +12,7 @@ const detalleVentaAnimalSchema = new Schema(
 
 const ventaAnimalSchema = new Schema(
     {
+        especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino' },
         fechaVenta: { type: Date, required: true },
         comprador: { type: String, required: true, trim: true },
         identificacionComprador: { type: String, trim: true },
@@ -40,20 +41,50 @@ const ventaAnimalSchema = new Schema(
     }
 );
 
-ventaAnimalSchema.pre('validate', function calcularTotales(next) {
-    this.animales = (this.animales || []).map((item) => ({
-        animal: item.animal,
+const calcularTotalesVenta = (animales = []) => {
+    const animalesCalculados = (animales || []).map((item) => ({
+        animal: item.animal?._id || item.animal,
         pesoVentaKg: item.pesoVentaKg,
         precioKg: item.precioKg,
         subtotal: Number(item.pesoVentaKg || 0) * Number(item.precioKg || 0)
     }));
-    this.totalAnimales = this.animales.length;
-    this.pesoTotalKg = this.animales.reduce((total, item) => total + Number(item.pesoVentaKg || 0), 0);
-    this.montoTotal = this.animales.reduce((total, item) => total + Number(item.subtotal || 0), 0);
+
+    return {
+        animales: animalesCalculados,
+        totalAnimales: animalesCalculados.length,
+        pesoTotalKg: animalesCalculados.reduce((total, item) => total + Number(item.pesoVentaKg || 0), 0),
+        montoTotal: animalesCalculados.reduce((total, item) => total + Number(item.subtotal || 0), 0)
+    };
+};
+
+ventaAnimalSchema.pre('validate', function calcularTotales(next) {
+    Object.assign(this, calcularTotalesVenta(this.animales));
+    next();
+});
+
+ventaAnimalSchema.pre('findOneAndUpdate', function calcularTotalesEnActualizacion(next) {
+    const update = this.getUpdate() || {};
+    const animales = update.animales || update.$set?.animales;
+
+    if (!animales) return next();
+
+    const totales = calcularTotalesVenta(animales);
+
+    if (update.$set) {
+        update.$set = {
+            ...update.$set,
+            ...totales
+        };
+    } else {
+        Object.assign(update, totales);
+    }
+
+    this.setUpdate(update);
     next();
 });
 
 ventaAnimalSchema.index({ estado: 1, fechaVenta: -1 });
+ventaAnimalSchema.index({ especie: 1, estado: 1, fechaVenta: -1 });
 ventaAnimalSchema.index({ comprador: 1 });
 ventaAnimalSchema.index({ 'animales.animal': 1 });
 

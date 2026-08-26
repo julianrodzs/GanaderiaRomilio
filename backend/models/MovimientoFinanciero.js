@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { normalizarMovimientoFinanciero } = require('../services/normalizacionFinanciera-service');
 
 const movimientoFinancieroSchema = new Schema(
     {
@@ -17,10 +18,14 @@ const movimientoFinancieroSchema = new Schema(
             trim: true
         },
         categoria: { type: String, required: true, trim: true },
+        categoriaNormalizada: { type: String, trim: true, default: 'Otros' },
         descripcion: { type: String, required: true, trim: true },
         producto: { type: String, trim: true },
         cantidad: { type: Number, min: 0 },
         unidad: { type: String, trim: true },
+        unidadNormalizada: { type: String, trim: true },
+        factorUnidad: { type: Number, min: 0 },
+        cantidadFisica: { type: Number, min: 0 },
         precioUnitario: { type: Number, min: 0 },
         periodoInicio: { type: Date },
         periodoFin: { type: Date },
@@ -60,10 +65,63 @@ const movimientoFinancieroSchema = new Schema(
     }
 );
 
+movimientoFinancieroSchema.pre('validate', function normalizarMovimiento(next) {
+    const normalizado = normalizarMovimientoFinanciero(this.toObject());
+
+    this.categoriaNormalizada = normalizado.categoriaNormalizada;
+    this.unidadNormalizada = normalizado.unidadNormalizada;
+    this.factorUnidad = normalizado.factorUnidad;
+    this.cantidadFisica = normalizado.cantidadFisica;
+
+    next();
+});
+
+movimientoFinancieroSchema.pre('findOneAndUpdate', function normalizarMovimientoActualizado(next) {
+    const update = this.getUpdate() || {};
+    const datos = {
+        ...(update.$set || {}),
+        ...Object.fromEntries(
+            Object.entries(update).filter(([clave]) => !clave.startsWith('$'))
+        )
+    };
+    const normalizado = normalizarMovimientoFinanciero(datos);
+    const cambiaCategoria = ['categoria', 'producto', 'descripcion', 'tipoMovimiento'].some((campo) => Object.prototype.hasOwnProperty.call(datos, campo));
+    const cambiaUnidad = ['unidad', 'cantidad'].some((campo) => Object.prototype.hasOwnProperty.call(datos, campo));
+    const camposNormalizados = {};
+
+    if (cambiaCategoria) {
+        camposNormalizados.categoriaNormalizada = normalizado.categoriaNormalizada;
+    }
+
+    if (cambiaUnidad) {
+        camposNormalizados.unidadNormalizada = normalizado.unidadNormalizada;
+        camposNormalizados.factorUnidad = normalizado.factorUnidad;
+        camposNormalizados.cantidadFisica = normalizado.cantidadFisica;
+    }
+
+    if (!Object.keys(camposNormalizados).length) {
+        return next();
+    }
+
+    if (update.$set) {
+        update.$set = {
+            ...update.$set,
+            ...camposNormalizados
+        };
+    } else {
+        Object.assign(update, camposNormalizados);
+    }
+
+    this.setUpdate(update);
+    next();
+});
+
 movimientoFinancieroSchema.index({ fecha: -1 });
 movimientoFinancieroSchema.index({ tipoMovimiento: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ categoria: 1, fecha: -1 });
+movimientoFinancieroSchema.index({ categoriaNormalizada: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ producto: 1, unidad: 1, fecha: -1 });
+movimientoFinancieroSchema.index({ producto: 1, unidadNormalizada: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ tipoMovimiento: 1, tipoTrabajo: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ tipoMovimiento: 1, tipoInversion: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ referenciaModelo: 1, referenciaId: 1 });

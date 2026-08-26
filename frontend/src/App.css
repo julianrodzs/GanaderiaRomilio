@@ -1188,6 +1188,73 @@
   color: #09160e;
 }
 
+.venta-buscador-animal {
+  position: relative;
+  width: min(100%, 520px);
+}
+
+.venta-buscador-animal input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  padding: 0 14px;
+  background: #fffdf7;
+  color: #09160e;
+  font-weight: 700;
+}
+
+.venta-buscador-animal input:focus {
+  border-color: #0b4228;
+  box-shadow: 0 0 0 2px rgba(11, 66, 40, 0.1);
+  outline: none;
+}
+
+.venta-resultados-animal {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid #d9ddd5;
+  background: #fffdf7;
+  box-shadow: 0 12px 28px rgba(9, 22, 14, 0.12);
+}
+
+.venta-resultados-animal button {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  border: 0;
+  border-bottom: 1px solid #edf0eb;
+  padding: 12px 14px;
+  background: transparent;
+  color: #09160e;
+  text-align: left;
+  cursor: pointer;
+}
+
+.venta-resultados-animal button:hover {
+  background: #edf4ed;
+}
+
+.venta-resultados-animal strong {
+  color: #003f25;
+  font-size: 1rem;
+}
+
+.venta-resultados-animal span {
+  font-weight: 700;
+}
+
+.venta-resultados-animal small,
+.venta-resultados-animal p {
+  margin: 0;
+  color: #667068;
+}
+
 .venta-detalle-tabla table {
   min-width: 980px;
 }

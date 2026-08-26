@@ -64,7 +64,12 @@ const crearFiltroProductos = ({ fechaInicio, fechaFin, producto, categoria, prov
     Object.assign(filtro, filtroFechas);
 
     if (producto) filtro.producto = { $regex: producto, $options: 'i' };
-    if (categoria) filtro.categoria = { $regex: categoria, $options: 'i' };
+    if (categoria) {
+        filtro.$or = [
+            { categoria: { $regex: categoria, $options: 'i' } },
+            { categoriaNormalizada: { $regex: categoria, $options: 'i' } }
+        ];
+    }
     if (proveedor) filtro.proveedor = { $regex: proveedor, $options: 'i' };
 
     return filtro;
@@ -74,9 +79,15 @@ const normalizarUnidadPipeline = {
     $ifNull: [
         {
             $cond: [
-                { $eq: ['$unidad', ''] },
-                'sin unidad',
-                '$unidad'
+                { $in: ['$unidadNormalizada', [null, '']] },
+                {
+                    $cond: [
+                        { $eq: ['$unidad', ''] },
+                        'sin unidad',
+                        '$unidad'
+                    ]
+                },
+                '$unidadNormalizada'
             ]
         },
         'sin unidad'
@@ -104,31 +115,54 @@ const agregarCantidadProductoPipeline = [
             cantidadCompra: { $ifNull: ['$cantidad', 0] },
             factorUnidad: {
                 $cond: [
-                    { $ne: ['$unidadPartes', null] },
+                    { $gt: [{ $ifNull: ['$factorUnidad', 0] }, 0] },
+                    '$factorUnidad',
                     {
-                        $toDouble: {
-                            $replaceAll: {
-                                input: { $arrayElemAt: ['$unidadPartes.captures', 0] },
-                                find: ',',
-                                replacement: '.'
-                            }
-                        }
-                    },
-                    1
+                        $cond: [
+                            { $ne: ['$unidadPartes', null] },
+                            {
+                                $toDouble: {
+                                    $replaceAll: {
+                                        input: { $arrayElemAt: ['$unidadPartes.captures', 0] },
+                                        find: ',',
+                                        replacement: '.'
+                                    }
+                                }
+                            },
+                            1
+                        ]
+                    }
                 ]
             },
             unidadBase: {
                 $cond: [
-                    { $ne: ['$unidadPartes', null] },
-                    { $arrayElemAt: ['$unidadPartes.captures', 1] },
-                    '$unidadNormalizada'
+                    { $not: [{ $in: ['$unidadNormalizada', [null, '']] }] },
+                    '$unidadNormalizada',
+                    {
+                        $cond: [
+                            { $ne: ['$unidadPartes', null] },
+                            { $arrayElemAt: ['$unidadPartes.captures', 1] },
+                            '$unidadNormalizada'
+                        ]
+                    }
                 ]
             }
         }
     },
     {
         $addFields: {
-            cantidadFisica: { $multiply: ['$cantidadCompra', '$factorUnidad'] }
+            cantidadFisicaCalculada: { $multiply: ['$cantidadCompra', '$factorUnidad'] }
+        }
+    },
+    {
+        $addFields: {
+            cantidadFisica: {
+                $cond: [
+                    { $gt: [{ $ifNull: ['$cantidadFisica', 0] }, 0] },
+                    '$cantidadFisica',
+                    '$cantidadFisicaCalculada'
+                ]
+            }
         }
     }
 ];
@@ -659,6 +693,8 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
 
 const crearReportePartos = async ({ fechaInicio, fechaFin, diio, filtroExtra = {} }) => {
     const filtroPartos = crearFiltroFechas('fechaPartoReal', fechaInicio, fechaFin);
+    const idsBovinos = await obtenerIdsAnimalesPorEspecie('Bovino');
+    const idsBovinosSet = new Set((idsBovinos || []).map((id) => String(id)));
     filtroPartos.fechaPartoReal = {
         ...(filtroPartos.fechaPartoReal || {}),
         $exists: true,
@@ -674,11 +710,18 @@ const crearReportePartos = async ({ fechaInicio, fechaFin, diio, filtroExtra = {
         }).select('_id');
 
         const idsDiio = animales.map((animal) => animal._id);
-        filtroPartos.animal = filtroExtra.animal?.$in
-            ? { $in: idsDiio.filter((id) => filtroExtra.animal.$in.some((otroId) => String(otroId) === String(id))) }
-            : { $in: idsDiio };
-    } else if (filtroExtra.animal) {
-        filtroPartos.animal = filtroExtra.animal;
+        filtroPartos.animal = {
+            $in: idsDiio.filter((id) => idsBovinosSet.has(String(id)))
+        };
+    } else {
+        filtroPartos.animal = { $in: idsBovinos || [] };
+    }
+
+    if (filtroExtra.animal?.$in) {
+        const idsActuales = filtroPartos.animal?.$in || [];
+        filtroPartos.animal = {
+            $in: idsActuales.filter((id) => filtroExtra.animal.$in.some((otroId) => String(otroId) === String(id)))
+        };
     }
 
     const registros = await RegistroReproductivo.find(filtroPartos)
@@ -1035,7 +1078,7 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                         cantidadTotal: { $sum: '$cantidadCompra' },
                         cantidadFisicaTotal: { $sum: '$cantidadFisica' },
                         montoTotal: { $sum: '$monto' },
-                        categoria: { $first: '$categoria' },
+                        categoria: { $first: { $ifNull: ['$categoriaNormalizada', '$categoria'] } },
                         unidadMedida: { $first: '$unidadNormalizada' },
                         unidadBase: { $first: '$unidadBase' }
                     }
@@ -1047,7 +1090,7 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 { $match: filtro },
                 {
                     $group: {
-                        _id: '$categoria',
+                        _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
                         cantidadRegistros: { $sum: 1 },
                         montoTotal: { $sum: '$monto' }
                     }
@@ -1072,7 +1115,7 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 { $match: filtro },
                 {
                     $group: {
-                        _id: '$categoria',
+                        _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -1126,7 +1169,7 @@ reporteCtrl.getProductosPorProducto = async (req, res) => {
                 $group: {
                     _id: {
                         producto: '$producto',
-                        categoria: '$categoria',
+                        categoria: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
                         unidadMedida: '$unidadNormalizada',
                         unidadBase: '$unidadBase'
                     },
@@ -1173,7 +1216,7 @@ reporteCtrl.getProductosPorCategoria = async (req, res) => {
             ...agregarCantidadProductoPipeline,
             {
                 $group: {
-                    _id: '$categoria',
+                    _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
                     cantidadTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' },
                     productosIncluidos: { $addToSet: '$producto' },
@@ -1219,6 +1262,7 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
             ...crearFiltroProductos(req.query),
             $or: [
                 { categoria: { $regex: 'combustible', $options: 'i' } },
+                { categoriaNormalizada: { $regex: 'combustible', $options: 'i' } },
                 { producto: { $regex: 'gasolina|di[eé]sel|diesel', $options: 'i' } }
             ]
         };
@@ -1432,7 +1476,7 @@ reporteCtrl.getProductosTop = async (req, res) => {
                 $group: {
                     _id: {
                         producto: '$producto',
-                        categoria: '$categoria',
+                        categoria: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
                         unidadMedida: '$unidadNormalizada',
                         unidadBase: '$unidadBase'
                     },
@@ -1905,7 +1949,7 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                 { $match: filtroFinanzas },
                 {
                     $group: {
-                        _id: '$categoria',
+                        _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }

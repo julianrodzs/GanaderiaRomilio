@@ -1856,6 +1856,272 @@ costoPorCriaViva = costoEstimado / nacidosVivos
 costoPorCriaDestetada = costoEstimado / destetados
 ```
 
+## Estandarizacion financiera usada por reportes
+
+Los reportes financieros trabajan sobre `MovimientoFinanciero`.
+
+Desde la fase de estandarizacion se conservan los datos originales y se agregan campos calculados para que los reportes no dependan tanto del texto libre.
+
+### Campos originales conservados
+
+```js
+categoria
+descripcion
+producto
+cantidad
+unidad
+monto
+precioUnitario
+proveedor
+observaciones
+tipoMovimiento
+naturaleza
+```
+
+### Campos normalizados
+
+```js
+categoriaNormalizada
+unidadNormalizada
+factorUnidad
+cantidadFisica
+```
+
+Origen:
+
+- `backend/services/normalizacionFinanciera-service.js`
+- hooks del modelo `MovimientoFinanciero`
+- controlador de movimientos financieros al crear.
+- importador de Excel de finanzas.
+- controladores de compras y ventas de animales.
+
+### Categoria normalizada
+
+Fuente:
+
+```js
+categoria
+producto
+descripcion
+tipoMovimiento
+```
+
+Transformacion:
+
+- Normaliza mayusculas, acentos y espacios.
+- Busca palabras clave.
+- Si encuentra coincidencia, asigna categoria estandar.
+- Si no encuentra, conserva la categoria original o usa `Otros`.
+
+Categorias actuales:
+
+- `Alimentación`
+- `Sanidad`
+- `Combustible`
+- `Mano de obra`
+- `Potreros`
+- `Infraestructura`
+- `Herramientas`
+- `Maquinaria`
+- `Mantenimiento`
+- `Ganado`
+- `Porcinos`
+- `Ventas`
+- `Compras de animales`
+- `Otros`
+
+Ejemplos:
+
+```txt
+producto = GASOLINA REGULAR
+categoriaNormalizada = Combustible
+```
+
+```txt
+descripcion = BIMECTIN 3,5%
+categoriaNormalizada = Sanidad
+```
+
+```txt
+descripcion = ALIMENTO CHANCHA
+categoriaNormalizada = Alimentación
+```
+
+```txt
+descripcion = Venta de porcino(s)
+categoriaNormalizada = Ventas
+```
+
+### Unidad y cantidad fisica
+
+Fuente:
+
+```js
+cantidad
+unidad
+```
+
+Transformacion:
+
+1. Se intenta detectar si `unidad` trae factor interno.
+2. Se normaliza la unidad base.
+3. Se calcula `cantidadFisica`.
+
+Ejemplos:
+
+```txt
+cantidad = 1
+unidad = 70 L
+unidadNormalizada = L
+factorUnidad = 70
+cantidadFisica = 70
+```
+
+```txt
+cantidad = 3
+unidad = 2 KG
+unidadNormalizada = KG
+factorUnidad = 2
+cantidadFisica = 6
+```
+
+```txt
+cantidad = 5
+unidad = unidad
+unidadNormalizada = UNIDAD
+factorUnidad = 1
+cantidadFisica = 5
+```
+
+Unidades actuales:
+
+- `L`
+- `KG`
+- `G`
+- `ML`
+- `UNIDAD`
+- `SACO`
+- `GALON`
+- `M`
+- `DOSIS`
+
+Nota:
+
+- `GALON` aun no se convierte automaticamente a litros.
+- Si la unidad viene vacia o como `-`, puede quedar sin unidad normalizada.
+
+### Reportes afectados directamente
+
+#### Finanzas generales
+
+Usa:
+
+- `categoriaNormalizada || categoria`
+- `naturaleza`
+- `tipoMovimiento`
+- `monto`
+- `fecha`
+
+Transforma:
+
+- Totales por categoria ya usan la categoria normalizada cuando existe.
+
+#### Productos e insumos
+
+Usa:
+
+- `producto`
+- `categoriaNormalizada || categoria`
+- `unidadNormalizada`
+- `cantidad`
+- `factorUnidad`
+- `cantidadFisica`
+- `monto`
+- `precioUnitario`
+- `proveedor`
+- `fecha`
+
+Transforma:
+
+```txt
+precioPromedio = montoTotal / cantidadFisicaTotal
+```
+
+Cuando un movimiento viejo no tiene `cantidadFisica`, el pipeline intenta calcularla usando `cantidad` y `unidad`.
+
+#### Combustibles
+
+Usa:
+
+- `categoriaNormalizada = Combustible`
+- o producto con `gasolina`, `diesel`, `diésel`.
+- `cantidadFisica`
+- `monto`
+
+Transforma:
+
+```txt
+litrosTotales = suma(cantidadFisica)
+precioPromedioLitro = montoTotal / litrosTotales
+```
+
+#### Sustentabilidad de cria
+
+Usa:
+
+- `Animal.fechaCompra`
+- `Animal.fechaNacimiento`
+- `Animal.fechaVenta`
+- `Animal.pesoCompra`
+- `Animal.precioCompraPorKg`
+- `Animal.pesoVenta`
+- `Animal.precioVentaPorKg`
+- movimientos clasificados como gastos operativos.
+
+Transforma:
+
+```txt
+gasto operativo mensual por animal =
+  gastosOperativosPeriodo / animalesActivosCosto / mesesPeriodo
+```
+
+```txt
+utilidad/perdida =
+  ventas - compras - costoProduccionAsignado
+```
+
+#### Compras y ventas de animales
+
+Compras de animales generan `MovimientoFinanciero` con:
+
+```js
+tipoMovimiento = 'Compra de animales'
+naturaleza = 'Egreso'
+categoria = 'Compra de animales'
+producto = 'Bovinos comprados' | 'Porcinos comprados'
+cantidad = totalAnimales
+unidad = 'animales'
+precioUnitario = montoTotal / pesoTotalKg
+referenciaModelo = 'CompraAnimal'
+referenciaId = compra._id
+```
+
+Ventas de animales generan `MovimientoFinanciero` con:
+
+```js
+tipoMovimiento = 'Venta de animales'
+naturaleza = 'Ingreso'
+categoria = 'Ingresos'
+producto = 'Bovinos vendidos' | 'Porcinos vendidos'
+cantidad = totalAnimales
+unidad = 'animales'
+precioUnitario = montoTotal / pesoTotalKg
+referenciaModelo = 'VentaAnimal'
+referenciaId = venta._id
+```
+
+Esto permite auditar desde Finanzas el movimiento que nacio en compra/venta.
+
 ## Como se usan en el frontend
 
 Archivo:
@@ -1920,6 +2186,8 @@ Filtros de productos:
 - `categoria`
 - `proveedor`
 
+Los reportes de productos usan `categoriaNormalizada`, `unidadNormalizada`, `factorUnidad` y `cantidadFisica` cuando existen. Si un movimiento viejo no tiene esos campos, el reporte usa `categoria`, `unidad` y calcula la cantidad fisica en el pipeline como respaldo.
+
 Filtros porcinos:
 
 - `fechaInicio`
@@ -1934,7 +2202,7 @@ Nota:
 
 - `valorEstimadoHato` depende de campos estimados que no siempre existen en el modelo actual.
 - `muertesPeriodo` usa `Animal.updatedAt`, no `fechaMuerte`; si se quiere precision historica, conviene cambiarlo a `fechaMuerte`.
-- `partos por vaca y ano` solo analiza vacas con partos registrados en el periodo.
+- `partos por vaca y ano` solo analiza animales Bovinos con partos registrados en el periodo; no incluye Porcinos aunque el filtro global este en Todos.
 - `sustentabilidad` ignora animales vendidos sin `pesoVenta` o `precioVentaPorKg`.
 - `precioKg.minimo` puede tomar `0` si algun item vendido no trae precio por kg.
 - `animalesInicioPeriodo` usa `createdAt`, no fecha nacimiento/compra.
@@ -1942,3 +2210,28 @@ Nota:
 - El reporte economico por camada es mas exacto cuando los movimientos financieros se ligan directamente a la camada con `referenciaId`.
 - Si los gastos porcinos no estan ligados a camada, el reporte economico los detecta por texto y los prorratea entre camadas del periodo.
 - El reporte de tareas por camada solo considera tareas automaticas con `referenciaId` de camada; no incluye tareas manuales sueltas.
+
+## Pendientes de estandarizacion financiera
+
+Pendientes tecnicos:
+
+- Crear catalogos administrables para categorias, unidades, tipos de trabajo, tipos de inversion y destinos de uso.
+- Permitir que el usuario corrija `categoriaNormalizada` manualmente sin perder `categoria` original.
+- Migrar movimientos viejos que no tienen `producto`, `cantidad`, `unidadNormalizada` o `cantidadFisica`.
+- Convertir unidades equivalentes si se decide hacerlo, por ejemplo `GALON` a `L`.
+- Definir reglas de tipo de cambio para reportes mixtos `CRC` y `USD`.
+- Definir si `precioUnitario` debe ser por unidad fisica o por linea del movimiento cuando hay factor de unidad.
+- Crear validaciones mas fuertes para evitar movimientos de compra de productos sin `producto`, `cantidad` o `unidad`.
+- Crear exportacion de reportes financieros a Excel/PDF.
+
+Pendientes de negocio:
+
+- Revisar movimientos clasificados como `General` u `Otros`.
+- Definir catalogo oficial de categorias con el cliente.
+- Separar formalmente gasto operativo, inversion capitalizable, compra de animales, venta de animales y gasto personal si aparece.
+- Definir destinos de uso: chapia, tractor, sanidad, potrero, mantenimiento, alimentacion, camada, animal, finca.
+- Asociar gastos porcinos directamente a camada cuando se quiera medir rentabilidad por camada.
+- Asociar gastos bovinos a animal, potrero o tarea cuando aplique.
+- Definir tratamiento de impuestos, descuentos, fletes y ajustes en compras/ventas.
+- Definir si planillas se registran por empleado, por corte, por tarea o por periodo completo.
+- Definir depreciacion real para inversiones en maquinaria, infraestructura o equipo.

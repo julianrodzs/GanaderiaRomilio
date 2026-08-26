@@ -52,6 +52,31 @@ const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(valor || 0);
 
+const textosPorEspecie = {
+  Bovino: {
+    titulo: 'Compras de bovinos',
+    formularioNuevo: 'Nueva compra de bovinos',
+    formularioEditar: 'Editar compra de bovinos',
+    ingreso: 'Ingreso de bovinos al inventario',
+    botonAgregar: '+ Bovino',
+    comprados: 'Bovinos comprados',
+    etiquetaId: 'DIIO',
+    raza: 'Raza'
+  },
+  Porcino: {
+    titulo: 'Compras de porcinos',
+    formularioNuevo: 'Nueva compra de porcinos',
+    formularioEditar: 'Editar compra de porcinos',
+    ingreso: 'Ingreso de porcinos al inventario',
+    botonAgregar: '+ Porcino',
+    comprados: 'Porcinos comprados',
+    etiquetaId: 'DIIO porcino',
+    raza: 'Raza/línea'
+  }
+};
+
+const textoEspecie = (especie, clave) => textosPorEspecie[especie]?.[clave] || textosPorEspecie.Bovino[clave];
+
 const normalizarCompraFormulario = (compra) => ({
   especie: compra.especie || 'Bovino',
   fechaCompra: compra.fechaCompra ? new Date(compra.fechaCompra).toISOString().slice(0, 10) : fechaHoy(),
@@ -87,7 +112,7 @@ const Compras = () => {
   const [error, setError] = useState('');
   const [errorFormulario, setErrorFormulario] = useState('');
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
-  const etiquetaId = 'DIIO';
+  const etiquetaId = textoEspecie(especie, 'etiquetaId');
 
   const cambiarEspecie = (valor) => {
     localStorage.setItem('ganaderiaEspecie', valor);
@@ -139,6 +164,7 @@ const Compras = () => {
   };
 
   const abrirEdicion = (compra) => {
+    cambiarEspecie(compra.especie || especie);
     setCompraSeleccionada(compra);
     setFormulario(normalizarCompraFormulario(compra));
     setErrorFormulario('');
@@ -237,14 +263,20 @@ const Compras = () => {
         <div className="panel-title">
           <div>
             <p className="eyebrow">Compras</p>
-            <h2>{compraSeleccionada ? 'Editar compra' : 'Nueva compra de animales'}</h2>
+            <h2>{compraSeleccionada ? textoEspecie(formulario.especie, 'formularioEditar') : textoEspecie(formulario.especie, 'formularioNuevo')}</h2>
           </div>
           <button className="boton-link" type="button" onClick={() => setModoFormulario(false)}>Volver</button>
         </div>
 
         <form className="form-card venta-form" onSubmit={guardarCompra}>
           {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
-          <SelectorEspecie valor={formulario.especie} onChange={(valor) => setFormulario((actual) => ({ ...actual, especie: valor }))} />
+          <SelectorEspecie
+            valor={formulario.especie}
+            onChange={(valor) => {
+              cambiarEspecie(valor);
+              setFormulario((actual) => ({ ...actual, especie: valor }));
+            }}
+          />
           <div className="form-grid">
             <label>Fecha<input type="date" name="fechaCompra" value={formulario.fechaCompra} onChange={actualizarCampo} required /></label>
             <label>Proveedor<input name="proveedor" value={formulario.proveedor} onChange={actualizarCampo} required /></label>
@@ -260,9 +292,9 @@ const Compras = () => {
             <div className="panel-title">
               <div>
                 <p className="eyebrow">Animales</p>
-                <h2>Ingreso a inventario</h2>
+                <h2>{textoEspecie(formulario.especie, 'ingreso')}</h2>
               </div>
-              <button className="boton-primario compacto" type="button" onClick={agregarAnimal}>+ Animal</button>
+              <button className="boton-primario compacto" type="button" onClick={agregarAnimal}>{textoEspecie(formulario.especie, 'botonAgregar')}</button>
             </div>
 
             <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
@@ -270,10 +302,10 @@ const Compras = () => {
                 <thead>
                   <tr>
                     <th>Identificador</th>
-                    <th>DIIO</th>
+                    <th>{textoEspecie(formulario.especie, 'etiquetaId')}</th>
                     <th>Nombre</th>
                     <th>Sexo</th>
-                    <th>Raza</th>
+                    <th>{textoEspecie(formulario.especie, 'raza')}</th>
                     <th>Nacimiento</th>
                     <th>Peso compra</th>
                     <th>Precio/kg</th>
@@ -344,7 +376,7 @@ const Compras = () => {
       <div className="panel-title">
         <div>
           <p className="eyebrow">Compras</p>
-          <h2>Compras de animales</h2>
+          <h2>{textoEspecie(especie, 'titulo')}</h2>
         </div>
         <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva compra</button>
       </div>
@@ -355,7 +387,7 @@ const Compras = () => {
         <article><span>Total comprado</span><strong>{formatearMoneda(resumen?.totalComprado)}</strong></article>
         <article><span>Kg comprados</span><strong>{formatearNumero(resumen?.totalKgComprados)} kg</strong></article>
         <article><span>Precio prom/kg</span><strong>{formatearMoneda(resumen?.precioPromedioKg)}</strong></article>
-        <article><span>Animales comprados</span><strong>{formatearNumero(resumen?.totalAnimalesComprados)}</strong></article>
+        <article><span>{textoEspecie(especie, 'comprados')}</span><strong>{formatearNumero(resumen?.totalAnimalesComprados)}</strong></article>
       </section>
 
       <div className="tabla-toolbar">
@@ -380,7 +412,7 @@ const Compras = () => {
             <tr>
               <th>Fecha</th>
               <th>Proveedor</th>
-              <th>Cantidad animales</th>
+              <th>{textoEspecie(especie, 'comprados')}</th>
               <th>Peso total</th>
               <th>Monto total</th>
               <th>Estado</th>

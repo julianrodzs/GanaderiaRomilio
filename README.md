@@ -354,6 +354,23 @@ Permite clasificar por naturaleza:
 - `Ingreso`
 - `Egreso`
 
+Estado actual de estandarizacion:
+
+- Conserva los textos originales de categoria, unidad, descripcion y observaciones.
+- Calcula `categoriaNormalizada` para reportes.
+- Calcula `unidadNormalizada`, `factorUnidad` y `cantidadFisica` para reportes de productos e insumos.
+- Soporta `producto`, `cantidad`, `unidad`, `precioUnitario` y proveedor.
+- Las compras y ventas de animales generan movimientos financieros referenciados.
+- Las compras/ventas separan bovinos y porcinos en el producto financiero.
+
+Pendiente principal:
+
+- cerrar catalogos oficiales de categorias, unidades, tipos de trabajo, tipos de inversion y destinos de uso con el cliente.
+- permitir correccion manual de categorias normalizadas.
+- migrar movimientos viejos incompletos.
+- decidir conversiones de unidades, por ejemplo galones a litros.
+- asociar gastos porcinos a camada y gastos bovinos a animal, potrero o tarea cuando aplique.
+
 El modelo `Costo` queda por compatibilidad.
 
 ### Compras de animales
@@ -377,6 +394,7 @@ Al confirmar compra:
 - deja el animal activo.
 - crea evento en bitacora.
 - crea movimiento financiero de egreso.
+- el movimiento queda referenciado a la compra y separa `Bovinos comprados` o `Porcinos comprados`.
 
 ### Ventas de animales
 
@@ -397,6 +415,8 @@ Al confirmar venta:
 - guarda fecha, peso y precio de venta.
 - crea evento en bitacora.
 - crea movimiento financiero de ingreso.
+- el movimiento queda referenciado a la venta y separa `Bovinos vendidos` o `Porcinos vendidos`.
+- para agregar animales a la venta se usa buscador por DIIO completo, ultimos 4 digitos, identificador provisional o nombre.
 
 ### Reportes
 

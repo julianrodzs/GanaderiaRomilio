@@ -1,4 +1,5 @@
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
+const { normalizarMovimientoFinanciero } = require('../services/normalizacionFinanciera-service');
 
 const movimientoFinancieroCtrl = {};
 
@@ -79,7 +80,7 @@ movimientoFinancieroCtrl.getMovimientos = async (req, res) => {
 
 movimientoFinancieroCtrl.createMovimiento = async (req, res) => {
     try {
-        const nuevoMovimiento = new MovimientoFinanciero(req.body);
+        const nuevoMovimiento = new MovimientoFinanciero(normalizarMovimientoFinanciero(req.body));
         const movimientoGuardado = await nuevoMovimiento.save();
         const movimiento = await poblarReferencias(
             MovimientoFinanciero.findById(movimientoGuardado._id)
@@ -107,7 +108,7 @@ movimientoFinancieroCtrl.getResumen = async (req, res) => {
             MovimientoFinanciero.aggregate([
                 {
                     $group: {
-                        _id: '$categoria',
+                        _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -200,8 +201,23 @@ movimientoFinancieroCtrl.getResumenConsumo = async (req, res) => {
             }
         }
 
-        if (categoria) filtro.categoria = categoria;
-        if (unidad) filtro.unidad = unidad;
+        if (categoria) {
+            filtro.$or = [
+                { categoria },
+                { categoriaNormalizada: categoria }
+            ];
+        }
+        if (unidad) {
+            filtro.$and = [
+                ...(filtro.$and || []),
+                {
+                    $or: [
+                        { unidad },
+                        { unidadNormalizada: unidad }
+                    ]
+                }
+            ];
+        }
         if (producto) filtro.producto = { $regex: producto, $options: 'i' };
 
         const consumo = await MovimientoFinanciero.aggregate([
@@ -210,8 +226,8 @@ movimientoFinancieroCtrl.getResumenConsumo = async (req, res) => {
                 $group: {
                     _id: {
                         producto: '$producto',
-                        unidad: '$unidad',
-                        categoria: '$categoria'
+                        unidad: { $ifNull: ['$unidadNormalizada', '$unidad'] },
+                        categoria: { $ifNull: ['$categoriaNormalizada', '$categoria'] }
                     },
                     cantidadTotal: { $sum: '$cantidad' },
                     montoTotal: { $sum: '$monto' },

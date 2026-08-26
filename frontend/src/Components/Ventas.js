@@ -48,7 +48,56 @@ const obtenerCategoria = (animal) => {
   return '--';
 };
 
+const obtenerCategoriaPorEspecie = (animal, especieActual) => {
+  const especieAnimal = animal?.especie || especieActual || 'Bovino';
+  if (especieAnimal !== 'Porcino') return obtenerCategoria(animal);
+
+  const edadMeses = calcularEdadMeses(animal?.fechaNacimiento);
+  if (edadMeses !== null && edadMeses < 2) return animal?.sexo === 'Macho' ? 'Lechón' : 'Lechona';
+  if (animal?.sexo === 'Hembra') return edadMeses !== null && edadMeses >= 6 ? 'Cerda' : 'Cerda joven';
+  if (animal?.sexo === 'Macho') return edadMeses !== null && edadMeses >= 6 ? 'Verraco' : 'Macho joven';
+  return 'Porcino';
+};
+
+const textosPorEspecie = {
+  Bovino: {
+    titulo: 'Ventas de bovinos',
+    formularioNuevo: 'Nueva venta de bovinos',
+    formularioEditar: 'Editar venta de bovinos',
+    selector: 'Selección de bovinos para venta',
+    vendidos: 'Bovinos vendidos',
+    etiquetaId: 'DIIO'
+  },
+  Porcino: {
+    titulo: 'Ventas de porcinos',
+    formularioNuevo: 'Nueva venta de porcinos',
+    formularioEditar: 'Editar venta de porcinos',
+    selector: 'Selección de porcinos para venta',
+    vendidos: 'Porcinos vendidos',
+    etiquetaId: 'DIIO porcino'
+  }
+};
+
+const textoEspecie = (especie, clave) => textosPorEspecie[especie]?.[clave] || textosPorEspecie.Bovino[clave];
+
 const nombreAnimal = (animal) => `${animal?.diio || animal?.identificadorFinca || 'Sin ID'}${animal?.nombre ? ` - ${animal.nombre}` : ''}`;
+
+const normalizarBusqueda = (valor) => String(valor || '').toLowerCase().trim();
+
+const coincideBusquedaAnimal = (animal, busqueda) => {
+  const termino = normalizarBusqueda(busqueda);
+  if (!termino) return false;
+
+  const diio = normalizarBusqueda(animal?.diio);
+  const identificador = normalizarBusqueda(animal?.identificadorFinca);
+  const nombre = normalizarBusqueda(animal?.nombre);
+  const ultimosCuatro = diio.slice(-4);
+
+  return diio.includes(termino)
+    || ultimosCuatro.includes(termino)
+    || identificador.includes(termino)
+    || nombre.includes(termino);
+};
 
 const estadoInicial = {
   fechaVenta: fechaHoy(),
@@ -73,8 +122,9 @@ const Ventas = () => {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [errorFormulario, setErrorFormulario] = useState('');
+  const [busquedaAnimal, setBusquedaAnimal] = useState('');
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
-  const etiquetaId = 'DIIO';
+  const etiquetaId = textoEspecie(especie, 'etiquetaId');
 
   const cambiarEspecie = (valor) => {
     localStorage.setItem('ganaderiaEspecie', valor);
@@ -106,11 +156,22 @@ const Ventas = () => {
 
   const animalesDisponibles = useMemo(() => {
     const seleccionados = new Set(formulario.animales.map((item) => item.animal));
+    const especieFormulario = formulario.especie || especie;
     return animales.filter((animal) => {
       if (['Vendido', 'Muerto'].includes(animal.estado)) return false;
+      if ((animal.especie || 'Bovino') !== especieFormulario) return false;
       return !seleccionados.has(animal._id);
     });
-  }, [animales, formulario.animales]);
+  }, [animales, formulario.animales, formulario.especie, especie]);
+
+  const animalesSugeridos = useMemo(() => {
+    const termino = normalizarBusqueda(busquedaAnimal);
+    if (!termino) return [];
+
+    return animalesDisponibles
+      .filter((animal) => coincideBusquedaAnimal(animal, termino))
+      .slice(0, 12);
+  }, [animalesDisponibles, busquedaAnimal]);
 
   const totalFormulario = useMemo(() => {
     return formulario.animales.reduce((total, item) => total + (Number(item.pesoVentaKg || 0) * Number(item.precioKg || 0)), 0);
@@ -122,12 +183,15 @@ const Ventas = () => {
 
   const abrirNuevo = () => {
     setVentaSeleccionada(null);
-    setFormulario(estadoInicial);
+    setFormulario({ ...estadoInicial, especie });
+    setBusquedaAnimal('');
     setErrorFormulario('');
     setModoFormulario(true);
   };
 
   const abrirEdicion = (venta) => {
+    const especieVenta = venta.especie || especie;
+    cambiarEspecie(especieVenta);
     setVentaSeleccionada(venta);
     setFormulario({
       fechaVenta: venta.fechaVenta ? new Date(venta.fechaVenta).toISOString().slice(0, 10) : fechaHoy(),
@@ -135,6 +199,7 @@ const Ventas = () => {
       identificacionComprador: venta.identificacionComprador || '',
       telefonoComprador: venta.telefonoComprador || '',
       observaciones: venta.observaciones || '',
+      especie: especieVenta,
       animales: (venta.animales || []).map((item) => ({
         animal: item.animal?._id || item.animal,
         pesoVentaKg: item.pesoVentaKg,
@@ -143,6 +208,7 @@ const Ventas = () => {
       comprobante: null
     });
     setErrorFormulario('');
+    setBusquedaAnimal('');
     setModoFormulario(true);
   };
 
@@ -165,6 +231,7 @@ const Ventas = () => {
         }
       ]
     }));
+    setBusquedaAnimal('');
   };
 
   const actualizarAnimalVenta = (indice, campo, valor) => {
@@ -188,10 +255,11 @@ const Ventas = () => {
     try {
       setGuardando(true);
       setErrorFormulario('');
+      const payload = { ...formulario, especie: formulario.especie || especie };
       if (ventaSeleccionada?._id) {
-        await actualizarVentaAnimal(ventaSeleccionada._id, formulario);
+        await actualizarVentaAnimal(ventaSeleccionada._id, payload);
       } else {
-        await crearVentaAnimal(formulario);
+        await crearVentaAnimal(payload);
       }
       setModoFormulario(false);
       setVentaSeleccionada(null);
@@ -236,13 +304,21 @@ const Ventas = () => {
         <div className="panel-title">
           <div>
             <p className="eyebrow">Ventas</p>
-            <h2>{ventaSeleccionada ? 'Editar venta' : 'Nueva venta de animales'}</h2>
+            <h2>{ventaSeleccionada ? textoEspecie(formulario.especie || especie, 'formularioEditar') : textoEspecie(formulario.especie || especie, 'formularioNuevo')}</h2>
           </div>
           <button className="boton-link" type="button" onClick={() => setModoFormulario(false)}>Volver</button>
         </div>
 
         <form className="form-card venta-form" onSubmit={guardarVenta}>
           {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
+          <SelectorEspecie
+            valor={formulario.especie || especie}
+            onChange={(valor) => {
+              cambiarEspecie(valor);
+              setFormulario((actual) => ({ ...actual, especie: valor, animales: [] }));
+              setBusquedaAnimal('');
+            }}
+          />
           <div className="form-grid">
             <label>Fecha<input type="date" name="fechaVenta" value={formulario.fechaVenta} onChange={actualizarCampo} required /></label>
             <label>Comprador<input name="comprador" value={formulario.comprador} onChange={actualizarCampo} required /></label>
@@ -258,16 +334,28 @@ const Ventas = () => {
             <div className="panel-title">
               <div>
                 <p className="eyebrow">Animales</p>
-                <h2>Selección de venta</h2>
+                <h2>{textoEspecie(formulario.especie || especie, 'selector')}</h2>
               </div>
-              <select value="" onChange={(evento) => agregarAnimal(evento.target.value)}>
-                <option value="">Agregar animal</option>
-                {animalesDisponibles.map((animal) => (
-                  <option key={animal._id} value={animal._id}>
-                    {nombreAnimal(animal)} · {animal.sexo} · {obtenerCategoria(animal)} · {animal.pesoActual || 0} kg
-                  </option>
-                ))}
-              </select>
+              <div className="venta-buscador-animal">
+                <input
+                  value={busquedaAnimal}
+                  onChange={(evento) => setBusquedaAnimal(evento.target.value)}
+                  placeholder={`Buscar por ${textoEspecie(formulario.especie || especie, 'etiquetaId')}, últimos 4 o nombre`}
+                />
+                {busquedaAnimal && (
+                  <div className="venta-resultados-animal">
+                    {animalesSugeridos.length ? animalesSugeridos.map((animal) => (
+                      <button key={animal._id} type="button" onClick={() => agregarAnimal(animal._id)}>
+                        <strong>{animal.diio || animal.identificadorFinca || '--'}</strong>
+                        <span>{animal.nombre || '--'}</span>
+                        <small>{animal.sexo || '--'} · {obtenerCategoriaPorEspecie(animal, formulario.especie || especie)} · {formatearNumero(animal.pesoActual)} kg</small>
+                      </button>
+                    )) : (
+                      <p>No hay coincidencias disponibles</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
@@ -294,7 +382,7 @@ const Ventas = () => {
                         <td>{animal.diio || animal.identificadorFinca}</td>
                         <td>{animal.nombre || '--'}</td>
                         <td>{animal.sexo || '--'}</td>
-                        <td>{obtenerCategoria(animal)}</td>
+                        <td>{obtenerCategoriaPorEspecie(animal, formulario.especie || especie)}</td>
                         <td>{formatearNumero(animal.pesoActual)} kg</td>
                         <td><input type="number" min="0.01" step="0.01" value={item.pesoVentaKg} onChange={(evento) => actualizarAnimalVenta(indice, 'pesoVentaKg', evento.target.value)} required /></td>
                         <td><input type="number" min="0.01" step="0.01" value={item.precioKg} onChange={(evento) => actualizarAnimalVenta(indice, 'precioKg', evento.target.value)} required /></td>
@@ -330,7 +418,7 @@ const Ventas = () => {
       <div className="panel-title">
         <div>
           <p className="eyebrow">Ventas</p>
-          <h2>Ventas de animales</h2>
+          <h2>{textoEspecie(especie, 'titulo')}</h2>
         </div>
         <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva venta</button>
       </div>
@@ -341,7 +429,7 @@ const Ventas = () => {
         <article><span>Total vendido</span><strong>{formatearMoneda(resumen?.totalVendido)}</strong></article>
         <article><span>Kg vendidos</span><strong>{formatearNumero(resumen?.totalKgVendidos)} kg</strong></article>
         <article><span>Precio prom/kg</span><strong>{formatearMoneda(resumen?.precioPromedioKg)}</strong></article>
-        <article><span>Animales vendidos</span><strong>{formatearNumero(resumen?.totalAnimalesVendidos)}</strong></article>
+        <article><span>{textoEspecie(especie, 'vendidos')}</span><strong>{formatearNumero(resumen?.totalAnimalesVendidos)}</strong></article>
       </section>
 
       <div className="tabla-toolbar">
@@ -366,7 +454,7 @@ const Ventas = () => {
             <tr>
               <th>Fecha</th>
               <th>Comprador</th>
-              <th>Cantidad animales</th>
+              <th>{textoEspecie(especie, 'vendidos')}</th>
               <th>Peso total</th>
               <th>Monto total</th>
               <th>Estado</th>

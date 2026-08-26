@@ -51,12 +51,12 @@ const compraAnimalSchema = new Schema(
     }
 );
 
-compraAnimalSchema.pre('validate', function calcularTotales(next) {
-    this.animales = (this.animales || []).map((item) => {
+const calcularTotalesCompra = ({ animales = [], montoFinal } = {}) => {
+    const animalesCalculados = (animales || []).map((item) => {
         const subtotal = Number(item.pesoCompraKg || 0) * Number(item.precioKg || 0);
 
         return {
-            animal: item.animal,
+            animal: item.animal?._id || item.animal,
             identificadorFinca: item.identificadorFinca,
             diio: item.diio,
             nombre: item.nombre,
@@ -69,15 +69,54 @@ compraAnimalSchema.pre('validate', function calcularTotales(next) {
             observaciones: item.observaciones
         };
     });
-    this.totalAnimales = this.animales.length;
-    this.pesoTotalKg = this.animales.reduce((total, item) => total + Number(item.pesoCompraKg || 0), 0);
-    this.montoCalculado = this.animales.reduce((total, item) => total + Number(item.subtotal || 0), 0);
-    const montoFinal = this.montoFinal === undefined || this.montoFinal === null || this.montoFinal === ''
+
+    const montoCalculado = animalesCalculados.reduce((total, item) => total + Number(item.subtotal || 0), 0);
+    const montoFinalNumero = montoFinal === undefined || montoFinal === null || montoFinal === ''
         ? undefined
-        : Number(this.montoFinal);
-    this.montoFinal = Number.isFinite(montoFinal) ? montoFinal : undefined;
-    this.montoTotal = Number.isFinite(montoFinal) ? montoFinal : this.montoCalculado;
-    this.ajusteMonto = this.montoTotal - this.montoCalculado;
+        : Number(montoFinal);
+    const montoFinalValido = Number.isFinite(montoFinalNumero) ? montoFinalNumero : undefined;
+    const montoTotal = Number.isFinite(montoFinalValido) ? montoFinalValido : montoCalculado;
+
+    return {
+        animales: animalesCalculados,
+        totalAnimales: animalesCalculados.length,
+        pesoTotalKg: animalesCalculados.reduce((total, item) => total + Number(item.pesoCompraKg || 0), 0),
+        montoCalculado,
+        montoFinal: montoFinalValido,
+        montoTotal,
+        ajusteMonto: montoTotal - montoCalculado
+    };
+};
+
+compraAnimalSchema.pre('validate', function calcularTotales(next) {
+    Object.assign(this, calcularTotalesCompra({
+        animales: this.animales,
+        montoFinal: this.montoFinal
+    }));
+    next();
+});
+
+compraAnimalSchema.pre('findOneAndUpdate', function calcularTotalesEnActualizacion(next) {
+    const update = this.getUpdate() || {};
+    const animales = update.animales || update.$set?.animales;
+    const montoFinal = Object.prototype.hasOwnProperty.call(update, 'montoFinal')
+        ? update.montoFinal
+        : update.$set?.montoFinal;
+
+    if (!animales) return next();
+
+    const totales = calcularTotalesCompra({ animales, montoFinal });
+
+    if (update.$set) {
+        update.$set = {
+            ...update.$set,
+            ...totales
+        };
+    } else {
+        Object.assign(update, totales);
+    }
+
+    this.setUpdate(update);
     next();
 });
 

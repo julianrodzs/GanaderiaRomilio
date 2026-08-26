@@ -75,7 +75,12 @@ const columnas = [
     ].join(' ')
   },
   { id: 'tipoMovimiento', label: 'Tipo', accessor: (movimiento) => movimiento.tipoMovimiento },
-  { id: 'categoria', label: 'Categoria', accessor: (movimiento) => movimiento.categoria },
+  {
+    id: 'categoria',
+    label: 'Categoria',
+    accessor: (movimiento) => movimiento.categoriaNormalizada || movimiento.categoria,
+    searchAccessor: (movimiento) => `${movimiento.categoriaNormalizada || ''} ${movimiento.categoria || ''}`
+  },
   {
     id: 'producto',
     label: 'Producto',
@@ -111,7 +116,7 @@ const columnas = [
 
 const filtros = [
   { id: 'naturaleza', accessor: (movimiento) => movimiento.naturaleza },
-  { id: 'categoria', accessor: (movimiento) => movimiento.categoria },
+  { id: 'categoria', accessor: (movimiento) => movimiento.categoriaNormalizada || movimiento.categoria },
   { id: 'moneda', accessor: (movimiento) => movimiento.moneda || 'CRC' },
   { id: 'proveedor', accessor: (movimiento) => movimiento.proveedor }
 ];

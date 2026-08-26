@@ -1,6 +1,5 @@
 const AlertaCorreo = require('../models/AlertaCorreo');
 const { PlanSanitario } = require('../models/PlanSanitario');
-const { RegistroReproductivo, completarFechasYEstado } = require('../models/RegistroReproductivo');
 const { Tarea } = require('../models/Tarea');
 const { enviarCorreoAdministradores } = require('./correoElectronico-service');
 
@@ -43,11 +42,6 @@ const diasDesde = (fecha) => {
     const hoy = normalizarDia();
     const enviada = normalizarDia(fecha);
     return Math.floor((hoy.getTime() - enviada.getTime()) / MS_DIA);
-};
-
-const obtenerNombreAnimal = (animal) => {
-    if (!animal) return 'DIIO no disponible';
-    return animal.diio || animal.identificadorFinca || 'DIIO no disponible';
 };
 
 const debeEnviarAlerta = async ({
@@ -175,101 +169,48 @@ const obtenerAlertasSanidad = async () => {
 };
 
 const obtenerAlertasReproduccion = async () => {
-    const registros = await RegistroReproductivo.find({
-        $and: [
-            { $or: [{ estadoCiclo: 'Activo' }, { estadoCiclo: { $exists: false } }] },
-            { $or: [{ activoParaAlertas: true }, { activoParaAlertas: { $exists: false } }] }
-        ]
+    const tareas = await Tarea.find({
+        moduloOrigen: 'Reproduccion',
+        creadoAutomaticamente: true,
+        estado: { $nin: ['Completada', 'Cancelada'] },
+        fechaProgramada: { $exists: true, $ne: null }
     }).populate('animal').lean();
     const alertas = [];
 
-    for (const registro of registros) {
-        const datos = { ...registro };
-        completarFechasYEstado(datos);
-        const animal = registro.animal;
-        const animalNombre = obtenerNombreAnimal(animal);
+    for (const tarea of tareas) {
+        const dias = diasHasta(tarea.fechaProgramada);
+        if (dias === null || dias > 15) continue;
 
-        const fechaProximoCelo = datos.fechaProximoCelo;
-        const diasProximoCelo = diasHasta(fechaProximoCelo);
-        if (fechaProximoCelo && diasProximoCelo !== null && diasProximoCelo >= 0 && diasProximoCelo <= 7) {
-            const clave = `reproduccion-proximo-celo:${registro._id}`;
-            const revision = await debeEnviarAlerta({
-                clave,
-                tipo: 'Próximo celo estimado',
-                referenciaModelo: 'RegistroReproductivo',
-                referenciaId: registro._id,
-                fechaObjetivo: fechaProximoCelo,
-                frecuenciaDias: FRECUENCIA_PROXIMA_DIAS,
-                enviarEnDiaObjetivo: true
+        const esVencida = dias < 0;
+        const esParto = (tarea.claveAutomatica || '').includes('parto');
+        const esCritica = !esVencida && esParto && dias <= DIAS_PARTO_CRITICO;
+        const estadoAlerta = esCritica ? 'Crítica' : esVencida ? 'Vencida' : 'Próxima';
+        const asunto = esCritica
+            ? 'Alertas críticas de reproducción'
+            : esVencida
+                ? 'Alertas de reproducción vencidas'
+                : 'Alertas de reproducción próximas';
+        const clave = `reproduccion-tarea-${estadoAlerta.toLowerCase()}:${tarea._id}`;
+        const revision = await debeEnviarAlerta({
+            clave,
+            tipo: `Reproducción ${estadoAlerta.toLowerCase()}`,
+            referenciaModelo: 'Tarea',
+            referenciaId: tarea._id,
+            fechaObjetivo: tarea.fechaProgramada,
+            frecuenciaDias: esCritica ? FRECUENCIA_CRITICA_DIAS : esVencida ? FRECUENCIA_VENCIDA_DIAS : FRECUENCIA_PROXIMA_DIAS,
+            enviarEnDiaObjetivo: true
+        });
+
+        if (revision.enviar) {
+            alertas.push({
+                ...revision.datosEstado,
+                categoria: 'Reproducción',
+                estadoAlerta,
+                asunto,
+                detalle: `${tarea.titulo}${tarea.especie ? ` (${tarea.especie})` : ''}`,
+                fecha: tarea.fechaProgramada,
+                dias
             });
-
-            if (revision.enviar) {
-                alertas.push({
-                    ...revision.datosEstado,
-                    categoria: 'Reproducción',
-                    estadoAlerta: 'Próximo celo estimado',
-                    asunto: 'Alertas de reproducción: próximo celo estimado',
-                    detalle: `${animalNombre} tiene próximo celo estimado`,
-                    fecha: fechaProximoCelo,
-                    dias: diasProximoCelo
-                });
-            }
-        }
-
-        const fechaPartoEstimada = datos.fechaPartoEstimada;
-        const diasParto = diasHasta(fechaPartoEstimada);
-        if (!datos.fechaPartoReal && fechaPartoEstimada && diasParto !== null && diasParto <= 15) {
-            const esCritica = diasParto <= DIAS_PARTO_CRITICO;
-            const clave = `${esCritica ? 'reproduccion-parto-critico' : 'reproduccion-parto-estimado'}:${registro._id}`;
-            const revision = await debeEnviarAlerta({
-                clave,
-                tipo: esCritica ? 'Parto crítico' : 'Parto estimado',
-                referenciaModelo: 'RegistroReproductivo',
-                referenciaId: registro._id,
-                fechaObjetivo: fechaPartoEstimada,
-                frecuenciaDias: esCritica ? FRECUENCIA_CRITICA_DIAS : FRECUENCIA_PROXIMA_DIAS,
-                enviarEnDiaObjetivo: true
-            });
-
-            if (revision.enviar) {
-                alertas.push({
-                    ...revision.datosEstado,
-                    categoria: 'Reproducción',
-                    estadoAlerta: esCritica ? 'Crítica' : 'Parto próximo',
-                    asunto: esCritica ? 'Alertas críticas de reproducción' : 'Alertas de reproducción: parto próximo',
-                    detalle: `${animalNombre} tiene parto estimado cercano`,
-                    fecha: fechaPartoEstimada,
-                    dias: diasParto
-                });
-            }
-        }
-
-        const fechaDestete = datos.fechaDestete;
-        const diasDestete = diasHasta(fechaDestete);
-        if (fechaDestete && diasDestete !== null && diasDestete <= 15) {
-            const esVencida = diasDestete < 0;
-            const clave = `${esVencida ? 'reproduccion-destete-vencido' : 'reproduccion-destete-proximo'}:${registro._id}`;
-            const revision = await debeEnviarAlerta({
-                clave,
-                tipo: esVencida ? 'Destete vencido' : 'Destete próximo',
-                referenciaModelo: 'RegistroReproductivo',
-                referenciaId: registro._id,
-                fechaObjetivo: fechaDestete,
-                frecuenciaDias: esVencida ? FRECUENCIA_VENCIDA_DIAS : FRECUENCIA_PROXIMA_DIAS,
-                enviarEnDiaObjetivo: true
-            });
-
-            if (revision.enviar) {
-                alertas.push({
-                    ...revision.datosEstado,
-                    categoria: 'Reproducción',
-                    estadoAlerta: esVencida ? 'Vencida' : 'Destete próximo',
-                    asunto: esVencida ? 'Alertas de reproducción vencidas' : 'Alertas de reproducción: destete próximo',
-                    detalle: `${animalNombre} tiene ${esVencida ? 'destete vencido' : 'destete próximo'}`,
-                    fecha: fechaDestete,
-                    dias: diasDestete
-                });
-            }
         }
     }
 

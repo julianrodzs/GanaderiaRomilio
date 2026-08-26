@@ -622,6 +622,150 @@ Naturaleza:
 - `Ingreso`
 - `Egreso`
 
+#### Estandarizacion financiera desde fase 1
+
+- Los campos originales se conservan para trazabilidad:
+  - `categoria`
+  - `unidad`
+  - `descripcion`
+  - `observaciones`
+- Se agregaron campos derivados para reportes y filtros:
+  - `categoriaNormalizada`
+  - `unidadNormalizada`
+  - `factorUnidad`
+  - `cantidadFisica`
+- Se agregaron campos operativos para compras de productos:
+  - `producto`
+  - `cantidad`
+  - `precioUnitario`
+- Se agregaron campos para planilla:
+  - `periodoInicio`
+  - `periodoFin`
+  - `tipoTrabajo`
+  - `cantidadPersonas`
+  - `diasTrabajados`
+  - `horasTrabajadas`
+  - `costoUnitario`
+- Se agregaron campos para inversiones:
+  - `tipoInversion`
+  - `activoAsociado`
+  - `depreciable`
+  - `vidaUtilMeses`
+  - `fechaInicioUso`
+  - `valorResidual`
+  - `depreciacionMensual`
+  - `estadoActivo`
+
+Servicio principal:
+
+```txt
+backend/services/normalizacionFinanciera-service.js
+```
+
+Responsabilidades:
+
+- inferir `categoriaNormalizada` desde `categoria`, `producto`, `descripcion` y `tipoMovimiento`.
+- normalizar unidades fisicas.
+- calcular cantidades fisicas para reportes de consumo.
+
+Ejemplos:
+
+```txt
+cantidad=1, unidad=70 L
+unidadNormalizada=L
+factorUnidad=70
+cantidadFisica=70
+```
+
+```txt
+cantidad=3, unidad=2 KG
+unidadNormalizada=KG
+factorUnidad=2
+cantidadFisica=6
+```
+
+```txt
+producto=GASOLINA REGULAR
+categoriaNormalizada=Combustible
+```
+
+La normalizacion se ejecuta:
+
+- al crear un movimiento financiero.
+- al editar un movimiento financiero.
+- al importar finanzas desde Excel.
+- al crear movimientos automaticos desde compras de animales.
+- al crear movimientos automaticos desde ventas de animales.
+
+Si una categoria no se puede inferir, queda como `Otros` o conserva la categoria escrita segun el caso.
+
+Categorias normalizadas iniciales:
+
+- `Alimentación`
+- `Sanidad`
+- `Combustible`
+- `Mano de obra`
+- `Potreros`
+- `Infraestructura`
+- `Herramientas`
+- `Maquinaria`
+- `Mantenimiento`
+- `Ganado`
+- `Porcinos`
+- `Ventas`
+- `Compras de animales`
+- `Otros`
+
+Unidades normalizadas iniciales:
+
+- `L`
+- `KG`
+- `G`
+- `ML`
+- `UNIDAD`
+- `SACO`
+- `GALON`
+- `M`
+- `DOSIS`
+
+#### Reportes financieros y de productos derivados
+
+Los reportes de productos e insumos usan los campos normalizados:
+
+- `categoriaNormalizada`
+- `unidadNormalizada`
+- `factorUnidad`
+- `cantidadFisica`
+
+Endpoints:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/api/reportes/productos/resumen` | Resumen general de productos |
+| GET | `/api/reportes/productos/por-producto` | Cantidad y monto por producto |
+| GET | `/api/reportes/productos/por-categoria` | Cantidad y monto por categoria |
+| GET | `/api/reportes/productos/combustibles` | Litros, monto y promedio por litro |
+| GET | `/api/reportes/productos/precio-promedio` | Precio promedio mensual por producto |
+| GET | `/api/reportes/productos/proveedores` | Compras agrupadas por proveedor |
+| GET | `/api/reportes/productos/destinos` | Uso estimado por destino |
+| GET | `/api/reportes/productos/top` | Productos mas usados o registrados |
+
+#### Pendiente por estandarizar en Finanzas
+
+- Definir catalogos cerrados para `categoriaNormalizada`, `tipoTrabajo`, `tipoInversion`, `unidadNormalizada` y `destinoUso`.
+- Decidir si el usuario podra elegir categoria normalizada manualmente o si siempre sera inferida.
+- Crear mantenimiento de catalogos desde frontend, para no depender de listas quemadas en codigo.
+- Migrar movimientos viejos que quedaron sin `producto`, `cantidad`, `unidadNormalizada` o `cantidadFisica`.
+- Revisar movimientos importados como `General` para reclasificarlos manualmente o con reglas nuevas.
+- Asociar gastos porcinos directamente a camada cuando aplique, no solo por texto.
+- Asociar gastos bovinos a animal, potrero o tarea cuando aplique.
+- Definir reglas de impuestos, descuentos y ajustes en compras/ventas para reportes contables mas formales.
+- Separar mejor inversiones capitalizables de gasto operativo en interfaz y reportes.
+- Implementar control opcional de comprobantes/facturas por proveedor.
+- Agregar exportacion de finanzas/reportes a Excel o PDF.
+- Definir si `GALON` debe convertirse a litros o mantenerse como unidad separada.
+- Estandarizar monedas y tipo de cambio si se mezclan `CRC` y `USD`.
+
 ### Compras de animales
 
 Base:
@@ -635,12 +779,16 @@ Modelo: `CompraAnimal`.
 Funciones:
 
 - registrar compra de uno o varios animales.
+- separar compras por `especie`: `Bovino` o `Porcino`.
 - calcular subtotal por animal.
-- calcular monto total y peso total.
+- calcular monto calculado, monto final editable, ajuste, monto total y peso total.
 - crear animales nuevos en inventario al confirmar compra.
 - guardar `fechaCompra`, `pesoCompra`, `pesoActual`, `precioCompraPorKg`, `montoCompra`, `proveedorCompra` y `compraId`.
 - crear evento de bitacora tipo `Compra`.
 - crear movimiento financiero de egreso tipo `Compra de animales`.
+- el movimiento financiero incluye `producto`, `cantidad`, `unidad`, `precioUnitario`, `referenciaId` y `referenciaModelo`.
+- para porcinos, el producto financiero queda como `Porcinos comprados`.
+- para bovinos, el producto financiero queda como `Bovinos comprados`.
 - anular o eliminar compras siempre que los animales no hayan sido vendidos o marcados como muertos despues.
 
 Endpoints:
@@ -668,13 +816,29 @@ Modelo: `VentaAnimal`.
 Funciones:
 
 - registrar venta de uno o varios animales.
+- separar ventas por `especie`: `Bovino` o `Porcino`.
 - calcular subtotal por animal.
 - calcular monto total y peso total.
 - impedir vender animales ya vendidos o muertos.
+- impedir mezclar bovinos y porcinos dentro de una misma venta.
 - actualizar animal al confirmar venta.
 - crear evento de bitacora.
 - crear movimiento financiero.
+- el movimiento financiero incluye `producto`, `cantidad`, `unidad`, `precioUnitario`, `referenciaId` y `referenciaModelo`.
+- para porcinos, el producto financiero queda como `Porcinos vendidos`.
+- para bovinos, el producto financiero queda como `Bovinos vendidos`.
 - revertir movimiento financiero al anular.
+
+Frontend:
+
+- La venta usa selector de especie.
+- Al agregar animales, ya no se muestra una lista completa grande.
+- Se usa buscador por:
+  - DIIO completo.
+  - ultimos 4 digitos del DIIO.
+  - identificador provisional.
+  - nombre.
+- El buscador respeta la especie seleccionada y omite vendidos, muertos o ya agregados.
 
 Reportes de ventas disponibles desde resumen:
 
@@ -921,9 +1085,7 @@ Revisa y envia alertas:
 
 - sanidad proxima.
 - sanidad vencida.
-- proximo celo.
-- parto estimado.
-- destete proximo.
+- tareas automaticas de reproduccion proximas, vencidas o criticas.
 
 Frecuencia configurable por:
 
@@ -938,6 +1100,16 @@ Crea eventos de bitacora desde modulos.
 ### `reproduccion-service.js`
 
 Centraliza cierre/cancelacion de ciclos reproductivos y reglas para que solo un ciclo activo genere alertas y tareas.
+
+### `reproduccionBovina-service.js`
+
+Genera y sincroniza tareas automaticas desde registros reproductivos bovinos:
+
+- revisar parto estimado.
+- revisar proximo celo estimado.
+- revisar destete.
+
+Estas tareas son la fuente para correos reproductivos.
 
 ### `reproduccionPorcina-service.js`
 

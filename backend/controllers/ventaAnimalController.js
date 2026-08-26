@@ -32,10 +32,18 @@ const crearFiltroEspecieAnimal = async (especie) => {
         ? { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] }
         : { especie };
     const animales = await Animal.find(filtroEspecie).select('_id');
-    return { 'animales.animal': { $in: animales.map((animal) => animal._id) } };
+    return {
+        $or: [
+            { especie },
+            {
+                especie: { $exists: false },
+                'animales.animal': { $in: animales.map((animal) => animal._id) }
+            }
+        ]
+    };
 };
 
-const validarAnimalesVenta = async (animales = [], ventaIdIgnorada = null) => {
+const validarAnimalesVenta = async (animales = [], ventaIdIgnorada = null, especieVenta = null) => {
     if (!Array.isArray(animales) || animales.length === 0) {
         return { valido: false, status: 400, mensaje: 'Debe agregar al menos un animal' };
     }
@@ -48,6 +56,10 @@ const validarAnimalesVenta = async (animales = [], ventaIdIgnorada = null) => {
     const animalesEncontrados = await Animal.find({ _id: { $in: ids } });
     if (animalesEncontrados.length !== ids.length) {
         return { valido: false, status: 404, mensaje: 'Uno o más animales no existen' };
+    }
+
+    if (especieVenta && animalesEncontrados.some((animal) => (animal.especie || 'Bovino') !== especieVenta)) {
+        return { valido: false, status: 400, mensaje: `Todos los animales de la venta deben ser ${especieVenta}` };
     }
 
     const animalNoDisponible = animalesEncontrados.find((animal) => ['Vendido', 'Muerto'].includes(animal.estado));
@@ -75,7 +87,7 @@ const validarAnimalesVenta = async (animales = [], ventaIdIgnorada = null) => {
         return { valido: false, status: 400, mensaje: 'Peso de venta y precio por kg deben ser mayores que cero' };
     }
 
-    return { valido: true };
+    return { valido: true, especie: especieVenta || animalesEncontrados[0]?.especie || 'Bovino' };
 };
 
 const crearEventosVenta = async (venta, usuarioId) => {
@@ -118,9 +130,14 @@ const aplicarVentaConfirmada = async (venta, usuarioId) => {
             tipoMovimiento: 'Venta de animales',
             naturaleza: 'Ingreso',
             categoria: 'Ingresos',
-            descripcion: `Venta de animal(es) a ${venta.comprador}`,
+            descripcion: `Venta de ${venta.especie === 'Porcino' ? 'porcino(s)' : 'bovino(s)'} a ${venta.comprador}`,
+            producto: venta.especie === 'Porcino' ? 'Porcinos vendidos' : 'Bovinos vendidos',
+            cantidad: venta.totalAnimales,
+            unidad: 'animales',
+            precioUnitario: venta.pesoTotalKg ? venta.montoTotal / venta.pesoTotalKg : undefined,
             monto: venta.montoTotal,
             moneda: 'CRC',
+            proveedor: venta.comprador,
             comprobante: venta.comprobanteUrl,
             observaciones: venta.observaciones,
             referenciaId: venta._id,
@@ -149,6 +166,23 @@ const revertirVenta = async (venta) => {
     await MovimientoFinanciero.deleteMany({ referenciaId: venta._id, referenciaModelo: 'VentaAnimal' });
     await eliminarEventosPorReferencia({ moduloOrigen: 'Ventas', referenciaId: venta._id });
 };
+
+const extraerDatosVenta = (venta) => ({
+    fechaVenta: venta.fechaVenta,
+    comprador: venta.comprador,
+    identificacionComprador: venta.identificacionComprador,
+    telefonoComprador: venta.telefonoComprador,
+    observaciones: venta.observaciones,
+    especie: venta.especie || 'Bovino',
+    animales: (venta.animales || []).map((item) => ({
+        animal: item.animal,
+        pesoVentaKg: item.pesoVentaKg,
+        precioKg: item.precioKg
+    })),
+    comprobanteUrl: venta.comprobanteUrl,
+    estado: venta.estado,
+    registradoPor: venta.registradoPor
+});
 
 ventaAnimalCtrl.getVentas = async (req, res) => {
     try {
@@ -187,11 +221,12 @@ ventaAnimalCtrl.getVentaById = async (req, res) => {
 ventaAnimalCtrl.crearVenta = async (req, res) => {
     try {
         const animales = typeof req.body.animales === 'string' ? JSON.parse(req.body.animales) : req.body.animales;
-        const validacion = await validarAnimalesVenta(animales);
+        const validacion = await validarAnimalesVenta(animales, null, req.body.especie);
         if (!validacion.valido) return res.status(validacion.status).json({ mensaje: validacion.mensaje });
 
         const venta = new VentaAnimal({
             ...req.body,
+            especie: validacion.especie,
             animales,
             comprobanteUrl: req.file ? `/uploads/ventas/${req.file.filename}` : undefined,
             registradoPor: req.usuario?.id
@@ -207,31 +242,51 @@ ventaAnimalCtrl.crearVenta = async (req, res) => {
 };
 
 ventaAnimalCtrl.actualizarVenta = async (req, res) => {
+    let ventaAnterior = null;
+    let ventaRevertida = false;
+
     try {
-        const ventaAnterior = await VentaAnimal.findById(req.params.id);
+        ventaAnterior = await VentaAnimal.findById(req.params.id);
         if (!ventaAnterior) return res.status(404).json({ mensaje: 'Venta no encontrada' });
         if (ventaAnterior.estado === 'Anulada') {
             return res.status(400).json({ mensaje: 'No se puede editar una venta anulada' });
         }
 
         await revertirVenta(ventaAnterior);
+        ventaRevertida = true;
         const animales = typeof req.body.animales === 'string' ? JSON.parse(req.body.animales) : req.body.animales;
-        const validacion = await validarAnimalesVenta(animales, req.params.id);
+        const validacion = await validarAnimalesVenta(animales, req.params.id, req.body.especie || ventaAnterior.especie);
         if (!validacion.valido) {
             await aplicarVentaConfirmada(ventaAnterior, req.usuario?.id);
+            ventaRevertida = false;
             return res.status(validacion.status).json({ mensaje: validacion.mensaje });
         }
 
         const datos = {
             ...req.body,
+            especie: validacion.especie,
             animales,
             comprobanteUrl: req.file ? `/uploads/ventas/${req.file.filename}` : ventaAnterior.comprobanteUrl
         };
         const venta = await VentaAnimal.findByIdAndUpdate(req.params.id, datos, { new: true, runValidators: true });
         await aplicarVentaConfirmada(venta, req.usuario?.id);
+        ventaRevertida = false;
         const ventaPoblada = await poblarVenta(VentaAnimal.findById(venta._id));
         res.json(ventaPoblada);
     } catch (error) {
+        if (ventaRevertida && ventaAnterior) {
+            try {
+                await VentaAnimal.findByIdAndUpdate(req.params.id, extraerDatosVenta(ventaAnterior), { runValidators: true });
+                await aplicarVentaConfirmada(ventaAnterior, req.usuario?.id);
+            } catch (rollbackError) {
+                return res.status(500).json({
+                    mensaje: 'Error al actualizar venta y al restaurar la venta anterior',
+                    error: error.message,
+                    rollback: rollbackError.message
+                });
+            }
+        }
+
         res.status(400).json({ mensaje: 'Error al actualizar venta', error: error.message });
     }
 };
