@@ -16,7 +16,7 @@ La aplicacion ya cuenta con:
 - Potreros con area, estado, actividades recientes y rotaciones.
 - Reproduccion/Gestacion bovina con parto estimado, parto real, destete y proximo celo estimado.
 - Reproduccion porcina con inseminacion/monta, fechas calculadas y tareas automaticas.
-- Plan Sanitario centralizado con alertas.
+- Plan Sanitario centralizado con alertas y registro real de aplicaciones.
 - Pesajes historicos por animal.
 - Finanzas unificadas con movimientos financieros.
 - Ventas formales de animales.
@@ -193,6 +193,44 @@ En porcinos, Inventario permite alternar entre:
 
 Los modulos crean eventos automaticamente cuando aplica.
 
+Origenes soportados:
+
+- Inventario
+- Pesajes
+- Sanidad
+- Reproduccion
+- Compras
+- Ventas
+- Camadas
+- Tareas
+- Manual
+
+Regla principal:
+
+- La bitacora registra hechos historicos, no simples programaciones.
+- En Sanidad, crear o editar un plan no crea bitacora.
+- La bitacora sanitaria se crea cuando se registra una aplicacion real.
+- Si una tarea importante se completa, puede crear bitacora automaticamente.
+- Las tareas operativas menores, como alimentacion rutinaria, no generan bitacora para evitar ruido.
+
+### Bitacora de camada
+
+`EventoCamada` centraliza eventos historicos de una camada porcina.
+
+Existe porque muchas crias porcinas se manejan agrupadas antes de tener DIIO o registro individual.
+
+Eventos principales:
+
+- camada registrada.
+- sanidad o tratamiento relevante.
+- destete.
+- venta agrupada.
+- sacrificio.
+- cambio de destino.
+- cierre o cancelacion.
+
+La venta por camada genera evento en la camada, no en animales individuales, porque esas crias no existen todavia como registros separados en inventario.
+
 ### Potreros y rotaciones
 
 Potreros incluyen:
@@ -319,7 +357,22 @@ Permite planes por grupo o animales especificos:
 - fecha aplicacion.
 - frecuencia.
 - proxima aplicacion calculada.
-- estado calculado: vigente, proximo, vencido o aplicado.
+- estado calculado: vigente, proximo o vencido.
+
+Flujo actual:
+
+1. Se crea un plan con fecha base y frecuencia.
+2. El sistema calcula `proximaAplicacion`.
+3. El estado se calcula segun esa proxima fecha.
+4. Cuando se aplica realmente el producto, se usa la accion `Registrar aplicacion`.
+5. Esa accion actualiza `fechaAplicacion`, recalcula la siguiente fecha y crea bitacora.
+
+La accion esta disponible:
+
+- en la tabla de Sanidad con el boton de registro.
+- dentro del formulario de editar plan.
+
+Si el plan es individual, la bitacora queda en ese animal. Si es `Todo el ganado`, se crea evento para todos los animales activos de la especie seleccionada.
 
 El modelo `RegistroSanitario` se mantiene por compatibilidad.
 
@@ -504,8 +557,22 @@ Las tareas automaticas de reproduccion/camadas usan:
 - `especie: Porcino`
 - `categoriaAutomatica`
 - `claveAutomatica`
+- `generaBitacora`
+- `tipoEventoBitacora`
 
 Esto permite actualizarlas o cancelarlas sin tocar tareas manuales.
+
+Solo tareas importantes escriben bitacora al completarse:
+
+- sanidad.
+- tratamiento.
+- destete.
+- parto/reproduccion relevante.
+- venta.
+- sacrificio.
+- pesaje.
+
+Tareas de alimentacion rutinaria quedan como operacion diaria, no como evento historico.
 
 ### Importacion Excel
 

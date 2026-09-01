@@ -268,6 +268,73 @@ Tipos:
 - Diagnostico de gestacion
 - Observacion
 
+Origenes permitidos:
+
+- `Inventario`
+- `Potreros`
+- `Pesajes`
+- `Sanidad`
+- `Reproduccion`
+- `Finanzas`
+- `Compras`
+- `Ventas`
+- `Camadas`
+- `Tareas`
+- `Manual`
+
+Reglas actuales:
+
+- La bitacora de animal se usa para animales individuales, bovinos o porcinos.
+- Compra individual crea evento `Compra`.
+- Venta individual crea evento `Venta`.
+- Pesaje crea evento `Pesaje`.
+- Registro reproductivo crea evento segun el caso: monta, parto, destete o diagnostico.
+- Plan sanitario solo crea evento cuando se registra una aplicacion real, no cuando solo se programa el plan.
+- Observaciones manuales se crean desde el detalle del animal.
+
+### Eventos de camada
+
+Base:
+
+```txt
+/api/eventos-camada
+```
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/camada/:camadaId` | Historial de una camada |
+| POST | `/` | Crea evento manual de camada |
+| PUT | `/:id` | Actualiza evento |
+| DELETE | `/:id` | Elimina evento |
+
+Modelo: `EventoCamada`.
+
+Tipos:
+
+- Camada registrada
+- Nacimiento
+- Sanidad
+- Tratamiento
+- Destete
+- Monta
+- Venta
+- Sacrificio
+- Mortalidad
+- Cambio de destino
+- Cierre
+- Cancelacion
+- Observacion
+
+Uso:
+
+- La camada tiene bitacora propia porque muchas crias porcinas no estan individualizadas con DIIO.
+- Registrar una camada crea evento en la madre y evento en la camada.
+- Registrar destete real crea evento `Destete` en la camada.
+- Cambiar destino de camada crea evento `Cambio de destino`.
+- Cerrar o cancelar camada crea evento de cierre/cancelacion.
+- Una venta agrupada por camada crea evento `Venta` en la camada.
+- Las ventas por camada no crean eventos por animal, porque esas crias aun no existen como animales individuales.
+
 ### Potreros
 
 Base:
@@ -342,7 +409,8 @@ Base:
 | GET | `/alertas` | Vencidos y proximos |
 | PUT | `/:id` | Actualiza plan |
 | DELETE | `/:id` | Elimina plan |
-| PATCH | `/:id/marcar-aplicado` | Marca como aplicado |
+| PATCH | `/:id/registrar-aplicacion` | Registra una aplicacion real |
+| PATCH | `/:id/marcar-aplicado` | Alias compatible de registrar aplicacion |
 
 Modelo: `PlanSanitario`.
 
@@ -355,6 +423,55 @@ Calcula:
   - vigente.
 
 Puede aplicar por grupo o con animales especificos opcionales, salvo `Todo el ganado`.
+
+#### Flujo recomendado de aplicacion sanitaria
+
+El plan sanitario es recurrente y no debe quedar congelado como `Aplicado`.
+
+Flujo:
+
+1. Se crea un plan con `fechaAplicacion` inicial y frecuencia.
+2. El modelo calcula `proximaAplicacion`.
+3. El estado se calcula automaticamente desde `proximaAplicacion`:
+   - `Vigente`
+   - `Próximo`
+   - `Vencido`
+4. Cuando se realiza la aplicacion en campo, se usa:
+
+```txt
+PATCH /api/plan-sanitario/:id/registrar-aplicacion
+```
+
+Body:
+
+```json
+{
+  "fechaAplicacion": "2026-08-10",
+  "responsable": "Encargado de finca",
+  "observaciones": "Aplicacion realizada sin incidentes"
+}
+```
+
+5. El backend actualiza `fechaAplicacion`.
+6. El modelo recalcula `proximaAplicacion`.
+7. El estado vuelve a calcularse segun la nueva proxima fecha.
+8. Se crean eventos reales de bitacora de sanidad para los animales afectados.
+
+Reglas de bitacora sanitaria:
+
+- Crear o editar un plan no crea bitacora.
+- Registrar aplicacion si crea bitacora.
+- Si el plan tiene `animalDiio`, crea evento solo en ese animal.
+- Si el plan es `Todo el ganado`, crea evento en todos los animales activos de la especie del plan.
+- Los animales `Muerto` o `Vendido` no reciben eventos de planes grupales.
+- La fecha del evento es la fecha real de aplicacion.
+- El titulo del evento es `actividad / producto`.
+- El origen del evento es `Sanidad`.
+
+Nota de compatibilidad:
+
+- La ruta vieja `marcar-aplicado` sigue existiendo como alias.
+- El estado `Aplicado` se mantiene en el enum por compatibilidad con datos viejos, pero el flujo nuevo recalcula el estado del plan despues de cada aplicacion.
 
 ### Reproduccion
 
@@ -1007,6 +1124,8 @@ Campos automaticos usados por reproduccion/camadas:
 - `especie`
 - `categoriaAutomatica`
 - `claveAutomatica`
+- `generaBitacora`
+- `tipoEventoBitacora`
 
 Reglas automaticas:
 
@@ -1014,6 +1133,27 @@ Reglas automaticas:
 - Las tareas automaticas completadas se conservan como historial.
 - Las tareas automaticas pendientes se cancelan si se cierra/cancela el ciclo o camada.
 - Las tareas manuales no se modifican por servicios automaticos.
+- Solo tareas importantes generan bitacora al completarse.
+- Si una tarea historica se revierte de `Completada` a otro estado, se elimina el evento generado desde esa tarea.
+
+Tareas que generan bitacora:
+
+- sanidad.
+- tratamiento.
+- destete.
+- parto o revision de parto.
+- celo/monta/inseminacion.
+- venta.
+- sacrificio.
+- pesaje.
+
+Tareas que normalmente no generan bitacora:
+
+- alimento inicio.
+- alimento desarrollo.
+- alimento engorde.
+- alimento lactancia.
+- limpiezas o revisiones operativas menores.
 
 ### Importacion Excel
 
