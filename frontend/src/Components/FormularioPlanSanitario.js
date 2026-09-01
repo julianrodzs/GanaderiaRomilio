@@ -38,7 +38,7 @@ const normalizarPlan = (plan) => ({
   frecuenciaCantidad: plan?.frecuenciaCantidad ?? 1
 });
 
-const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error, planInicial, modo = 'crear', especie = 'Bovino' }) => {
+const FormularioPlanSanitario = ({ onCancelar, onGuardar, onRegistrarAplicacion, guardando, error, planInicial, modo = 'crear', especie = 'Bovino' }) => {
   const [formulario, setFormulario] = useState(() => ({
     ...normalizarPlan(planInicial),
     especie: planInicial?.especie || especie
@@ -218,6 +218,16 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, guardando, error, plan
         </label>
 
         <div className="form-actions">
+          {onRegistrarAplicacion && (
+            <button
+              className="boton-secundario compacto"
+              type="button"
+              onClick={() => onRegistrarAplicacion(planInicial)}
+              disabled={guardando}
+            >
+              Registrar aplicación
+            </button>
+          )}
           <button className="boton-link" type="button" onClick={onCancelar}>Cancelar</button>
           <button className="boton-primario compacto" type="submit" disabled={guardando}>
             {guardando ? 'Guardando...' : modo === 'editar' ? 'Actualizar plan' : 'Guardar plan'}

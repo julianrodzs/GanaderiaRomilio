@@ -173,6 +173,20 @@
   min-height: 44px;
 }
 
+.boton-secundario {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid #cfd8cf;
+  border-radius: 4px;
+  background: #f8faf7;
+  color: #0b3b21;
+  font-weight: 900;
+}
+
+.boton-secundario.compacto {
+  width: auto;
+}
+
 .boton-link {
   min-height: 42px;
   background: transparent;
@@ -2583,6 +2597,30 @@
   margin: 0;
 }
 
+.aplicacion-sanitaria-modal {
+  max-width: 760px;
+}
+
+.aplicacion-sanitaria-resumen {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid #dfe5dc;
+  background: #f4f7f2;
+}
+
+.aplicacion-sanitaria-resumen span {
+  color: #4d5b51;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.aplicacion-sanitaria-resumen strong {
+  color: #082114;
+}
+
 .modal-panel p:not(.eyebrow) {
   color: #3b463f;
   line-height: 1.5;
@@ -3199,6 +3237,14 @@
 
 .texto-ayuda-formulario {
   color: #657267;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.form-help {
+  margin: 0;
+  color: #657267;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.45;
 }

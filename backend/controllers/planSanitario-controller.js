@@ -39,7 +39,6 @@ const obtenerAnimalesParaPlan = async (plan) => {
 };
 
 const registrarEventosSanidad = async (plan, usuarioId) => {
-    await eliminarEventosPorReferencia({ moduloOrigen: 'Sanidad', referenciaId: plan._id });
     const animales = await obtenerAnimalesParaPlan(plan);
 
     await Promise.all(animales.map((animal) => upsertEventoAnimal({
@@ -49,9 +48,9 @@ const registrarEventosSanidad = async (plan, usuarioId) => {
         titulo: `${plan.actividad} / ${plan.producto}`,
         descripcion: plan.observaciones || `Aplicación sanitaria para ${plan.grupoGanado}.`,
         moduloOrigen: 'Sanidad',
-        referenciaId: plan._id,
         creadoPor: usuarioId,
         metadata: {
+            planSanitario: plan._id,
             grupoGanado: plan.grupoGanado,
             animalDiio: plan.animalDiio,
             actividad: plan.actividad,
@@ -91,7 +90,6 @@ planSanitarioCtrl.createPlanSanitario = async (req, res) => {
     try {
         const nuevoPlan = new PlanSanitario(req.body);
         const planGuardado = await nuevoPlan.save();
-        await registrarEventosSanidad(planGuardado, req.usuario?.id);
         res.status(201).json(planGuardado);
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al crear plan sanitario', error: error.message });
@@ -127,7 +125,7 @@ planSanitarioCtrl.updatePlanSanitario = async (req, res) => {
 
         Object.assign(plan, req.body);
         const planActualizado = await plan.save();
-        await registrarEventosSanidad(planActualizado, req.usuario?.id);
+        await eliminarEventosPorReferencia({ moduloOrigen: 'Sanidad', referenciaId: plan._id });
 
         res.json(planActualizado);
     } catch (error) {
@@ -151,7 +149,7 @@ planSanitarioCtrl.deletePlanSanitario = async (req, res) => {
     }
 };
 
-planSanitarioCtrl.marcarPlanAplicado = async (req, res) => {
+planSanitarioCtrl.registrarAplicacionPlan = async (req, res) => {
     try {
         const plan = await PlanSanitario.findById(req.params.id);
 
@@ -159,8 +157,8 @@ planSanitarioCtrl.marcarPlanAplicado = async (req, res) => {
             return res.status(404).json({ mensaje: 'Plan sanitario no encontrado' });
         }
 
+        await eliminarEventosPorReferencia({ moduloOrigen: 'Sanidad', referenciaId: plan._id });
         plan.fechaAplicacion = req.body.fechaAplicacion || new Date();
-        plan.estado = 'Aplicado';
 
         if (req.body.responsable) {
             plan.responsable = req.body.responsable;
@@ -174,8 +172,10 @@ planSanitarioCtrl.marcarPlanAplicado = async (req, res) => {
         await registrarEventosSanidad(planActualizado, req.usuario?.id);
         res.json(planActualizado);
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al marcar plan como aplicado', error: error.message });
+        res.status(400).json({ mensaje: 'Error al registrar aplicacion sanitaria', error: error.message });
     }
 };
+
+planSanitarioCtrl.marcarPlanAplicado = planSanitarioCtrl.registrarAplicacionPlan;
 
 module.exports = planSanitarioCtrl;

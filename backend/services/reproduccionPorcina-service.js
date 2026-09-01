@@ -24,7 +24,7 @@ const obtenerCodigoAnimal = (animal) => {
     return animal.diio || animal.identificadorFinca || animal.nombre || 'chancha';
 };
 
-const crearTareaBase = ({ registro, animal, usuarioId, clave, titulo, descripcion, tipo, fechaProgramada, prioridad = 'Media', categoriaAutomatica }) => ({
+const crearTareaBase = ({ registro, animal, usuarioId, clave, titulo, descripcion, tipo, fechaProgramada, prioridad = 'Media', categoriaAutomatica, generaBitacora = false, tipoEventoBitacora }) => ({
     titulo,
     descripcion,
     tipo,
@@ -39,18 +39,20 @@ const crearTareaBase = ({ registro, animal, usuarioId, clave, titulo, descripcio
     creadoAutomaticamente: true,
     especie: 'Porcino',
     categoriaAutomatica,
-    claveAutomatica: clave
+    claveAutomatica: clave,
+    generaBitacora,
+    tipoEventoBitacora
 });
 
 const crearDefinicionesTareasPorcinas = ({ registro, animal, usuarioId }) => {
     const codigo = obtenerCodigoAnimal(animal);
     const ventana = `${formatearFecha(registro.fechaInicioVentanaParto)} a ${formatearFecha(registro.fechaFinVentanaParto)}`;
     const tareasChancha = [
-        ['revisar-celo', 'Revisar celo', 'Reproducción', registro.fechaRevisionCelo, 'Reproducción porcina', 'Revisión de celo programada 21 días después de la inseminación/monta.'],
-        ['desparasitar-antes-parto', 'Desparasitar antes del parto', 'Sanidad', registro.fechaDesparasitacionAntesParto, 'Sanidad porcina', 'Desparasitación programada 30 días antes del parto estimado.'],
-        ['alimento-lactancia', 'Dar alimento de lactancia', 'Alimentación', registro.fechaAlimentoLactancia, 'Alimentación porcina', 'Alimento de lactancia programado 15 días antes del parto estimado.'],
-        ['revisar-parto', 'Revisar parto', 'Reproducción', registro.fechaPartoEstimada, 'Reproducción porcina', `Parto estimado. Ventana probable: ${ventana}.`]
-    ].filter(([, , , fecha]) => Boolean(fecha)).map(([clave, titulo, tipo, fechaProgramada, categoriaAutomatica, descripcion]) => crearTareaBase({
+        ['revisar-celo', 'Revisar celo', 'Reproducción', registro.fechaRevisionCelo, 'Reproducción porcina', 'Revisión de celo programada 21 días después de la inseminación/monta.', true, 'Monta'],
+        ['desparasitar-antes-parto', 'Desparasitar antes del parto', 'Sanidad', registro.fechaDesparasitacionAntesParto, 'Sanidad porcina', 'Desparasitación programada 30 días antes del parto estimado.', true, 'Sanidad'],
+        ['alimento-lactancia', 'Dar alimento de lactancia', 'Alimentación', registro.fechaAlimentoLactancia, 'Alimentación porcina', 'Alimento de lactancia programado 15 días antes del parto estimado.', false, null],
+        ['revisar-parto', 'Revisar parto', 'Reproducción', registro.fechaPartoEstimada, 'Reproducción porcina', `Parto estimado. Ventana probable: ${ventana}.`, true, 'Parto']
+    ].filter(([, , , fecha]) => Boolean(fecha)).map(([clave, titulo, tipo, fechaProgramada, categoriaAutomatica, descripcion, generaBitacora, tipoEventoBitacora]) => crearTareaBase({
         registro,
         animal,
         usuarioId,
@@ -59,7 +61,9 @@ const crearDefinicionesTareasPorcinas = ({ registro, animal, usuarioId }) => {
         descripcion,
         tipo,
         fechaProgramada,
-        categoriaAutomatica
+        categoriaAutomatica,
+        generaBitacora,
+        tipoEventoBitacora
     }));
 
     return tareasChancha;

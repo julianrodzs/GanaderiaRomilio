@@ -10,6 +10,17 @@ const detalleVentaAnimalSchema = new Schema(
     { _id: false }
 );
 
+const detalleVentaCamadaSchema = new Schema(
+    {
+        camada: { type: Schema.Types.ObjectId, ref: 'Camada', required: true },
+        cantidad: { type: Number, required: true, min: 1 },
+        pesoTotalKg: { type: Number, required: true, min: 0.01 },
+        precioKg: { type: Number, required: true, min: 0.01 },
+        subtotal: { type: Number, min: 0 }
+    },
+    { _id: false }
+);
+
 const ventaAnimalSchema = new Schema(
     {
         especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino' },
@@ -18,13 +29,8 @@ const ventaAnimalSchema = new Schema(
         identificacionComprador: { type: String, trim: true },
         telefonoComprador: { type: String, trim: true },
         observaciones: { type: String, trim: true },
-        animales: {
-            type: [detalleVentaAnimalSchema],
-            validate: {
-                validator: (items) => Array.isArray(items) && items.length > 0,
-                message: 'Debe agregar al menos un animal a la venta'
-            }
-        },
+        animales: { type: [detalleVentaAnimalSchema], default: [] },
+        camadas: { type: [detalleVentaCamadaSchema], default: [] },
         totalAnimales: { type: Number, default: 0, min: 0 },
         pesoTotalKg: { type: Number, default: 0, min: 0 },
         montoTotal: { type: Number, default: 0, min: 0 },
@@ -41,34 +47,49 @@ const ventaAnimalSchema = new Schema(
     }
 );
 
-const calcularTotalesVenta = (animales = []) => {
+const calcularTotalesVenta = (animales = [], camadas = []) => {
     const animalesCalculados = (animales || []).map((item) => ({
         animal: item.animal?._id || item.animal,
         pesoVentaKg: item.pesoVentaKg,
         precioKg: item.precioKg,
         subtotal: Number(item.pesoVentaKg || 0) * Number(item.precioKg || 0)
     }));
+    const camadasCalculadas = (camadas || []).map((item) => ({
+        camada: item.camada?._id || item.camada,
+        cantidad: Number(item.cantidad || 0),
+        pesoTotalKg: item.pesoTotalKg,
+        precioKg: item.precioKg,
+        subtotal: Number(item.pesoTotalKg || 0) * Number(item.precioKg || 0)
+    }));
 
     return {
         animales: animalesCalculados,
-        totalAnimales: animalesCalculados.length,
-        pesoTotalKg: animalesCalculados.reduce((total, item) => total + Number(item.pesoVentaKg || 0), 0),
+        camadas: camadasCalculadas,
+        totalAnimales: animalesCalculados.length + camadasCalculadas.reduce((total, item) => total + Number(item.cantidad || 0), 0),
+        pesoTotalKg: animalesCalculados.reduce((total, item) => total + Number(item.pesoVentaKg || 0), 0)
+            + camadasCalculadas.reduce((total, item) => total + Number(item.pesoTotalKg || 0), 0),
         montoTotal: animalesCalculados.reduce((total, item) => total + Number(item.subtotal || 0), 0)
+            + camadasCalculadas.reduce((total, item) => total + Number(item.subtotal || 0), 0)
     };
 };
 
 ventaAnimalSchema.pre('validate', function calcularTotales(next) {
-    Object.assign(this, calcularTotalesVenta(this.animales));
+    if ((!this.animales || this.animales.length === 0) && (!this.camadas || this.camadas.length === 0)) {
+        this.invalidate('animales', 'Debe agregar al menos un animal o una camada a la venta');
+    }
+
+    Object.assign(this, calcularTotalesVenta(this.animales, this.camadas));
     next();
 });
 
 ventaAnimalSchema.pre('findOneAndUpdate', function calcularTotalesEnActualizacion(next) {
     const update = this.getUpdate() || {};
     const animales = update.animales || update.$set?.animales;
+    const camadas = update.camadas || update.$set?.camadas;
 
-    if (!animales) return next();
+    if (!animales && !camadas) return next();
 
-    const totales = calcularTotalesVenta(animales);
+    const totales = calcularTotalesVenta(animales || [], camadas || []);
 
     if (update.$set) {
         update.$set = {
@@ -87,5 +108,6 @@ ventaAnimalSchema.index({ estado: 1, fechaVenta: -1 });
 ventaAnimalSchema.index({ especie: 1, estado: 1, fechaVenta: -1 });
 ventaAnimalSchema.index({ comprador: 1 });
 ventaAnimalSchema.index({ 'animales.animal': 1 });
+ventaAnimalSchema.index({ 'camadas.camada': 1 });
 
 module.exports = model('VentaAnimal', ventaAnimalSchema);

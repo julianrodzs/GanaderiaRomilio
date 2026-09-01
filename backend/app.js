@@ -29,6 +29,7 @@ app.use('/api/animales', auth, require('./routes/animal'));
 app.use('/api/camadas', auth, require('./routes/camadaRoutes'));
 app.use('/api/genealogia', auth, require('./routes/genealogiaRoutes'));
 app.use('/api/eventos-animal', auth, require('./routes/eventoAnimalRoutes'));
+app.use('/api/eventos-camada', auth, require('./routes/eventoCamadaRoutes'));
 app.use('/api/potreros', auth, require('./routes/potrero'));
 app.use('/api/pesajes', soloAdministrador, require('./routes/pesaje'));
 app.use('/api/sanidad', soloAdministrador, require('./routes/sanidad'));

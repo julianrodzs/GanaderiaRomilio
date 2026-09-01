@@ -33,7 +33,9 @@ const crearTareaBase = ({ registro, animal, usuarioId, config, fechaProgramada, 
     creadoAutomaticamente: true,
     especie: 'Bovino',
     categoriaAutomatica: config.categoriaAutomatica,
-    claveAutomatica: config.clave
+    claveAutomatica: config.clave,
+    generaBitacora: true,
+    tipoEventoBitacora: config.tipoEventoBitacora || 'Observacion'
 });
 
 const crearDefinicionesTareasBovinas = ({ registro, animal, usuarioId }) => {

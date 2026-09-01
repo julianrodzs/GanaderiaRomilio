@@ -338,6 +338,8 @@ export const eliminarPesaje = (id) => {
 
 export const obtenerEventosAnimal = (animalId) => request(`/eventos-animal/animal/${animalId}`);
 
+export const obtenerEventosCamada = (camadaId) => request(`/eventos-camada/camada/${camadaId}`);
+
 export const crearEventoAnimal = (evento) => {
   return request('/eventos-animal', {
     method: 'POST',
@@ -421,6 +423,13 @@ export const actualizarPlanSanitario = (id, plan) => {
 export const eliminarPlanSanitario = (id) => {
   return request(`/plan-sanitario/${id}`, {
     method: 'DELETE'
+  });
+};
+
+export const registrarAplicacionPlanSanitario = (id, datos) => {
+  return request(`/plan-sanitario/${id}/registrar-aplicacion`, {
+    method: 'PATCH',
+    body: JSON.stringify(datos)
   });
 };
 
@@ -605,7 +614,7 @@ const crearFormDataVenta = (venta) => {
   const formData = new FormData();
   Object.entries(venta).forEach(([clave, valor]) => {
     if (clave === 'comprobante') return;
-    if (clave === 'animales') {
+    if (clave === 'animales' || clave === 'camadas') {
       formData.append(clave, JSON.stringify(valor || []));
       return;
     }

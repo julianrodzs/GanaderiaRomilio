@@ -14,6 +14,7 @@ import {
   obtenerCamadas,
   obtenerDescendenciaAnimal,
   obtenerEventosAnimal,
+  obtenerEventosCamada,
   obtenerPesajesPorAnimal,
   registrarDesteteCamada
 } from '../services/api';
@@ -103,6 +104,11 @@ const formatearPeso = (peso) => {
   return `${peso} kg`;
 };
 
+const etiquetaCamada = (camada) => {
+  if (!camada) return '--';
+  return camada.codigoCamada || '--';
+};
+
 const formatearMoneda = (valor) => {
   if (valor === null || valor === undefined || valor === '') return '--';
   return new Intl.NumberFormat('es-CR', {
@@ -165,6 +171,12 @@ const columnas = [
   { id: 'pesoActual', label: 'Peso actual', accessor: (animal) => animal.pesoActual },
   { id: 'estado', label: 'Estado', accessor: (animal) => animal.estado }
 ];
+
+const columnaCamadaOrigen = {
+  id: 'camadaOrigen',
+  label: 'Camada',
+  accessor: (animal) => etiquetaCamada(animal.camadaOrigen)
+};
 
 const filtros = [
   { id: 'categoria', accessor: obtenerCategoriaAnimal },
@@ -237,15 +249,18 @@ const Animales = ({ soloLectura = false }) => {
   const [animalSeleccionado, setAnimalSeleccionado] = useState(null);
   const [camadaSeleccionada, setCamadaSeleccionada] = useState(null);
   const [camadaDetalle, setCamadaDetalle] = useState(null);
+  const [eventosCamada, setEventosCamada] = useState([]);
   const [animalDetalle, setAnimalDetalle] = useState(null);
   const [eventosAnimal, setEventosAnimal] = useState([]);
   const [pesajesAnimal, setPesajesAnimal] = useState([]);
   const [arbolGenealogico, setArbolGenealogico] = useState(null);
   const [descendenciaAnimal, setDescendenciaAnimal] = useState(null);
   const [cargandoEventos, setCargandoEventos] = useState(false);
+  const [cargandoEventosCamada, setCargandoEventosCamada] = useState(false);
   const [cargandoPesajes, setCargandoPesajes] = useState(false);
   const [cargandoGenealogia, setCargandoGenealogia] = useState(false);
   const [errorEventos, setErrorEventos] = useState('');
+  const [errorEventosCamada, setErrorEventosCamada] = useState('');
   const [errorPesajes, setErrorPesajes] = useState('');
   const [errorGenealogia, setErrorGenealogia] = useState('');
   const [observacionManual, setObservacionManual] = useState('');
@@ -321,6 +336,9 @@ const Animales = ({ soloLectura = false }) => {
       setModoFormulario(false);
       setCargando(true);
       await cargarAnimales();
+      if (especie === 'Porcino') {
+        await cargarCamadas();
+      }
     } catch (err) {
       setErrorFormulario(err.message);
     } finally {
@@ -356,6 +374,9 @@ const Animales = ({ soloLectura = false }) => {
       window.alert('Animal eliminado correctamente.');
       setCargando(true);
       await cargarAnimales();
+      if (especie === 'Porcino') {
+        await cargarCamadas();
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -383,6 +404,31 @@ const Animales = ({ soloLectura = false }) => {
     setAnimalSeleccionado(animal);
     setErrorFormulario('');
     setModoFormulario(true);
+  };
+
+  const cargarEventosCamada = async (camadaId) => {
+    try {
+      setCargandoEventosCamada(true);
+      setErrorEventosCamada('');
+      const eventos = await obtenerEventosCamada(camadaId);
+      setEventosCamada(eventos);
+    } catch (err) {
+      setErrorEventosCamada(err.message);
+    } finally {
+      setCargandoEventosCamada(false);
+    }
+  };
+
+  const abrirDetalleCamada = async (camada) => {
+    setCamadaDetalle(camada);
+    setEventosCamada([]);
+    await cargarEventosCamada(camada._id);
+  };
+
+  const cerrarDetalleCamada = () => {
+    setCamadaDetalle(null);
+    setEventosCamada([]);
+    setErrorEventosCamada('');
   };
 
   const cargarEventosAnimal = async (animalId) => {
@@ -561,6 +607,7 @@ const Animales = ({ soloLectura = false }) => {
       <FormularioAnimal
         animalInicial={animalSeleccionado}
         animales={animales}
+        camadas={camadas}
         modo={animalSeleccionado ? 'editar' : 'crear'}
         onCancelar={cancelarFormulario}
         onGuardar={guardarAnimal}
@@ -605,7 +652,7 @@ const Animales = ({ soloLectura = false }) => {
           columnas={columnasCamadas}
           datos={camadas.map((camada) => ({
             ...camada,
-            abrirDetalle: setCamadaDetalle,
+            abrirDetalle: abrirDetalleCamada,
             destetar: destetarCamada,
             cerrar: cerrarRegistroCamada,
             cancelar: cancelarRegistroCamada,
@@ -624,7 +671,8 @@ const Animales = ({ soloLectura = false }) => {
         <TablaDinamica
           titulo={especie === 'Porcino' ? 'Porcinos' : 'Bovinos'}
           subtitulo="Inventario"
-          columnas={columnas.map((columna) => columna.id === 'diio' ? { ...columna, label: etiquetaId } : columna)}
+          columnas={(especie === 'Porcino' ? [columnas[0], columnaCamadaOrigen, ...columnas.slice(1)] : columnas)
+            .map((columna) => columna.id === 'diio' ? { ...columna, label: etiquetaId } : columna)}
           datos={animales.map((animal) => ({ ...animal, abrirDetalle: abrirDetalleAnimal }))}
           cargando={cargando}
           error={error}
@@ -645,7 +693,7 @@ const Animales = ({ soloLectura = false }) => {
                 <p className="eyebrow">Detalle camada</p>
                 <h2>{camadaDetalle.codigoCamada}</h2>
               </div>
-              <button className="boton-link" type="button" onClick={() => setCamadaDetalle(null)}>Cerrar</button>
+              <button className="boton-link" type="button" onClick={cerrarDetalleCamada}>Cerrar</button>
             </div>
 
             <div className="detalle-animal-grid">
@@ -664,6 +712,12 @@ const Animales = ({ soloLectura = false }) => {
               <article><span>Crías para finca</span><strong>{camadaDetalle.criasParaFinca ?? 0}</strong></article>
               <article><span>Crías para venta</span><strong>{camadaDetalle.criasParaVenta ?? 0}</strong></article>
               <article><span>Crías para engorde</span><strong>{camadaDetalle.criasParaEngorde ?? 0}</strong></article>
+              <article><span>Registradas finca</span><strong>{camadaDetalle.animalesRegistradosFinca ?? 0}</strong></article>
+              <article><span>Registradas engorde</span><strong>{camadaDetalle.animalesRegistradosEngorde ?? 0}</strong></article>
+              <article><span>Registradas otras</span><strong>{camadaDetalle.animalesRegistradosOtros ?? 0}</strong></article>
+              <article><span>Pendientes finca</span><strong>{camadaDetalle.pendientesFinca ?? 0}</strong></article>
+              <article><span>Pendientes engorde</span><strong>{camadaDetalle.pendientesEngorde ?? 0}</strong></article>
+              <article><span>Pendientes venta</span><strong>{camadaDetalle.pendientesVenta ?? 0}</strong></article>
               <article><span>Peso prom. nacimiento</span><strong>{formatearPeso(camadaDetalle.pesoPromedioNacimiento)}</strong></article>
               <article><span>Peso prom. destete</span><strong>{formatearPeso(camadaDetalle.pesoPromedioDestete)}</strong></article>
               <article><span>Peso total destete</span><strong>{formatearPeso(camadaDetalle.pesoTotalDestete)}</strong></article>
@@ -682,6 +736,44 @@ const Animales = ({ soloLectura = false }) => {
                 <p>{camadaDetalle.tareasGeneradas.length} tareas automáticas asociadas a esta camada.</p>
               </div>
             )}
+
+            <section className="bitacora-animal">
+              <div className="panel-title">
+                <div>
+                  <p className="eyebrow">Historial</p>
+                  <h2>Bitácora de camada</h2>
+                </div>
+              </div>
+
+              {errorEventosCamada && <div className="alerta-formulario">{errorEventosCamada}</div>}
+              {cargandoEventosCamada && <span className="reporte-vacio">Cargando bitácora...</span>}
+
+              {!cargandoEventosCamada && eventosCamada.length === 0 && (
+                <div className="bitacora-vacia">
+                  <strong>Sin eventos registrados todavía.</strong>
+                  <span>
+                    Los eventos de nacimiento, sanidad, destete, venta, cierre o tareas importantes
+                    aparecerán aquí automáticamente.
+                  </span>
+                </div>
+              )}
+
+              <div className="bitacora-timeline">
+                {eventosCamada.map((evento) => (
+                  <article className="bitacora-evento" key={evento._id}>
+                    <div className="bitacora-fecha">
+                      <strong>{formatearFecha(evento.fecha)}</strong>
+                      <span>{evento.moduloOrigen || 'Manual'}</span>
+                    </div>
+                    <div className="bitacora-contenido">
+                      <span className="estado-badge estado-Gestante">{evento.tipoEvento}</span>
+                      <h3>{evento.titulo}</h3>
+                      {evento.descripcion && <p>{evento.descripcion}</p>}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
           </section>
         </div>
       )}
@@ -710,6 +802,12 @@ const Animales = ({ soloLectura = false }) => {
                 <span>Edad reproductiva</span>
                 <strong>{estaListaMontaPorEdad(animalDetalle) ? 'Sí' : 'No'}</strong>
               </article>
+              {animalDetalle.especie === 'Porcino' && (
+                <article>
+                  <span>Camada origen</span>
+                  <strong>{etiquetaCamada(animalDetalle.camadaOrigen)}</strong>
+                </article>
+              )}
               <article>
                 <span>Madre</span>
                 <strong>{etiquetaAnimal(animalDetalle.madre) || animalDetalle.madreExternaNombre || animalDetalle.madreDiio || '--'}</strong>

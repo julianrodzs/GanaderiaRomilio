@@ -3,9 +3,11 @@ import {
   actualizarPlanSanitario,
   crearPlanSanitario,
   eliminarPlanSanitario,
-  obtenerPlanesSanitarios
+  obtenerPlanesSanitarios,
+  registrarAplicacionPlanSanitario
 } from '../services/api';
 import FormularioPlanSanitario from './FormularioPlanSanitario';
+import RegistrarAplicacionSanitaria from './RegistrarAplicacionSanitaria';
 import SelectorEspecie from './SelectorEspecie';
 import TablaDinamica from './TablaDinamica';
 
@@ -62,6 +64,7 @@ const PlanSanitario = () => {
   const [errorFormulario, setErrorFormulario] = useState('');
   const [modoFormulario, setModoFormulario] = useState(false);
   const [planSeleccionado, setPlanSeleccionado] = useState(null);
+  const [planAplicacion, setPlanAplicacion] = useState(null);
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const etiquetaId = 'DIIO';
 
@@ -138,17 +141,59 @@ const PlanSanitario = () => {
     setModoFormulario(false);
   };
 
+  const abrirRegistroAplicacion = (plan) => {
+    setPlanAplicacion(plan);
+    setErrorFormulario('');
+  };
+
+  const cerrarRegistroAplicacion = () => {
+    setPlanAplicacion(null);
+    setErrorFormulario('');
+  };
+
+  const registrarAplicacion = async (datos) => {
+    if (!planAplicacion?._id) return;
+
+    try {
+      setGuardando(true);
+      setErrorFormulario('');
+      await registrarAplicacionPlanSanitario(planAplicacion._id, datos);
+      setPlanAplicacion(null);
+      setModoFormulario(false);
+      setPlanSeleccionado(null);
+      setCargando(true);
+      await cargarPlanes();
+      window.alert('Aplicación sanitaria registrada correctamente.');
+    } catch (err) {
+      setErrorFormulario(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   if (modoFormulario) {
     return (
-      <FormularioPlanSanitario
-        planInicial={planSeleccionado}
-        modo={planSeleccionado ? 'editar' : 'crear'}
-        onCancelar={cancelarFormulario}
-        onGuardar={guardarPlan}
-        guardando={guardando}
-        error={errorFormulario}
-        especie={especie}
-      />
+      <>
+        <FormularioPlanSanitario
+          planInicial={planSeleccionado}
+          modo={planSeleccionado ? 'editar' : 'crear'}
+          onCancelar={cancelarFormulario}
+          onGuardar={guardarPlan}
+          onRegistrarAplicacion={planSeleccionado ? abrirRegistroAplicacion : undefined}
+          guardando={guardando}
+          error={errorFormulario}
+          especie={especie}
+        />
+        {planAplicacion && (
+          <RegistrarAplicacionSanitaria
+            plan={planAplicacion}
+            onCancelar={cerrarRegistroAplicacion}
+            onRegistrar={registrarAplicacion}
+            guardando={guardando}
+            error={errorFormulario}
+          />
+        )}
+      </>
     );
   }
 
@@ -167,7 +212,26 @@ const PlanSanitario = () => {
         onAgregar={abrirNuevoPlan}
         onEditar={abrirEdicionPlan}
         onEliminar={borrarPlan}
+        accionesExtra={(plan) => (
+          <button
+            type="button"
+            aria-label="Registrar aplicación"
+            title="Registrar aplicación"
+            onClick={() => abrirRegistroAplicacion(plan)}
+          >
+            ✓
+          </button>
+        )}
       />
+      {planAplicacion && (
+        <RegistrarAplicacionSanitaria
+          plan={planAplicacion}
+          onCancelar={cerrarRegistroAplicacion}
+          onRegistrar={registrarAplicacion}
+          guardando={guardando}
+          error={errorFormulario}
+        />
+      )}
     </>
   );
 };

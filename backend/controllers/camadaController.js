@@ -1,5 +1,6 @@
 const Camada = require('../models/Camada');
 const Animal = require('../models/Animal');
+const VentaAnimal = require('../models/VentaAnimal');
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const {
     generarCodigoCamada,
@@ -10,12 +11,113 @@ const {
     cancelarTareasEstimadasDelRegistro,
     registrarEventoCamada
 } = require('../services/camada-service');
+const { upsertEventoCamada } = require('../services/eventoCamada-service');
 
 const camadaCtrl = {};
 
 const poblarCamada = (query) => query
     .populate('madre', 'diio identificadorFinca nombre sexo especie categoria')
     .populate('registroReproductivo');
+
+const CATEGORIAS_FINCA = ['Chancha', 'Verraco', 'Reemplazo'];
+const CATEGORIAS_ENGORDE = ['Engorde'];
+
+const anexarContadoresInventario = async (camadasEntrada) => {
+    const lista = Array.isArray(camadasEntrada) ? camadasEntrada : [camadasEntrada];
+    const camadas = lista.filter(Boolean);
+    if (camadas.length === 0) return Array.isArray(camadasEntrada) ? [] : camadasEntrada;
+
+    const ids = camadas.map((camada) => camada._id);
+    const conteos = await Animal.aggregate([
+        {
+            $match: {
+                especie: 'Porcino',
+                camadaOrigen: { $in: ids }
+            }
+        },
+        {
+            $group: {
+                _id: {
+                    camadaOrigen: '$camadaOrigen',
+                    categoria: '$categoria',
+                    estado: '$estado'
+                },
+                cantidad: { $sum: 1 }
+            }
+        }
+    ]);
+    const ventasPorCamada = await VentaAnimal.aggregate([
+        {
+            $match: {
+                estado: { $ne: 'Anulada' },
+                'camadas.camada': { $in: ids }
+            }
+        },
+        { $unwind: '$camadas' },
+        { $match: { 'camadas.camada': { $in: ids } } },
+        {
+            $group: {
+                _id: '$camadas.camada',
+                cantidadVendida: { $sum: '$camadas.cantidad' }
+            }
+        }
+    ]);
+
+    const mapa = new Map();
+    const mapaVentas = new Map(ventasPorCamada.map((item) => [item._id.toString(), item.cantidadVendida || 0]));
+    conteos.forEach((item) => {
+        const camadaId = item._id.camadaOrigen.toString();
+        const actual = mapa.get(camadaId) || {
+            registradosFinca: 0,
+            registradosEngorde: 0,
+            registradosOtros: 0,
+            vendidosIndividuales: 0,
+            muertosIndividuales: 0,
+            registradosTotal: 0
+        };
+        const cantidad = item.cantidad || 0;
+        const categoria = item._id.categoria;
+        const estado = item._id.estado;
+
+        actual.registradosTotal += cantidad;
+        if (CATEGORIAS_FINCA.includes(categoria)) actual.registradosFinca += cantidad;
+        else if (CATEGORIAS_ENGORDE.includes(categoria)) actual.registradosEngorde += cantidad;
+        else actual.registradosOtros += cantidad;
+
+        if (estado === 'Vendido') actual.vendidosIndividuales += cantidad;
+        if (estado === 'Muerto') actual.muertosIndividuales += cantidad;
+        mapa.set(camadaId, actual);
+    });
+
+    const resultado = camadas.map((camada) => {
+        const objeto = typeof camada.toObject === 'function' ? camada.toObject() : camada;
+        const conteo = mapa.get(objeto._id.toString()) || {
+            registradosFinca: 0,
+            registradosEngorde: 0,
+            registradosOtros: 0,
+            vendidosIndividuales: 0,
+            muertosIndividuales: 0,
+            registradosTotal: 0
+        };
+        const vendidasPorCamada = mapaVentas.get(objeto._id.toString()) || 0;
+
+        return {
+            ...objeto,
+            animalesRegistradosFinca: conteo.registradosFinca,
+            animalesRegistradosEngorde: conteo.registradosEngorde,
+            animalesRegistradosOtros: conteo.registradosOtros,
+            animalesRegistradosTotal: conteo.registradosTotal,
+            vendidasPorCamada,
+            vendidosIndividuales: conteo.vendidosIndividuales,
+            muertosIndividuales: conteo.muertosIndividuales,
+            pendientesFinca: Math.max((objeto.criasParaFinca || 0) - conteo.registradosFinca, 0),
+            pendientesEngorde: Math.max((objeto.criasParaEngorde || 0) - conteo.registradosEngorde, 0),
+            pendientesVenta: Math.max((objeto.criasParaVenta || 0) - vendidasPorCamada, 0)
+        };
+    });
+
+    return Array.isArray(camadasEntrada) ? resultado : resultado[0];
+};
 
 const normalizarNumero = (valor, defecto = 0) => {
     if (valor === '' || valor === null || valor === undefined) return defecto;
@@ -96,7 +198,7 @@ camadaCtrl.getCamadas = async (req, res) => {
             Camada.find(filtro).sort({ fechaNacimiento: -1, createdAt: -1 })
         );
 
-        res.json(camadas);
+        res.json(await anexarContadoresInventario(camadas));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener camadas', error: error.message });
     }
@@ -110,7 +212,7 @@ camadaCtrl.getCamada = async (req, res) => {
             return res.status(404).json({ mensaje: 'Camada no encontrada' });
         }
 
-        res.json(camada);
+        res.json(await anexarContadoresInventario(camada));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener camada', error: error.message });
     }
@@ -122,7 +224,7 @@ camadaCtrl.getCamadasPorMadre = async (req, res) => {
             Camada.find({ madre: req.params.madreId }).sort({ fechaNacimiento: -1 })
         );
 
-        res.json(camadas);
+        res.json(await anexarContadoresInventario(camadas));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener camadas de la madre', error: error.message });
     }
@@ -147,7 +249,7 @@ camadaCtrl.createCamada = async (req, res) => {
         await sincronizarTareasCamada({ camada: camadaGuardada, madre, usuarioId: req.usuario?.id });
 
         const camadaRespuesta = await poblarCamada(Camada.findById(camadaGuardada._id));
-        res.status(201).json(camadaRespuesta);
+        res.status(201).json(await anexarContadoresInventario(camadaRespuesta));
     } catch (error) {
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al crear camada', error: error.message });
     }
@@ -183,7 +285,26 @@ camadaCtrl.updateCamada = async (req, res) => {
             await cancelarTareasCamada(camada._id);
         }
 
-        res.json(await poblarCamada(Camada.findById(camada._id)));
+        if (actual.destino !== camada.destino) {
+            await upsertEventoCamada({
+                camada: camada._id,
+                tipoEvento: 'Cambio de destino',
+                fecha: new Date(),
+                titulo: 'Destino de camada actualizado',
+                descripcion: `Destino anterior: ${actual.destino || '--'}. Destino nuevo: ${camada.destino || '--'}.`,
+                moduloOrigen: 'Camadas',
+                creadoPor: req.usuario?.id,
+                metadata: {
+                    destinoAnterior: actual.destino,
+                    destinoNuevo: camada.destino,
+                    criasParaFinca: camada.criasParaFinca,
+                    criasParaVenta: camada.criasParaVenta,
+                    criasParaEngorde: camada.criasParaEngorde
+                }
+            });
+        }
+
+        res.json(await anexarContadoresInventario(await poblarCamada(Camada.findById(camada._id))));
     } catch (error) {
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar camada', error: error.message });
     }
@@ -207,8 +328,24 @@ camadaCtrl.registrarDestete = async (req, res) => {
         const madre = await Animal.findById(guardada.madre);
         await completarTareasDesteteCamada(guardada._id, guardada.fechaDesteteReal);
         await sincronizarTareasCamada({ camada: guardada, madre, usuarioId: req.usuario?.id });
+        await upsertEventoCamada({
+            camada: guardada._id,
+            tipoEvento: 'Destete',
+            fecha: guardada.fechaDesteteReal,
+            titulo: 'Destete registrado',
+            descripcion: `Destete registrado para ${guardada.destetados || 0} cría(s).`,
+            moduloOrigen: 'Camadas',
+            referenciaId: guardada._id,
+            creadoPor: req.usuario?.id,
+            metadata: {
+                destetados: guardada.destetados,
+                muertosPreDestete: guardada.muertosPreDestete,
+                pesoPromedioDestete: guardada.pesoPromedioDestete,
+                pesoTotalDestete: guardada.pesoTotalDestete
+            }
+        });
 
-        res.json(await poblarCamada(Camada.findById(guardada._id)));
+        res.json(await anexarContadoresInventario(await poblarCamada(Camada.findById(guardada._id))));
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al registrar destete', error: error.message });
     }
@@ -227,7 +364,17 @@ camadaCtrl.cerrarCamada = async (req, res) => {
         }
 
         await cancelarTareasCamada(camada._id, 'Camada cerrada.');
-        res.json(await poblarCamada(Camada.findById(camada._id)));
+        await upsertEventoCamada({
+            camada: camada._id,
+            tipoEvento: 'Cierre',
+            fecha: new Date(),
+            titulo: 'Camada cerrada',
+            descripcion: req.body.observaciones || 'Camada cerrada.',
+            moduloOrigen: 'Camadas',
+            referenciaId: camada._id,
+            creadoPor: req.usuario?.id
+        });
+        res.json(await anexarContadoresInventario(await poblarCamada(Camada.findById(camada._id))));
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al cerrar camada', error: error.message });
     }
@@ -246,7 +393,17 @@ camadaCtrl.cancelarCamada = async (req, res) => {
         }
 
         await cancelarTareasCamada(camada._id, 'Camada cancelada.');
-        res.json(await poblarCamada(Camada.findById(camada._id)));
+        await upsertEventoCamada({
+            camada: camada._id,
+            tipoEvento: 'Cancelacion',
+            fecha: new Date(),
+            titulo: 'Camada cancelada',
+            descripcion: req.body.observaciones || 'Camada cancelada.',
+            moduloOrigen: 'Camadas',
+            referenciaId: camada._id,
+            creadoPor: req.usuario?.id
+        });
+        res.json(await anexarContadoresInventario(await poblarCamada(Camada.findById(camada._id))));
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al cancelar camada', error: error.message });
     }

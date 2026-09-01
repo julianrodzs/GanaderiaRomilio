@@ -7,6 +7,7 @@ const {
     getAlertasPlanSanitario,
     updatePlanSanitario,
     deletePlanSanitario,
+    registrarAplicacionPlan,
     marcarPlanAplicado
 } = require('../controllers/planSanitario-controller');
 
@@ -20,6 +21,7 @@ router.route('/:id')
     .put(updatePlanSanitario)
     .delete(deletePlanSanitario);
 
+router.patch('/:id/registrar-aplicacion', registrarAplicacionPlan);
 router.patch('/:id/marcar-aplicado', marcarPlanAplicado);
 
 module.exports = router;

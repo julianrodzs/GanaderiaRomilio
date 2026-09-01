@@ -44,6 +44,7 @@ const TablaDinamica = ({
   onAgregar,
   onEditar,
   onEliminar,
+  accionesExtra,
   mostrarAcciones = true
 }) => {
   const [busqueda, setBusqueda] = useState('');
@@ -155,6 +156,7 @@ const TablaDinamica = ({
                 {mostrarAcciones && (
                   <td>
                     <div className="acciones-tabla">
+                      {accionesExtra?.(fila)}
                       <button type="button" aria-label="Editar" title="Editar" onClick={() => onEditar?.(fila)}>✎</button>
                       <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => onEliminar?.(fila)}>⌫</button>
                     </div>

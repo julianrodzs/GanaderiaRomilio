@@ -31,6 +31,7 @@ const estadoInicial = {
   fechaCompra: '',
   fechaVenta: '',
   fechaMuerte: '',
+  camadaOrigen: '',
   estado: 'Activo',
   observaciones: ''
 };
@@ -45,6 +46,7 @@ const normalizarAnimal = (animal) => ({
   ...animal,
   padre: animal?.padre?._id || animal?.padre || '',
   madre: animal?.madre?._id || animal?.madre || '',
+  camadaOrigen: animal?.camadaOrigen?._id || animal?.camadaOrigen || '',
   fechaNacimiento: formatearFechaInput(animal?.fechaNacimiento),
   fechaDestete: formatearFechaInput(animal?.fechaDestete),
   pesoNacimiento: animal?.pesoNacimiento ?? '',
@@ -69,7 +71,7 @@ const obtenerEtiquetaAnimal = (animal) => {
   return `${codigo}${animal.nombre ? ` - ${animal.nombre}` : ''}`;
 };
 
-const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInicial, modo = 'crear', animales = [] }) => {
+const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInicial, modo = 'crear', animales = [], camadas = [] }) => {
   const [formulario, setFormulario] = useState(() => normalizarAnimal(animalInicial));
   const etiquetaId = 'DIIO';
   const categoriasPorEspecie = formulario.especie === 'Porcino'
@@ -106,6 +108,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       madre: formulario.madre || null,
       padreExternoNombre: formulario.padreExternoNombre || '',
       madreExternaNombre: formulario.madreExternaNombre || '',
+      camadaOrigen: formulario.especie === 'Porcino' ? formulario.camadaOrigen || null : null,
       origenGenealogico: formulario.origenGenealogico,
       registroGenealogico: formulario.registroGenealogico || '',
       observacionesGenealogicas: formulario.observacionesGenealogicas || ''
@@ -114,6 +117,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
 
   const machos = animales.filter((animal) => animal.sexo === 'Macho' && animal.especie === formulario.especie && animal._id !== animalInicial?._id);
   const hembras = animales.filter((animal) => animal.sexo === 'Hembra' && animal.especie === formulario.especie && animal._id !== animalInicial?._id);
+  const camadasPorcinas = camadas.filter((camada) => camada.estado !== 'Cancelada');
 
   return (
     <section className="form-page">
@@ -186,6 +190,31 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
             <input name="pesoActual" type="number" min="0" value={formulario.pesoActual} onChange={actualizarCampo} />
           </label>
         </div>
+
+        {formulario.especie === 'Porcino' && (
+          <section className="form-section">
+            <div>
+              <p className="eyebrow">Camada</p>
+              <h3>Origen productivo</h3>
+            </div>
+
+            <label>
+              Camada origen
+              <select name="camadaOrigen" value={formulario.camadaOrigen} onChange={actualizarCampo}>
+                <option value="">Sin camada origen</option>
+                {camadasPorcinas.map((camada) => (
+                  <option key={camada._id} value={camada._id}>
+                    {camada.codigoCamada} · {camada.madre?.diio || camada.madre?.nombre || 'Madre sin codigo'}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <p className="form-help">
+              La categoria del porcino define si cuenta como cria retenida, verraco o engorde dentro de la camada.
+            </p>
+          </section>
+        )}
 
         <section className="form-section">
           <div>

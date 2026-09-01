@@ -121,7 +121,7 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
             fecha: compra.fechaCompra,
             titulo: 'Animal comprado',
             descripcion: `Compra registrada por ₡${Number(montoAsignado || 0).toLocaleString('es-CR')} con peso de ${item.pesoCompraKg} kg.`,
-            moduloOrigen: 'Finanzas',
+            moduloOrigen: 'Compras',
             referenciaId: compra._id,
             creadoPor: usuarioId,
             metadata: {
@@ -199,7 +199,7 @@ const revertirCompra = async (compra) => {
         estado: 'Activo'
     });
     await MovimientoFinanciero.deleteMany({ referenciaId: compra._id, referenciaModelo: 'CompraAnimal' });
-    await eliminarEventosPorReferencia({ moduloOrigen: 'Finanzas', referenciaId: compra._id });
+    await eliminarEventosPorReferencia({ moduloOrigen: 'Compras', referenciaId: compra._id });
 };
 
 compraAnimalCtrl.getCompras = async (req, res) => {

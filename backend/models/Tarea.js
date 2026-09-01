@@ -40,6 +40,8 @@ const tareaSchema = new Schema(
         especie: { type: String, enum: ['Bovino', 'Porcino'] },
         categoriaAutomatica: { type: String, trim: true },
         claveAutomatica: { type: String, trim: true },
+        generaBitacora: { type: Boolean, default: false },
+        tipoEventoBitacora: { type: String, trim: true },
         evidenciaUrl: { type: String, trim: true },
         observaciones: { type: String, trim: true },
         comentarios: [

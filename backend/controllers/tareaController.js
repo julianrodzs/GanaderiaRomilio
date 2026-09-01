@@ -1,4 +1,6 @@
 const { Tarea } = require('../models/Tarea');
+const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
+const { upsertEventoCamada, eliminarEventosCamadaPorReferencia } = require('../services/eventoCamada-service');
 
 const tareaCtrl = {};
 const POPULATE_TAREA = [
@@ -69,6 +71,91 @@ const aplicarFechaCompletadaPorEstado = (datos) => {
     return datosConEstado;
 };
 
+const TIPOS_EVENTO_POR_CLAVE = {
+    'parto-estimado': 'Parto',
+    'proximo-celo': 'Monta',
+    destete: 'Destete',
+    'revisar-celo': 'Monta',
+    'desparasitar-antes-parto': 'Sanidad',
+    'revisar-parto': 'Parto',
+    'camada-hierro': 'Tratamiento',
+    'camada-vitamina-desparasitacion': 'Sanidad',
+    'camada-destete': 'Destete',
+    'camada-desparasitar-destete': 'Sanidad',
+    'camada-vitamina-selenio-destete': 'Tratamiento',
+    'camada-circovirus': 'Sanidad',
+    'camada-primera-monta': 'Monta',
+    'camada-venta': 'Venta',
+    'camada-sacrificio': 'Sacrificio'
+};
+
+const TIPOS_EVENTO_POR_TIPO_TAREA = {
+    Sanidad: 'Sanidad',
+    Pesaje: 'Pesaje',
+    Venta: 'Venta',
+    Sacrificio: 'Muerte'
+};
+
+const obtenerTipoEventoBitacora = (tarea) => (
+    tarea.tipoEventoBitacora
+    || TIPOS_EVENTO_POR_CLAVE[tarea.claveAutomatica]
+    || TIPOS_EVENTO_POR_TIPO_TAREA[tarea.tipo]
+);
+
+const tareaDebeGenerarBitacora = (tarea) => Boolean(tarea.generaBitacora || obtenerTipoEventoBitacora(tarea));
+
+const sincronizarBitacoraTarea = async (tarea, usuarioId) => {
+    await eliminarEventosPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id });
+    await eliminarEventosCamadaPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id });
+
+    if (tarea.estado !== 'Completada' || !tareaDebeGenerarBitacora(tarea)) return;
+
+    const tipoEvento = obtenerTipoEventoBitacora(tarea);
+    const fecha = tarea.fechaCompletada || new Date();
+    const descripcion = tarea.observaciones || tarea.descripcion || 'Tarea importante completada.';
+
+    if (tarea.claveAutomatica?.startsWith('camada-') && tarea.referenciaId) {
+        await upsertEventoCamada({
+            camada: tarea.referenciaId,
+            tipoEvento,
+            fecha,
+            titulo: `Tarea completada: ${tarea.titulo}`,
+            descripcion,
+            moduloOrigen: 'Tareas',
+            referenciaId: tarea._id,
+            creadoPor: usuarioId,
+            metadata: {
+                tarea: tarea._id,
+                tipo: tarea.tipo,
+                claveAutomatica: tarea.claveAutomatica,
+                categoriaAutomatica: tarea.categoriaAutomatica,
+                evidenciaUrl: tarea.evidenciaUrl
+            }
+        });
+        return;
+    }
+
+    if (tarea.animal) {
+        await upsertEventoAnimal({
+            animal: tarea.animal?._id || tarea.animal,
+            tipoEvento,
+            fecha,
+            titulo: `Tarea completada: ${tarea.titulo}`,
+            descripcion,
+            moduloOrigen: 'Tareas',
+            referenciaId: tarea._id,
+            creadoPor: usuarioId,
+            metadata: {
+                tarea: tarea._id,
+                tipo: tarea.tipo,
+                claveAutomatica: tarea.claveAutomatica,
+                categoriaAutomatica: tarea.categoriaAutomatica,
+                evidenciaUrl: tarea.evidenciaUrl
+            }
+        });
+    }
+};
+
 tareaCtrl.getTareas = async (req, res) => {
     try {
         if (!esAdministrador(req)) {
@@ -131,6 +218,7 @@ tareaCtrl.crearTarea = async (req, res) => {
             creadoPor: req.usuario.id
         });
         const tareaGuardada = await nuevaTarea.save();
+        await sincronizarBitacoraTarea(tareaGuardada, req.usuario?.id);
         const tarea = await obtenerTareaPoblada(tareaGuardada._id);
 
         res.status(201).json(tarea);
@@ -155,6 +243,7 @@ tareaCtrl.actualizarTarea = async (req, res) => {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
         }
 
+        await sincronizarBitacoraTarea(tarea, req.usuario?.id);
         res.json(tarea);
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al actualizar tarea', error: error.message });
@@ -188,6 +277,7 @@ tareaCtrl.cambiarEstadoTarea = async (req, res) => {
         }
 
         const tareaActualizada = await tarea.save();
+        await sincronizarBitacoraTarea(tareaActualizada, req.usuario?.id);
         res.json(await obtenerTareaPoblada(tareaActualizada._id));
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al cambiar estado de tarea', error: error.message });
@@ -218,6 +308,7 @@ tareaCtrl.completarTarea = async (req, res) => {
         }
 
         const tareaActualizada = await tarea.save();
+        await sincronizarBitacoraTarea(tareaActualizada, req.usuario?.id);
         res.json(await obtenerTareaPoblada(tareaActualizada._id));
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al completar tarea', error: error.message });
@@ -236,6 +327,8 @@ tareaCtrl.eliminarTarea = async (req, res) => {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
         }
 
+        await eliminarEventosPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id });
+        await eliminarEventosCamadaPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id });
         res.json({ mensaje: 'Tarea eliminada' });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al eliminar tarea', error: error.message });

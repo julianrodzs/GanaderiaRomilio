@@ -51,6 +51,7 @@ const animalSchema = new Schema(
         montoVenta: { type: Number, min: 0 },
         proveedorCompra: { type: String, trim: true },
         compraId: { type: Schema.Types.ObjectId, ref: 'CompraAnimal' },
+        camadaOrigen: { type: Schema.Types.ObjectId, ref: 'Camada' },
         comprador: { type: String, trim: true },
         ventaId: { type: Schema.Types.ObjectId, ref: 'VentaAnimal' },
         fechaCompra: { type: Date },
@@ -75,6 +76,7 @@ animalSchema.index({ sexo: 1 });
 animalSchema.index({ potreroActual: 1 });
 animalSchema.index({ especie: 1, estado: 1 });
 animalSchema.index({ especie: 1, categoria: 1 });
+animalSchema.index({ camadaOrigen: 1, categoria: 1 });
 animalSchema.index({ estado: 1, potreroActual: 1 });
 
 module.exports = model('Animal', animalSchema);

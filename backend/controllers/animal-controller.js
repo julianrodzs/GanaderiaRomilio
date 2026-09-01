@@ -1,6 +1,7 @@
 const animalCtrl = {};
 
 const Animal = require('../models/Animal');
+const Camada = require('../models/Camada');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const {
     prepararDatosGenealogia,
@@ -34,6 +35,35 @@ const crearFiltroEspecie = (especie) => {
     if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
     if (especie === 'Porcino') return { especie };
     return {};
+};
+
+const prepararRelacionCamada = async (datos) => {
+    if (datos.especie !== 'Porcino') {
+        return { ...datos, camadaOrigen: null };
+    }
+
+    if (!datos.camadaOrigen) {
+        return { ...datos, camadaOrigen: null };
+    }
+
+    const camada = await Camada.findById(datos.camadaOrigen).select('madre fechaNacimiento codigoCamada estado');
+    if (!camada) {
+        const error = new Error('Camada origen no encontrada');
+        error.status = 404;
+        throw error;
+    }
+
+    if (camada.estado === 'Cancelada') {
+        const error = new Error('No se puede asociar un animal a una camada cancelada');
+        error.status = 400;
+        throw error;
+    }
+
+    return {
+        ...datos,
+        fechaNacimiento: datos.fechaNacimiento || camada.fechaNacimiento,
+        madre: datos.madre || camada.madre
+    };
 };
 
 const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId }) => {
@@ -75,7 +105,8 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
                 identificadorFinca: animal.identificadorFinca,
                 pesoNacimiento: animal.pesoNacimiento,
                 madreDiio: animal.madreDiio,
-                padreDiio: animal.padreDiio
+                padreDiio: animal.padreDiio,
+                camadaOrigen: animal.camadaOrigen
             }
         });
     }
@@ -147,6 +178,7 @@ animalCtrl.getAnimales = async (req, res) => {
     try {
         const animales = await Animal.find(crearFiltroEspecie(req.query.especie))
             .populate('potreroActual')
+            .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo especie')
             .populate('madre', 'diio identificadorFinca nombre sexo especie')
             .sort({ createdAt: -1 });
@@ -158,10 +190,11 @@ animalCtrl.getAnimales = async (req, res) => {
 
 animalCtrl.createAnimal = async (req, res) => {
     try {
-        const datos = prepararDatosGenealogia({
+        let datos = prepararDatosGenealogia({
             ...req.body,
             diio: limpiarDiio(req.body.diio)
         });
+        datos = await prepararRelacionCamada(datos);
         await validarDiioDisponible(datos.diio);
         await validarRelacionGenealogica(null, datos.padre, datos.madre);
 
@@ -178,6 +211,7 @@ animalCtrl.getAnimal = async (req, res) => {
     try {
         const animal = await Animal.findById(req.params.id)
             .populate('potreroActual')
+            .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo')
             .populate('madre', 'diio identificadorFinca nombre sexo');
 
@@ -193,7 +227,7 @@ animalCtrl.getAnimal = async (req, res) => {
 
 animalCtrl.updateAnimal = async (req, res) => {
     try {
-        const datos = prepararDatosGenealogia({
+        let datos = prepararDatosGenealogia({
             ...req.body,
             diio: req.body.diio !== undefined ? limpiarDiio(req.body.diio) : req.body.diio
         });
@@ -206,6 +240,11 @@ animalCtrl.updateAnimal = async (req, res) => {
         if (datos.diio !== undefined && limpiarDiio(animalAnterior.diio) !== datos.diio) {
             await validarDiioDisponible(datos.diio, req.params.id);
         }
+        datos = await prepararRelacionCamada({
+            ...datos,
+            especie: datos.especie || animalAnterior.especie,
+            camadaOrigen: datos.camadaOrigen !== undefined ? datos.camadaOrigen : animalAnterior.camadaOrigen
+        });
         await validarRelacionGenealogica(req.params.id, datos.padre, datos.madre);
 
         const animal = await Animal.findByIdAndUpdate(req.params.id, datos, {
@@ -213,6 +252,7 @@ animalCtrl.updateAnimal = async (req, res) => {
             runValidators: true
         })
             .populate('potreroActual')
+            .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo')
             .populate('madre', 'diio identificadorFinca nombre sexo');
 

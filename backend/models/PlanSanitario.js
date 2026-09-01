@@ -84,9 +84,7 @@ planSanitarioSchema.pre('save', function calcularProximaAplicacion(next) {
         this.frecuenciaUnidad
     );
 
-    if (this.estado !== 'Aplicado') {
-        this.estado = calcularEstadoPlanSanitario(this.proximaAplicacion);
-    }
+    this.estado = calcularEstadoPlanSanitario(this.proximaAplicacion);
 
     next();
 });
@@ -103,9 +101,7 @@ planSanitarioSchema.pre('findOneAndUpdate', function calcularProximaEnUpdate(nex
         if (fechaAplicacion && frecuenciaCantidad && frecuenciaUnidad) {
             datos.proximaAplicacion = sumarFrecuencia(fechaAplicacion, frecuenciaCantidad, frecuenciaUnidad);
 
-            if (datos.estado !== 'Aplicado') {
-                datos.estado = calcularEstadoPlanSanitario(datos.proximaAplicacion);
-            }
+            datos.estado = calcularEstadoPlanSanitario(datos.proximaAplicacion);
         }
     }
 

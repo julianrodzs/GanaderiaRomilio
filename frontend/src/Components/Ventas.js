@@ -5,6 +5,7 @@ import {
   crearVentaAnimal,
   eliminarVentaAnimal,
   obtenerAnimales,
+  obtenerCamadas,
   obtenerResumenVentas,
   obtenerVentas,
   API_URL
@@ -106,12 +107,14 @@ const estadoInicial = {
   telefonoComprador: '',
   observaciones: '',
   animales: [],
+  camadas: [],
   comprobante: null
 };
 
 const Ventas = () => {
   const [ventas, setVentas] = useState([]);
   const [animales, setAnimales] = useState([]);
+  const [camadas, setCamadas] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [filtros, setFiltros] = useState({ ...obtenerRangoMesActual(), comprador: '', estado: '' });
   const [formulario, setFormulario] = useState(estadoInicial);
@@ -123,6 +126,7 @@ const Ventas = () => {
   const [error, setError] = useState('');
   const [errorFormulario, setErrorFormulario] = useState('');
   const [busquedaAnimal, setBusquedaAnimal] = useState('');
+  const [modoVentaDetalle, setModoVentaDetalle] = useState('individual');
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const etiquetaId = textoEspecie(especie, 'etiquetaId');
 
@@ -135,14 +139,16 @@ const Ventas = () => {
     try {
       setCargando(true);
       setError('');
-      const [ventasData, animalesData, resumenData] = await Promise.all([
+      const [ventasData, animalesData, resumenData, camadasData] = await Promise.all([
         obtenerVentas({ ...filtros, especie }),
         obtenerAnimales({ especie }),
-        obtenerResumenVentas({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie })
+        obtenerResumenVentas({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie }),
+        especie === 'Porcino' ? obtenerCamadas() : Promise.resolve([])
       ]);
       setVentas(ventasData);
       setAnimales(animalesData);
       setResumen(resumenData);
+      setCamadas(camadasData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -173,18 +179,36 @@ const Ventas = () => {
       .slice(0, 12);
   }, [animalesDisponibles, busquedaAnimal]);
 
+  const camadasDisponibles = useMemo(() => {
+    const seleccionadas = new Set((formulario.camadas || []).map((item) => item.camada));
+    return camadas.filter((camada) => {
+      if (camada.estado === 'Cancelada') return false;
+      if (seleccionadas.has(camada._id)) return false;
+      return Number(camada.pendientesVenta || 0) > 0;
+    });
+  }, [camadas, formulario.camadas]);
+
   const totalFormulario = useMemo(() => {
-    return formulario.animales.reduce((total, item) => total + (Number(item.pesoVentaKg || 0) * Number(item.precioKg || 0)), 0);
-  }, [formulario.animales]);
+    const totalAnimales = formulario.animales.reduce((total, item) => total + (Number(item.pesoVentaKg || 0) * Number(item.precioKg || 0)), 0);
+    const totalCamadas = (formulario.camadas || []).reduce((total, item) => total + (Number(item.pesoTotalKg || 0) * Number(item.precioKg || 0)), 0);
+    return totalAnimales + totalCamadas;
+  }, [formulario.animales, formulario.camadas]);
 
   const pesoFormulario = useMemo(() => {
-    return formulario.animales.reduce((total, item) => total + Number(item.pesoVentaKg || 0), 0);
-  }, [formulario.animales]);
+    const pesoAnimales = formulario.animales.reduce((total, item) => total + Number(item.pesoVentaKg || 0), 0);
+    const pesoCamadas = (formulario.camadas || []).reduce((total, item) => total + Number(item.pesoTotalKg || 0), 0);
+    return pesoAnimales + pesoCamadas;
+  }, [formulario.animales, formulario.camadas]);
+
+  const unidadesFormulario = useMemo(() => {
+    return formulario.animales.length + (formulario.camadas || []).reduce((total, item) => total + Number(item.cantidad || 0), 0);
+  }, [formulario.animales, formulario.camadas]);
 
   const abrirNuevo = () => {
     setVentaSeleccionada(null);
     setFormulario({ ...estadoInicial, especie });
     setBusquedaAnimal('');
+    setModoVentaDetalle('individual');
     setErrorFormulario('');
     setModoFormulario(true);
   };
@@ -205,10 +229,18 @@ const Ventas = () => {
         pesoVentaKg: item.pesoVentaKg,
         precioKg: item.precioKg
       })),
+      camadas: (venta.camadas || []).map((item) => ({
+        camada: item.camada?._id || item.camada,
+        cantidad: item.cantidad,
+        cantidadOriginal: item.cantidad,
+        pesoTotalKg: item.pesoTotalKg,
+        precioKg: item.precioKg
+      })),
       comprobante: null
     });
     setErrorFormulario('');
     setBusquedaAnimal('');
+    setModoVentaDetalle((venta.camadas || []).length ? 'camada' : 'individual');
     setModoFormulario(true);
   };
 
@@ -234,6 +266,25 @@ const Ventas = () => {
     setBusquedaAnimal('');
   };
 
+  const agregarCamada = (camadaId) => {
+    const camada = camadas.find((item) => item._id === camadaId);
+    if (!camada) return;
+
+    setFormulario((actual) => ({
+      ...actual,
+      camadas: [
+        ...(actual.camadas || []),
+        {
+          camada: camadaId,
+          cantidad: camada.pendientesVenta || '',
+          cantidadOriginal: 0,
+          pesoTotalKg: '',
+          precioKg: ''
+        }
+      ]
+    }));
+  };
+
   const actualizarAnimalVenta = (indice, campo, valor) => {
     setFormulario((actual) => ({
       ...actual,
@@ -247,6 +298,22 @@ const Ventas = () => {
     setFormulario((actual) => ({
       ...actual,
       animales: actual.animales.filter((_, itemIndice) => itemIndice !== indice)
+    }));
+  };
+
+  const actualizarCamadaVenta = (indice, campo, valor) => {
+    setFormulario((actual) => ({
+      ...actual,
+      camadas: (actual.camadas || []).map((item, itemIndice) => (
+        itemIndice === indice ? { ...item, [campo]: valor } : item
+      ))
+    }));
+  };
+
+  const quitarCamada = (indice) => {
+    setFormulario((actual) => ({
+      ...actual,
+      camadas: (actual.camadas || []).filter((_, itemIndice) => itemIndice !== indice)
     }));
   };
 
@@ -315,8 +382,9 @@ const Ventas = () => {
             valor={formulario.especie || especie}
             onChange={(valor) => {
               cambiarEspecie(valor);
-              setFormulario((actual) => ({ ...actual, especie: valor, animales: [] }));
+              setFormulario((actual) => ({ ...actual, especie: valor, animales: [], camadas: [] }));
               setBusquedaAnimal('');
+              setModoVentaDetalle('individual');
             }}
           />
           <div className="form-grid">
@@ -331,12 +399,24 @@ const Ventas = () => {
           <label>Comprobante<input type="file" name="comprobante" accept="image/*,.pdf" onChange={actualizarCampo} /></label>
 
           <section className="venta-selector">
+            {formulario.especie === 'Porcino' && (
+              <div className="inventario-tabs venta-tabs">
+                <button className={modoVentaDetalle === 'individual' ? 'activo' : ''} type="button" onClick={() => setModoVentaDetalle('individual')}>
+                  Por DIIO
+                </button>
+                <button className={modoVentaDetalle === 'camada' ? 'activo' : ''} type="button" onClick={() => setModoVentaDetalle('camada')}>
+                  Por camada
+                </button>
+              </div>
+            )}
+
             <div className="panel-title">
               <div>
                 <p className="eyebrow">Animales</p>
-                <h2>{textoEspecie(formulario.especie || especie, 'selector')}</h2>
+                <h2>{modoVentaDetalle === 'camada' ? 'Selección de camadas para venta' : textoEspecie(formulario.especie || especie, 'selector')}</h2>
               </div>
-              <div className="venta-buscador-animal">
+              {modoVentaDetalle === 'individual' ? (
+                <div className="venta-buscador-animal">
                 <input
                   value={busquedaAnimal}
                   onChange={(evento) => setBusquedaAnimal(evento.target.value)}
@@ -355,10 +435,21 @@ const Ventas = () => {
                     )}
                   </div>
                 )}
-              </div>
+                </div>
+              ) : (
+                <select className="venta-selector-camada" value="" onChange={(evento) => agregarCamada(evento.target.value)}>
+                  <option value="">Agregar camada</option>
+                  {camadasDisponibles.map((camada) => (
+                    <option key={camada._id} value={camada._id}>
+                      {camada.codigoCamada} · disponibles {camada.pendientesVenta}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
-            <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
+            {modoVentaDetalle === 'individual' && (
+              <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
               <table>
                 <thead>
                   <tr>
@@ -393,10 +484,59 @@ const Ventas = () => {
                   })}
                 </tbody>
               </table>
-            </div>
+              </div>
+            )}
+
+            {formulario.especie === 'Porcino' && modoVentaDetalle === 'camada' && (
+              <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Camada</th>
+                      <th>Madre</th>
+                      <th>Disponibles</th>
+                      <th>Cantidad</th>
+                      <th>Peso total</th>
+                      <th>Precio/kg</th>
+                      <th>Subtotal</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(formulario.camadas || []).map((item, indice) => {
+                      const camada = camadas.find((camadaItem) => camadaItem._id === item.camada) || {};
+                      const subtotal = Number(item.pesoTotalKg || 0) * Number(item.precioKg || 0);
+                      const disponibleReal = Number(camada.pendientesVenta || 0) + Number(item.cantidadOriginal || 0);
+                      return (
+                        <tr key={item.camada}>
+                          <td>{camada.codigoCamada || '--'}</td>
+                          <td>{camada.madre?.diio || camada.madre?.nombre || '--'}</td>
+                          <td>{disponibleReal || '--'}</td>
+                          <td>
+                            <input
+                              type="number"
+                              min="1"
+                              max={disponibleReal || undefined}
+                              step="1"
+                              value={item.cantidad}
+                              onChange={(evento) => actualizarCamadaVenta(indice, 'cantidad', evento.target.value)}
+                              required
+                            />
+                          </td>
+                          <td><input type="number" min="0.01" step="0.01" value={item.pesoTotalKg} onChange={(evento) => actualizarCamadaVenta(indice, 'pesoTotalKg', evento.target.value)} required /></td>
+                          <td><input type="number" min="0.01" step="0.01" value={item.precioKg} onChange={(evento) => actualizarCamadaVenta(indice, 'precioKg', evento.target.value)} required /></td>
+                          <td>{formatearMoneda(subtotal)}</td>
+                          <td><button className="boton-link" type="button" onClick={() => quitarCamada(indice)}>Quitar</button></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <div className="venta-totales">
-              <article><span>Animales</span><strong>{formulario.animales.length}</strong></article>
+              <article><span>Animales</span><strong>{unidadesFormulario}</strong></article>
               <article><span>Peso total</span><strong>{formatearNumero(pesoFormulario)} kg</strong></article>
               <article><span>Total</span><strong>{formatearMoneda(totalFormulario)}</strong></article>
             </div>
@@ -404,7 +544,7 @@ const Ventas = () => {
 
           <div className="form-actions">
             <button className="boton-link" type="button" onClick={() => setModoFormulario(false)}>Cancelar</button>
-            <button className="boton-primario compacto" type="submit" disabled={guardando || formulario.animales.length === 0}>
+            <button className="boton-primario compacto" type="submit" disabled={guardando || (formulario.animales.length === 0 && (formulario.camadas || []).length === 0)}>
               {guardando ? 'Guardando...' : 'Guardar venta'}
             </button>
           </div>
@@ -526,6 +666,27 @@ const Ventas = () => {
                 </tbody>
               </table>
             </div>
+            {(detalle.camadas || []).length > 0 && (
+              <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
+                <table>
+                  <thead>
+                    <tr><th>Camada</th><th>Madre</th><th>Cantidad</th><th>Peso total</th><th>Precio/kg</th><th>Subtotal</th></tr>
+                  </thead>
+                  <tbody>
+                    {detalle.camadas.map((item) => (
+                      <tr key={item.camada?._id || item.camada}>
+                        <td>{item.camada?.codigoCamada || '--'}</td>
+                        <td>{item.camada?.madre?.diio || item.camada?.madre?.nombre || '--'}</td>
+                        <td>{formatearNumero(item.cantidad)}</td>
+                        <td>{formatearNumero(item.pesoTotalKg)} kg</td>
+                        <td>{formatearMoneda(item.precioKg)}</td>
+                        <td>{formatearMoneda(item.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
         </div>
       )}

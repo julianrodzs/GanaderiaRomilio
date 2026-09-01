@@ -1,39 +1,34 @@
 const { Schema, model } = require('mongoose');
 
-const TIPOS_EVENTO = [
+const TIPOS_EVENTO_CAMADA = [
+    'Camada registrada',
     'Nacimiento',
-    'Compra',
-    'Venta',
-    'Muerte',
-    'Cambio de potrero',
-    'Pesaje',
     'Sanidad',
     'Tratamiento',
-    'Parto',
     'Destete',
     'Monta',
-    'Diagnostico de gestacion',
+    'Venta',
+    'Sacrificio',
+    'Mortalidad',
+    'Cambio de destino',
+    'Cierre',
+    'Cancelacion',
     'Observacion'
 ];
 
 const MODULOS_ORIGEN = [
-    'Inventario',
-    'Potreros',
-    'Pesajes',
-    'Sanidad',
     'Reproduccion',
-    'Finanzas',
-    'Compras',
-    'Ventas',
     'Camadas',
     'Tareas',
+    'Ventas',
+    'Inventario',
     'Manual'
 ];
 
-const eventoAnimalSchema = new Schema(
+const eventoCamadaSchema = new Schema(
     {
-        animal: { type: Schema.Types.ObjectId, ref: 'Animal', required: true },
-        tipoEvento: { type: String, enum: TIPOS_EVENTO, required: true },
+        camada: { type: Schema.Types.ObjectId, ref: 'Camada', required: true },
+        tipoEvento: { type: String, enum: TIPOS_EVENTO_CAMADA, required: true },
         fecha: { type: Date, required: true },
         titulo: { type: String, required: true, trim: true },
         descripcion: { type: String, trim: true },
@@ -47,7 +42,7 @@ const eventoAnimalSchema = new Schema(
     }
 );
 
-eventoAnimalSchema.index({ animal: 1, fecha: -1 });
-eventoAnimalSchema.index({ animal: 1, moduloOrigen: 1, referenciaId: 1, tipoEvento: 1 });
+eventoCamadaSchema.index({ camada: 1, fecha: -1 });
+eventoCamadaSchema.index({ camada: 1, moduloOrigen: 1, referenciaId: 1, tipoEvento: 1 });
 
-module.exports = model('EventoAnimal', eventoAnimalSchema);
+module.exports = model('EventoCamada', eventoCamadaSchema);

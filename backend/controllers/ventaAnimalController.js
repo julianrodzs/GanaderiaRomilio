@@ -1,15 +1,22 @@
 const Animal = require('../models/Animal');
+const Camada = require('../models/Camada');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const VentaAnimal = require('../models/VentaAnimal');
 const { eliminarEventosPorReferencia, upsertEventoAnimal } = require('../services/eventoAnimal-service');
+const { eliminarEventosCamadaPorReferencia, upsertEventoCamada } = require('../services/eventoCamada-service');
 
 const ventaAnimalCtrl = {};
 
 const poblarVenta = (query) => query
     .populate('animales.animal')
+    .populate({
+        path: 'camadas.camada',
+        populate: { path: 'madre', select: 'diio identificadorFinca nombre sexo especie categoria' }
+    })
     .populate('registradoPor', 'nombre apellido correo rol');
 
 const idsAnimalesVenta = (animales = []) => animales.map((item) => item.animal?.toString?.() || item.animal).filter(Boolean);
+const idsCamadasVenta = (camadas = []) => camadas.map((item) => item.camada?.toString?.() || item.camada).filter(Boolean);
 
 const redondear = (valor, decimales = 2) => Number((valor || 0).toFixed(decimales));
 
@@ -43,9 +50,86 @@ const crearFiltroEspecieAnimal = async (especie) => {
     };
 };
 
+const obtenerCantidadesVendidasPorCamada = async (camadaIds = [], ventaIdIgnorada = null) => {
+    if (camadaIds.length === 0) return new Map();
+
+    const filtro = {
+        estado: { $ne: 'Anulada' },
+        'camadas.camada': { $in: camadaIds }
+    };
+    if (ventaIdIgnorada) filtro._id = { $ne: ventaIdIgnorada };
+
+    const ventas = await VentaAnimal.aggregate([
+        { $match: filtro },
+        { $unwind: '$camadas' },
+        { $match: { 'camadas.camada': { $in: camadaIds } } },
+        {
+            $group: {
+                _id: '$camadas.camada',
+                cantidadVendida: { $sum: '$camadas.cantidad' }
+            }
+        }
+    ]);
+
+    return new Map(ventas.map((item) => [item._id.toString(), item.cantidadVendida || 0]));
+};
+
+const validarCamadasVenta = async (camadas = [], ventaIdIgnorada = null) => {
+    if (!Array.isArray(camadas) || camadas.length === 0) {
+        return { valido: true };
+    }
+
+    const ids = idsCamadasVenta(camadas);
+    if (ids.length !== new Set(ids).size) {
+        return { valido: false, status: 400, mensaje: 'No puedes repetir la misma camada en una venta' };
+    }
+
+    const camadasEncontradas = await Camada.find({ _id: { $in: ids } });
+    if (camadasEncontradas.length !== ids.length) {
+        return { valido: false, status: 404, mensaje: 'Una o más camadas no existen' };
+    }
+
+    const camadaCancelada = camadasEncontradas.find((camada) => camada.estado === 'Cancelada');
+    if (camadaCancelada) {
+        return {
+            valido: false,
+            status: 400,
+            mensaje: `La camada ${camadaCancelada.codigoCamada} está cancelada y no puede venderse`
+        };
+    }
+
+    const vendidasPorCamada = await obtenerCantidadesVendidasPorCamada(ids, ventaIdIgnorada);
+
+    for (const item of camadas) {
+        const camadaId = item.camada?.toString?.() || item.camada;
+        const camada = camadasEncontradas.find((registro) => registro._id.toString() === camadaId);
+        const cantidad = Number(item.cantidad || 0);
+        const pesoTotalKg = Number(item.pesoTotalKg || 0);
+        const precioKg = Number(item.precioKg || 0);
+
+        if (!Number.isInteger(cantidad) || cantidad <= 0) {
+            return { valido: false, status: 400, mensaje: 'La cantidad vendida por camada debe ser un entero mayor que cero' };
+        }
+        if (pesoTotalKg <= 0 || precioKg <= 0) {
+            return { valido: false, status: 400, mensaje: 'Peso total y precio por kg de camada deben ser mayores que cero' };
+        }
+
+        const disponible = Math.max((camada.criasParaVenta || 0) - (vendidasPorCamada.get(camadaId) || 0), 0);
+        if (cantidad > disponible) {
+            return {
+                valido: false,
+                status: 400,
+                mensaje: `La camada ${camada.codigoCamada} solo tiene ${disponible} cría(s) disponibles para venta`
+            };
+        }
+    }
+
+    return { valido: true };
+};
+
 const validarAnimalesVenta = async (animales = [], ventaIdIgnorada = null, especieVenta = null) => {
     if (!Array.isArray(animales) || animales.length === 0) {
-        return { valido: false, status: 400, mensaje: 'Debe agregar al menos un animal' };
+        return { valido: true, especie: especieVenta || 'Bovino' };
     }
 
     const ids = idsAnimalesVenta(animales);
@@ -91,28 +175,47 @@ const validarAnimalesVenta = async (animales = [], ventaIdIgnorada = null, espec
 };
 
 const crearEventosVenta = async (venta, usuarioId) => {
-    await Promise.all((venta.animales || []).map((item) => upsertEventoAnimal({
-        animal: item.animal,
-        tipoEvento: 'Venta',
-        fecha: venta.fechaVenta,
-        titulo: 'Animal vendido',
-        descripcion: `Venta registrada por ₡${Number(item.subtotal || 0).toLocaleString('es-CR')} con peso de ${item.pesoVentaKg} kg`,
-        moduloOrigen: 'Ventas',
-        referenciaId: venta._id,
-        creadoPor: usuarioId,
-        metadata: {
-            comprador: venta.comprador,
-            pesoVentaKg: item.pesoVentaKg,
-            precioKg: item.precioKg,
-            subtotal: item.subtotal
-        }
-    })));
+    await Promise.all([
+        ...(venta.animales || []).map((item) => upsertEventoAnimal({
+            animal: item.animal,
+            tipoEvento: 'Venta',
+            fecha: venta.fechaVenta,
+            titulo: 'Animal vendido',
+            descripcion: `Venta registrada por ₡${Number(item.subtotal || 0).toLocaleString('es-CR')} con peso de ${item.pesoVentaKg} kg`,
+            moduloOrigen: 'Ventas',
+            referenciaId: venta._id,
+            creadoPor: usuarioId,
+            metadata: {
+                comprador: venta.comprador,
+                pesoVentaKg: item.pesoVentaKg,
+                precioKg: item.precioKg,
+                subtotal: item.subtotal
+            }
+        })),
+        ...(venta.camadas || []).map((item) => upsertEventoCamada({
+            camada: item.camada?._id || item.camada,
+            tipoEvento: 'Venta',
+            fecha: venta.fechaVenta,
+            titulo: 'Venta de crías de camada',
+            descripcion: `Venta agrupada de ${item.cantidad || 0} cría(s) por ₡${Number(item.subtotal || 0).toLocaleString('es-CR')}.`,
+            moduloOrigen: 'Ventas',
+            referenciaId: venta._id,
+            creadoPor: usuarioId,
+            metadata: {
+                comprador: venta.comprador,
+                cantidad: item.cantidad,
+                pesoTotalKg: item.pesoTotalKg,
+                precioKg: item.precioKg,
+                subtotal: item.subtotal
+            }
+        }))
+    ]);
 };
 
 const aplicarVentaConfirmada = async (venta, usuarioId) => {
     if (venta.estado !== 'Confirmada') return;
 
-    await Promise.all(venta.animales.map((item) => Animal.findByIdAndUpdate(item.animal, {
+    await Promise.all((venta.animales || []).map((item) => Animal.findByIdAndUpdate(item.animal, {
         estado: 'Vendido',
         fechaVenta: venta.fechaVenta,
         pesoVenta: item.pesoVentaKg,
@@ -148,7 +251,7 @@ const aplicarVentaConfirmada = async (venta, usuarioId) => {
 };
 
 const revertirVenta = async (venta) => {
-    await Promise.all(venta.animales.map((item) => Animal.findOneAndUpdate(
+    await Promise.all((venta.animales || []).map((item) => Animal.findOneAndUpdate(
         { _id: item.animal, ventaId: venta._id },
         {
             $set: { estado: 'Activo' },
@@ -165,6 +268,7 @@ const revertirVenta = async (venta) => {
 
     await MovimientoFinanciero.deleteMany({ referenciaId: venta._id, referenciaModelo: 'VentaAnimal' });
     await eliminarEventosPorReferencia({ moduloOrigen: 'Ventas', referenciaId: venta._id });
+    await eliminarEventosCamadaPorReferencia({ moduloOrigen: 'Ventas', referenciaId: venta._id });
 };
 
 const extraerDatosVenta = (venta) => ({
@@ -177,6 +281,12 @@ const extraerDatosVenta = (venta) => ({
     animales: (venta.animales || []).map((item) => ({
         animal: item.animal,
         pesoVentaKg: item.pesoVentaKg,
+        precioKg: item.precioKg
+    })),
+    camadas: (venta.camadas || []).map((item) => ({
+        camada: item.camada,
+        cantidad: item.cantidad,
+        pesoTotalKg: item.pesoTotalKg,
         precioKg: item.precioKg
     })),
     comprobanteUrl: venta.comprobanteUrl,
@@ -221,13 +331,23 @@ ventaAnimalCtrl.getVentaById = async (req, res) => {
 ventaAnimalCtrl.crearVenta = async (req, res) => {
     try {
         const animales = typeof req.body.animales === 'string' ? JSON.parse(req.body.animales) : req.body.animales;
+        const camadas = typeof req.body.camadas === 'string' ? JSON.parse(req.body.camadas) : req.body.camadas;
+        if ((!Array.isArray(animales) || animales.length === 0) && (!Array.isArray(camadas) || camadas.length === 0)) {
+            return res.status(400).json({ mensaje: 'Debe agregar al menos un animal o una camada' });
+        }
+        if (Array.isArray(camadas) && camadas.length > 0 && req.body.especie !== 'Porcino') {
+            return res.status(400).json({ mensaje: 'Las ventas por camada solo aplican para porcinos' });
+        }
         const validacion = await validarAnimalesVenta(animales, null, req.body.especie);
         if (!validacion.valido) return res.status(validacion.status).json({ mensaje: validacion.mensaje });
+        const validacionCamadas = await validarCamadasVenta(camadas);
+        if (!validacionCamadas.valido) return res.status(validacionCamadas.status).json({ mensaje: validacionCamadas.mensaje });
 
         const venta = new VentaAnimal({
             ...req.body,
-            especie: validacion.especie,
-            animales,
+            especie: req.body.especie || validacion.especie || 'Bovino',
+            animales: animales || [],
+            camadas: camadas || [],
             comprobanteUrl: req.file ? `/uploads/ventas/${req.file.filename}` : undefined,
             registradoPor: req.usuario?.id
         });
@@ -255,17 +375,35 @@ ventaAnimalCtrl.actualizarVenta = async (req, res) => {
         await revertirVenta(ventaAnterior);
         ventaRevertida = true;
         const animales = typeof req.body.animales === 'string' ? JSON.parse(req.body.animales) : req.body.animales;
+        const camadas = typeof req.body.camadas === 'string' ? JSON.parse(req.body.camadas) : req.body.camadas;
+        if ((!Array.isArray(animales) || animales.length === 0) && (!Array.isArray(camadas) || camadas.length === 0)) {
+            await aplicarVentaConfirmada(ventaAnterior, req.usuario?.id);
+            ventaRevertida = false;
+            return res.status(400).json({ mensaje: 'Debe agregar al menos un animal o una camada' });
+        }
+        if (Array.isArray(camadas) && camadas.length > 0 && (req.body.especie || ventaAnterior.especie) !== 'Porcino') {
+            await aplicarVentaConfirmada(ventaAnterior, req.usuario?.id);
+            ventaRevertida = false;
+            return res.status(400).json({ mensaje: 'Las ventas por camada solo aplican para porcinos' });
+        }
         const validacion = await validarAnimalesVenta(animales, req.params.id, req.body.especie || ventaAnterior.especie);
         if (!validacion.valido) {
             await aplicarVentaConfirmada(ventaAnterior, req.usuario?.id);
             ventaRevertida = false;
             return res.status(validacion.status).json({ mensaje: validacion.mensaje });
         }
+        const validacionCamadas = await validarCamadasVenta(camadas, req.params.id);
+        if (!validacionCamadas.valido) {
+            await aplicarVentaConfirmada(ventaAnterior, req.usuario?.id);
+            ventaRevertida = false;
+            return res.status(validacionCamadas.status).json({ mensaje: validacionCamadas.mensaje });
+        }
 
         const datos = {
             ...req.body,
-            especie: validacion.especie,
-            animales,
+            especie: req.body.especie || validacion.especie || ventaAnterior.especie,
+            animales: animales || [],
+            camadas: camadas || [],
             comprobanteUrl: req.file ? `/uploads/ventas/${req.file.filename}` : ventaAnterior.comprobanteUrl
         };
         const venta = await VentaAnimal.findByIdAndUpdate(req.params.id, datos, { new: true, runValidators: true });
@@ -338,7 +476,13 @@ ventaAnimalCtrl.getResumenVentas = async (req, res) => {
         const ventas = await VentaAnimal.find(filtro).populate('animales.animal').lean();
         const totalVendido = ventas.reduce((total, venta) => total + (venta.montoTotal || 0), 0);
         const totalKgVendidos = ventas.reduce((total, venta) => total + (venta.pesoTotalKg || 0), 0);
+        const totalUnidadesVendidas = ventas.reduce((total, venta) => total + (venta.totalAnimales || 0), 0);
         const animalesVendidos = ventas.flatMap((venta) => (venta.animales || []).map((item) => ({
+            ...item,
+            fechaVenta: venta.fechaVenta,
+            comprador: venta.comprador
+        })));
+        const camadasVendidas = ventas.flatMap((venta) => (venta.camadas || []).map((item) => ({
             ...item,
             fechaVenta: venta.fechaVenta,
             comprador: venta.comprador
@@ -365,6 +509,10 @@ ventaAnimalCtrl.getResumenVentas = async (req, res) => {
             mapa[categoria] = (mapa[categoria] || 0) + 1;
             return mapa;
         }, {});
+        const porCategoriaConCamadas = camadasVendidas.reduce((mapa, item) => {
+            mapa['Camadas porcinas'] = (mapa['Camadas porcinas'] || 0) + Number(item.cantidad || 0);
+            return mapa;
+        }, porCategoria);
         const ventasPorOrigen = animalesVendidos.reduce((mapa, item) => {
             const animal = item.animal || {};
             const origen = obtenerOrigenAnimal(animal);
@@ -411,26 +559,26 @@ ventaAnimalCtrl.getResumenVentas = async (req, res) => {
             precioPromedioKg: totalKgVendidos ? totalVendido / totalKgVendidos : 0,
             ingresosGenerados: totalVendido,
             totalVentas: ventas.length,
-            totalAnimalesVendidos: animalesVendidos.length,
+            totalAnimalesVendidos: totalUnidadesVendidas,
             ventasPorPeriodo: {
                 totalVendido,
                 totalKgVendidos,
                 totalVentas: ventas.length,
-                totalAnimalesVendidos: animalesVendidos.length,
-                ventaPromedioPorAnimal: animalesVendidos.length ? totalVendido / animalesVendidos.length : 0,
+                totalAnimalesVendidos: totalUnidadesVendidas,
+                ventaPromedioPorAnimal: totalUnidadesVendidas ? totalVendido / totalUnidadesVendidas : 0,
                 ticketPromedioVenta: ventas.length ? totalVendido / ventas.length : 0
             },
             precioKg: {
                 promedio: totalKgVendidos ? totalVendido / totalKgVendidos : 0,
-                minimo: animalesVendidos.length ? Math.min(...animalesVendidos.map((item) => item.precioKg || 0)) : 0,
-                maximo: animalesVendidos.length ? Math.max(...animalesVendidos.map((item) => item.precioKg || 0)) : 0
+                minimo: [...animalesVendidos, ...camadasVendidas].length ? Math.min(...[...animalesVendidos, ...camadasVendidas].map((item) => item.precioKg || 0)) : 0,
+                maximo: [...animalesVendidos, ...camadasVendidas].length ? Math.max(...[...animalesVendidos, ...camadasVendidas].map((item) => item.precioKg || 0)) : 0
             },
             ventasPorMes: Object.values(ventasPorMes).map((item) => ({
                 ...item,
                 precioPromedioKg: item.pesoTotalKg ? item.total / item.pesoTotalKg : 0
             })).sort((a, b) => a.mes.localeCompare(b.mes)),
             compradoresFrecuentes: Object.entries(compradores).map(([comprador, cantidad]) => ({ comprador, cantidad })),
-            animalesVendidosPorCategoria: Object.entries(porCategoria).map(([categoria, cantidad]) => ({ categoria, cantidad })),
+            animalesVendidosPorCategoria: Object.entries(porCategoriaConCamadas).map(([categoria, cantidad]) => ({ categoria, cantidad })),
             ventasPorOrigen: Object.values(ventasPorOrigen).map((item) => ({
                 origen: item.origen,
                 animales: item.animales,

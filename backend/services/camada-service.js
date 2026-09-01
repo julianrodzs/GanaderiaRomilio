@@ -1,6 +1,7 @@
 const Camada = require('../models/Camada');
 const { Tarea } = require('../models/Tarea');
 const { upsertEventoAnimal } = require('./eventoAnimal-service');
+const { upsertEventoCamada } = require('./eventoCamada-service');
 const reproduccionPorcinaConfig = require('../config/reproduccionPorcinaConfig');
 
 const sumarDias = (fecha, dias) => {
@@ -58,7 +59,7 @@ const calcularFechasCamada = (datos) => {
     };
 };
 
-const crearDefinicionTarea = ({ camada, madre, usuarioId, clave, titulo, descripcion, tipo, fechaProgramada, categoriaAutomatica }) => ({
+const crearDefinicionTarea = ({ camada, madre, usuarioId, clave, titulo, descripcion, tipo, fechaProgramada, categoriaAutomatica, generaBitacora = false, tipoEventoBitacora }) => ({
     titulo: `${titulo} - ${camada.codigoCamada}`,
     descripcion,
     tipo,
@@ -73,7 +74,9 @@ const crearDefinicionTarea = ({ camada, madre, usuarioId, clave, titulo, descrip
     creadoAutomaticamente: true,
     especie: 'Porcino',
     categoriaAutomatica,
-    claveAutomatica: `camada-${clave}`
+    claveAutomatica: `camada-${clave}`,
+    generaBitacora,
+    tipoEventoBitacora
 });
 
 const crearDefinicionesTareasCamada = ({ camada, madre, usuarioId }) => {
@@ -86,42 +89,42 @@ const crearDefinicionesTareasCamada = ({ camada, madre, usuarioId }) => {
     const manejarComoVenta = destino === 'Se venden' || (destino === 'Mixto' && (mixtoSinDistribucion || (camada.criasParaVenta || 0) > 0));
     const manejarComoEngorde = destino === 'Engorde' || (destino === 'Mixto' && (mixtoSinDistribucion || (camada.criasParaEngorde || 0) > 0));
     const base = [
-        ['hierro', 'Aplicar hierro a crías', 'Sanidad', fechas.fechaHierro, 'Sanidad porcina'],
-        ['vitamina-desparasitacion', 'Vitaminizar y desparasitar crías', 'Sanidad', fechas.fechaVitaminaDesparasitacion, 'Sanidad porcina'],
-        ['destete', 'Destetar camada', 'Reproducción', fechas.fechaDesteteEstimada, 'Crías porcinas'],
-        ['desparasitar-destete', 'Desparasitar en el destete', 'Sanidad', fechas.fechaDesteteEstimada, 'Sanidad porcina'],
-        ['vitamina-selenio-destete', 'Aplicar vitamina con selenio', 'Sanidad', fechas.fechaDesteteEstimada, 'Sanidad porcina'],
-        ['nueva-inseminacion-madre', 'Nueva inseminación/monta de la madre', 'Reproducción', fechas.fechaNuevaInseminacionMadre, 'Reproducción porcina'],
-        ['revisar-celo-posterior-madre', 'Revisar celo posterior de la madre', 'Reproducción', fechas.fechaRevisionCeloPosteriorMadre, 'Reproducción porcina']
+        ['hierro', 'Aplicar hierro a crías', 'Sanidad', fechas.fechaHierro, 'Sanidad porcina', true, 'Tratamiento'],
+        ['vitamina-desparasitacion', 'Vitaminizar y desparasitar crías', 'Sanidad', fechas.fechaVitaminaDesparasitacion, 'Sanidad porcina', true, 'Sanidad'],
+        ['destete', 'Destetar camada', 'Reproducción', fechas.fechaDesteteEstimada, 'Crías porcinas', true, 'Destete'],
+        ['desparasitar-destete', 'Desparasitar en el destete', 'Sanidad', fechas.fechaDesteteEstimada, 'Sanidad porcina', true, 'Sanidad'],
+        ['vitamina-selenio-destete', 'Aplicar vitamina con selenio', 'Sanidad', fechas.fechaDesteteEstimada, 'Sanidad porcina', true, 'Tratamiento'],
+        ['nueva-inseminacion-madre', 'Nueva inseminación/monta de la madre', 'Reproducción', fechas.fechaNuevaInseminacionMadre, 'Reproducción porcina', false, null],
+        ['revisar-celo-posterior-madre', 'Revisar celo posterior de la madre', 'Reproducción', fechas.fechaRevisionCeloPosteriorMadre, 'Reproducción porcina', false, null]
     ];
     const porDestino = [];
 
     if (manejarComoFinca || manejarComoEngorde) {
         porDestino.push(
-            ['alimento-inicio', 'Dar alimento inicio a crías', 'Alimentación', fechas.fechaAlimentoInicio, 'Alimentación porcina'],
-            ['alimento-desarrollo', 'Dar alimento de desarrollo a crías', 'Alimentación', fechas.fechaAlimentoDesarrollo, 'Alimentación porcina'],
-            ['alimento-engorde', 'Dar alimento de engorde a crías', 'Alimentación', fechas.fechaAlimentoEngorde, 'Alimentación porcina']
+            ['alimento-inicio', 'Dar alimento inicio a crías', 'Alimentación', fechas.fechaAlimentoInicio, 'Alimentación porcina', false, null],
+            ['alimento-desarrollo', 'Dar alimento de desarrollo a crías', 'Alimentación', fechas.fechaAlimentoDesarrollo, 'Alimentación porcina', false, null],
+            ['alimento-engorde', 'Dar alimento de engorde a crías', 'Alimentación', fechas.fechaAlimentoEngorde, 'Alimentación porcina', false, null]
         );
     }
 
     if (manejarComoFinca) {
         porDestino.push(
-            ['circovirus', 'Aplicar circovirus porcino', 'Sanidad', fechas.fechaCircovirus, 'Sanidad porcina'],
-            ['primera-monta', 'Primera inseminación/monta de crías', 'Reproducción', fechas.fechaPrimeraMonta, 'Crías porcinas']
+            ['circovirus', 'Aplicar circovirus porcino', 'Sanidad', fechas.fechaCircovirus, 'Sanidad porcina', true, 'Sanidad'],
+            ['primera-monta', 'Primera inseminación/monta de crías', 'Reproducción', fechas.fechaPrimeraMonta, 'Crías porcinas', true, 'Monta']
         );
     }
 
     if (manejarComoVenta) {
-        porDestino.push(['venta', 'Vender crías', 'Venta', fechas.fechaVentaEstimada || sumarDias(camada.fechaNacimiento, 30), 'Crías porcinas']);
+        porDestino.push(['venta', 'Vender crías', 'Venta', fechas.fechaVentaEstimada || sumarDias(camada.fechaNacimiento, 30), 'Crías porcinas', true, 'Venta']);
     }
 
     if (manejarComoEngorde) {
-        porDestino.push(['sacrificio', 'Sacrificio de cerdos de engorde', 'Sacrificio', fechas.fechaSacrificioEstimada || sumarDias(camada.fechaNacimiento, 270), 'Crías porcinas']);
+        porDestino.push(['sacrificio', 'Sacrificio de cerdos de engorde', 'Sacrificio', fechas.fechaSacrificioEstimada || sumarDias(camada.fechaNacimiento, 270), 'Crías porcinas', true, 'Sacrificio']);
     }
 
     return [...base, ...porDestino]
         .filter(([, , , fecha]) => Boolean(fecha))
-        .map(([clave, titulo, tipo, fechaProgramada, categoriaAutomatica]) => crearDefinicionTarea({
+        .map(([clave, titulo, tipo, fechaProgramada, categoriaAutomatica, generaBitacora, tipoEventoBitacora]) => crearDefinicionTarea({
             camada,
             madre,
             usuarioId,
@@ -130,7 +133,9 @@ const crearDefinicionesTareasCamada = ({ camada, madre, usuarioId }) => {
             descripcion: `${titulo} de la camada ${camada.codigoCamada}, madre ${codigoMadre}. Fecha base de nacimiento: ${formatearFecha(camada.fechaNacimiento)}.`,
             tipo,
             fechaProgramada,
-            categoriaAutomatica
+            categoriaAutomatica,
+            generaBitacora,
+            tipoEventoBitacora
         }));
 };
 
@@ -272,17 +277,38 @@ const cancelarTareasEstimadasDelRegistro = (registroId) => {
 };
 
 const registrarEventoCamada = async ({ camada, madre, usuarioId, titulo = 'Camada registrada', descripcion }) => {
+    const descripcionEvento = descripcion || `Camada ${camada.codigoCamada} registrada con ${camada.nacidosVivos || 0} nacidos vivos.`;
+
     await upsertEventoAnimal({
         animal: madre._id || madre,
         tipoEvento: 'Parto',
         fecha: camada.fechaNacimiento,
         titulo,
-        descripcion: descripcion || `Camada ${camada.codigoCamada} registrada con ${camada.nacidosVivos || 0} nacidos vivos.`,
+        descripcion: descripcionEvento,
         moduloOrigen: 'Reproduccion',
         referenciaId: camada._id,
         creadoPor: usuarioId,
         metadata: {
             camada: camada._id,
+            codigoCamada: camada.codigoCamada,
+            nacidosTotales: camada.nacidosTotales,
+            nacidosVivos: camada.nacidosVivos,
+            nacidosMuertos: camada.nacidosMuertos,
+            destino: camada.destino
+        }
+    });
+
+    await upsertEventoCamada({
+        camada: camada._id,
+        tipoEvento: 'Camada registrada',
+        fecha: camada.fechaNacimiento,
+        titulo,
+        descripcion: descripcionEvento,
+        moduloOrigen: 'Camadas',
+        referenciaId: camada._id,
+        creadoPor: usuarioId,
+        metadata: {
+            madre: madre._id || madre,
             codigoCamada: camada.codigoCamada,
             nacidosTotales: camada.nacidosTotales,
             nacidosVivos: camada.nacidosVivos,
