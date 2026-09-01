@@ -2178,6 +2178,79 @@
   padding: 18px;
 }
 
+.acciones-encabezado {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.boton-catalogos-finanzas {
+  min-height: 44px;
+  border: 1px solid #91a394;
+  border-radius: 4px;
+  padding: 0 16px;
+  background: #f8f9f5;
+  color: #0b3b21;
+  font-weight: 900;
+  text-transform: uppercase;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.boton-catalogos-finanzas:hover:not(:disabled) {
+  border-color: #0b3b21;
+  background: #e8efe8;
+  transform: translateY(-1px);
+}
+
+.boton-catalogos-finanzas:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.boton-actualizar-finanzas {
+  border: 1px solid #0b3b21;
+  box-shadow: 0 6px 14px rgba(11, 59, 33, 0.14);
+  letter-spacing: 0;
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.boton-actualizar-finanzas:hover:not(:disabled) {
+  background: #14542f;
+  box-shadow: 0 8px 18px rgba(11, 59, 33, 0.2);
+  transform: translateY(-1px);
+}
+
+.boton-actualizar-finanzas:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.finanzas-bloque-interno {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #e3e6df;
+  padding-top: 16px;
+}
+
+.panel-title.compacto {
+  margin: 0;
+}
+
+.panel-title.compacto h3 {
+  margin: 0;
+  color: #09160e;
+  font-size: 22px;
+}
+
+.finanzas-revision-tabla table {
+  min-width: 760px;
+}
+
+.finanzas-revision-tabla .boton-secundario.compacto {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
 .finanzas-tabs {
   display: flex;
   gap: 8px;
@@ -2275,6 +2348,117 @@
 
 .finanzas-consumo-grid small {
   color: #314137;
+}
+
+.catalogos-financieros-page {
+  display: grid;
+  gap: 18px;
+}
+
+.catalogos-aviso {
+  display: grid;
+  gap: 6px;
+  border-left: 4px solid #8b5e34;
+  background: #fff4ea;
+  padding: 14px 16px;
+  color: #2e2115;
+}
+
+.catalogos-aviso strong {
+  color: #7b351b;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.catalogos-panel {
+  gap: 18px;
+}
+
+.catalogos-descripcion {
+  margin: -8px 0 0;
+  color: #5d675f;
+}
+
+.catalogos-form {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  border: 1px solid #e1e5de;
+  background: #f8f9f5;
+  padding: 14px;
+}
+
+.catalogos-form label {
+  display: grid;
+  gap: 6px;
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.catalogos-form input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #d8ddd5;
+  border-radius: 2px;
+  padding: 0 12px;
+  background: #fffdf7;
+  color: #09160e;
+}
+
+.catalogos-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.catalogo-item {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 10px 12px;
+}
+
+.catalogo-item.inactivo {
+  background: #f1f3ee;
+  opacity: 0.76;
+}
+
+.catalogo-item-info {
+  display: grid;
+  gap: 4px;
+}
+
+.catalogo-item-info small {
+  color: #6e766f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.catalogo-item span {
+  color: #09160e;
+  font-weight: 900;
+}
+
+.catalogo-item > div:last-child {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.boton-secundario.peligro {
+  color: #9b1c1c;
+}
+
+.boton-secundario.peligro:disabled {
+  color: #8b9690;
 }
 
 .conteo-drone-grid {
@@ -2788,8 +2972,18 @@
   .form-grid,
   .evaluar-cruce-form,
   .dashboard-content,
-  .productos-reportes-grid {
+  .productos-reportes-grid,
+  .catalogos-form {
     grid-template-columns: 1fr;
+  }
+
+  .acciones-encabezado {
+    justify-content: flex-start;
+  }
+
+  .acciones-encabezado button,
+  .catalogos-form button {
+    width: 100%;
   }
 
   .app-header {
@@ -3204,5 +3398,15 @@
 
   .selector-especie button {
     min-width: 0;
+  }
+
+  .catalogo-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .catalogo-item > div:last-child {
+    width: 100%;
+    justify-content: flex-start;
   }
 }

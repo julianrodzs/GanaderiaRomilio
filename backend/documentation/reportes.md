@@ -1860,7 +1860,7 @@ costoPorCriaDestetada = costoEstimado / destetados
 
 Los reportes financieros trabajan sobre `MovimientoFinanciero`.
 
-Desde la fase de estandarizacion se conservan los datos originales y se agregan campos calculados para que los reportes no dependan tanto del texto libre.
+Desde la fase de estandarizacion se conservan los datos originales y se agregan campos calculados para ordenar reportes sin perder trazabilidad.
 
 ### Campos originales conservados
 
@@ -1885,6 +1885,7 @@ categoriaNormalizada
 unidadNormalizada
 factorUnidad
 cantidadFisica
+precioUnitarioFisico
 ```
 
 Origen:
@@ -1901,17 +1902,14 @@ Fuente:
 
 ```js
 categoria
-producto
-descripcion
-tipoMovimiento
 ```
 
 Transformacion:
 
 - Normaliza mayusculas, acentos y espacios.
-- Busca palabras clave.
-- Si encuentra coincidencia, asigna categoria estandar.
-- Si no encuentra, conserva la categoria original o usa `Otros`.
+- Si coincide con una categoria del catalogo base, asigna esa categoria canonica.
+- No infiere categoria desde producto, descripcion o tipoMovimiento.
+- Si no coincide, conserva la categoria original o usa `Otros`.
 
 Categorias actuales:
 
@@ -1933,22 +1931,22 @@ Categorias actuales:
 Ejemplos:
 
 ```txt
-producto = GASOLINA REGULAR
+categoria = combustible
 categoriaNormalizada = Combustible
 ```
 
 ```txt
-descripcion = BIMECTIN 3,5%
+categoria = sanidad
 categoriaNormalizada = Sanidad
 ```
 
 ```txt
-descripcion = ALIMENTO CHANCHA
+categoria = alimentacion
 categoriaNormalizada = Alimentación
 ```
 
 ```txt
-descripcion = Venta de porcino(s)
+categoria = ventas
 categoriaNormalizada = Ventas
 ```
 
@@ -1975,6 +1973,7 @@ unidad = 70 L
 unidadNormalizada = L
 factorUnidad = 70
 cantidadFisica = 70
+precioUnitarioFisico = monto / 70
 ```
 
 ```txt
@@ -1983,6 +1982,7 @@ unidad = 2 KG
 unidadNormalizada = KG
 factorUnidad = 2
 cantidadFisica = 6
+precioUnitarioFisico = monto / 6
 ```
 
 ```txt
@@ -2032,6 +2032,7 @@ Usa:
 
 - `producto`
 - `categoriaNormalizada || categoria`
+- `destinoUso`
 - `unidadNormalizada`
 - `cantidad`
 - `factorUnidad`
@@ -2049,12 +2050,72 @@ precioPromedio = montoTotal / cantidadFisicaTotal
 
 Cuando un movimiento viejo no tiene `cantidadFisica`, el pipeline intenta calcularla usando `cantidad` y `unidad`.
 
+`precioUnitarioFisico` queda guardado en cada movimiento nuevo o editado. Sirve para auditar el precio real por unidad fisica:
+
+```txt
+precioUnitarioFisico = monto / cantidadFisica
+```
+
+Esto evita confundir el precio por linea con el precio por litro, kilo, saco, unidad, etc.
+
+#### Destinos de uso
+
+Usa:
+
+- `destinoUso`
+- `monto`
+- `moneda`
+- `producto`
+- `fecha`
+
+Transforma:
+
+- Si `destinoUso` existe, agrupa con ese valor.
+- Si `destinoUso` viene vacio, agrupa como `Otro`.
+- No infiere destino desde producto, descripcion o categoria.
+
+Endpoint financiero directo:
+
+```txt
+GET /api/finanzas/destinos-resumen?fechaInicio=&fechaFin=
+```
+
+Respuesta:
+
+- `destinoUso`
+- `registros`
+- `totales` por moneda.
+- hasta 5 `productos` relacionados.
+
+### Revision de datos financieros
+
+Endpoint:
+
+```txt
+GET /api/finanzas/revision-datos?fechaInicio=&fechaFin=
+```
+
+Objetivo:
+
+- detectar datos que conviene corregir antes de analizar reportes.
+
+Reglas actuales:
+
+- movimientos sin `destinoUso`.
+- movimientos con categoria `General` u `Otros`.
+- compras sin `producto`.
+- compras sin `cantidad` o `unidad`.
+- movimientos sin `proveedor`.
+- compras con cantidad/unidad pero sin `precioUnitarioFisico`.
+
+La pantalla de Finanzas muestra un resumen de estos casos y permite abrir la edicion del movimiento.
+
 #### Combustibles
 
 Usa:
 
-- `categoriaNormalizada = Combustible`
-- o producto con `gasolina`, `diesel`, `diésel`.
+- `categoria = Combustible`
+- o `categoriaNormalizada = Combustible`.
 - `cantidadFisica`
 - `monto`
 
@@ -2099,8 +2160,8 @@ tipoMovimiento = 'Compra de animales'
 naturaleza = 'Egreso'
 categoria = 'Compra de animales'
 producto = 'Bovinos comprados' | 'Porcinos comprados'
-cantidad = totalAnimales
-unidad = 'animales'
+cantidad = pesoTotalKg
+unidad = 'KG'
 precioUnitario = montoTotal / pesoTotalKg
 referenciaModelo = 'CompraAnimal'
 referenciaId = compra._id
@@ -2111,16 +2172,21 @@ Ventas de animales generan `MovimientoFinanciero` con:
 ```js
 tipoMovimiento = 'Venta de animales'
 naturaleza = 'Ingreso'
-categoria = 'Ingresos'
+categoria = 'Ventas'
 producto = 'Bovinos vendidos' | 'Porcinos vendidos'
-cantidad = totalAnimales
-unidad = 'animales'
+cantidad = pesoTotalKg
+unidad = 'KG'
 precioUnitario = montoTotal / pesoTotalKg
 referenciaModelo = 'VentaAnimal'
 referenciaId = venta._id
 ```
 
 Esto permite auditar desde Finanzas el movimiento que nacio en compra/venta.
+
+Nota:
+
+- La cantidad de animales queda en el documento `CompraAnimal` o `VentaAnimal`.
+- En `MovimientoFinanciero`, `cantidad` usa kilos para que `precioUnitario` represente precio por kg.
 
 ## Como se usan en el frontend
 
@@ -2215,21 +2281,25 @@ Nota:
 
 Pendientes tecnicos:
 
-- Crear catalogos administrables para categorias, unidades, tipos de trabajo, tipos de inversion y destinos de uso.
-- Permitir que el usuario corrija `categoriaNormalizada` manualmente sin perder `categoria` original.
+- Categorias financieras y destinos de uso ya son catalogos administrables desde Finanzas. Se guardan en `CatalogoFinanciero`, pueden activarse/desactivarse y solo se eliminan si no tienen movimientos asociados.
+- El endpoint publico `GET /api/finanzas/catalogos` devuelve solo categorias y destinos activos para formularios.
+- El endpoint administrativo `GET /api/finanzas/catalogos/admin` devuelve activos e inactivos con conteo de usos y bandera `puedeEliminar`.
+- Renombrar un catalogo puede actualizar movimientos existentes si el usuario confirma la migracion.
+- Desactivar un catalogo no cambia reportes historicos; solo evita que aparezca en nuevos registros.
+- Definir si el usuario podra corregir `categoriaNormalizada` manualmente sin perder `categoria` original.
 - Migrar movimientos viejos que no tienen `producto`, `cantidad`, `unidadNormalizada` o `cantidadFisica`.
 - Convertir unidades equivalentes si se decide hacerlo, por ejemplo `GALON` a `L`.
 - Definir reglas de tipo de cambio para reportes mixtos `CRC` y `USD`.
-- Definir si `precioUnitario` debe ser por unidad fisica o por linea del movimiento cuando hay factor de unidad.
+- Mantener `precioUnitario` como valor de linea/importacion y usar `precioUnitarioFisico` para costo real por litro, kilo, unidad, saco, etc.
 - Crear validaciones mas fuertes para evitar movimientos de compra de productos sin `producto`, `cantidad` o `unidad`.
 - Crear exportacion de reportes financieros a Excel/PDF.
 
 Pendientes de negocio:
 
 - Revisar movimientos clasificados como `General` u `Otros`.
-- Definir catalogo oficial de categorias con el cliente.
+- Definir catalogo oficial definitivo de categorias y destinos con el cliente, aunque la app ya permite administrarlos.
 - Separar formalmente gasto operativo, inversion capitalizable, compra de animales, venta de animales y gasto personal si aparece.
-- Definir destinos de uso: chapia, tractor, sanidad, potrero, mantenimiento, alimentacion, camada, animal, finca.
+- Definir destinos de uso oficiales finales: chapia, tractor, sanidad, potrero, mantenimiento, alimentacion, camada, animal, finca, galera, cortadora, cerca, rancho, aguas, administracion, etc.
 - Asociar gastos porcinos directamente a camada cuando se quiera medir rentabilidad por camada.
 - Asociar gastos bovinos a animal, potrero o tarea cuando aplique.
 - Definir tratamiento de impuestos, descuentos, fletes y ajustes en compras/ventas.

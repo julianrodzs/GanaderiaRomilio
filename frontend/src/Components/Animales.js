@@ -54,7 +54,14 @@ const formatearEdad = (fechaNacimiento) => {
   return `${anios} años ${mesesRestantes} meses`;
 };
 
-const estaListaMontaPorEdad = (animal) => animal.sexo === 'Hembra' && (calcularEdadMeses(animal.fechaNacimiento) || 0) >= 24;
+const estaListaMontaPorEdad = (animal) => {
+  if (animal.sexo !== 'Hembra') return false;
+
+  const edadMeses = calcularEdadMeses(animal.fechaNacimiento);
+  if (edadMeses === null) return false;
+
+  return animal.especie === 'Porcino' ? edadMeses >= 7 : edadMeses >= 24;
+};
 
 const obtenerEstadoMontaEdad = (animal) => {
   if (animal.sexo !== 'Hembra') return 'No aplica';

@@ -1,8 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  activarCatalogoFinanciero,
   actualizarMovimientoFinanciero,
+  actualizarCatalogoFinanciero,
+  crearCatalogoFinanciero,
   crearMovimientoFinanciero,
+  desactivarCatalogoFinanciero,
+  eliminarCatalogoFinanciero,
   eliminarMovimientoFinanciero,
+  obtenerCatalogosFinancierosAdmin,
   obtenerMovimientosFinancieros,
   obtenerResumenConsumoFinanciero,
   obtenerResumenFinanciero,
@@ -137,6 +143,250 @@ const sumarPorTipoYMoneda = (movimientos) => {
   }, {});
 };
 
+const estaVacio = (valor) => valor === null || valor === undefined || String(valor).trim() === '';
+
+const formatearTotalesMoneda = (totales = {}) => {
+  const partes = Object.entries(totales)
+    .filter(([, total]) => total > 0)
+    .map(([moneda, total]) => formatearNumero(total, moneda));
+
+  return partes.length ? partes.join(' / ') : '--';
+};
+
+const reglasRevisionFinanciera = [
+  {
+    id: 'sinDestinoUso',
+    label: 'Sin destino de uso',
+    evaluar: (movimiento) => estaVacio(movimiento.destinoUso)
+  },
+  {
+    id: 'categoriaGeneralOtros',
+    label: 'Categoria general/otros',
+    evaluar: (movimiento) => ['General', 'Otros'].includes(movimiento.categoriaNormalizada || movimiento.categoria)
+  },
+  {
+    id: 'comprasSinProducto',
+    label: 'Compra sin producto',
+    evaluar: (movimiento) => movimiento.tipoMovimiento === 'Compra' && estaVacio(movimiento.producto)
+  },
+  {
+    id: 'comprasSinCantidadUnidad',
+    label: 'Compra sin cantidad/unidad',
+    evaluar: (movimiento) => movimiento.tipoMovimiento === 'Compra' && (!movimiento.cantidad || estaVacio(movimiento.unidad))
+  }
+];
+
+const EditorCatalogosFinancieros = ({ onCerrar }) => {
+  const [catalogoActivo, setCatalogoActivo] = useState('categorias');
+  const [items, setItems] = useState([]);
+  const [nuevoValor, setNuevoValor] = useState('');
+  const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
+  const [guardandoCatalogo, setGuardandoCatalogo] = useState(false);
+  const [errorCatalogo, setErrorCatalogo] = useState('');
+
+  const catalogos = {
+    categorias: {
+      titulo: 'Categorías financieras',
+      descripcion: 'Definen qué tipo de ingreso, gasto o inversión es el movimiento.',
+      tipo: 'categoria'
+    },
+    destinosUso: {
+      titulo: 'Destinos de uso',
+      descripcion: 'Definen dónde o para qué se usó el movimiento financiero.',
+      tipo: 'destinoUso'
+    }
+  };
+
+  const catalogo = catalogos[catalogoActivo];
+
+  const cargarCatalogos = async () => {
+    try {
+      setCargandoCatalogos(true);
+      setErrorCatalogo('');
+      const datos = await obtenerCatalogosFinancierosAdmin(catalogo.tipo);
+      setItems(datos);
+    } catch (err) {
+      setErrorCatalogo(err.message);
+    } finally {
+      setCargandoCatalogos(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarCatalogos();
+  }, [catalogoActivo]);
+
+  const agregarValor = async (evento) => {
+    evento.preventDefault();
+    const valor = nuevoValor.trim();
+    if (!valor) return;
+
+    try {
+      setGuardandoCatalogo(true);
+      setErrorCatalogo('');
+      await crearCatalogoFinanciero({ tipo: catalogo.tipo, nombre: valor });
+      setNuevoValor('');
+      await cargarCatalogos();
+    } catch (err) {
+      setErrorCatalogo(err.message);
+    } finally {
+      setGuardandoCatalogo(false);
+    }
+  };
+
+  const renombrarCatalogo = async (item) => {
+    const nuevoNombre = window.prompt(`Nuevo nombre para "${item.nombre}"`, item.nombre);
+    if (!nuevoNombre || nuevoNombre.trim() === item.nombre) return;
+
+    const actualizarMovimientos = item.usos > 0
+      ? window.confirm(`"${item.nombre}" tiene ${item.usos} movimiento(s). ¿Quieres actualizar también esos movimientos al nuevo nombre?`)
+      : false;
+
+    try {
+      setErrorCatalogo('');
+      await actualizarCatalogoFinanciero(item._id, {
+        nombre: nuevoNombre.trim(),
+        actualizarMovimientos
+      });
+      await cargarCatalogos();
+    } catch (err) {
+      setErrorCatalogo(err.message);
+    }
+  };
+
+  const cambiarEstadoCatalogo = async (item) => {
+    const accion = item.activo ? 'desactivar' : 'activar';
+    const mensaje = item.activo
+      ? `Desactivar "${item.nombre}" hará que no aparezca para nuevos movimientos. Los ${item.usos} movimiento(s) existentes conservarán el valor.`
+      : `Activar "${item.nombre}" hará que vuelva a aparecer en los formularios.`;
+
+    if (!window.confirm(mensaje)) return;
+
+    try {
+      setErrorCatalogo('');
+      if (item.activo) {
+        await desactivarCatalogoFinanciero(item._id);
+      } else {
+        await activarCatalogoFinanciero(item._id);
+      }
+      await cargarCatalogos();
+    } catch (err) {
+      setErrorCatalogo(err.message);
+    }
+  };
+
+  const eliminarCatalogo = async (item) => {
+    if (item.usos > 0) {
+      window.alert(`No se puede eliminar porque hay ${item.usos} movimiento(s) usando este valor. Puedes desactivarlo.`);
+      return;
+    }
+
+    if (!window.confirm(`Eliminar "${item.nombre}" del catálogo. Esta acción no afecta movimientos porque no tiene usos.`)) return;
+
+    try {
+      setErrorCatalogo('');
+      await eliminarCatalogoFinanciero(item._id);
+      await cargarCatalogos();
+    } catch (err) {
+      setErrorCatalogo(err.message);
+    }
+  };
+
+  return (
+    <section className="catalogos-financieros-page">
+      <div className="panel-title">
+        <div>
+          <p className="eyebrow">Finanzas</p>
+          <h2>Catálogos financieros</h2>
+        </div>
+        <button className="boton-link" type="button" onClick={onCerrar}>Volver</button>
+      </div>
+
+      <div className="catalogos-aviso">
+        <strong>Catálogo protegido</strong>
+        <span>
+          Puedes agregar, renombrar y desactivar valores. Eliminar solo está permitido cuando ningún movimiento financiero
+          usa ese valor, para no romper reportes históricos.
+        </span>
+      </div>
+
+      <section className="finanzas-panel catalogos-panel">
+        <div className="finanzas-tabs" role="tablist" aria-label="Catálogos financieros">
+          <button
+            className={catalogoActivo === 'categorias' ? 'finanza-tab activo' : 'finanza-tab'}
+            type="button"
+            onClick={() => setCatalogoActivo('categorias')}
+          >
+            Categorías
+          </button>
+          <button
+            className={catalogoActivo === 'destinosUso' ? 'finanza-tab activo' : 'finanza-tab'}
+            type="button"
+            onClick={() => setCatalogoActivo('destinosUso')}
+          >
+            Destinos de uso
+          </button>
+        </div>
+
+        <div className="panel-title compacto">
+          <div>
+            <p className="eyebrow">{catalogoActivo === 'categorias' ? 'Clasificación' : 'Uso operativo'}</p>
+            <h3>{catalogo.titulo}</h3>
+          </div>
+        </div>
+        <p className="catalogos-descripcion">{catalogo.descripcion}</p>
+
+        <form className="catalogos-form" onSubmit={agregarValor}>
+          <label>
+            Nuevo valor
+            <input
+              value={nuevoValor}
+              onChange={(evento) => setNuevoValor(evento.target.value.toUpperCase())}
+              placeholder={catalogoActivo === 'categorias' ? 'Ej. SERVICIOS' : 'Ej. BODEGA'}
+            />
+          </label>
+          <button className="boton-primario compacto" type="submit" disabled={guardandoCatalogo}>
+            {guardandoCatalogo ? 'Agregando...' : 'Agregar'}
+          </button>
+        </form>
+
+        {errorCatalogo && <div className="alerta-formulario">{errorCatalogo}</div>}
+
+        <div className="catalogos-lista">
+          {cargandoCatalogos && <p className="catalogos-descripcion">Cargando catálogo...</p>}
+          {!cargandoCatalogos && items.map((item) => (
+            <article key={item._id} className={item.activo ? 'catalogo-item' : 'catalogo-item inactivo'}>
+              <div className="catalogo-item-info">
+                <span>{item.nombre}</span>
+                <small>
+                  {item.usos} movimiento(s) · {item.activo ? 'Activo' : 'Inactivo'}
+                </small>
+              </div>
+              <div>
+                <button className="boton-secundario compacto" type="button" onClick={() => renombrarCatalogo(item)}>
+                  Renombrar
+                </button>
+                <button className="boton-secundario compacto" type="button" onClick={() => cambiarEstadoCatalogo(item)}>
+                  {item.activo ? 'Desactivar' : 'Activar'}
+                </button>
+                <button
+                  className="boton-secundario compacto peligro"
+                  type="button"
+                  onClick={() => eliminarCatalogo(item)}
+                  disabled={!item.puedeEliminar}
+                  title={item.puedeEliminar ? 'Eliminar catálogo' : 'Tiene movimientos asociados'}
+                >
+                  Eliminar
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </section>
+  );
+};
+
 const Finanzas = () => {
   const [movimientos, setMovimientos] = useState([]);
   const [resumen, setResumen] = useState(null);
@@ -150,6 +400,7 @@ const Finanzas = () => {
   const [errorFormulario, setErrorFormulario] = useState('');
   const [movimientoSeleccionado, setMovimientoSeleccionado] = useState(null);
   const [modoFormulario, setModoFormulario] = useState(false);
+  const [modoCatalogos, setModoCatalogos] = useState(false);
   const [rangoFechas, setRangoFechas] = useState(rangoMesActual);
 
   const cargarFinanzas = async () => {
@@ -202,6 +453,54 @@ const Finanzas = () => {
   }, [movimientosFiltrados]);
 
   const totalesPorTipo = useMemo(() => sumarPorTipoYMoneda(movimientos), [movimientos]);
+
+  const resumenPorDestino = useMemo(() => {
+    const destinos = movimientosFiltrados.reduce((acumulado, movimiento) => {
+      const destinoUso = movimiento.destinoUso || 'Sin destino';
+      const moneda = movimiento.moneda || 'CRC';
+
+      if (!acumulado[destinoUso]) {
+        acumulado[destinoUso] = {
+          destinoUso,
+          registros: 0,
+          totales: {},
+          productos: new Set()
+        };
+      }
+
+      acumulado[destinoUso].registros += 1;
+      acumulado[destinoUso].totales[moneda] = (acumulado[destinoUso].totales[moneda] || 0) + (movimiento.monto || 0);
+      if (movimiento.producto) acumulado[destinoUso].productos.add(movimiento.producto);
+
+      return acumulado;
+    }, {});
+
+    return Object.values(destinos)
+      .map((destino) => ({
+        ...destino,
+        productos: Array.from(destino.productos).slice(0, 4)
+      }))
+      .sort((a, b) => (b.totales.CRC || 0) - (a.totales.CRC || 0) || b.registros - a.registros);
+  }, [movimientosFiltrados]);
+
+  const revisionDatos = useMemo(() => {
+    const resumenRevision = reglasRevisionFinanciera.map((regla) => ({
+      ...regla,
+      cantidad: movimientosFiltrados.filter(regla.evaluar).length
+    }));
+
+    const muestras = movimientosFiltrados
+      .map((movimiento) => ({
+        movimiento,
+        problemas: reglasRevisionFinanciera
+          .filter((regla) => regla.evaluar(movimiento))
+          .map((regla) => regla.label)
+      }))
+      .filter((item) => item.problemas.length > 0)
+      .slice(0, 8);
+
+    return { resumen: resumenRevision, muestras };
+  }, [movimientosFiltrados]);
 
   const renderizarDetalleTipo = (tipo) => {
     const total = totalesPorTipo[tipo] || { cantidad: 0, CRC: 0, USD: 0 };
@@ -282,6 +581,10 @@ const Finanzas = () => {
     );
   }
 
+  if (modoCatalogos) {
+    return <EditorCatalogosFinancieros onCerrar={() => setModoCatalogos(false)} />;
+  }
+
   return (
     <section className="finanzas-page">
       <div className="panel-title">
@@ -289,9 +592,14 @@ const Finanzas = () => {
           <p className="eyebrow">Costos y finanzas</p>
           <h2>Movimientos financieros</h2>
         </div>
-        <button className="boton-primario compacto" type="button" onClick={cargarFinanzas} disabled={cargando}>
-          {cargando ? 'Actualizando...' : 'Actualizar'}
-        </button>
+        <div className="acciones-encabezado">
+          <button className="boton-secundario compacto boton-catalogos-finanzas" type="button" onClick={() => setModoCatalogos(true)}>
+            Catálogos
+          </button>
+          <button className="boton-primario compacto boton-actualizar-finanzas" type="button" onClick={cargarFinanzas} disabled={cargando}>
+            {cargando ? 'Actualizando...' : 'Actualizar'}
+          </button>
+        </div>
       </div>
 
       <section className="finanzas-resumen">
@@ -425,6 +733,80 @@ const Finanzas = () => {
             <strong>{formatearNumero(totalPorMoneda.USD, 'USD')}</strong>
           </article>
         </div>
+
+        {resumenPorDestino.length > 0 && (
+          <section className="finanzas-bloque-interno">
+            <div className="panel-title compacto">
+              <div>
+                <p className="eyebrow">Destino de uso</p>
+                <h3>Resumen del periodo visible</h3>
+              </div>
+            </div>
+            <div className="finanzas-consumo-grid">
+              {resumenPorDestino.slice(0, 6).map((destino) => (
+                <article key={destino.destinoUso}>
+                  <span>{destino.destinoUso}</span>
+                  <strong>{formatearTotalesMoneda(destino.totales)}</strong>
+                  <small>
+                    {destino.registros} registros
+                    {destino.productos.length ? ` · ${destino.productos.join(', ')}` : ''}
+                  </small>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="finanzas-bloque-interno">
+          <div className="panel-title compacto">
+            <div>
+              <p className="eyebrow">Revision de datos</p>
+              <h3>Movimientos por completar</h3>
+            </div>
+          </div>
+          <div className="finanzas-consumo-grid">
+            {revisionDatos.resumen.map((item) => (
+              <article key={item.id}>
+                <span>{item.label}</span>
+                <strong>{item.cantidad}</strong>
+                <small>En el periodo visible</small>
+              </article>
+            ))}
+          </div>
+
+          {revisionDatos.muestras.length > 0 && (
+            <div className="tabla-scroll tabla-dinamica finanzas-revision-tabla">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Categoria</th>
+                    <th>Producto</th>
+                    <th>Problema</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {revisionDatos.muestras.map(({ movimiento, problemas }) => (
+                    <tr key={movimiento._id}>
+                      <td>{formatearFecha(movimiento.fecha)}</td>
+                      <td>{movimiento.tipoMovimiento}</td>
+                      <td>{movimiento.categoriaNormalizada || movimiento.categoria || '--'}</td>
+                      <td>{movimiento.producto || '--'}</td>
+                      <td>{problemas.join(', ')}</td>
+                      <td>
+                        <button className="boton-secundario compacto" type="button" onClick={() => abrirEdicion(movimiento)}>
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <TablaDinamica
           titulo={tipoActivo === 'Todos' ? 'Todos los movimientos' : `Movimientos: ${tipoActivo}`}

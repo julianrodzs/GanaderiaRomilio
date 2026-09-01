@@ -27,6 +27,7 @@ const movimientoFinancieroSchema = new Schema(
         factorUnidad: { type: Number, min: 0 },
         cantidadFisica: { type: Number, min: 0 },
         precioUnitario: { type: Number, min: 0 },
+        precioUnitarioFisico: { type: Number, min: 0 },
         periodoInicio: { type: Date },
         periodoFin: { type: Date },
         tipoTrabajo: { type: String, trim: true },
@@ -36,6 +37,7 @@ const movimientoFinancieroSchema = new Schema(
         costoUnitario: { type: Number, min: 0 },
         tipoInversion: { type: String, trim: true },
         activoAsociado: { type: String, trim: true },
+        destinoUso: { type: String, trim: true },
         depreciable: { type: Boolean, default: false },
         vidaUtilMeses: { type: Number, min: 0 },
         fechaInicioUso: { type: Date },
@@ -72,6 +74,7 @@ movimientoFinancieroSchema.pre('validate', function normalizarMovimiento(next) {
     this.unidadNormalizada = normalizado.unidadNormalizada;
     this.factorUnidad = normalizado.factorUnidad;
     this.cantidadFisica = normalizado.cantidadFisica;
+    this.precioUnitarioFisico = normalizado.precioUnitarioFisico;
 
     next();
 });
@@ -87,6 +90,7 @@ movimientoFinancieroSchema.pre('findOneAndUpdate', function normalizarMovimiento
     const normalizado = normalizarMovimientoFinanciero(datos);
     const cambiaCategoria = ['categoria', 'producto', 'descripcion', 'tipoMovimiento'].some((campo) => Object.prototype.hasOwnProperty.call(datos, campo));
     const cambiaUnidad = ['unidad', 'cantidad'].some((campo) => Object.prototype.hasOwnProperty.call(datos, campo));
+    const cambiaPrecioFisico = ['unidad', 'cantidad', 'monto'].some((campo) => Object.prototype.hasOwnProperty.call(datos, campo));
     const camposNormalizados = {};
 
     if (cambiaCategoria) {
@@ -97,6 +101,10 @@ movimientoFinancieroSchema.pre('findOneAndUpdate', function normalizarMovimiento
         camposNormalizados.unidadNormalizada = normalizado.unidadNormalizada;
         camposNormalizados.factorUnidad = normalizado.factorUnidad;
         camposNormalizados.cantidadFisica = normalizado.cantidadFisica;
+    }
+
+    if (cambiaPrecioFisico) {
+        camposNormalizados.precioUnitarioFisico = normalizado.precioUnitarioFisico;
     }
 
     if (!Object.keys(camposNormalizados).length) {
@@ -122,6 +130,7 @@ movimientoFinancieroSchema.index({ categoria: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ categoriaNormalizada: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ producto: 1, unidad: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ producto: 1, unidadNormalizada: 1, fecha: -1 });
+movimientoFinancieroSchema.index({ destinoUso: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ tipoMovimiento: 1, tipoTrabajo: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ tipoMovimiento: 1, tipoInversion: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ referenciaModelo: 1, referenciaId: 1 });

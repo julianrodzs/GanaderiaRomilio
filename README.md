@@ -250,7 +250,7 @@ Fechas calculadas desde la inseminacion:
 - desparasitar antes del parto: parto estimado -30 dias.
 - alimento de lactancia: parto estimado -15 dias.
 - destete estimado: parto +31 dias.
-- nueva inseminacion/monta: destete +21 dias.
+- nueva inseminacion/monta: destete +5 dias.
 - revisar celo posterior: nueva inseminacion +21 dias.
 
 Al crear o actualizar un ciclo porcino se generan tareas automaticas para la chancha. Las tareas de crias ahora nacen desde la camada, no desde el parto estimado, para que dependan de nacimientos reales.
@@ -357,21 +357,65 @@ Permite clasificar por naturaleza:
 Estado actual de estandarizacion:
 
 - Conserva los textos originales de categoria, unidad, descripcion y observaciones.
-- Calcula `categoriaNormalizada` para reportes.
-- Calcula `unidadNormalizada`, `factorUnidad` y `cantidadFisica` para reportes de productos e insumos.
+- Calcula `categoriaNormalizada` como version limpia de `categoria`, sin inferir por producto o descripcion.
+- Calcula `unidadNormalizada`, `factorUnidad`, `cantidadFisica` y `precioUnitarioFisico` para reportes de productos e insumos.
 - Soporta `producto`, `cantidad`, `unidad`, `precioUnitario` y proveedor.
+- Soporta `destinoUso` opcional para indicar para que se uso el gasto, por ejemplo `Potrero`, `Tractor` o `Sanidad`.
+- Incluye catalogos financieros consultables en `GET /api/finanzas/catalogos`.
+- Las categorias financieras y destinos de uso son administrables desde Finanzas.
+- Los catalogos usados por movimientos historicos no se eliminan; se pueden desactivar o renombrar con migracion controlada.
+- El catalogo administrativo muestra usos por valor para decidir si se puede eliminar o solo desactivar.
+- En el formulario, `categoria` y `destinoUso` se eligen desde lista cerrada para evitar variaciones de escritura.
+- La pantalla de Finanzas muestra resumen por destino de uso y una revision de movimientos incompletos del periodo visible.
+- Los campos financieros de texto libre se guardan en mayusculas desde la interfaz.
 - Las compras y ventas de animales generan movimientos financieros referenciados.
 - Las compras/ventas separan bovinos y porcinos en el producto financiero.
 
 Pendiente principal:
 
-- cerrar catalogos oficiales de categorias, unidades, tipos de trabajo, tipos de inversion y destinos de uso con el cliente.
+- cerrar catalogos oficiales definitivos de unidades, tipos de trabajo, tipos de inversion y metodos de pago con el cliente.
 - permitir correccion manual de categorias normalizadas.
 - migrar movimientos viejos incompletos.
 - decidir conversiones de unidades, por ejemplo galones a litros.
 - asociar gastos porcinos a camada y gastos bovinos a animal, potrero o tarea cuando aplique.
 
 El modelo `Costo` queda por compatibilidad.
+
+#### Catalogos financieros administrables
+
+Modelo:
+
+```txt
+CatalogoFinanciero
+```
+
+Campos principales:
+
+- `tipo`: `categoria` o `destinoUso`.
+- `nombre`: valor visible para el usuario.
+- `nombreNormalizado`: version interna para evitar duplicados.
+- `activo`: define si aparece en formularios.
+- `protegido`: marca valores base del sistema.
+
+Rutas:
+
+```txt
+GET    /api/finanzas/catalogos
+GET    /api/finanzas/catalogos/admin
+POST   /api/finanzas/catalogos
+PUT    /api/finanzas/catalogos/:id
+PATCH  /api/finanzas/catalogos/:id/desactivar
+PATCH  /api/finanzas/catalogos/:id/activar
+DELETE /api/finanzas/catalogos/:id
+```
+
+Reglas:
+
+- `GET /api/finanzas/catalogos` devuelve solo valores activos para formularios.
+- `GET /api/finanzas/catalogos/admin` devuelve activos, inactivos, conteo de usos y si puede eliminarse.
+- Si tiene usos, no se elimina; se desactiva.
+- Si se renombra y tiene usos, el administrador decide si actualiza tambien movimientos historicos.
+- Si no tiene usos, se puede eliminar.
 
 ### Compras de animales
 

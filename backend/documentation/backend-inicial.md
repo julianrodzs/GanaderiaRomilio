@@ -446,7 +446,7 @@ Reglas base:
 - desparasitar antes del parto: 30 dias antes.
 - alimento lactancia: 15 dias antes.
 - destete post parto: 31 dias.
-- nueva monta post destete: 21 dias.
+- nueva monta post destete: 5 dias.
 - revision de celo posterior: 21 dias.
 
 Al crear o actualizar un registro porcino se generan tareas automaticas para la chancha mediante:
@@ -605,6 +605,8 @@ Endpoints:
 | GET | `/` | Lista movimientos |
 | POST | `/` | Crea movimiento |
 | GET | `/resumen` | Resumen financiero |
+| GET | `/destinos-resumen` | Resumen por destino de uso |
+| GET | `/revision-datos` | Revision de movimientos incompletos |
 | GET | `/tipo/:tipoMovimiento` | Filtra por tipo |
 | PUT | `/:id` | Actualiza movimiento |
 | DELETE | `/:id` | Elimina movimiento |
@@ -634,6 +636,7 @@ Naturaleza:
   - `unidadNormalizada`
   - `factorUnidad`
   - `cantidadFisica`
+  - `precioUnitarioFisico`
 - Se agregaron campos operativos para compras de productos:
   - `producto`
   - `cantidad`
@@ -649,6 +652,7 @@ Naturaleza:
 - Se agregaron campos para inversiones:
   - `tipoInversion`
   - `activoAsociado`
+  - `destinoUso`
   - `depreciable`
   - `vidaUtilMeses`
   - `fechaInicioUso`
@@ -662,11 +666,116 @@ Servicio principal:
 backend/services/normalizacionFinanciera-service.js
 ```
 
+Catalogos financieros:
+
+```txt
+backend/config/catalogosFinancieros.js
+frontend/src/constants/catalogosFinancieros.js
+backend/models/CatalogoFinanciero.js
+```
+
+Los catalogos base siguen en codigo como valores iniciales, pero las categorias financieras y los destinos de uso ya son administrables desde Finanzas.
+
+El backend sincroniza los valores base hacia `CatalogoFinanciero` cuando se consultan por primera vez.
+
+Modelo `CatalogoFinanciero`:
+
+```js
+tipo: 'categoria' | 'destinoUso'
+nombre: String
+nombreNormalizado: String
+activo: Boolean
+protegido: Boolean
+descripcion: String
+timestamps
+```
+
+Indice:
+
+```js
+{ tipo: 1, nombreNormalizado: 1 } unique
+```
+
+Este indice evita duplicados aunque el usuario escriba con diferencias de mayusculas, espacios o acentos.
+
+Catalogos editables:
+
+- categorias financieras.
+- destinos de uso.
+
+Catalogos base aun no administrables:
+
+- tipos de movimiento.
+- naturalezas.
+- unidades.
+- tipos de trabajo.
+- tipos de inversion.
+- estados de activo.
+- metodos de pago.
+- monedas.
+
+Endpoint de consulta:
+
+```txt
+GET /api/finanzas/catalogos
+```
+
+Endpoints administrativos:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/api/finanzas/catalogos/admin` | Lista categorias y destinos con estado y usos |
+| POST | `/api/finanzas/catalogos` | Crea una categoria o destino |
+| PUT | `/api/finanzas/catalogos/:id` | Renombra o actualiza un catalogo |
+| PATCH | `/api/finanzas/catalogos/:id/desactivar` | Desactiva un catalogo para nuevos movimientos |
+| PATCH | `/api/finanzas/catalogos/:id/activar` | Reactiva un catalogo |
+| DELETE | `/api/finanzas/catalogos/:id` | Elimina solo si no tiene movimientos asociados |
+
+Reglas de seguridad de datos:
+
+- Si un catalogo tiene movimientos asociados, no se elimina; se desactiva.
+- Al renombrar, el usuario decide si tambien actualiza los movimientos historicos.
+- Los valores inactivos no aparecen para movimientos nuevos, pero los registros viejos conservan trazabilidad.
+
+Conteo de usos:
+
+- Para categorias, el backend cuenta movimientos donde `categoria` o `categoriaNormalizada` coincidan con el nombre del catalogo.
+- Para destinos, cuenta movimientos donde `destinoUso` coincida.
+
+Acciones disponibles desde frontend:
+
+- `Agregar`: crea un nuevo valor activo.
+- `Renombrar`: cambia el nombre del catalogo. Si tiene usos, pregunta si actualiza tambien los movimientos existentes.
+- `Desactivar`: oculta el valor para nuevos movimientos, sin tocar movimientos historicos.
+- `Activar`: vuelve a mostrar un valor inactivo.
+- `Eliminar`: solo se permite si `usos = 0`.
+
+Flujo recomendado:
+
+```txt
+Si el valor esta mal escrito y ya fue usado:
+  Renombrar + actualizar movimientos existentes.
+
+Si el valor ya no se quiere usar pero existe historial:
+  Desactivar.
+
+Si el valor fue creado por error y nunca se uso:
+  Eliminar.
+```
+
+El formulario de movimientos financieros usa estos catalogos de dos formas:
+
+- `categoria` y `destinoUso` se eligen desde lista cerrada para evitar variaciones de escritura.
+- los demas campos de texto libre se convierten a mayusculas desde la interfaz.
+
+El backend se mantiene flexible para no romper importaciones historicas o movimientos ya existentes.
+
 Responsabilidades:
 
-- inferir `categoriaNormalizada` desde `categoria`, `producto`, `descripcion` y `tipoMovimiento`.
+- calcular `categoriaNormalizada` como version limpia/canonica de `categoria`, sin inferir por producto o descripcion.
 - normalizar unidades fisicas.
 - calcular cantidades fisicas para reportes de consumo.
+- calcular `precioUnitarioFisico` cuando existen `monto`, `cantidad` y `unidad`.
 
 Ejemplos:
 
@@ -675,6 +784,7 @@ cantidad=1, unidad=70 L
 unidadNormalizada=L
 factorUnidad=70
 cantidadFisica=70
+precioUnitarioFisico=monto / 70
 ```
 
 ```txt
@@ -682,10 +792,11 @@ cantidad=3, unidad=2 KG
 unidadNormalizada=KG
 factorUnidad=2
 cantidadFisica=6
+precioUnitarioFisico=monto / 6
 ```
 
 ```txt
-producto=GASOLINA REGULAR
+categoria=combustible
 categoriaNormalizada=Combustible
 ```
 
@@ -697,7 +808,7 @@ La normalizacion se ejecuta:
 - al crear movimientos automaticos desde compras de animales.
 - al crear movimientos automaticos desde ventas de animales.
 
-Si una categoria no se puede inferir, queda como `Otros` o conserva la categoria escrita segun el caso.
+Si una categoria no coincide con el catalogo base, se conserva la categoria escrita. Si viene vacia, queda como `Otros`.
 
 Categorias normalizadas iniciales:
 
@@ -733,9 +844,19 @@ Unidades normalizadas iniciales:
 Los reportes de productos e insumos usan los campos normalizados:
 
 - `categoriaNormalizada`
+- `destinoUso`
 - `unidadNormalizada`
 - `factorUnidad`
 - `cantidadFisica`
+
+El reporte de destinos usa `destinoUso` si existe. Si viene vacio, clasifica como `Otro`; no infiere destino desde producto o descripcion.
+
+La pantalla de Finanzas tambien muestra:
+
+- resumen por destino de uso del periodo visible.
+- revision de movimientos sin destino, con categoria `General`/`Otros`, compras sin producto y compras sin cantidad o unidad.
+
+Estos indicadores son de limpieza operativa: ayudan a detectar que registros conviene corregir antes de sacar reportes mas formales.
 
 Endpoints:
 
@@ -752,10 +873,10 @@ Endpoints:
 
 #### Pendiente por estandarizar en Finanzas
 
-- Definir catalogos cerrados para `categoriaNormalizada`, `tipoTrabajo`, `tipoInversion`, `unidadNormalizada` y `destinoUso`.
-- Decidir si el usuario podra elegir categoria normalizada manualmente o si siempre sera inferida.
-- Crear mantenimiento de catalogos desde frontend, para no depender de listas quemadas en codigo.
-- Migrar movimientos viejos que quedaron sin `producto`, `cantidad`, `unidadNormalizada` o `cantidadFisica`.
+- Validar con el cliente el catalogo definitivo de categorias, unidades, tipos de trabajo, tipos de inversion y destinos de uso.
+- Decidir si `categoriaNormalizada` se mantiene como calculo interno o si se expone como campo editable para correcciones contables.
+- Crear mantenimiento de catalogos desde frontend, para no depender de listas base en codigo.
+- Migrar movimientos viejos que quedaron sin `producto`, `cantidad`, `unidadNormalizada`, `cantidadFisica` o `precioUnitarioFisico`.
 - Revisar movimientos importados como `General` para reclasificarlos manualmente o con reglas nuevas.
 - Asociar gastos porcinos directamente a camada cuando aplique, no solo por texto.
 - Asociar gastos bovinos a animal, potrero o tarea cuando aplique.

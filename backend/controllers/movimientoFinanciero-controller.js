@@ -66,6 +66,14 @@ const construirFiltroFecha = ({ fechaInicio, fechaFin } = {}) => {
     return filtro;
 };
 
+const campoVacio = (campo) => ({
+    $or: [
+        { [campo]: { $exists: false } },
+        { [campo]: null },
+        { [campo]: '' }
+    ]
+});
+
 movimientoFinancieroCtrl.getMovimientos = async (req, res) => {
     try {
         const movimientos = await poblarReferencias(
@@ -183,6 +191,173 @@ movimientoFinancieroCtrl.getMovimientosPorTipo = async (req, res) => {
     }
 };
 
+movimientoFinancieroCtrl.getResumenDestinos = async (req, res) => {
+    try {
+        const filtro = construirFiltroFecha(req.query);
+        const destinos = await MovimientoFinanciero.aggregate([
+            { $match: filtro },
+            {
+                $addFields: {
+                    destinoCalculado: {
+                        $cond: [
+                            {
+                                $or: [
+                                    { $eq: ['$destinoUso', null] },
+                                    { $eq: ['$destinoUso', ''] }
+                                ]
+                            },
+                            'Sin destino',
+                            '$destinoUso'
+                        ]
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        destinoUso: '$destinoCalculado',
+                        moneda: { $ifNull: ['$moneda', 'CRC'] }
+                    },
+                    total: { $sum: '$monto' },
+                    registros: { $sum: 1 },
+                    productos: { $addToSet: '$producto' }
+                }
+            },
+            {
+                $group: {
+                    _id: '$_id.destinoUso',
+                    totales: {
+                        $push: {
+                            moneda: '$_id.moneda',
+                            total: '$total'
+                        }
+                    },
+                    registros: { $sum: '$registros' },
+                    productos: { $push: '$productos' }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    destinoUso: '$_id',
+                    registros: 1,
+                    totales: 1,
+                    productos: {
+                        $slice: [
+                            {
+                                $reduce: {
+                                    input: '$productos',
+                                    initialValue: [],
+                                    in: { $setUnion: ['$$value', '$$this'] }
+                                }
+                            },
+                            5
+                        ]
+                    }
+                }
+            },
+            { $sort: { registros: -1 } }
+        ]);
+
+        res.json(destinos);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener resumen por destino de uso', error: error.message });
+    }
+};
+
+movimientoFinancieroCtrl.getRevisionDatos = async (req, res) => {
+    try {
+        const filtro = construirFiltroFecha(req.query);
+        const baseCompra = { ...filtro, tipoMovimiento: 'Compra' };
+        const consultas = {
+            sinDestinoUso: { ...filtro, ...campoVacio('destinoUso') },
+            categoriaGeneralOtros: {
+                ...filtro,
+                $or: [
+                    { categoria: { $in: ['General', 'Otros'] } },
+                    { categoriaNormalizada: { $in: ['General', 'Otros'] } }
+                ]
+            },
+            comprasSinProducto: { ...baseCompra, ...campoVacio('producto') },
+            comprasSinCantidadUnidad: {
+                ...baseCompra,
+                $or: [
+                    { cantidad: { $exists: false } },
+                    { cantidad: null },
+                    { cantidad: 0 },
+                    { unidad: { $exists: false } },
+                    { unidad: null },
+                    { unidad: '' }
+                ]
+            },
+            sinProveedor: { ...filtro, ...campoVacio('proveedor') },
+            sinPrecioFisico: {
+                ...baseCompra,
+                cantidad: { $gt: 0 },
+                unidad: { $exists: true, $nin: [null, ''] },
+                $or: [
+                    { precioUnitarioFisico: { $exists: false } },
+                    { precioUnitarioFisico: null },
+                    { precioUnitarioFisico: 0 }
+                ]
+            }
+        };
+
+        const camposMuestra = 'fecha tipoMovimiento categoria categoriaNormalizada producto cantidad unidad monto moneda proveedor destinoUso descripcion';
+        const [
+            total,
+            sinDestinoUso,
+            categoriaGeneralOtros,
+            comprasSinProducto,
+            comprasSinCantidadUnidad,
+            sinProveedor,
+            sinPrecioFisico,
+            muestras
+        ] = await Promise.all([
+            MovimientoFinanciero.countDocuments(filtro),
+            MovimientoFinanciero.countDocuments(consultas.sinDestinoUso),
+            MovimientoFinanciero.countDocuments(consultas.categoriaGeneralOtros),
+            MovimientoFinanciero.countDocuments(consultas.comprasSinProducto),
+            MovimientoFinanciero.countDocuments(consultas.comprasSinCantidadUnidad),
+            MovimientoFinanciero.countDocuments(consultas.sinProveedor),
+            MovimientoFinanciero.countDocuments(consultas.sinPrecioFisico),
+            MovimientoFinanciero.find({
+                ...filtro,
+                $or: [
+                    ...consultas.sinDestinoUso.$or,
+                    { categoria: { $in: ['General', 'Otros'] } },
+                    { categoriaNormalizada: { $in: ['General', 'Otros'] } },
+                    { producto: { $exists: false } },
+                    { producto: null },
+                    { producto: '' },
+                    { proveedor: { $exists: false } },
+                    { proveedor: null },
+                    { proveedor: '' }
+                ]
+            })
+                .sort({ fecha: -1 })
+                .limit(10)
+                .select(camposMuestra)
+                .lean()
+        ]);
+
+        res.json({
+            total,
+            resumen: {
+                sinDestinoUso,
+                categoriaGeneralOtros,
+                comprasSinProducto,
+                comprasSinCantidadUnidad,
+                sinProveedor,
+                sinPrecioFisico
+            },
+            muestras
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al revisar calidad de datos financieros', error: error.message });
+    }
+};
+
 movimientoFinancieroCtrl.getResumenConsumo = async (req, res) => {
     try {
         const { fechaInicio, fechaFin, categoria, producto, unidad } = req.query;
@@ -229,7 +404,7 @@ movimientoFinancieroCtrl.getResumenConsumo = async (req, res) => {
                         unidad: { $ifNull: ['$unidadNormalizada', '$unidad'] },
                         categoria: { $ifNull: ['$categoriaNormalizada', '$categoria'] }
                     },
-                    cantidadTotal: { $sum: '$cantidad' },
+                    cantidadTotal: { $sum: { $ifNull: ['$cantidadFisica', '$cantidad'] } },
                     montoTotal: { $sum: '$monto' },
                     registros: { $sum: 1 },
                     primeraCompra: { $min: '$fecha' },

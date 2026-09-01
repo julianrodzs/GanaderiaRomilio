@@ -168,38 +168,11 @@ const agregarCantidadProductoPipeline = [
 ];
 
 const pipelineDestinoUso = {
-    $let: {
-        vars: {
-            texto: {
-                $toLower: {
-                    $concat: [
-                        { $ifNull: ['$producto', ''] },
-                        ' ',
-                        { $ifNull: ['$categoria', ''] },
-                        ' ',
-                        { $ifNull: ['$descripcion', ''] },
-                        ' ',
-                        { $ifNull: ['$tipoTrabajo', ''] },
-                        ' ',
-                        { $ifNull: ['$observaciones', ''] }
-                    ]
-                }
-            }
-        },
-        in: {
-            $switch: {
-                branches: [
-                    { case: { $regexMatch: { input: '$$texto', regex: /chapia/ } }, then: 'Chapia' },
-                    { case: { $regexMatch: { input: '$$texto', regex: /tractor|gasolina|diesel|diésel|combustible/ } }, then: 'Tractor' },
-                    { case: { $regexMatch: { input: '$$texto', regex: /sanidad|vacuna|desparasit|medicamento|garrapata/ } }, then: 'Sanidad' },
-                    { case: { $regexMatch: { input: '$$texto', regex: /potrero|cerca|port[oó]n/ } }, then: 'Potrero' },
-                    { case: { $regexMatch: { input: '$$texto', regex: /manten|repar|aceite|repuesto/ } }, then: 'Mantenimiento' },
-                    { case: { $regexMatch: { input: '$$texto', regex: /alimento|sal|melaza|concentrado|pasto/ } }, then: 'Alimentación' }
-                ],
-                default: 'Otro'
-            }
-        }
-    }
+    $cond: [
+        { $not: [{ $in: ['$destinoUso', [null, '']] }] },
+        '$destinoUso',
+        'Otro'
+    ]
 };
 
 const agruparPorCampo = async (Modelo, campo, filtro = {}) => {
@@ -1262,8 +1235,7 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
             ...crearFiltroProductos(req.query),
             $or: [
                 { categoria: { $regex: 'combustible', $options: 'i' } },
-                { categoriaNormalizada: { $regex: 'combustible', $options: 'i' } },
-                { producto: { $regex: 'gasolina|di[eé]sel|diesel', $options: 'i' } }
+                { categoriaNormalizada: { $regex: 'combustible', $options: 'i' } }
             ]
         };
 

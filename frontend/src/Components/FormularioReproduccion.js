@@ -132,8 +132,8 @@ const FormularioReproduccion = ({
     desparasitar: restarDiasInput(sumarDiasInput(fechaBasePorcina, 118), 30),
     lactancia: restarDiasInput(sumarDiasInput(fechaBasePorcina, 118), 15),
     destete: sumarDiasInput(sumarDiasInput(fechaBasePorcina, 118), 31),
-    nuevaInseminacion: sumarDiasInput(sumarDiasInput(sumarDiasInput(fechaBasePorcina, 118), 31), 21),
-    revisionPosterior: sumarDiasInput(sumarDiasInput(sumarDiasInput(sumarDiasInput(fechaBasePorcina, 118), 31), 21), 21)
+    nuevaInseminacion: sumarDiasInput(sumarDiasInput(sumarDiasInput(fechaBasePorcina, 118), 31), 5),
+    revisionPosterior: sumarDiasInput(sumarDiasInput(sumarDiasInput(sumarDiasInput(fechaBasePorcina, 118), 31), 5), 21)
   } : null;
 
   const actualizarCampo = (evento) => {

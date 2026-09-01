@@ -5,7 +5,7 @@ const reproduccionPorcinaConfig = {
     diasDesparasitacionAntesParto: 30,
     diasAlimentoLactanciaAntesParto: 15,
     diasDestetePostParto: 31,
-    diasNuevaMontaPostDestete: 21,
+    diasNuevaMontaPostDestete: 5,
     diasRevisionCeloPostNuevaMonta: 21,
 
     criasQueSeQuedan: {

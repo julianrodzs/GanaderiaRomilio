@@ -495,6 +495,45 @@ export const obtenerMovimientosFinancieros = () => request('/finanzas');
 
 export const obtenerResumenFinanciero = () => request('/finanzas/resumen');
 
+export const obtenerCatalogosFinancieros = () => request('/finanzas/catalogos');
+
+export const obtenerCatalogosFinancierosAdmin = (tipo) => {
+  const query = tipo ? `?tipo=${encodeURIComponent(tipo)}` : '';
+  return request(`/finanzas/catalogos/admin${query}`);
+};
+
+export const crearCatalogoFinanciero = (catalogo) => {
+  return request('/finanzas/catalogos', {
+    method: 'POST',
+    body: JSON.stringify(catalogo)
+  });
+};
+
+export const actualizarCatalogoFinanciero = (id, catalogo) => {
+  return request(`/finanzas/catalogos/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(catalogo)
+  });
+};
+
+export const desactivarCatalogoFinanciero = (id) => {
+  return request(`/finanzas/catalogos/${id}/desactivar`, {
+    method: 'PATCH'
+  });
+};
+
+export const activarCatalogoFinanciero = (id) => {
+  return request(`/finanzas/catalogos/${id}/activar`, {
+    method: 'PATCH'
+  });
+};
+
+export const eliminarCatalogoFinanciero = (id) => {
+  return request(`/finanzas/catalogos/${id}`, {
+    method: 'DELETE'
+  });
+};
+
 export const obtenerResumenConsumoFinanciero = (filtros = {}) => {
   const params = new URLSearchParams();
   Object.entries(filtros).forEach(([clave, valor]) => {
@@ -520,6 +559,24 @@ export const obtenerResumenInversionesFinancieras = (filtros = {}) => {
   });
   const query = params.toString();
   return request(`/finanzas/inversiones-resumen${query ? `?${query}` : ''}`);
+};
+
+export const obtenerResumenDestinosFinancieros = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/finanzas/destinos-resumen${query ? `?${query}` : ''}`);
+};
+
+export const obtenerRevisionDatosFinancieros = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/finanzas/revision-datos${query ? `?${query}` : ''}`);
 };
 
 export const obtenerMovimientosPorTipo = (tipoMovimiento) => request(`/finanzas/tipo/${tipoMovimiento}`);

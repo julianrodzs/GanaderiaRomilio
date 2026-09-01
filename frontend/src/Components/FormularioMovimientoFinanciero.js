@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { catalogosFinancierosBase } from '../constants/catalogosFinancieros';
+import { obtenerCatalogosFinancieros } from '../services/api';
 
 const estadoInicial = {
   fecha: new Date().toISOString().slice(0, 10),
@@ -19,6 +21,7 @@ const estadoInicial = {
   costoUnitario: '',
   tipoInversion: '',
   activoAsociado: '',
+  destinoUso: '',
   depreciable: false,
   vidaUtilMeses: '',
   fechaInicioUso: '',
@@ -40,6 +43,13 @@ const formatearFechaInput = (fecha) => {
   return new Date(fecha).toISOString().slice(0, 10);
 };
 
+const numeroFormulario = (valor, decimales = 2) => {
+  if (valor === '' || valor === null || valor === undefined) return '';
+  const numero = Number(valor);
+  if (!Number.isFinite(numero)) return valor;
+  return Number(numero.toFixed(decimales));
+};
+
 const normalizarMovimiento = (movimiento) => ({
   ...estadoInicial,
   ...movimiento,
@@ -48,7 +58,7 @@ const normalizarMovimiento = (movimiento) => ({
   periodoFin: formatearFechaInput(movimiento?.periodoFin),
   fechaInicioUso: formatearFechaInput(movimiento?.fechaInicioUso),
   cantidad: movimiento?.cantidad ?? '',
-  precioUnitario: movimiento?.precioUnitario ?? '',
+  precioUnitario: numeroFormulario(movimiento?.precioUnitario),
   cantidadPersonas: movimiento?.cantidadPersonas ?? '',
   diasTrabajados: movimiento?.diasTrabajados ?? '',
   horasTrabajadas: movimiento?.horasTrabajadas ?? '',
@@ -62,6 +72,35 @@ const normalizarMovimiento = (movimiento) => ({
 
 const numeroONulo = (valor) => (valor === '' || valor === null || valor === undefined ? null : Number(valor));
 
+const camposTextoMayuscula = new Set([
+  'descripcion',
+  'producto',
+  'unidad',
+  'tipoTrabajo',
+  'tipoInversion',
+  'activoAsociado',
+  'estadoActivo',
+  'proveedor',
+  'empleado',
+  'finca',
+  'metodoPago',
+  'comprobante',
+  'observaciones'
+]);
+
+const mayusculas = (valor) => String(valor || '').toUpperCase();
+
+const opcionesConValorActual = (opciones = [], valorActual) => {
+  if (!valorActual || opciones.includes(valorActual)) return opciones;
+  return [...opciones, valorActual];
+};
+
+const OpcionesDatalist = ({ id, opciones = [] }) => (
+  <datalist id={id}>
+    {opciones.map((opcion) => <option key={opcion} value={opcion} />)}
+  </datalist>
+);
+
 const FormularioMovimientoFinanciero = ({
   movimientoInicial,
   modo = 'crear',
@@ -71,10 +110,28 @@ const FormularioMovimientoFinanciero = ({
   error
 }) => {
   const [formulario, setFormulario] = useState(() => normalizarMovimiento(movimientoInicial));
+  const [catalogos, setCatalogos] = useState(catalogosFinancierosBase);
+
+  useEffect(() => {
+    let activo = true;
+
+    obtenerCatalogosFinancieros()
+      .then((datos) => {
+        if (activo) setCatalogos({ ...catalogosFinancierosBase, ...datos });
+      })
+      .catch(() => {
+        if (activo) setCatalogos(catalogosFinancierosBase);
+      });
+
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   const actualizarCampo = (evento) => {
     const { name, value, type, checked } = evento.target;
-    setFormulario((actual) => ({ ...actual, [name]: type === 'checkbox' ? checked : value }));
+    const valor = camposTextoMayuscula.has(name) ? mayusculas(value) : value;
+    setFormulario((actual) => ({ ...actual, [name]: type === 'checkbox' ? checked : valor }));
   };
 
   const enviarFormulario = (evento) => {
@@ -94,6 +151,9 @@ const FormularioMovimientoFinanciero = ({
       monto: Number(formulario.monto)
     });
   };
+
+  const categorias = opcionesConValorActual(catalogos.categorias, formulario.categoria);
+  const destinosUso = opcionesConValorActual(catalogos.destinosUso, formulario.destinoUso);
 
   return (
     <section className="form-page">
@@ -117,9 +177,9 @@ const FormularioMovimientoFinanciero = ({
           <label>
             Tipo
             <select name="tipoMovimiento" value={formulario.tipoMovimiento} onChange={actualizarCampo} required>
-              <option value="Planilla">Planilla</option>
-              <option value="Inversion">Inversion</option>
-              <option value="Compra">Compra</option>
+              {(catalogos.tiposMovimiento || catalogosFinancierosBase.tiposMovimiento)
+                .filter((tipo) => ['Planilla', 'Inversion', 'Compra'].includes(tipo))
+                .map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
             </select>
           </label>
         </div>
@@ -128,14 +188,20 @@ const FormularioMovimientoFinanciero = ({
           <label>
             Naturaleza
             <select name="naturaleza" value={formulario.naturaleza} onChange={actualizarCampo} required>
-              <option value="Egreso">Egreso</option>
-              <option value="Ingreso">Ingreso</option>
+              {(catalogos.naturalezas || catalogosFinancierosBase.naturalezas).map((naturaleza) => (
+                <option key={naturaleza} value={naturaleza}>{naturaleza}</option>
+              ))}
             </select>
           </label>
 
           <label>
             Categoria
-            <input name="categoria" value={formulario.categoria} onChange={actualizarCampo} required />
+            <select name="categoria" value={formulario.categoria} onChange={actualizarCampo} required>
+              <option value="">Seleccionar categoria</option>
+              {categorias.map((categoria) => (
+                <option key={categoria} value={categoria}>{categoria}</option>
+              ))}
+            </select>
           </label>
         </div>
 
@@ -152,7 +218,8 @@ const FormularioMovimientoFinanciero = ({
 
           <label>
             Unidad
-            <input name="unidad" value={formulario.unidad} onChange={actualizarCampo} placeholder="litros, sacos, unidades..." />
+            <input name="unidad" list="unidades-financieras" value={formulario.unidad} onChange={actualizarCampo} placeholder="litros, sacos, unidades..." />
+            <OpcionesDatalist id="unidades-financieras" opciones={catalogos.unidades} />
           </label>
         </div>
 
@@ -177,8 +244,9 @@ const FormularioMovimientoFinanciero = ({
           <label>
             Moneda
             <select name="moneda" value={formulario.moneda} onChange={actualizarCampo}>
-              <option value="CRC">CRC</option>
-              <option value="USD">USD</option>
+              {(catalogos.monedas || catalogosFinancierosBase.monedas).map((moneda) => (
+                <option key={moneda} value={moneda}>{moneda}</option>
+              ))}
             </select>
           </label>
         </div>
@@ -205,7 +273,8 @@ const FormularioMovimientoFinanciero = ({
             <div className="form-grid">
               <label>
                 Tipo de trabajo
-                <input name="tipoTrabajo" value={formulario.tipoTrabajo} onChange={actualizarCampo} placeholder="Chapia, cerca, mano de obra..." />
+                <input name="tipoTrabajo" list="tipos-trabajo-financieros" value={formulario.tipoTrabajo} onChange={actualizarCampo} placeholder="Chapia, cerca, mano de obra..." />
+                <OpcionesDatalist id="tipos-trabajo-financieros" opciones={catalogos.tiposTrabajo} />
               </label>
 
               <label>
@@ -243,7 +312,8 @@ const FormularioMovimientoFinanciero = ({
             <div className="form-grid">
               <label>
                 Tipo de inversion
-                <input name="tipoInversion" value={formulario.tipoInversion} onChange={actualizarCampo} placeholder="Ganado, finca, maquinaria..." />
+                <input name="tipoInversion" list="tipos-inversion-financieros" value={formulario.tipoInversion} onChange={actualizarCampo} placeholder="Ganado, finca, maquinaria..." />
+                <OpcionesDatalist id="tipos-inversion-financieros" opciones={catalogos.tiposInversion} />
               </label>
 
               <label>
@@ -260,7 +330,8 @@ const FormularioMovimientoFinanciero = ({
 
               <label>
                 Estado del activo
-                <input name="estadoActivo" value={formulario.estadoActivo} onChange={actualizarCampo} placeholder="En uso, pendiente, vendido..." />
+                <input name="estadoActivo" list="estados-activo-financieros" value={formulario.estadoActivo} onChange={actualizarCampo} placeholder="En uso, pendiente, vendido..." />
+                <OpcionesDatalist id="estados-activo-financieros" opciones={catalogos.estadosActivo} />
               </label>
             </div>
 
@@ -300,6 +371,16 @@ const FormularioMovimientoFinanciero = ({
           </label>
         </div>
 
+        <label>
+          Destino de uso
+          <select name="destinoUso" value={formulario.destinoUso} onChange={actualizarCampo}>
+            <option value="">Sin destino definido</option>
+            {destinosUso.map((destino) => (
+              <option key={destino} value={destino}>{destino}</option>
+            ))}
+          </select>
+        </label>
+
         <div className="form-grid">
           <label>
             Finca
@@ -308,7 +389,8 @@ const FormularioMovimientoFinanciero = ({
 
           <label>
             Metodo de pago
-            <input name="metodoPago" value={formulario.metodoPago} onChange={actualizarCampo} />
+            <input name="metodoPago" list="metodos-pago-financieros" value={formulario.metodoPago} onChange={actualizarCampo} />
+            <OpcionesDatalist id="metodos-pago-financieros" opciones={catalogos.metodosPago} />
           </label>
         </div>
 
