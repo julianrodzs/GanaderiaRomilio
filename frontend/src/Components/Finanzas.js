@@ -84,7 +84,7 @@ const columnas = [
   {
     id: 'categoria',
     label: 'Categoria',
-    accessor: (movimiento) => movimiento.categoriaNormalizada || movimiento.categoria,
+    accessor: (movimiento) => movimiento.categoria || movimiento.categoriaNormalizada,
     searchAccessor: (movimiento) => `${movimiento.categoriaNormalizada || ''} ${movimiento.categoria || ''}`
   },
   {
@@ -111,20 +111,22 @@ const columnas = [
     searchAccessor: (movimiento) => `${formatearMonto(movimiento)} ${movimiento.monto ?? ''}`
   },
   {
-    id: 'precioUnitario',
-    label: 'Precio unit.',
-    accessor: (movimiento) => movimiento.precioUnitario ? formatearNumero(movimiento.precioUnitario, movimiento.moneda || 'CRC') : '--',
-    sortAccessor: (movimiento) => movimiento.precioUnitario ?? null
-  },
-  { id: 'proveedor', label: 'Proveedor/Lugar', accessor: (movimiento) => movimiento.proveedor },
-  { id: 'observaciones', label: 'Observaciones', accessor: (movimiento) => movimiento.observaciones }
+    id: 'proveedor',
+    label: 'Proveedor/Lugar',
+    accessor: (movimiento) => movimiento.proveedor,
+    className: 'columna-proveedor-finanzas',
+    render: (movimiento) => (
+      <span title={movimiento.proveedor || '--'}>{movimiento.proveedor || '--'}</span>
+    )
+  }
 ];
 
 const filtros = [
   { id: 'naturaleza', accessor: (movimiento) => movimiento.naturaleza },
-  { id: 'categoria', accessor: (movimiento) => movimiento.categoriaNormalizada || movimiento.categoria },
+  { id: 'categoria', accessor: (movimiento) => movimiento.categoria || movimiento.categoriaNormalizada },
   { id: 'moneda', accessor: (movimiento) => movimiento.moneda || 'CRC' },
-  { id: 'proveedor', accessor: (movimiento) => movimiento.proveedor }
+  { id: 'proveedor', accessor: (movimiento) => movimiento.proveedor },
+  { id: 'destinoUso', accessor: (movimiento) => movimiento.destinoUso }
 ];
 
 const sumarPorTipoYMoneda = (movimientos) => {
@@ -162,7 +164,7 @@ const reglasRevisionFinanciera = [
   {
     id: 'categoriaGeneralOtros',
     label: 'Categoria general/otros',
-    evaluar: (movimiento) => ['General', 'Otros'].includes(movimiento.categoriaNormalizada || movimiento.categoria)
+    evaluar: (movimiento) => ['General', 'Otros'].includes(movimiento.categoria || movimiento.categoriaNormalizada)
   },
   {
     id: 'comprasSinProducto',
@@ -792,7 +794,7 @@ const Finanzas = () => {
                     <tr key={movimiento._id}>
                       <td>{formatearFecha(movimiento.fecha)}</td>
                       <td>{movimiento.tipoMovimiento}</td>
-                      <td>{movimiento.categoriaNormalizada || movimiento.categoria || '--'}</td>
+                      <td>{movimiento.categoria || movimiento.categoriaNormalizada || '--'}</td>
                       <td>{movimiento.producto || '--'}</td>
                       <td>{problemas.join(', ')}</td>
                       <td>

@@ -2300,13 +2300,16 @@
 }
 
 .tabla-dinamica th.columna-producto-finanzas,
-.tabla-dinamica td.columna-producto-finanzas {
+.tabla-dinamica td.columna-producto-finanzas,
+.tabla-dinamica th.columna-proveedor-finanzas,
+.tabla-dinamica td.columna-proveedor-finanzas {
   width: 220px;
   min-width: 220px;
   max-width: 220px;
 }
 
-.tabla-dinamica td.columna-producto-finanzas span {
+.tabla-dinamica td.columna-producto-finanzas span,
+.tabla-dinamica td.columna-proveedor-finanzas span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;

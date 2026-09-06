@@ -1,28 +1,28 @@
 const TIPOS_MOVIMIENTO_FINANCIERO = [
-    'Planilla',
-    'Inversion',
     'Compra',
-    'Venta de animales',
-    'Compra de animales'
+    'Compra de animales',
+    'Inversion',
+    'Planilla',
+    'Venta de animales'
 ];
 
-const NATURALEZAS_FINANCIERAS = ['Ingreso', 'Egreso'];
+const NATURALEZAS_FINANCIERAS = ['Egreso', 'Ingreso'];
 
 const CATEGORIAS_FINANCIERAS = [
     'Alimentación',
-    'Sanidad',
     'Combustible',
-    'Mano de obra',
-    'Potreros',
-    'Infraestructura',
-    'Herramientas',
-    'Maquinaria',
-    'Mantenimiento',
-    'Ganado',
-    'Porcinos',
-    'Ventas',
     'Compras de animales',
-    'Otros'
+    'Ganado',
+    'Herramientas',
+    'Infraestructura',
+    'Mano de obra',
+    'Mantenimiento',
+    'Maquinaria',
+    'Otros',
+    'Porcinos',
+    'Potreros',
+    'Sanidad',
+    'Ventas'
 ];
 
 const UNIDADES_FINANCIERAS = {
@@ -38,68 +38,68 @@ const UNIDADES_FINANCIERAS = {
 };
 
 const TIPOS_TRABAJO_FINANCIERO = [
-    'Chapia',
-    'Herbicida',
-    'Fertilización',
-    'Cerca',
-    'Corral',
-    'Mantenimiento',
-    'Limpieza',
     'Alimentación',
-    'Sanidad',
-    'Transporte',
+    'Cerca',
+    'Chapia',
+    'Corral',
+    'Fertilización',
+    'Herbicida',
+    'Limpieza',
+    'Mantenimiento',
     'Mano de obra general',
-    'Otro'
+    'Otro',
+    'Sanidad',
+    'Transporte'
 ];
 
 const TIPOS_INVERSION_FINANCIERA = [
-    'Ganado',
-    'Finca',
-    'Infraestructura',
     'Cercas',
     'Corrales',
-    'Maquinaria',
     'Equipo',
-    'Vehículo',
+    'Finca',
+    'Ganado',
+    'Infraestructura',
+    'Maquinaria',
     'Mejora de potrero',
-    'Otro'
+    'Otro',
+    'Vehículo'
 ];
 
 const DESTINOS_USO_FINANCIERO = [
-    'Chapia',
-    'Tractor',
-    'Galera',
-    'Cortadora',
-    'Cerca',
-    'Rancho',
-    'Aguas',
-    'Sanidad',
-    'Potrero',
-    'Mantenimiento',
-    'Alimentación',
-    'Camada',
-    'Animal',
-    'Finca',
     'Administración',
-    'Otro'
+    'Aguas',
+    'Alimentación',
+    'Animal',
+    'Camada',
+    'Cerca',
+    'Chapia',
+    'Cortadora',
+    'Finca',
+    'Galera',
+    'Mantenimiento',
+    'Otro',
+    'Potrero',
+    'Rancho',
+    'Sanidad',
+    'Tractor'
 ];
 
 const ESTADOS_ACTIVO_FINANCIERO = [
+    'En mantenimiento',
     'En uso',
     'Pendiente',
-    'En mantenimiento',
-    'Vendido',
-    'Retirado'
+    'Retirado',
+    'Vendido'
 ];
 
 const METODOS_PAGO_FINANCIERO = [
-    'Efectivo',
-    'Transferencia',
-    'SINPE',
-    'Tarjeta',
     'Cheque',
     'Crédito',
-    'Otro'
+    'Efectivo',
+    'Otro',
+    'SINPE',
+    'Tarjeta',
+    'Transferencia'
 ];
 
 const MONEDAS_FINANCIERAS = ['CRC', 'USD'];
