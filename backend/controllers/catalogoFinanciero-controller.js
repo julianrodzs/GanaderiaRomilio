@@ -22,29 +22,26 @@ const baseCatalogos = [
 ];
 
 const asegurarCatalogosBase = async () => {
-    await Promise.all(baseCatalogos.map((item) => CatalogoFinanciero.findOneAndUpdate(
-        { tipo: item.tipo, nombreNormalizado: normalizarTexto(item.nombre) },
-        {
-            $setOnInsert: {
-                tipo: item.tipo,
-                nombre: item.nombre,
-                nombreNormalizado: normalizarTexto(item.nombre),
-                activo: true,
-                protegido: true
-            }
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-    )));
+    const tipos = [...new Set(baseCatalogos.map((item) => item.tipo))];
+
+    await Promise.all(tipos.map(async (tipo) => {
+        const existeCatalogoDelTipo = await CatalogoFinanciero.exists({ tipo });
+        if (existeCatalogoDelTipo) return;
+
+        const catalogosDelTipo = baseCatalogos.filter((item) => item.tipo === tipo);
+        await CatalogoFinanciero.insertMany(catalogosDelTipo.map((item) => ({
+            tipo: item.tipo,
+            nombre: item.nombre,
+            nombreNormalizado: normalizarTexto(item.nombre),
+            activo: true,
+            protegido: true
+        })), { ordered: false });
+    }));
 };
 
 const filtroUsoPorCatalogo = (catalogo) => {
     if (catalogo.tipo === 'categoria') {
-        return {
-            $or: [
-                { categoria: catalogo.nombre },
-                { categoriaNormalizada: catalogo.nombre }
-            ]
-        };
+        return { categoria: catalogo.nombre };
     }
 
     return { destinoUso: catalogo.nombre };

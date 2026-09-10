@@ -65,10 +65,7 @@ const crearFiltroProductos = ({ fechaInicio, fechaFin, producto, categoria, prov
 
     if (producto) filtro.producto = { $regex: producto, $options: 'i' };
     if (categoria) {
-        filtro.$or = [
-            { categoria: { $regex: categoria, $options: 'i' } },
-            { categoriaNormalizada: { $regex: categoria, $options: 'i' } }
-        ];
+        filtro.categoria = { $regex: categoria, $options: 'i' };
     }
     if (proveedor) filtro.proveedor = { $regex: proveedor, $options: 'i' };
 
@@ -390,19 +387,7 @@ const crearRecomendacionesProductividad = ({
     return recomendaciones;
 };
 
-const categoriasInversion = ['ganado', 'animal', 'animales', 'novillo', 'novillos', 'vaca', 'vacas', 'toro', 'toros', 'ternero', 'terneros', 'finca', 'fincas', 'infraestructura', 'cerca', 'cercas', 'corral', 'corrales', 'maquinaria', 'inversion', 'inversión'];
-const categoriasOperativas = ['vacuna', 'vacunas', 'desparasitante', 'desparasitantes', 'sales', 'sal', 'medicamento', 'medicamentos', 'salario', 'salarios', 'mano de obra', 'combustible', 'mantenimiento', 'veterinario', 'sanidad', 'alimentacion', 'alimentación'];
-
-const contieneCategoria = (movimiento, palabras) => {
-    const texto = [
-        movimiento.tipoMovimiento,
-        movimiento.categoria,
-        movimiento.descripcion,
-        movimiento.observaciones
-    ].filter(Boolean).join(' ').toLowerCase();
-
-    return palabras.some((palabra) => texto.includes(palabra));
-};
+const categoriasInversion = new Set(['Ganado', 'Infraestructura', 'Maquinaria', 'Compra de animales']);
 
 const sumarMovimientos = (movimientos) => movimientos.reduce((total, movimiento) => total + (movimiento.monto || 0), 0);
 
@@ -419,7 +404,9 @@ const calcularValorAnimal = (animal) => {
 };
 
 const esMovimientoInversion = (movimiento) => {
-    return movimiento.tipoMovimiento === 'Inversion' || contieneCategoria(movimiento, categoriasInversion);
+    return movimiento.tipoMovimiento === 'Inversion'
+        || movimiento.tipoMovimiento === 'Compra de animales'
+        || categoriasInversion.has(movimiento.categoria);
 };
 
 const esMovimientoIngreso = (movimiento) => movimiento.naturaleza === 'Ingreso';
@@ -428,8 +415,7 @@ const esMovimientoGastoOperativo = (movimiento) => {
     if (movimiento.naturaleza !== 'Egreso') return false;
     if (esMovimientoInversion(movimiento)) return false;
     return movimiento.tipoMovimiento === 'Planilla'
-        || movimiento.tipoMovimiento === 'Compra'
-        || contieneCategoria(movimiento, categoriasOperativas);
+        || movimiento.tipoMovimiento === 'Compra';
 };
 
 reporteCtrl.getProductividadCria = async (req, res) => {
@@ -930,7 +916,8 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
 
         const filtroHembras = {
             sexo: 'Hembra',
-            estado: { $in: ['Activo', 'En tratamiento'] }
+            estado: { $in: ['Activo', 'En tratamiento'] },
+            ...crearFiltroEspecieAnimal('Bovino')
         };
 
         if (diio) {
@@ -944,7 +931,10 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
         const [hembras, registros, terneros] = await Promise.all([
             Animal.find(filtroHembras).lean(),
             RegistroReproductivo.find().lean(),
-            Animal.find({ madreDiio: { $exists: true, $ne: null } }).lean()
+            Animal.find({
+                madreDiio: { $exists: true, $ne: null },
+                ...crearFiltroEspecieAnimal('Bovino')
+            }).lean()
         ]);
         const registrosPorAnimal = registros.reduce((mapa, registro) => {
             const animalId = registro.animal?.toString();
@@ -1051,7 +1041,7 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                         cantidadTotal: { $sum: '$cantidadCompra' },
                         cantidadFisicaTotal: { $sum: '$cantidadFisica' },
                         montoTotal: { $sum: '$monto' },
-                        categoria: { $first: { $ifNull: ['$categoriaNormalizada', '$categoria'] } },
+                        categoria: { $first: '$categoria' },
                         unidadMedida: { $first: '$unidadNormalizada' },
                         unidadBase: { $first: '$unidadBase' }
                     }
@@ -1063,7 +1053,7 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 { $match: filtro },
                 {
                     $group: {
-                        _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
+                        _id: '$categoria',
                         cantidadRegistros: { $sum: 1 },
                         montoTotal: { $sum: '$monto' }
                     }
@@ -1088,7 +1078,7 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 { $match: filtro },
                 {
                     $group: {
-                        _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
+                        _id: '$categoria',
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -1142,7 +1132,7 @@ reporteCtrl.getProductosPorProducto = async (req, res) => {
                 $group: {
                     _id: {
                         producto: '$producto',
-                        categoria: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
+                        categoria: '$categoria',
                         unidadMedida: '$unidadNormalizada',
                         unidadBase: '$unidadBase'
                     },
@@ -1189,7 +1179,7 @@ reporteCtrl.getProductosPorCategoria = async (req, res) => {
             ...agregarCantidadProductoPipeline,
             {
                 $group: {
-                    _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
+                    _id: '$categoria',
                     cantidadTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' },
                     productosIncluidos: { $addToSet: '$producto' },
@@ -1233,10 +1223,7 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
     try {
         const filtro = {
             ...crearFiltroProductos(req.query),
-            $or: [
-                { categoria: { $regex: 'combustible', $options: 'i' } },
-                { categoriaNormalizada: { $regex: 'combustible', $options: 'i' } }
-            ]
+            categoria: { $regex: 'combustible', $options: 'i' }
         };
 
         const [general, consumoPorMes, proveedores] = await Promise.all([
@@ -1448,7 +1435,7 @@ reporteCtrl.getProductosTop = async (req, res) => {
                 $group: {
                     _id: {
                         producto: '$producto',
-                        categoria: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
+                        categoria: '$categoria',
                         unidadMedida: '$unidadNormalizada',
                         unidadBase: '$unidadBase'
                     },
@@ -1846,10 +1833,11 @@ reporteCtrl.getReporteEconomicoCamadas = async (req, res) => {
 
 reporteCtrl.getResumenReportes = async (req, res) => {
     try {
-        const { fechaInicio, fechaFin, diio, especie } = req.query;
+        const { fechaInicio, fechaFin, partosFechaInicio, partosFechaFin, diio, especie } = req.query;
         const filtroFinanzas = crearFiltroFechas('fecha', fechaInicio, fechaFin);
         const filtroDrone = crearFiltroFechas('fechaVuelo', fechaInicio, fechaFin);
-        const filtroAnimales = crearFiltroEspecieAnimal(especie);
+        const especieInventarioGanado = especie === 'Porcino' ? 'Porcino' : 'Bovino';
+        const filtroAnimales = crearFiltroEspecieAnimal(especieInventarioGanado);
         const idsEspecie = await obtenerIdsAnimalesPorEspecie(especie);
         const filtroReproduccion = idsEspecie ? { animal: { $in: idsEspecie } } : {};
         const filtroSanidad = crearFiltroEspecieAnimal(especie);
@@ -1868,6 +1856,7 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             finanzasPorTipo,
             finanzasPorCategoria,
             finanzasPorMes,
+            gastosPorMes,
             totalConteosDrone,
             conteosDronePorEstado,
             reportePartos
@@ -1921,7 +1910,7 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                 { $match: filtroFinanzas },
                 {
                     $group: {
-                        _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
+                        _id: '$categoria',
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -1943,15 +1932,36 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                 },
                 { $sort: { '_id.anio': 1, '_id.mes': 1 } }
             ]),
+            MovimientoFinanciero.aggregate([
+                { $match: { ...filtroFinanzas, naturaleza: 'Egreso' } },
+                {
+                    $group: {
+                        _id: {
+                            anio: { $year: '$fecha' },
+                            mes: { $month: '$fecha' }
+                        },
+                        total: { $sum: '$monto' },
+                        cantidad: { $sum: 1 }
+                    }
+                },
+                { $sort: { '_id.anio': 1, '_id.mes': 1 } }
+            ]),
             ConteoDrone.countDocuments(filtroDrone),
             agruparPorCampo(ConteoDrone, 'estado', filtroDrone),
-            crearReportePartos({ fechaInicio, fechaFin, diio, filtroExtra: filtroReproduccion })
+            crearReportePartos({
+                fechaInicio: partosFechaInicio || fechaInicio,
+                fechaFin: partosFechaFin || fechaFin,
+                diio,
+                filtroExtra: filtroReproduccion
+            })
         ]);
 
         res.json({
             filtros: {
                 fechaInicio: fechaInicio || null,
                 fechaFin: fechaFin || null,
+                partosFechaInicio: partosFechaInicio || fechaInicio || null,
+                partosFechaFin: partosFechaFin || fechaFin || null,
                 diio: diio || null,
                 especie: especie || null
             },
@@ -1988,6 +1998,12 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                     cantidad: item.cantidad
                 })),
                 porMes: finanzasPorMes.map((item) => ({
+                    anio: item._id.anio,
+                    mes: item._id.mes,
+                    total: item.total,
+                    cantidad: item.cantidad
+                })),
+                gastosPorMes: gastosPorMes.map((item) => ({
                     anio: item._id.anio,
                     mes: item._id.mes,
                     total: item.total,

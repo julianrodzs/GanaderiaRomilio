@@ -105,13 +105,29 @@ Query:
 
 - `fechaInicio`
 - `fechaFin`
+- `partosFechaInicio`
+- `partosFechaFin`
 - `diio`
+- `especie`
 
 Frontend:
 
 ```js
-obtenerResumenReportes({ fechaInicio, fechaFin, diio })
+obtenerResumenReportes({
+  fechaInicio,
+  fechaFin,
+  partosFechaInicio,
+  partosFechaFin,
+  diio,
+  especie
+})
 ```
+
+Regla de fechas:
+
+- `fechaInicio` y `fechaFin` son el rango general del reporte. Afectan finanzas, drone y otros resumenes por periodo.
+- `partosFechaInicio` y `partosFechaFin` solo afectan el bloque `Partos por vaca y año`.
+- Si no se envian fechas de partos, el backend usa `fechaInicio` y `fechaFin` como respaldo.
 
 ### Inventario
 
@@ -131,7 +147,7 @@ Origen:
 
 Variables:
 
-- `totalAnimales`: `Animal.countDocuments()`.
+- `totalAnimales`: `Animal.countDocuments()` filtrado por especie.
 - `porSexo`: agrupacion por `Animal.sexo`.
 - `porEstado`: agrupacion por `Animal.estado`.
 - `pesoPromedio`: promedio de `Animal.pesoActual` donde `pesoActual > 0`.
@@ -146,6 +162,11 @@ Uso visual:
 
 - Tarjetas generales del dashboard/reportes.
 - Distribucion de inventario.
+
+Nota:
+
+- Si `especie=Porcino`, la distribucion corresponde a porcinos.
+- Si `especie` viene vacio o `Todos`, la tarjeta `Distribucion del ganado` usa Bovinos por defecto para no mezclar chanchas con ganado bovino.
 
 ### Potreros
 
@@ -207,6 +228,7 @@ finanzas.porNaturaleza
 finanzas.porTipo
 finanzas.porCategoria
 finanzas.porMes
+finanzas.gastosPorMes
 ```
 
 Origen:
@@ -223,6 +245,7 @@ Variables:
 - `porTipo`: agrupa por `tipoMovimiento`.
 - `porCategoria`: agrupa por `categoria`, ordena por total y limita a 8.
 - `porMes`: agrupa por ano y mes de `fecha`.
+- `gastosPorMes`: agrupa solo movimientos con `naturaleza = 'Egreso'` por ano y mes de `fecha`.
 
 Transformaciones:
 
@@ -230,6 +253,12 @@ Transformaciones:
 total = suma(monto)
 cantidad = cantidad de documentos
 ```
+
+Uso visual:
+
+- `Gastos por categoria`: barras por categoria financiera.
+- `Gastos por mes`: grafico lineal basado en `finanzas.gastosPorMes`; obedece al rango general `fechaInicio` / `fechaFin`.
+- `Destino de uso`: barras por `destinoUso`, cargadas desde `GET /api/finanzas/destinos-resumen`.
 
 ### Drone
 
@@ -1860,7 +1889,7 @@ costoPorCriaDestetada = costoEstimado / destetados
 
 Los reportes financieros trabajan sobre `MovimientoFinanciero`.
 
-Desde la fase de estandarizacion se conservan los datos originales y se agregan campos calculados para ordenar reportes sin perder trazabilidad.
+Desde la fase de estandarizacion se conservan los datos principales y se usan catalogos administrables para ordenar reportes sin perder trazabilidad.
 
 ### Campos originales conservados
 
@@ -1878,7 +1907,7 @@ tipoMovimiento
 naturaleza
 ```
 
-### Campos normalizados
+### Campos normalizados y derivados
 
 ```js
 categoriaNormalizada
@@ -1896,7 +1925,7 @@ Origen:
 - importador de Excel de finanzas.
 - controladores de compras y ventas de animales.
 
-### Categoria normalizada
+### Categoria oficial
 
 Fuente:
 
@@ -1904,12 +1933,13 @@ Fuente:
 categoria
 ```
 
-Transformacion:
+Regla actual:
 
-- Normaliza mayusculas, acentos y espacios.
-- Si coincide con una categoria del catalogo base, asigna esa categoria canonica.
-- No infiere categoria desde producto, descripcion o tipoMovimiento.
-- Si no coincide, conserva la categoria original o usa `Otros`.
+- `categoria` es la fuente oficial de negocio.
+- El usuario la elige desde el catalogo financiero activo.
+- Los reportes, filtros y conteos usan `categoria`.
+- `categoriaNormalizada` queda como campo legado sincronizado con `categoria`.
+- No se infiere categoria desde producto, descripcion, observaciones o tipoMovimiento.
 
 Categorias actuales:
 
@@ -1931,22 +1961,22 @@ Categorias actuales:
 Ejemplos:
 
 ```txt
-categoria = combustible
+categoria = Combustible
 categoriaNormalizada = Combustible
 ```
 
 ```txt
-categoria = sanidad
+categoria = Sanidad
 categoriaNormalizada = Sanidad
 ```
 
 ```txt
-categoria = alimentacion
+categoria = Alimentación
 categoriaNormalizada = Alimentación
 ```
 
 ```txt
-categoria = ventas
+categoria = Ventas
 categoriaNormalizada = Ventas
 ```
 
@@ -2016,7 +2046,7 @@ Nota:
 
 Usa:
 
-- `categoriaNormalizada || categoria`
+- `categoria`
 - `naturaleza`
 - `tipoMovimiento`
 - `monto`
@@ -2024,14 +2054,14 @@ Usa:
 
 Transforma:
 
-- Totales por categoria ya usan la categoria normalizada cuando existe.
+- Totales por categoria usan la categoria oficial del catalogo.
 
 #### Productos e insumos
 
 Usa:
 
 - `producto`
-- `categoriaNormalizada || categoria`
+- `categoria`
 - `destinoUso`
 - `unidadNormalizada`
 - `cantidad`
@@ -2115,7 +2145,6 @@ La pantalla de Finanzas muestra un resumen de estos casos y permite abrir la edi
 Usa:
 
 - `categoria = Combustible`
-- o `categoriaNormalizada = Combustible`.
 - `cantidadFisica`
 - `monto`
 
@@ -2199,7 +2228,12 @@ frontend/src/Components/Reportes.js
 El componente carga en paralelo:
 
 ```js
-obtenerResumenReportes(filtrosPartos)
+obtenerResumenReportes({
+  ...filtrosGenerales,
+  partosFechaInicio,
+  partosFechaFin,
+  diio
+})
 obtenerProductividadCria(filtrosGenerales)
 obtenerFinanzasCria(filtrosGenerales)
 obtenerSustentabilidadCria(filtrosGenerales)
@@ -2211,6 +2245,7 @@ obtenerReporteProductosPorProducto(filtrosProductos)
 obtenerReporteProductosPorCategoria(filtrosProductos)
 obtenerReporteProductosCombustibles(filtrosProductos)
 obtenerReporteProductosProveedores(filtrosProductos)
+obtenerResumenDestinosFinancieros(filtrosGenerales)
 obtenerReporteCamadas(filtrosGenerales)
 obtenerReporteReproductivoPorcino(filtrosGenerales)
 obtenerReporteTareasCamadas(filtrosGenerales)
@@ -2228,6 +2263,8 @@ Filtros de partos:
 - `partosFechaInicio`
 - `partosFechaFin`
 - `diio`
+
+Estos filtros no deben reemplazar el rango general. Solo afectan el reporte `Partos por vaca y año`.
 
 Filtros de vacas improductivas:
 
@@ -2252,7 +2289,7 @@ Filtros de productos:
 - `categoria`
 - `proveedor`
 
-Los reportes de productos usan `categoriaNormalizada`, `unidadNormalizada`, `factorUnidad` y `cantidadFisica` cuando existen. Si un movimiento viejo no tiene esos campos, el reporte usa `categoria`, `unidad` y calcula la cantidad fisica en el pipeline como respaldo.
+Los reportes de productos usan `categoria`, `unidadNormalizada`, `factorUnidad` y `cantidadFisica` cuando existen. Si un movimiento viejo no tiene campos de unidad normalizada, el reporte usa `unidad` y calcula la cantidad fisica en el pipeline como respaldo.
 
 Filtros porcinos:
 
@@ -2272,7 +2309,7 @@ Nota:
 - `sustentabilidad` ignora animales vendidos sin `pesoVenta` o `precioVentaPorKg`.
 - `precioKg.minimo` puede tomar `0` si algun item vendido no trae precio por kg.
 - `animalesInicioPeriodo` usa `createdAt`, no fecha nacimiento/compra.
-- El reporte de gastos operativos depende de clasificacion por texto; conviene estandarizar categorias cada vez mas.
+- El reporte de gastos operativos usa `tipoMovimiento`, `naturaleza` y categorias financieras estandarizadas; ya no clasifica por texto libre de descripcion u observaciones.
 - El reporte economico por camada es mas exacto cuando los movimientos financieros se ligan directamente a la camada con `referenciaId`.
 - Si los gastos porcinos no estan ligados a camada, el reporte economico los detecta por texto y los prorratea entre camadas del periodo.
 - El reporte de tareas por camada solo considera tareas automaticas con `referenciaId` de camada; no incluye tareas manuales sueltas.
@@ -2286,7 +2323,7 @@ Pendientes tecnicos:
 - El endpoint administrativo `GET /api/finanzas/catalogos/admin` devuelve activos e inactivos con conteo de usos y bandera `puedeEliminar`.
 - Renombrar un catalogo puede actualizar movimientos existentes si el usuario confirma la migracion.
 - Desactivar un catalogo no cambia reportes historicos; solo evita que aparezca en nuevos registros.
-- Definir si el usuario podra corregir `categoriaNormalizada` manualmente sin perder `categoria` original.
+- Mantener `categoriaNormalizada` como campo legado sincronizado con `categoria`; no exponerlo como categoria editable separada.
 - Migrar movimientos viejos que no tienen `producto`, `cantidad`, `unidadNormalizada` o `cantidadFisica`.
 - Convertir unidades equivalentes si se decide hacerlo, por ejemplo `GALON` a `L`.
 - Definir reglas de tipo de cambio para reportes mixtos `CRC` y `USD`.

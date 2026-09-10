@@ -748,8 +748,8 @@ Naturaleza:
   - `unidad`
   - `descripcion`
   - `observaciones`
-- Se agregaron campos derivados para reportes y filtros:
-  - `categoriaNormalizada`
+- Se agregaron campos derivados para unidades, consumos y compatibilidad:
+  - `categoriaNormalizada` (legado sincronizado con `categoria`)
   - `unidadNormalizada`
   - `factorUnidad`
   - `cantidadFisica`
@@ -793,7 +793,7 @@ backend/models/CatalogoFinanciero.js
 
 Los catalogos base siguen en codigo como valores iniciales, pero las categorias financieras y los destinos de uso ya son administrables desde Finanzas.
 
-El backend sincroniza los valores base hacia `CatalogoFinanciero` cuando se consultan por primera vez.
+El backend sincroniza los valores base hacia `CatalogoFinanciero` solo cuando no existe ningun catalogo de ese tipo. Esto evita que una opcion base renombrada o desactivada se vuelva a crear automaticamente.
 
 Modelo `CatalogoFinanciero`:
 
@@ -856,7 +856,7 @@ Reglas de seguridad de datos:
 
 Conteo de usos:
 
-- Para categorias, el backend cuenta movimientos donde `categoria` o `categoriaNormalizada` coincidan con el nombre del catalogo.
+- Para categorias, el backend cuenta movimientos donde `categoria` coincida con el nombre del catalogo.
 - Para destinos, cuenta movimientos donde `destinoUso` coincida.
 
 Acciones disponibles desde frontend:
@@ -889,7 +889,7 @@ El backend se mantiene flexible para no romper importaciones historicas o movimi
 
 Responsabilidades:
 
-- calcular `categoriaNormalizada` como version limpia/canonica de `categoria`, sin inferir por producto o descripcion.
+- sincronizar `categoriaNormalizada` con `categoria` como campo legado, sin inferir por producto o descripcion.
 - normalizar unidades fisicas.
 - calcular cantidades fisicas para reportes de consumo.
 - calcular `precioUnitarioFisico` cuando existen `monto`, `cantidad` y `unidad`.
@@ -913,7 +913,7 @@ precioUnitarioFisico=monto / 6
 ```
 
 ```txt
-categoria=combustible
+categoria=Combustible
 categoriaNormalizada=Combustible
 ```
 
@@ -925,9 +925,9 @@ La normalizacion se ejecuta:
 - al crear movimientos automaticos desde compras de animales.
 - al crear movimientos automaticos desde ventas de animales.
 
-Si una categoria no coincide con el catalogo base, se conserva la categoria escrita. Si viene vacia, queda como `Otros`.
+La categoria oficial de negocio es `categoria`, elegida desde el catalogo financiero. `categoriaNormalizada` se mantiene por compatibilidad y debe tener el mismo valor.
 
-Categorias normalizadas iniciales:
+Categorias financieras iniciales:
 
 - `Alimentación`
 - `Sanidad`
@@ -958,9 +958,9 @@ Unidades normalizadas iniciales:
 
 #### Reportes financieros y de productos derivados
 
-Los reportes de productos e insumos usan los campos normalizados:
+Los reportes de productos e insumos usan:
 
-- `categoriaNormalizada`
+- `categoria`
 - `destinoUso`
 - `unidadNormalizada`
 - `factorUnidad`
@@ -974,6 +974,14 @@ La pantalla de Finanzas tambien muestra:
 - revision de movimientos sin destino, con categoria `General`/`Otros`, compras sin producto y compras sin cantidad o unidad.
 
 Estos indicadores son de limpieza operativa: ayudan a detectar que registros conviene corregir antes de sacar reportes mas formales.
+
+La pantalla de Reportes tambien consume datos financieros para:
+
+- `Gastos por categoria`: agrupa por `categoria`.
+- `Gastos por mes`: usa solo movimientos con `naturaleza = Egreso` y respeta el rango general `fechaInicio` / `fechaFin`.
+- `Destino de uso`: usa `GET /api/finanzas/destinos-resumen` y respeta el rango general `fechaInicio` / `fechaFin`.
+
+El rango especial de partos (`partosFechaInicio` / `partosFechaFin`) no debe afectar estos reportes financieros.
 
 Endpoints:
 
@@ -991,8 +999,7 @@ Endpoints:
 #### Pendiente por estandarizar en Finanzas
 
 - Validar con el cliente el catalogo definitivo de categorias, unidades, tipos de trabajo, tipos de inversion y destinos de uso.
-- Decidir si `categoriaNormalizada` se mantiene como calculo interno o si se expone como campo editable para correcciones contables.
-- Crear mantenimiento de catalogos desde frontend, para no depender de listas base en codigo.
+- Mantener `categoriaNormalizada` solo como campo legado sincronizado con `categoria`.
 - Migrar movimientos viejos que quedaron sin `producto`, `cantidad`, `unidadNormalizada`, `cantidadFisica` o `precioUnitarioFisico`.
 - Revisar movimientos importados como `General` para reclasificarlos manualmente o con reglas nuevas.
 - Asociar gastos porcinos directamente a camada cuando aplique, no solo por texto.

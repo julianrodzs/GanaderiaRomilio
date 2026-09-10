@@ -116,7 +116,7 @@ movimientoFinancieroCtrl.getResumen = async (req, res) => {
             MovimientoFinanciero.aggregate([
                 {
                     $group: {
-                        _id: { $ifNull: ['$categoriaNormalizada', '$categoria'] },
+                        _id: '$categoria',
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -273,10 +273,7 @@ movimientoFinancieroCtrl.getRevisionDatos = async (req, res) => {
             sinDestinoUso: { ...filtro, ...campoVacio('destinoUso') },
             categoriaGeneralOtros: {
                 ...filtro,
-                $or: [
-                    { categoria: { $in: ['General', 'Otros'] } },
-                    { categoriaNormalizada: { $in: ['General', 'Otros'] } }
-                ]
+                categoria: { $in: ['General', 'Otros'] }
             },
             comprasSinProducto: { ...baseCompra, ...campoVacio('producto') },
             comprasSinCantidadUnidad: {
@@ -326,7 +323,6 @@ movimientoFinancieroCtrl.getRevisionDatos = async (req, res) => {
                 $or: [
                     ...consultas.sinDestinoUso.$or,
                     { categoria: { $in: ['General', 'Otros'] } },
-                    { categoriaNormalizada: { $in: ['General', 'Otros'] } },
                     { producto: { $exists: false } },
                     { producto: null },
                     { producto: '' },
@@ -377,10 +373,7 @@ movimientoFinancieroCtrl.getResumenConsumo = async (req, res) => {
         }
 
         if (categoria) {
-            filtro.$or = [
-                { categoria },
-                { categoriaNormalizada: categoria }
-            ];
+            filtro.categoria = categoria;
         }
         if (unidad) {
             filtro.$and = [
@@ -402,7 +395,7 @@ movimientoFinancieroCtrl.getResumenConsumo = async (req, res) => {
                     _id: {
                         producto: '$producto',
                         unidad: { $ifNull: ['$unidadNormalizada', '$unidad'] },
-                        categoria: { $ifNull: ['$categoriaNormalizada', '$categoria'] }
+                        categoria: '$categoria'
                     },
                     cantidadTotal: { $sum: { $ifNull: ['$cantidadFisica', '$cantidad'] } },
                     montoTotal: { $sum: '$monto' },

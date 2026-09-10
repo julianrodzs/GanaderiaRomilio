@@ -90,9 +90,27 @@ const camposTextoMayuscula = new Set([
 
 const mayusculas = (valor) => String(valor || '').toUpperCase();
 
+const catalogosIniciales = {
+  ...catalogosFinancierosBase,
+  categorias: [],
+  destinosUso: []
+};
+
 const opcionesConValorActual = (opciones = [], valorActual) => {
-  if (!valorActual || opciones.includes(valorActual)) return opciones;
-  return [...opciones, valorActual];
+  const opcionesBase = opciones.map((opcion) => ({
+    valor: opcion,
+    etiqueta: opcion
+  }));
+
+  if (!valorActual || opciones.includes(valorActual)) return opcionesBase;
+
+  return [
+    ...opcionesBase,
+    {
+      valor: valorActual,
+      etiqueta: `${valorActual} (histórico)`
+    }
+  ];
 };
 
 const OpcionesDatalist = ({ id, opciones = [] }) => (
@@ -110,7 +128,7 @@ const FormularioMovimientoFinanciero = ({
   error
 }) => {
   const [formulario, setFormulario] = useState(() => normalizarMovimiento(movimientoInicial));
-  const [catalogos, setCatalogos] = useState(catalogosFinancierosBase);
+  const [catalogos, setCatalogos] = useState(catalogosIniciales);
 
   useEffect(() => {
     let activo = true;
@@ -199,7 +217,7 @@ const FormularioMovimientoFinanciero = ({
             <select name="categoria" value={formulario.categoria} onChange={actualizarCampo} required>
               <option value="">Seleccionar categoria</option>
               {categorias.map((categoria) => (
-                <option key={categoria} value={categoria}>{categoria}</option>
+                <option key={categoria.valor} value={categoria.valor}>{categoria.etiqueta}</option>
               ))}
             </select>
           </label>
@@ -376,7 +394,7 @@ const FormularioMovimientoFinanciero = ({
           <select name="destinoUso" value={formulario.destinoUso} onChange={actualizarCampo}>
             <option value="">Sin destino definido</option>
             {destinosUso.map((destino) => (
-              <option key={destino} value={destino}>{destino}</option>
+              <option key={destino.valor} value={destino.valor}>{destino.etiqueta}</option>
             ))}
           </select>
         </label>

@@ -1,5 +1,4 @@
 const {
-    CATEGORIAS_FINANCIERAS,
     UNIDADES_FINANCIERAS
 } = require('../config/catalogosFinancieros');
 
@@ -11,13 +10,6 @@ const normalizarTexto = (valor = '') => String(valor)
 
 const normalizarCategoria = ({ categoria } = {}) => {
     const categoriaLimpia = String(categoria || '').trim();
-
-    const categoriaCanonical = CATEGORIAS_FINANCIERAS.find(
-        (item) => normalizarTexto(item) === normalizarTexto(categoriaLimpia)
-    );
-
-    if (categoriaCanonical) return categoriaCanonical;
-
     return categoriaLimpia || 'Otros';
 };
 
@@ -77,7 +69,6 @@ const normalizarMovimientoFinanciero = (movimiento = {}) => {
 };
 
 module.exports = {
-    CATEGORIAS_NORMALIZADAS: CATEGORIAS_FINANCIERAS,
     UNIDADES_NORMALIZADAS: UNIDADES_FINANCIERAS,
     normalizarCategoria,
     normalizarUnidad,

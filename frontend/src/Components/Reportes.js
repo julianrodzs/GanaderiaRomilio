@@ -13,6 +13,7 @@ import {
   obtenerReporteReproductivoPorcino,
   obtenerReporteTareasCamadas,
   obtenerResumenVentas,
+  obtenerResumenDestinosFinancieros,
   obtenerResumenReportes,
   obtenerSustentabilidadCria,
   obtenerVacasImproductivas
@@ -98,6 +99,44 @@ const BarraReporte = ({ label, valor, detalle, maximo }) => {
 
 const obtenerMaximo = (items, campo) => Math.max(...items.map((item) => item[campo] || 0), 0);
 
+const totalizarDestino = (destino) => (destino.totales || []).reduce((total, item) => total + (item.total || 0), 0);
+
+const LineaFinanzasMensual = ({ datos = [], maximo }) => {
+  if (!datos.length) return <span className="reporte-vacio">Sin gastos para este rango.</span>;
+
+  const maximoGrafico = maximo || obtenerMaximo(datos, 'total') || 1;
+  const puntos = datos.map((item, indice) => {
+    const x = datos.length === 1 ? 8 : 8 + (indice / (datos.length - 1)) * 84;
+    const y = 86 - ((item.total || 0) / maximoGrafico) * 68;
+    return { ...item, x, y };
+  });
+  const coordenadas = puntos.map((punto) => `${punto.x},${punto.y}`).join(' ');
+
+  return (
+    <div className="linea-finanzas">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Gastos por mes">
+        <polyline points={coordenadas} fill="none" stroke="currentColor" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+        {puntos.map((punto) => (
+          <circle key={`${punto.anio}-${punto.mes}`} cx={punto.x} cy={punto.y} r="1.8" vectorEffect="non-scaling-stroke" />
+        ))}
+      </svg>
+      <div className="linea-finanzas-etiquetas">
+        {puntos.map((punto) => (
+          <span key={`${punto.anio}-${punto.mes}`}>{nombreMes(punto.mes)}</span>
+        ))}
+      </div>
+      <div className="linea-finanzas-detalle">
+        {puntos.map((punto) => (
+          <article key={`${punto.anio}-${punto.mes}`}>
+            <strong>{nombreMes(punto.mes)} {punto.anio}</strong>
+            <span>{formatearMoneda(punto.total)} · {punto.cantidad} registros</span>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const LineaPeso = ({ puntos = [] }) => {
   if (!puntos || puntos.length < 2) {
     return <span className="reporte-vacio">Se necesitan al menos dos pesajes.</span>;
@@ -145,6 +184,7 @@ const Reportes = () => {
   const [ventasReporte, setVentasReporte] = useState(null);
   const [productosReporte, setProductosReporte] = useState(null);
   const [porcinosReporte, setPorcinosReporte] = useState(null);
+  const [destinosFinancieros, setDestinosFinancieros] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const etiquetaId = 'DIIO';
@@ -158,11 +198,10 @@ const Reportes = () => {
         fechaFin: filtros.fechaFin,
         especie: especie === 'Todos' ? '' : especie
       };
-      const filtrosPartos = {
-        ...filtros,
-        fechaInicio: filtros.partosFechaInicio || filtros.fechaInicio,
-        fechaFin: filtros.partosFechaFin || filtros.fechaFin,
-        especie: especie === 'Todos' ? '' : especie
+      const filtrosPartosResumen = {
+        partosFechaInicio: filtros.partosFechaInicio || filtros.fechaInicio,
+        partosFechaFin: filtros.partosFechaFin || filtros.fechaFin,
+        diio: filtros.diio
       };
       const filtrosImproductivas = {
         fechaInicio: filtros.partosFechaInicio || filtros.fechaInicio,
@@ -193,12 +232,16 @@ const Reportes = () => {
         productosPorCategoriaData,
         productosCombustiblesData,
         productosProveedoresData,
+        destinosFinancierosData,
         camadasData,
         reproduccionPorcinaData,
         tareasCamadasData,
         economiaCamadasData
       ] = await Promise.all([
-        obtenerResumenReportes(filtrosPartos),
+        obtenerResumenReportes({
+          ...filtrosGenerales,
+          ...filtrosPartosResumen
+        }),
         obtenerProductividadCria(filtrosGenerales),
         obtenerFinanzasCria(filtrosGenerales),
         obtenerSustentabilidadCria(filtrosGenerales),
@@ -213,6 +256,10 @@ const Reportes = () => {
         obtenerReporteProductosPorCategoria(filtrosProductos),
         obtenerReporteProductosCombustibles(filtrosProductos),
         obtenerReporteProductosProveedores(filtrosProductos),
+        obtenerResumenDestinosFinancieros({
+          fechaInicio: filtros.fechaInicio,
+          fechaFin: filtros.fechaFin
+        }),
         obtenerReporteCamadas(filtrosGenerales),
         obtenerReporteReproductivoPorcino(filtrosGenerales),
         obtenerReporteTareasCamadas(filtrosGenerales),
@@ -232,6 +279,7 @@ const Reportes = () => {
         combustibles: productosCombustiblesData,
         proveedores: productosProveedoresData
       });
+      setDestinosFinancieros(destinosFinancierosData || []);
       setPorcinosReporte({
         camadas: camadasData,
         reproduccion: reproduccionPorcinaData,
@@ -258,7 +306,17 @@ const Reportes = () => {
   }, [reporte]);
 
   const maxCategoria = obtenerMaximo(reporte?.finanzas?.porCategoria || [], 'total');
-  const maxMes = obtenerMaximo(reporte?.finanzas?.porMes || [], 'total');
+  const maxGastosMes = obtenerMaximo(reporte?.finanzas?.gastosPorMes || [], 'total');
+  const destinosOrdenados = useMemo(() => {
+    return [...destinosFinancieros]
+      .map((destino) => ({
+        destinoUso: destino.destinoUso,
+        total: totalizarDestino(destino),
+        registros: destino.registros
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [destinosFinancieros]);
+  const maxDestino = obtenerMaximo(destinosOrdenados, 'total');
 
   return (
     <section className="reportes-page">
@@ -1097,18 +1155,25 @@ const Reportes = () => {
 
             <article className="reporte-panel reporte-panel-amplio">
               <p className="eyebrow">Finanzas</p>
-              <h2>Movimientos por mes</h2>
+              <h2>Gastos por mes</h2>
+              <LineaFinanzasMensual datos={reporte.finanzas.gastosPorMes || []} maximo={maxGastosMes} />
+            </article>
+
+            <article className="reporte-panel reporte-panel-amplio">
+              <p className="eyebrow">Finanzas</p>
+              <h2>Destino de uso</h2>
               <div className="reportes-meses">
-                {(reporte.finanzas.porMes || []).map((item) => (
+                {destinosOrdenados.map((item) => (
                   <BarraReporte
-                    key={`${item.anio}-${item.mes}`}
-                    label={`${nombreMes(item.mes)} ${item.anio}`}
+                    key={item.destinoUso}
+                    label={item.destinoUso || 'Sin destino'}
                     valor={item.total}
-                    detalle={`${formatearMoneda(item.total)} · ${item.cantidad} movimientos`}
-                    maximo={maxMes}
+                    detalle={`${formatearMoneda(item.total)} · ${item.registros} registros`}
+                    maximo={maxDestino}
                   />
                 ))}
               </div>
+              {destinosOrdenados.length === 0 && <span className="reporte-vacio">Sin destinos de uso para este rango.</span>}
             </article>
 
             <article className="reporte-panel">

@@ -732,10 +732,12 @@ export const eliminarCompraAnimal = (id) => {
   });
 };
 
-export const obtenerResumenReportes = ({ fechaInicio, fechaFin, diio, especie } = {}) => {
+export const obtenerResumenReportes = ({ fechaInicio, fechaFin, partosFechaInicio, partosFechaFin, diio, especie } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
+  if (partosFechaInicio) params.append('partosFechaInicio', partosFechaInicio);
+  if (partosFechaFin) params.append('partosFechaFin', partosFechaFin);
   if (diio) params.append('diio', diio);
   if (especie) params.append('especie', especie);
   const query = params.toString();
