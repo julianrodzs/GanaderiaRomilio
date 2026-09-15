@@ -1,8 +1,9 @@
 const { Router } = require('express');
 const router = Router();
-const { autorizarRoles } = require('../middleware/auth');
-const puedeVer = autorizarRoles('Administrador', 'Encargado');
-const soloAdministrador = autorizarRoles('Administrador');
+const { autorizarPermiso } = require('../middleware/auth');
+const puedeVer = autorizarPermiso('reproduccion.ver');
+const puedeGestionar = autorizarPermiso('reproduccion.gestionar');
+const puedeEliminar = autorizarPermiso('reproduccion.eliminar');
 
 const {
     getRegistros,
@@ -19,17 +20,17 @@ const {
 
 router.route('/')
     .get(puedeVer, getRegistros)
-    .post(soloAdministrador, createRegistro);
+    .post(puedeGestionar, createRegistro);
 
 router.get('/animal/:animalId', puedeVer, getRegistrosPorAnimal);
-router.post('/:id/ternero', soloAdministrador, registrarTerneroDesdeParto);
-router.patch('/:id/cerrar-ciclo', soloAdministrador, cerrarCiclo);
-router.patch('/:id/cancelar-ciclo', soloAdministrador, cancelarCiclo);
-router.patch('/:id/no-prenada', soloAdministrador, marcarNoPrenada);
+router.post('/:id/ternero', puedeGestionar, registrarTerneroDesdeParto);
+router.patch('/:id/cerrar-ciclo', puedeGestionar, cerrarCiclo);
+router.patch('/:id/cancelar-ciclo', puedeGestionar, cancelarCiclo);
+router.patch('/:id/no-prenada', puedeGestionar, marcarNoPrenada);
 
 router.route('/:id')
     .get(puedeVer, getRegistro)
-    .put(soloAdministrador, updateRegistro)
-    .delete(soloAdministrador, deleteRegistro);
+    .put(puedeGestionar, updateRegistro)
+    .delete(puedeEliminar, deleteRegistro);
 
 module.exports = router;

@@ -56,7 +56,7 @@ const filtros = [
   { id: 'estado', accessor: (plan) => plan.estado }
 ];
 
-const PlanSanitario = () => {
+const PlanSanitario = ({ soloLectura = false }) => {
   const [planes, setPlanes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -209,10 +209,11 @@ const PlanSanitario = () => {
         error={error}
         filtros={filtros}
         textoAgregar="Nuevo plan"
-        onAgregar={abrirNuevoPlan}
-        onEditar={abrirEdicionPlan}
-        onEliminar={borrarPlan}
-        accionesExtra={(plan) => (
+        onAgregar={soloLectura ? undefined : abrirNuevoPlan}
+        onEditar={soloLectura ? undefined : abrirEdicionPlan}
+        onEliminar={soloLectura ? undefined : borrarPlan}
+        mostrarAcciones={!soloLectura}
+        accionesExtra={soloLectura ? undefined : (plan) => (
           <button
             type="button"
             aria-label="Registrar aplicación"

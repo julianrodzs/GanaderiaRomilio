@@ -33,6 +33,12 @@ const obtenerOrigenAnimal = (animal = {}) => animal.fechaCompra ? 'Comprado' : '
 
 const obtenerFechaIngresoAnimal = (animal = {}) => animal.fechaCompra || animal.fechaNacimiento || animal.createdAt;
 
+const calcularMontoAsignadoVenta = (venta, subtotal = 0) => {
+    const montoCalculado = Number(venta.montoCalculado || 0);
+    if (!montoCalculado) return Number(subtotal || 0);
+    return Number(venta.montoTotal || 0) * (Number(subtotal || 0) / montoCalculado);
+};
+
 const crearFiltroEspecieAnimal = async (especie) => {
     if (!['Bovino', 'Porcino'].includes(especie)) return {};
     const filtroEspecie = especie === 'Bovino'
@@ -176,54 +182,72 @@ const validarAnimalesVenta = async (animales = [], ventaIdIgnorada = null, espec
 
 const crearEventosVenta = async (venta, usuarioId) => {
     await Promise.all([
-        ...(venta.animales || []).map((item) => upsertEventoAnimal({
-            animal: item.animal,
-            tipoEvento: 'Venta',
-            fecha: venta.fechaVenta,
-            titulo: 'Animal vendido',
-            descripcion: `Venta registrada por ₡${Number(item.subtotal || 0).toLocaleString('es-CR')} con peso de ${item.pesoVentaKg} kg`,
-            moduloOrigen: 'Ventas',
-            referenciaId: venta._id,
-            creadoPor: usuarioId,
-            metadata: {
-                comprador: venta.comprador,
-                pesoVentaKg: item.pesoVentaKg,
-                precioKg: item.precioKg,
-                subtotal: item.subtotal
-            }
-        })),
-        ...(venta.camadas || []).map((item) => upsertEventoCamada({
-            camada: item.camada?._id || item.camada,
-            tipoEvento: 'Venta',
-            fecha: venta.fechaVenta,
-            titulo: 'Venta de crías de camada',
-            descripcion: `Venta agrupada de ${item.cantidad || 0} cría(s) por ₡${Number(item.subtotal || 0).toLocaleString('es-CR')}.`,
-            moduloOrigen: 'Ventas',
-            referenciaId: venta._id,
-            creadoPor: usuarioId,
-            metadata: {
-                comprador: venta.comprador,
-                cantidad: item.cantidad,
-                pesoTotalKg: item.pesoTotalKg,
-                precioKg: item.precioKg,
-                subtotal: item.subtotal
-            }
-        }))
+        ...(venta.animales || []).map((item) => {
+            const montoAsignado = calcularMontoAsignadoVenta(venta, item.subtotal);
+
+            return upsertEventoAnimal({
+                animal: item.animal,
+                tipoEvento: 'Venta',
+                fecha: venta.fechaVenta,
+                titulo: 'Animal vendido',
+                descripcion: `Venta registrada por ₡${Number(montoAsignado || 0).toLocaleString('es-CR')} con peso de ${item.pesoVentaKg} kg`,
+                moduloOrigen: 'Ventas',
+                referenciaId: venta._id,
+                creadoPor: usuarioId,
+                metadata: {
+                    comprador: venta.comprador,
+                    pesoVentaKg: item.pesoVentaKg,
+                    precioKg: item.precioKg,
+                    subtotal: item.subtotal,
+                    montoAsignado,
+                    montoFinalVenta: venta.montoFinal,
+                    ajusteMontoVenta: venta.ajusteMonto
+                }
+            });
+        }),
+        ...(venta.camadas || []).map((item) => {
+            const montoAsignado = calcularMontoAsignadoVenta(venta, item.subtotal);
+
+            return upsertEventoCamada({
+                camada: item.camada?._id || item.camada,
+                tipoEvento: 'Venta',
+                fecha: venta.fechaVenta,
+                titulo: 'Venta de crías de camada',
+                descripcion: `Venta agrupada de ${item.cantidad || 0} cría(s) por ₡${Number(montoAsignado || 0).toLocaleString('es-CR')}.`,
+                moduloOrigen: 'Ventas',
+                referenciaId: venta._id,
+                creadoPor: usuarioId,
+                metadata: {
+                    comprador: venta.comprador,
+                    cantidad: item.cantidad,
+                    pesoTotalKg: item.pesoTotalKg,
+                    precioKg: item.precioKg,
+                    subtotal: item.subtotal,
+                    montoAsignado,
+                    montoFinalVenta: venta.montoFinal,
+                    ajusteMontoVenta: venta.ajusteMonto
+                }
+            });
+        })
     ]);
 };
 
 const aplicarVentaConfirmada = async (venta, usuarioId) => {
     if (venta.estado !== 'Confirmada') return;
 
-    await Promise.all((venta.animales || []).map((item) => Animal.findByIdAndUpdate(item.animal, {
-        estado: 'Vendido',
-        fechaVenta: venta.fechaVenta,
-        pesoVenta: item.pesoVentaKg,
-        precioVentaPorKg: item.precioKg,
-        montoVenta: item.subtotal,
-        comprador: venta.comprador,
-        ventaId: venta._id
-    })));
+    await Promise.all((venta.animales || []).map((item) => {
+        const montoAsignado = calcularMontoAsignadoVenta(venta, item.subtotal);
+
+        return Animal.findByIdAndUpdate(item.animal, {
+            estado: 'Vendido',
+            fechaVenta: venta.fechaVenta,
+            pesoVenta: item.pesoVentaKg,
+            precioVentaPorKg: item.pesoVentaKg ? montoAsignado / item.pesoVentaKg : item.precioKg,
+            montoVenta: montoAsignado,
+            comprador: venta.comprador,
+            ventaId: venta._id
+        });
+    }));
 
     await crearEventosVenta(venta, usuarioId);
     await MovimientoFinanciero.findOneAndUpdate(
@@ -290,6 +314,7 @@ const extraerDatosVenta = (venta) => ({
         precioKg: item.precioKg
     })),
     comprobanteUrl: venta.comprobanteUrl,
+    montoFinal: venta.montoFinal,
     estado: venta.estado,
     registradoPor: venta.registradoPor
 });
@@ -477,16 +502,28 @@ ventaAnimalCtrl.getResumenVentas = async (req, res) => {
         const totalVendido = ventas.reduce((total, venta) => total + (venta.montoTotal || 0), 0);
         const totalKgVendidos = ventas.reduce((total, venta) => total + (venta.pesoTotalKg || 0), 0);
         const totalUnidadesVendidas = ventas.reduce((total, venta) => total + (venta.totalAnimales || 0), 0);
-        const animalesVendidos = ventas.flatMap((venta) => (venta.animales || []).map((item) => ({
-            ...item,
-            fechaVenta: venta.fechaVenta,
-            comprador: venta.comprador
-        })));
-        const camadasVendidas = ventas.flatMap((venta) => (venta.camadas || []).map((item) => ({
-            ...item,
-            fechaVenta: venta.fechaVenta,
-            comprador: venta.comprador
-        })));
+        const animalesVendidos = ventas.flatMap((venta) => (venta.animales || []).map((item) => {
+            const montoAsignado = calcularMontoAsignadoVenta(venta, item.subtotal);
+
+            return {
+                ...item,
+                montoAsignado,
+                precioKgFinal: item.pesoVentaKg ? montoAsignado / item.pesoVentaKg : item.precioKg,
+                fechaVenta: venta.fechaVenta,
+                comprador: venta.comprador
+            };
+        }));
+        const camadasVendidas = ventas.flatMap((venta) => (venta.camadas || []).map((item) => {
+            const montoAsignado = calcularMontoAsignadoVenta(venta, item.subtotal);
+
+            return {
+                ...item,
+                montoAsignado,
+                precioKgFinal: item.pesoTotalKg ? montoAsignado / item.pesoTotalKg : item.precioKg,
+                fechaVenta: venta.fechaVenta,
+                comprador: venta.comprador
+            };
+        }));
         const ventasPorMes = ventas.reduce((mapa, venta) => {
             const fecha = new Date(venta.fechaVenta);
             const clave = `${fecha.getUTCFullYear()}-${String(fecha.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -523,7 +560,7 @@ ventaAnimalCtrl.getResumenVentas = async (req, res) => {
             const mesesEnFinca = calcularMesesEntre(fechaIngreso, item.fechaVenta);
             mapa[origen].animales += 1;
             mapa[origen].pesoTotalKg += item.pesoVentaKg || 0;
-            mapa[origen].montoTotal += item.subtotal || 0;
+            mapa[origen].montoTotal += item.montoAsignado || item.subtotal || 0;
             if (mesesEnFinca !== null) {
                 mapa[origen].mesesTotal += mesesEnFinca;
                 mapa[origen].animalesConMeses += 1;
@@ -544,8 +581,8 @@ ventaAnimalCtrl.getResumenVentas = async (req, res) => {
                 fechaVenta: item.fechaVenta,
                 mesesEnFinca,
                 pesoVentaKg: item.pesoVentaKg || 0,
-                precioKg: item.precioKg || 0,
-                subtotal: item.subtotal || 0,
+                precioKg: item.precioKgFinal || item.precioKg || 0,
+                subtotal: item.montoAsignado || item.subtotal || 0,
                 comprador: item.comprador
             };
         }).filter((item) => item.mesesEnFinca !== null);
@@ -570,8 +607,8 @@ ventaAnimalCtrl.getResumenVentas = async (req, res) => {
             },
             precioKg: {
                 promedio: totalKgVendidos ? totalVendido / totalKgVendidos : 0,
-                minimo: [...animalesVendidos, ...camadasVendidas].length ? Math.min(...[...animalesVendidos, ...camadasVendidas].map((item) => item.precioKg || 0)) : 0,
-                maximo: [...animalesVendidos, ...camadasVendidas].length ? Math.max(...[...animalesVendidos, ...camadasVendidas].map((item) => item.precioKg || 0)) : 0
+                minimo: [...animalesVendidos, ...camadasVendidas].length ? Math.min(...[...animalesVendidos, ...camadasVendidas].map((item) => item.precioKgFinal || item.precioKg || 0)) : 0,
+                maximo: [...animalesVendidos, ...camadasVendidas].length ? Math.max(...[...animalesVendidos, ...camadasVendidas].map((item) => item.precioKgFinal || item.precioKg || 0)) : 0
             },
             ventasPorMes: Object.values(ventasPorMes).map((item) => ({
                 ...item,

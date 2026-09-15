@@ -99,7 +99,7 @@ const normalizarCompraFormulario = (compra) => ({
   comprobante: null
 });
 
-const Compras = () => {
+const Compras = ({ soloLectura = false }) => {
   const [compras, setCompras] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [filtros, setFiltros] = useState({ ...obtenerRangoMesActual(), proveedor: '', estado: '' });
@@ -378,7 +378,7 @@ const Compras = () => {
           <p className="eyebrow">Compras</p>
           <h2>{textoEspecie(especie, 'titulo')}</h2>
         </div>
-        <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva compra</button>
+        {!soloLectura && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva compra</button>}
       </div>
 
       <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
@@ -431,9 +431,9 @@ const Compras = () => {
                 <td>
                   <div className="acciones-tabla acciones-tabla-amplia">
                     <button type="button" title="Ver detalle" onClick={() => setDetalle(compra)}>⊙</button>
-                    {compra.estado !== 'Anulada' && <button type="button" title="Editar" onClick={() => abrirEdicion(compra)}>✎</button>}
-                    {compra.estado !== 'Anulada' && <button type="button" title="Anular" onClick={() => anularCompra(compra)}>↺</button>}
-                    <button type="button" title="Eliminar" onClick={() => borrarCompra(compra)}>⌫</button>
+                    {!soloLectura && compra.estado !== 'Anulada' && <button type="button" title="Editar" onClick={() => abrirEdicion(compra)}>✎</button>}
+                    {!soloLectura && compra.estado !== 'Anulada' && <button type="button" title="Anular" onClick={() => anularCompra(compra)}>↺</button>}
+                    {!soloLectura && <button type="button" title="Eliminar" onClick={() => borrarCompra(compra)}>⌫</button>}
                   </div>
                 </td>
               </tr>

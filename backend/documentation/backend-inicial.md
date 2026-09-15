@@ -92,9 +92,18 @@ Exporta:
 
 - `auth`
 - `autorizarRoles(...roles)`
+- `autorizarPermiso(permiso)`
 - `generarToken`
 
 El login usa JWT. La recuperacion de contrasena no usa JWT.
+
+Validacion de sesion:
+
+- Cada request autenticado valida la firma y expiracion del JWT.
+- Luego consulta el usuario en base de datos.
+- Si el usuario no existe, se rechaza la sesion.
+- Si el usuario esta `Inactivo`, se rechaza la sesion aunque el token aun no haya vencido.
+- El rol efectivo se toma desde la base de datos, no desde el rol guardado originalmente en el token.
 
 ### Roles
 
@@ -102,13 +111,136 @@ Roles actuales:
 
 - `Administrador`
 - `Encargado`
+- `Trabajador`
+- `Veterinario`
+- `Contador`
 - `Consulta`
 
-Regla general actual:
+Reglas generales:
 
 - Administrador tiene acceso completo.
-- Encargado tiene acceso limitado a tareas y vistas operativas.
-- Consulta queda preparado para lectura.
+- Encargado gestiona la operacion diaria, pero no usuarios, importaciones, finanzas ni reportes financieros.
+- Trabajador trabaja principalmente con tareas asignadas y consulta informacion basica de campo.
+- Veterinario gestiona sanidad, reproduccion y pesajes, sin acceso financiero.
+- Contador gestiona finanzas y consulta compras, ventas y reportes.
+- Consulta es un rol de lectura/auditoria.
+
+Fuente tecnica:
+
+```txt
+backend/config/permisosRoles.js
+frontend/src/constants/permisosRoles.js
+```
+
+Tabla de permisos base:
+
+| Modulo | Administrador | Encargado | Trabajador | Veterinario | Contador | Consulta |
+| --- | --- | --- | --- | --- | --- | --- |
+| Dashboard | Total | No | No | No | No | No |
+| Tareas | Total | Total | Asignadas | Asignadas | Asignadas | Asignadas |
+| Importar | Total | No | No | No | No | No |
+| Inventario | Total | Crear/editar | Lectura | Lectura | No | Lectura |
+| Pesajes | Total | Crear/editar | No | Crear/editar | No | Lectura |
+| Potreros | Total | Crear/editar | Lectura | No | No | Lectura |
+| Sanidad | Total | Crear/editar | No | Crear/editar | No | Lectura |
+| Reproduccion | Total | Crear/editar | No | Crear/editar | No | Lectura |
+| Compras | Total | Crear/editar/anular | No | No | Lectura | Lectura |
+| Ventas | Total | Crear/editar/anular | No | No | Lectura | Lectura |
+| Finanzas | Total | No | No | No | Crear/editar | No |
+| Catalogos financieros | Total | No | No | No | No | No |
+| Reportes | Total | No | No | No | Lectura | Lectura |
+| Drone | Total | Operar/ver | No | No | No | No |
+| Usuarios | Total | No | No | No | No | No |
+
+Notas:
+
+- El backend protege por permiso aunque el frontend oculte botones.
+- En compras y ventas, `Contador` y `Consulta` pueden ver, pero no crear, editar, anular ni eliminar.
+- En tareas, roles sin gestion solo consultan y completan tareas asignadas.
+- Eliminar datos sensibles queda mas restringido que editar: en pesajes, sanidad, reproduccion, compras, ventas y drone solo `Administrador` elimina.
+- `Consulta` no entra al modulo Finanzas, pero puede consumir resumenes financieros incluidos dentro de Reportes.
+
+### Auditoria global
+
+Modelo:
+
+```txt
+backend/models/Auditoria.js
+```
+
+Middleware:
+
+```txt
+backend/middleware/auditoria.js
+```
+
+La auditoria registra automaticamente requests de cambio:
+
+- `POST`
+- `PUT`
+- `PATCH`
+- `DELETE`
+
+Campos principales:
+
+- usuario, correo y rol.
+- accion, modulo, metodo y ruta.
+- recurso afectado cuando existe `:id`.
+- estado: `Exitoso`, `Fallido` o `Denegado`.
+- codigo de respuesta.
+- IP y user agent.
+- datos sanitizados de `body` y `query`.
+
+Los campos sensibles se reemplazan por `[protegido]`, por ejemplo:
+
+- `contrasena`
+- `password`
+- `token`
+- `authorization`
+- `resetPasswordToken`
+- `comprobante`
+
+Vista en frontend:
+
+```txt
+Usuarios > Auditoria
+```
+
+Solo `Administrador` puede consultar auditoria.
+
+Endpoints:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/api/auditoria` | Lista eventos de auditoria |
+| GET | `/api/auditoria/:id` | Detalle de evento |
+
+Filtros disponibles:
+
+- `fechaInicio`
+- `fechaFin`
+- `usuario`
+- `modulo`
+- `accion`
+- `estado`
+- `limite`
+
+### Rate limit
+
+Middleware:
+
+```txt
+backend/middleware/rateLimit.js
+```
+
+Reglas actuales:
+
+| Flujo | Ventana | Maximo |
+| --- | --- | --- |
+| Login | 15 minutos | 5 intentos por IP/correo |
+| Recuperacion/restablecimiento | 30 minutos | 3 solicitudes por IP/correo |
+
+Si se supera el limite, el backend responde `429` con `Retry-After`.
 
 ### Recuperacion de contrasena
 
@@ -171,7 +303,22 @@ Base:
 | PATCH | `/:id/estado` | Activa/Inactiva usuario |
 | DELETE | `/:id` | Elimina usuario |
 
-Las rutas administrativas requieren rol `Administrador`.
+Las rutas administrativas de usuarios requieren rol `Administrador`.
+
+### Auditoria
+
+Base:
+
+```txt
+/api/auditoria
+```
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Lista eventos de auditoria |
+| GET | `/:id` | Detalle de evento |
+
+Requiere rol `Administrador`.
 
 ### Animales
 
@@ -633,6 +780,13 @@ Uso de destino mixto:
 - En `Mixto`, estas cantidades definen que tareas automaticas se crean.
 - Si una camada mixta no tiene cantidades, se mantiene compatibilidad y se generan tareas amplias de finca, venta y engorde.
 
+Permisos:
+
+- `Administrador`, `Encargado` y `Veterinario` pueden crear, editar, destetar, cerrar y cancelar camadas.
+- `Administrador` puede eliminar camadas.
+- `Consulta` puede ver camadas.
+- `Trabajador` y `Contador` no ven camadas por defecto.
+
 Endpoints:
 
 | Metodo | Ruta | Descripcion |
@@ -1063,16 +1217,25 @@ Funciones:
 - registrar venta de uno o varios animales.
 - separar ventas por `especie`: `Bovino` o `Porcino`.
 - calcular subtotal por animal.
-- calcular monto total y peso total.
+- calcular `montoCalculado`, `montoFinal`, `montoTotal`, `ajusteMonto` y peso total.
+- permitir `montoFinal` general para ventas con ajustes, impuestos, redondeos u otros cargos.
 - impedir vender animales ya vendidos o muertos.
 - impedir mezclar bovinos y porcinos dentro de una misma venta.
 - actualizar animal al confirmar venta.
 - crear evento de bitacora.
 - crear movimiento financiero.
-- el movimiento financiero incluye `producto`, `cantidad`, `unidad`, `precioUnitario`, `referenciaId` y `referenciaModelo`.
+- el movimiento financiero usa `montoTotal` oficial e incluye `producto`, `cantidad`, `unidad`, `precioUnitario`, `referenciaId` y `referenciaModelo`.
 - para porcinos, el producto financiero queda como `Porcinos vendidos`.
 - para bovinos, el producto financiero queda como `Bovinos vendidos`.
 - revertir movimiento financiero al anular.
+
+Regla de monto:
+
+- `montoCalculado`: suma de peso por precio/kg en animales o camadas.
+- `montoFinal`: monto oficial editable de la venta.
+- `montoTotal`: usa `montoFinal` si existe; si no, usa `montoCalculado`.
+- `ajusteMonto`: diferencia entre `montoTotal` y `montoCalculado`.
+- Cuando existe ajuste, el monto se distribuye proporcionalmente para actualizar `montoVenta` y bitacora de animales.
 
 Frontend:
 
@@ -1118,10 +1281,10 @@ Endpoints:
 
 Reglas:
 
-- Administrador gestiona todas.
-- Encargado ve sus tareas.
-- Encargado puede pasar sus tareas a `En proceso` o `Completada`.
-- Encargado no elimina ni reasigna.
+- `Administrador` y `Encargado` gestionan todas las tareas.
+- `Trabajador`, `Veterinario`, `Contador` y `Consulta` ven sus tareas asignadas.
+- Los usuarios sin gestion pueden pasar sus tareas asignadas a `Pendiente`, `En proceso` o `Completada`.
+- Los usuarios sin gestion no eliminan ni reasignan tareas.
 
 Campos automaticos usados por reproduccion/camadas:
 

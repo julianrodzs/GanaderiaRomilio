@@ -4,11 +4,13 @@ import {
   cambiarEstadoUsuario,
   crearUsuario,
   eliminarUsuario,
+  obtenerAuditorias,
   obtenerUsuarios
 } from '../services/api';
-
-const roles = ['Administrador', 'Encargado', 'Consulta'];
+import { ROLES } from '../constants/permisosRoles';
 const estados = ['Activo', 'Inactivo'];
+const estadosAuditoria = ['Exitoso', 'Fallido', 'Denegado'];
+const accionesAuditoria = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
 const estadoInicial = {
   nombre: '',
@@ -32,6 +34,21 @@ const formatearFecha = (fecha) => {
   });
 };
 
+const fechaInput = (fecha) => {
+  if (!fecha) return '';
+  return new Date(fecha).toISOString().slice(0, 10);
+};
+
+const obtenerRangoMesActual = () => {
+  const hoy = new Date();
+  const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  return {
+    fechaInicio: fechaInput(inicio),
+    fechaFin: fechaInput(fin)
+  };
+};
+
 const normalizarUsuario = (usuario) => ({
   ...estadoInicial,
   ...usuario,
@@ -49,6 +66,18 @@ const Usuarios = ({ usuarioActual }) => {
   const [modoFormulario, setModoFormulario] = useState(false);
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState(null);
   const [formulario, setFormulario] = useState(estadoInicial);
+  const [vista, setVista] = useState('usuarios');
+  const [auditorias, setAuditorias] = useState([]);
+  const [cargandoAuditoria, setCargandoAuditoria] = useState(false);
+  const [detalleAuditoria, setDetalleAuditoria] = useState(null);
+  const [filtrosAuditoria, setFiltrosAuditoria] = useState({
+    ...obtenerRangoMesActual(),
+    usuario: '',
+    modulo: '',
+    accion: '',
+    estado: '',
+    limite: '100'
+  });
 
   const cargarUsuarios = async () => {
     try {
@@ -65,6 +94,33 @@ const Usuarios = ({ usuarioActual }) => {
   useEffect(() => {
     cargarUsuarios();
   }, []);
+
+  const cargarAuditorias = async () => {
+    try {
+      setCargandoAuditoria(true);
+      setError('');
+      setAuditorias(await obtenerAuditorias(filtrosAuditoria));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCargandoAuditoria(false);
+    }
+  };
+
+  useEffect(() => {
+    if (vista === 'auditoria') {
+      cargarAuditorias();
+    }
+  }, [
+    vista,
+    filtrosAuditoria.fechaInicio,
+    filtrosAuditoria.fechaFin,
+    filtrosAuditoria.usuario,
+    filtrosAuditoria.modulo,
+    filtrosAuditoria.accion,
+    filtrosAuditoria.estado,
+    filtrosAuditoria.limite
+  ]);
 
   const usuariosFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
@@ -83,6 +139,11 @@ const Usuarios = ({ usuarioActual }) => {
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
     setFormulario((actual) => ({ ...actual, [name]: value }));
+  };
+
+  const actualizarFiltroAuditoria = (evento) => {
+    const { name, value } = evento.target;
+    setFiltrosAuditoria((actual) => ({ ...actual, [name]: value }));
   };
 
   const abrirNuevo = () => {
@@ -196,57 +257,140 @@ const Usuarios = ({ usuarioActual }) => {
           <p className="eyebrow">Seguridad</p>
           <h2>Administracion de Usuarios</h2>
         </div>
-        <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nuevo Usuario</button>
+        {vista === 'usuarios' && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nuevo Usuario</button>}
       </div>
 
-      <div className="tabla-toolbar">
-        <input value={busqueda} onChange={(evento) => setBusqueda(evento.target.value)} placeholder="Buscar usuario..." />
-        <span>{usuariosFiltrados.length} usuarios</span>
+      <div className="inventario-tabs">
+        <button className={vista === 'usuarios' ? 'activo' : ''} type="button" onClick={() => setVista('usuarios')}>
+          Usuarios
+        </button>
+        <button className={vista === 'auditoria' ? 'activo' : ''} type="button" onClick={() => setVista('auditoria')}>
+          Auditoría
+        </button>
       </div>
+
+      {vista === 'usuarios' && (
+        <div className="tabla-toolbar">
+          <input value={busqueda} onChange={(evento) => setBusqueda(evento.target.value)} placeholder="Buscar usuario..." />
+          <span>{usuariosFiltrados.length} usuarios</span>
+        </div>
+      )}
 
       {error && <div className="alerta-formulario">{error}</div>}
-      {cargando && <div className="estado-importacion">Cargando usuarios...</div>}
+      {vista === 'usuarios' && cargando && <div className="estado-importacion">Cargando usuarios...</div>}
 
-      <div className="tabla-scroll tabla-dinamica">
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Correo</th>
-              <th>Telefono</th>
-              <th>Rol</th>
-              <th>Estado</th>
-              <th>Ultimo acceso</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {usuariosFiltrados.map((usuario) => (
-              <tr key={usuario._id}>
-                <td>{[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || '--'}</td>
-                <td>{usuario.correo}</td>
-                <td>{usuario.telefono || '--'}</td>
-                <td>{usuario.rol}</td>
-                <td>
-                  <span className={usuario.estado === 'Activo' ? 'estado-badge estado-Vigente' : 'estado-badge estado-Aplicado'}>
-                    {usuario.estado}
-                  </span>
-                </td>
-                <td>{formatearFecha(usuario.ultimoAcceso)}</td>
-                <td>
-                  <div className="acciones-tabla acciones-tabla-amplia">
-                    <button type="button" title="Editar" onClick={() => abrirEdicion(usuario)}>✎</button>
-                    <button type="button" title={usuario.estado === 'Activo' ? 'Inactivar' : 'Activar'} onClick={() => alternarEstado(usuario)}>
-                      {usuario.estado === 'Activo' ? '⏸' : '▶'}
-                    </button>
-                    <button type="button" title="Eliminar" onClick={() => borrarUsuario(usuario)}>⌫</button>
-                  </div>
-                </td>
+      {vista === 'usuarios' && (
+        <div className="tabla-scroll tabla-dinamica">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Telefono</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Ultimo acceso</th>
+                <th>Acciones</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {usuariosFiltrados.map((usuario) => (
+                <tr key={usuario._id}>
+                  <td>{[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || '--'}</td>
+                  <td>{usuario.correo}</td>
+                  <td>{usuario.telefono || '--'}</td>
+                  <td>{usuario.rol}</td>
+                  <td>
+                    <span className={usuario.estado === 'Activo' ? 'estado-badge estado-Vigente' : 'estado-badge estado-Aplicado'}>
+                      {usuario.estado}
+                    </span>
+                  </td>
+                  <td>{formatearFecha(usuario.ultimoAcceso)}</td>
+                  <td>
+                    <div className="acciones-tabla acciones-tabla-amplia">
+                      <button type="button" title="Editar" onClick={() => abrirEdicion(usuario)}>✎</button>
+                      <button type="button" title={usuario.estado === 'Activo' ? 'Inactivar' : 'Activar'} onClick={() => alternarEstado(usuario)}>
+                        {usuario.estado === 'Activo' ? '⏸' : '▶'}
+                      </button>
+                      <button type="button" title="Eliminar" onClick={() => borrarUsuario(usuario)}>⌫</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {vista === 'auditoria' && (
+        <>
+          <div className="tabla-toolbar">
+            <input type="date" name="fechaInicio" value={filtrosAuditoria.fechaInicio} onChange={actualizarFiltroAuditoria} />
+            <input type="date" name="fechaFin" value={filtrosAuditoria.fechaFin} onChange={actualizarFiltroAuditoria} />
+            <select name="usuario" value={filtrosAuditoria.usuario} onChange={actualizarFiltroAuditoria}>
+              <option value="">Todos los usuarios</option>
+              {usuarios.map((usuario) => (
+                <option key={usuario._id} value={usuario._id}>
+                  {[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo}
+                </option>
+              ))}
+            </select>
+            <input name="modulo" value={filtrosAuditoria.modulo} onChange={actualizarFiltroAuditoria} placeholder="Módulo..." />
+            <select name="accion" value={filtrosAuditoria.accion} onChange={actualizarFiltroAuditoria}>
+              <option value="">Todas las acciones</option>
+              {accionesAuditoria.map((accion) => <option key={accion} value={accion}>{accion}</option>)}
+            </select>
+            <select name="estado" value={filtrosAuditoria.estado} onChange={actualizarFiltroAuditoria}>
+              <option value="">Todos los estados</option>
+              {estadosAuditoria.map((estado) => <option key={estado} value={estado}>{estado}</option>)}
+            </select>
+            <select name="limite" value={filtrosAuditoria.limite} onChange={actualizarFiltroAuditoria}>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+              <option value="500">500</option>
+            </select>
+            <span>{auditorias.length} eventos</span>
+          </div>
+
+          {cargandoAuditoria && <div className="estado-importacion">Cargando auditoría...</div>}
+
+          <div className="tabla-scroll tabla-dinamica">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Usuario</th>
+                  <th>Rol</th>
+                  <th>Acción</th>
+                  <th>Módulo</th>
+                  <th>Ruta</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditorias.map((item) => (
+                  <tr key={item._id}>
+                    <td>{formatearFecha(item.createdAt)}</td>
+                    <td>{item.usuarioNombre || item.usuarioCorreo || '--'}</td>
+                    <td>{item.usuarioRol || '--'}</td>
+                    <td>{item.accion}</td>
+                    <td>{item.modulo}</td>
+                    <td>{item.ruta}</td>
+                    <td><span className={`estado-badge estado-${item.estado}`}>{item.estado}</span></td>
+                    <td>
+                      <div className="acciones-tabla">
+                        <button type="button" title="Ver detalle" onClick={() => setDetalleAuditoria(item)}>⊙</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {modoFormulario && (
         <div className="modal-backdrop">
@@ -285,7 +429,7 @@ const Usuarios = ({ usuarioActual }) => {
               <label>
                 Rol
                 <select name="rol" value={formulario.rol} onChange={actualizarCampo}>
-                  {roles.map((rol) => <option key={rol} value={rol}>{rol}</option>)}
+                  {ROLES.map((rol) => <option key={rol} value={rol}>{rol}</option>)}
                 </select>
               </label>
 
@@ -327,6 +471,38 @@ const Usuarios = ({ usuarioActual }) => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {detalleAuditoria && (
+        <div className="modal-backdrop">
+          <section className="modal-panel usuario-modal">
+            <div className="panel-title">
+              <div>
+                <p className="eyebrow">Auditoría</p>
+                <h2>{detalleAuditoria.modulo}</h2>
+              </div>
+              <button className="boton-link" type="button" onClick={() => setDetalleAuditoria(null)}>Cerrar</button>
+            </div>
+            <div className="detalle-animal-grid">
+              <article><span>Fecha</span><strong>{formatearFecha(detalleAuditoria.createdAt)}</strong></article>
+              <article><span>Usuario</span><strong>{detalleAuditoria.usuarioNombre || detalleAuditoria.usuarioCorreo || '--'}</strong></article>
+              <article><span>Rol</span><strong>{detalleAuditoria.usuarioRol || '--'}</strong></article>
+              <article><span>Acción</span><strong>{detalleAuditoria.accion}</strong></article>
+              <article><span>Estado</span><strong>{detalleAuditoria.estado}</strong></article>
+              <article><span>Código</span><strong>{detalleAuditoria.codigoRespuesta || '--'}</strong></article>
+              <article><span>IP</span><strong>{detalleAuditoria.ip || '--'}</strong></article>
+              <article><span>Recurso</span><strong>{detalleAuditoria.recursoId || '--'}</strong></article>
+            </div>
+            <div className="detalle-observaciones">
+              <span>Ruta</span>
+              <p>{detalleAuditoria.ruta}</p>
+            </div>
+            <div className="detalle-observaciones">
+              <span>Datos sanitizados</span>
+              <pre className="auditoria-json">{JSON.stringify(detalleAuditoria.datos || {}, null, 2)}</pre>
+            </div>
+          </section>
         </div>
       )}
     </section>

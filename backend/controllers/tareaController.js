@@ -1,4 +1,5 @@
 const { Tarea } = require('../models/Tarea');
+const { rolTienePermiso } = require('../config/permisosRoles');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const { upsertEventoCamada, eliminarEventosCamadaPorReferencia } = require('../services/eventoCamada-service');
 
@@ -11,7 +12,8 @@ const POPULATE_TAREA = [
     { path: 'comentarios.usuario', select: 'nombre apellido correo rol' }
 ];
 
-const esAdministrador = (req) => req.usuario?.rol === 'Administrador';
+const puedeGestionarTareas = (req) => rolTienePermiso(req.usuario?.rol, 'tareas.gestionar');
+const puedeVerTodasLasTareas = (req) => rolTienePermiso(req.usuario?.rol, 'tareas.verTodas');
 const esAsignado = (req, tarea) => String(tarea.asignadoA?._id || tarea.asignadoA) === String(req.usuario?.id);
 
 const construirFiltros = (query = {}) => {
@@ -158,8 +160,8 @@ const sincronizarBitacoraTarea = async (tarea, usuarioId) => {
 
 tareaCtrl.getTareas = async (req, res) => {
     try {
-        if (!esAdministrador(req)) {
-            return res.status(403).json({ mensaje: 'Solo el Administrador puede ver todas las tareas' });
+        if (!puedeVerTodasLasTareas(req)) {
+            return res.status(403).json({ mensaje: 'No tienes permisos para ver todas las tareas' });
         }
 
         const tareas = await Tarea.find(construirFiltros(req.query))
@@ -197,7 +199,7 @@ tareaCtrl.getTareaById = async (req, res) => {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
         }
 
-        if (!esAdministrador(req) && !esAsignado(req, tarea)) {
+        if (!puedeVerTodasLasTareas(req) && !esAsignado(req, tarea)) {
             return res.status(403).json({ mensaje: 'No tienes permisos para ver esta tarea' });
         }
 
@@ -209,8 +211,8 @@ tareaCtrl.getTareaById = async (req, res) => {
 
 tareaCtrl.crearTarea = async (req, res) => {
     try {
-        if (!esAdministrador(req)) {
-            return res.status(403).json({ mensaje: 'Solo el Administrador puede crear tareas' });
+        if (!puedeGestionarTareas(req)) {
+            return res.status(403).json({ mensaje: 'No tienes permisos para crear tareas' });
         }
 
         const nuevaTarea = new Tarea({
@@ -229,8 +231,8 @@ tareaCtrl.crearTarea = async (req, res) => {
 
 tareaCtrl.actualizarTarea = async (req, res) => {
     try {
-        if (!esAdministrador(req)) {
-            return res.status(403).json({ mensaje: 'Solo el Administrador puede editar tareas' });
+        if (!puedeGestionarTareas(req)) {
+            return res.status(403).json({ mensaje: 'No tienes permisos para editar tareas' });
         }
 
         const tarea = await Tarea.findByIdAndUpdate(
@@ -259,7 +261,7 @@ tareaCtrl.cambiarEstadoTarea = async (req, res) => {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
         }
 
-        if (!esAdministrador(req)) {
+        if (!puedeGestionarTareas(req)) {
             if (!esAsignado(req, tarea)) {
                 return res.status(403).json({ mensaje: 'No puedes modificar tareas de otros usuarios' });
             }
@@ -292,7 +294,7 @@ tareaCtrl.completarTarea = async (req, res) => {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
         }
 
-        if (!esAdministrador(req) && !esAsignado(req, tarea)) {
+        if (!puedeGestionarTareas(req) && !esAsignado(req, tarea)) {
             return res.status(403).json({ mensaje: 'No puedes completar esta tarea' });
         }
 
@@ -317,8 +319,8 @@ tareaCtrl.completarTarea = async (req, res) => {
 
 tareaCtrl.eliminarTarea = async (req, res) => {
     try {
-        if (!esAdministrador(req)) {
-            return res.status(403).json({ mensaje: 'Solo el Administrador puede eliminar tareas' });
+        if (!puedeGestionarTareas(req)) {
+            return res.status(403).json({ mensaje: 'No tienes permisos para eliminar tareas' });
         }
 
         const tarea = await Tarea.findByIdAndDelete(req.params.id);
@@ -349,7 +351,7 @@ tareaCtrl.agregarComentario = async (req, res) => {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
         }
 
-        if (!esAdministrador(req) && !esAsignado(req, tarea)) {
+        if (!puedeGestionarTareas(req) && !esAsignado(req, tarea)) {
             return res.status(403).json({ mensaje: 'No puedes comentar esta tarea' });
         }
 

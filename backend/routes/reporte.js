@@ -1,5 +1,7 @@
 const { Router } = require('express');
 const router = Router();
+const { autorizarPermiso } = require('../middleware/auth');
+const puedeVer = autorizarPermiso('reportes.ver');
 
 const {
     getResumenReportes,
@@ -21,6 +23,8 @@ const {
     getReporteTareasCamadas,
     getReporteEconomicoCamadas
 } = require('../controllers/reporte-controller');
+
+router.use(puedeVer);
 
 router.get('/resumen', getResumenReportes);
 router.get('/productividad', getProductividadCria);

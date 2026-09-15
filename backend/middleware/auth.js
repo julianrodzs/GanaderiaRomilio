@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const { obtenerRolesPermiso, rolTienePermiso } = require('../config/permisosRoles');
+const Usuario = require('../models/Usuario');
 
 const base64UrlDecode = (valor) => {
     const base64 = valor.replace(/-/g, '+').replace(/_/g, '/');
@@ -65,7 +67,7 @@ const verificarToken = (token) => {
     return datos;
 };
 
-const auth = (req, res, next) => {
+const auth = async (req, res, next) => {
     try {
         const authorization = req.headers.authorization || '';
         const [tipo, token] = authorization.split(' ');
@@ -74,7 +76,25 @@ const auth = (req, res, next) => {
             return res.status(401).json({ mensaje: 'Token de autenticacion requerido' });
         }
 
-        req.usuario = verificarToken(token);
+        const datosToken = verificarToken(token);
+        const usuario = await Usuario.findById(datosToken.id).select('nombre apellido correo rol estado');
+
+        if (!usuario) {
+            return res.status(401).json({ mensaje: 'Usuario no encontrado' });
+        }
+
+        if (usuario.estado === 'Inactivo') {
+            return res.status(403).json({ mensaje: 'Usuario inactivo. Contacta al administrador.' });
+        }
+
+        req.usuario = {
+            id: usuario._id.toString(),
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+            correo: usuario.correo,
+            rol: usuario.rol || 'Encargado',
+            estado: usuario.estado
+        };
         next();
     } catch (error) {
         res.status(401).json({ mensaje: 'No autorizado', error: error.message });
@@ -93,9 +113,24 @@ const autorizarRoles = (...rolesPermitidos) => (req, res, next) => {
     next();
 };
 
+const autorizarPermiso = (permiso) => (req, res, next) => {
+    if (!req.usuario) {
+        return res.status(401).json({ mensaje: 'Token de autenticacion requerido' });
+    }
+
+    if (!rolTienePermiso(req.usuario.rol, permiso)) {
+        return res.status(403).json({ mensaje: 'No tienes permisos para realizar esta accion' });
+    }
+
+    next();
+};
+
 module.exports = {
+    autorizarPermiso,
     autorizarRoles,
     auth,
     generarToken,
+    obtenerRolesPermiso,
+    rolTienePermiso,
     verificarToken
 };

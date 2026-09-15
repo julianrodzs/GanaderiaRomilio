@@ -1,5 +1,9 @@
 const { Router } = require('express');
 const router = Router();
+const { autorizarPermiso } = require('../middleware/auth');
+const puedeVer = autorizarPermiso('sanidad.ver');
+const puedeGestionar = autorizarPermiso('sanidad.gestionar');
+const puedeEliminar = autorizarPermiso('sanidad.eliminar');
 
 const {
     getRegistrosSanitarios,
@@ -10,12 +14,12 @@ const {
 } = require('../controllers/sanidad-controller');
 
 router.route('/')
-    .get(getRegistrosSanitarios)
-    .post(createRegistroSanitario);
+    .get(puedeVer, getRegistrosSanitarios)
+    .post(puedeGestionar, createRegistroSanitario);
 
 router.route('/:id')
-    .get(getRegistroSanitario)
-    .put(updateRegistroSanitario)
-    .delete(deleteRegistroSanitario);
+    .get(puedeVer, getRegistroSanitario)
+    .put(puedeGestionar, updateRegistroSanitario)
+    .delete(puedeEliminar, deleteRegistroSanitario);
 
 module.exports = router;

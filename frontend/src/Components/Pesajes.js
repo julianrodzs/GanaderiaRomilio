@@ -62,7 +62,7 @@ const valorInicial = {
   observaciones: ''
 };
 
-const Pesajes = () => {
+const Pesajes = ({ soloLectura = false }) => {
   const [pesajes, setPesajes] = useState([]);
   const [animales, setAnimales] = useState([]);
   const [potreros, setPotreros] = useState([]);
@@ -314,7 +314,7 @@ const Pesajes = () => {
           <p className="eyebrow">Crecimiento</p>
           <h2>Pesajes Históricos</h2>
         </div>
-        <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nuevo pesaje</button>
+        {!soloLectura && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nuevo pesaje</button>}
       </div>
 
       <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
@@ -393,8 +393,8 @@ const Pesajes = () => {
                 <td>{pesaje.observaciones || '--'}</td>
                 <td>
                   <div className="acciones-tabla">
-                    <button type="button" aria-label="Editar" title="Editar" onClick={() => abrirEditar(pesaje)}>✎</button>
-                    <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => borrarPesaje(pesaje)}>⌫</button>
+                    {!soloLectura && <button type="button" aria-label="Editar" title="Editar" onClick={() => abrirEditar(pesaje)}>✎</button>}
+                    {!soloLectura && <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => borrarPesaje(pesaje)}>⌫</button>}
                   </div>
                 </td>
               </tr>

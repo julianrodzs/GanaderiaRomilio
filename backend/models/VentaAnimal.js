@@ -33,7 +33,10 @@ const ventaAnimalSchema = new Schema(
         camadas: { type: [detalleVentaCamadaSchema], default: [] },
         totalAnimales: { type: Number, default: 0, min: 0 },
         pesoTotalKg: { type: Number, default: 0, min: 0 },
+        montoCalculado: { type: Number, default: 0, min: 0 },
+        montoFinal: { type: Number, min: 0, default: null },
         montoTotal: { type: Number, default: 0, min: 0 },
+        ajusteMonto: { type: Number, default: 0 },
         comprobanteUrl: { type: String, trim: true },
         estado: {
             type: String,
@@ -47,7 +50,7 @@ const ventaAnimalSchema = new Schema(
     }
 );
 
-const calcularTotalesVenta = (animales = [], camadas = []) => {
+const calcularTotalesVenta = ({ animales = [], camadas = [], montoFinal } = {}) => {
     const animalesCalculados = (animales || []).map((item) => ({
         animal: item.animal?._id || item.animal,
         pesoVentaKg: item.pesoVentaKg,
@@ -62,14 +65,24 @@ const calcularTotalesVenta = (animales = [], camadas = []) => {
         subtotal: Number(item.pesoTotalKg || 0) * Number(item.precioKg || 0)
     }));
 
+    const montoCalculado = animalesCalculados.reduce((total, item) => total + Number(item.subtotal || 0), 0)
+        + camadasCalculadas.reduce((total, item) => total + Number(item.subtotal || 0), 0);
+    const montoFinalNumero = montoFinal === undefined || montoFinal === null || montoFinal === ''
+        ? undefined
+        : Number(montoFinal);
+    const montoFinalValido = Number.isFinite(montoFinalNumero) ? montoFinalNumero : null;
+    const montoTotal = Number.isFinite(montoFinalValido) ? montoFinalValido : montoCalculado;
+
     return {
         animales: animalesCalculados,
         camadas: camadasCalculadas,
         totalAnimales: animalesCalculados.length + camadasCalculadas.reduce((total, item) => total + Number(item.cantidad || 0), 0),
         pesoTotalKg: animalesCalculados.reduce((total, item) => total + Number(item.pesoVentaKg || 0), 0)
             + camadasCalculadas.reduce((total, item) => total + Number(item.pesoTotalKg || 0), 0),
-        montoTotal: animalesCalculados.reduce((total, item) => total + Number(item.subtotal || 0), 0)
-            + camadasCalculadas.reduce((total, item) => total + Number(item.subtotal || 0), 0)
+        montoCalculado,
+        montoFinal: montoFinalValido,
+        montoTotal,
+        ajusteMonto: montoTotal - montoCalculado
     };
 };
 
@@ -78,7 +91,11 @@ ventaAnimalSchema.pre('validate', function calcularTotales(next) {
         this.invalidate('animales', 'Debe agregar al menos un animal o una camada a la venta');
     }
 
-    Object.assign(this, calcularTotalesVenta(this.animales, this.camadas));
+    Object.assign(this, calcularTotalesVenta({
+        animales: this.animales,
+        camadas: this.camadas,
+        montoFinal: this.montoFinal
+    }));
     next();
 });
 
@@ -86,10 +103,13 @@ ventaAnimalSchema.pre('findOneAndUpdate', function calcularTotalesEnActualizacio
     const update = this.getUpdate() || {};
     const animales = update.animales || update.$set?.animales;
     const camadas = update.camadas || update.$set?.camadas;
+    const montoFinal = Object.prototype.hasOwnProperty.call(update, 'montoFinal')
+        ? update.montoFinal
+        : update.$set?.montoFinal;
 
     if (!animales && !camadas) return next();
 
-    const totales = calcularTotalesVenta(animales || [], camadas || []);
+    const totales = calcularTotalesVenta({ animales: animales || [], camadas: camadas || [], montoFinal });
 
     if (update.$set) {
         update.$set = {

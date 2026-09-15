@@ -13,7 +13,7 @@ import {
   registrarTerneroDesdeParto
 } from '../services/api';
 import { guardarGestacionOffline, obtenerGestacionOffline } from '../services/offlineStorage';
-import { fechaEnRango, obtenerRangoUltimosAnios } from '../utils/fechas';
+import { fechaEnRango, obtenerRangoReproduccion } from '../utils/fechas';
 import FormularioCamada from './FormularioCamada';
 import FormularioReproduccion from './FormularioReproduccion';
 import SelectorEspecie from './SelectorEspecie';
@@ -136,7 +136,7 @@ const Reproduccion = ({ soloLectura = false }) => {
   const [cruce, setCruce] = useState({ macho: '', hembra: '' });
   const [resultadoCruce, setResultadoCruce] = useState(null);
   const [evaluandoCruce, setEvaluandoCruce] = useState(false);
-  const [filtroFechas, setFiltroFechas] = useState(() => obtenerRangoUltimosAnios(2));
+  const [filtroFechas, setFiltroFechas] = useState(() => obtenerRangoReproduccion());
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const [resumenPorcino, setResumenPorcino] = useState(null);
   const [conflictoCiclo, setConflictoCiclo] = useState(null);

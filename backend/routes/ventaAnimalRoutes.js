@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { Router } = require('express');
 const multer = require('multer');
+const { autorizarPermiso } = require('../middleware/auth');
 const {
     actualizarVenta,
     anularVenta,
@@ -14,6 +15,9 @@ const {
 
 const router = Router();
 const uploadsDir = path.join(__dirname, '..', 'uploads', 'ventas');
+const puedeVer = autorizarPermiso('ventas.ver');
+const puedeGestionar = autorizarPermiso('ventas.gestionar');
+const puedeEliminar = autorizarPermiso('ventas.eliminar');
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -41,12 +45,12 @@ const upload = multer({
     }
 });
 
-router.get('/', getVentas);
-router.get('/resumen', getResumenVentas);
-router.get('/:id', getVentaById);
-router.post('/', upload.single('comprobante'), crearVenta);
-router.put('/:id', upload.single('comprobante'), actualizarVenta);
-router.patch('/:id/anular', anularVenta);
-router.delete('/:id', deleteVenta);
+router.get('/', puedeVer, getVentas);
+router.get('/resumen', puedeVer, getResumenVentas);
+router.get('/:id', puedeVer, getVentaById);
+router.post('/', puedeGestionar, upload.single('comprobante'), crearVenta);
+router.put('/:id', puedeGestionar, upload.single('comprobante'), actualizarVenta);
+router.patch('/:id/anular', puedeGestionar, anularVenta);
+router.delete('/:id', puedeEliminar, deleteVenta);
 
 module.exports = router;

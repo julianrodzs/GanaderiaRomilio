@@ -1,5 +1,9 @@
 const { Router } = require('express');
 const router = Router();
+const { autorizarPermiso } = require('../middleware/auth');
+const puedeVer = autorizarPermiso('pesajes.ver');
+const puedeGestionar = autorizarPermiso('pesajes.gestionar');
+const puedeEliminar = autorizarPermiso('pesajes.eliminar');
 
 const {
     getPesajes,
@@ -11,14 +15,14 @@ const {
 } = require('../controllers/pesaje-controller');
 
 router.route('/')
-    .get(getPesajes)
-    .post(createPesaje);
+    .get(puedeVer, getPesajes)
+    .post(puedeGestionar, createPesaje);
 
-router.get('/animal/:animalId', getPesajesPorAnimal);
+router.get('/animal/:animalId', puedeVer, getPesajesPorAnimal);
 
 router.route('/:id')
-    .get(getPesaje)
-    .put(updatePesaje)
-    .delete(deletePesaje);
+    .get(puedeVer, getPesaje)
+    .put(puedeGestionar, updatePesaje)
+    .delete(puedeEliminar, deletePesaje);
 
 module.exports = router;

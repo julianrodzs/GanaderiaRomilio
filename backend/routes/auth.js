@@ -3,10 +3,11 @@ const {
     restablecerContrasena,
     solicitarRecuperacionContrasena
 } = require('../controllers/usuario-controller');
+const { rateLimitRecuperacion } = require('../middleware/rateLimit');
 
 const router = Router();
 
-router.post('/forgot-password', solicitarRecuperacionContrasena);
-router.post('/reset-password', restablecerContrasena);
+router.post('/forgot-password', rateLimitRecuperacion, solicitarRecuperacionContrasena);
+router.post('/reset-password', rateLimitRecuperacion, restablecerContrasena);
 
 module.exports = router;

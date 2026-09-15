@@ -1359,7 +1359,7 @@ Formulas:
 
 ```txt
 pesoTotalKg = suma pesoVentaKg
-montoTotal = suma subtotal
+montoTotal = suma monto asignado desde el total oficial de la venta
 precioPromedioKg = montoTotal / pesoTotalKg
 mesesPromedioEnFinca = promedio de meses entre fechaIngreso y fechaVenta
 ```
@@ -2209,6 +2209,17 @@ precioUnitario = montoTotal / pesoTotalKg
 referenciaModelo = 'VentaAnimal'
 referenciaId = venta._id
 ```
+
+En ventas, `montoTotal` es el total oficial:
+
+```txt
+montoCalculado = suma de subtotales por animal/camada
+montoFinal = monto editable indicado por el usuario
+montoTotal = montoFinal si existe; si no, montoCalculado
+ajusteMonto = montoTotal - montoCalculado
+```
+
+Si existe ajuste, reportes, inventario y bitacora distribuyen el monto oficial de forma proporcional sobre los animales o camadas de la venta.
 
 Esto permite auditar desde Finanzas el movimiento que nacio en compra/venta.
 

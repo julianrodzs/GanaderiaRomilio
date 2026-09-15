@@ -108,10 +108,11 @@ const estadoInicial = {
   observaciones: '',
   animales: [],
   camadas: [],
+  montoFinal: '',
   comprobante: null
 };
 
-const Ventas = () => {
+const Ventas = ({ soloLectura = false }) => {
   const [ventas, setVentas] = useState([]);
   const [animales, setAnimales] = useState([]);
   const [camadas, setCamadas] = useState([]);
@@ -188,11 +189,18 @@ const Ventas = () => {
     });
   }, [camadas, formulario.camadas]);
 
-  const totalFormulario = useMemo(() => {
+  const totalCalculadoFormulario = useMemo(() => {
     const totalAnimales = formulario.animales.reduce((total, item) => total + (Number(item.pesoVentaKg || 0) * Number(item.precioKg || 0)), 0);
     const totalCamadas = (formulario.camadas || []).reduce((total, item) => total + (Number(item.pesoTotalKg || 0) * Number(item.precioKg || 0)), 0);
     return totalAnimales + totalCamadas;
   }, [formulario.animales, formulario.camadas]);
+
+  const totalFormulario = useMemo(() => {
+    if (formulario.montoFinal !== '' && formulario.montoFinal !== null && formulario.montoFinal !== undefined) {
+      return Number(formulario.montoFinal || 0);
+    }
+    return totalCalculadoFormulario;
+  }, [formulario.montoFinal, totalCalculadoFormulario]);
 
   const pesoFormulario = useMemo(() => {
     const pesoAnimales = formulario.animales.reduce((total, item) => total + Number(item.pesoVentaKg || 0), 0);
@@ -236,6 +244,7 @@ const Ventas = () => {
         pesoTotalKg: item.pesoTotalKg,
         precioKg: item.precioKg
       })),
+      montoFinal: venta.montoFinal ?? '',
       comprobante: null
     });
     setErrorFormulario('');
@@ -538,7 +547,21 @@ const Ventas = () => {
             <div className="venta-totales">
               <article><span>Animales</span><strong>{unidadesFormulario}</strong></article>
               <article><span>Peso total</span><strong>{formatearNumero(pesoFormulario)} kg</strong></article>
-              <article><span>Total</span><strong>{formatearMoneda(totalFormulario)}</strong></article>
+              <article><span>Total calculado</span><strong>{formatearMoneda(totalCalculadoFormulario)}</strong></article>
+              <article>
+                <span>Monto final</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  name="montoFinal"
+                  value={formulario.montoFinal}
+                  onChange={actualizarCampo}
+                  placeholder={String(Math.round(totalCalculadoFormulario || 0))}
+                />
+              </article>
+              <article><span>Total oficial</span><strong>{formatearMoneda(totalFormulario)}</strong></article>
+              <article><span>Ajuste</span><strong>{formatearMoneda(totalFormulario - totalCalculadoFormulario)}</strong></article>
             </div>
           </section>
 
@@ -560,7 +583,7 @@ const Ventas = () => {
           <p className="eyebrow">Ventas</p>
           <h2>{textoEspecie(especie, 'titulo')}</h2>
         </div>
-        <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva venta</button>
+        {!soloLectura && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva venta</button>}
       </div>
 
       <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
@@ -613,9 +636,9 @@ const Ventas = () => {
                 <td>
                   <div className="acciones-tabla acciones-tabla-amplia">
                     <button type="button" title="Ver detalle" onClick={() => setDetalle(venta)}>⊙</button>
-                    {venta.estado !== 'Anulada' && <button type="button" title="Editar" onClick={() => abrirEdicion(venta)}>✎</button>}
-                    {venta.estado !== 'Anulada' && <button type="button" title="Anular" onClick={() => anularVenta(venta)}>↺</button>}
-                    <button type="button" title="Eliminar" onClick={() => borrarVenta(venta)}>⌫</button>
+                    {!soloLectura && venta.estado !== 'Anulada' && <button type="button" title="Editar" onClick={() => abrirEdicion(venta)}>✎</button>}
+                    {!soloLectura && venta.estado !== 'Anulada' && <button type="button" title="Anular" onClick={() => anularVenta(venta)}>↺</button>}
+                    {!soloLectura && <button type="button" title="Eliminar" onClick={() => borrarVenta(venta)}>⌫</button>}
                   </div>
                 </td>
               </tr>
@@ -640,7 +663,10 @@ const Ventas = () => {
               <article><span>Teléfono</span><strong>{detalle.telefonoComprador || '--'}</strong></article>
               <article><span>Identificación</span><strong>{detalle.identificacionComprador || '--'}</strong></article>
               <article><span>Peso total</span><strong>{formatearNumero(detalle.pesoTotalKg)} kg</strong></article>
-              <article><span>Total</span><strong>{formatearMoneda(detalle.montoTotal)}</strong></article>
+              <article><span>Total calculado</span><strong>{formatearMoneda(detalle.montoCalculado ?? detalle.montoTotal)}</strong></article>
+              <article><span>Monto final</span><strong>{detalle.montoFinal !== undefined && detalle.montoFinal !== null ? formatearMoneda(detalle.montoFinal) : '--'}</strong></article>
+              <article><span>Total oficial</span><strong>{formatearMoneda(detalle.montoTotal)}</strong></article>
+              <article><span>Ajuste</span><strong>{formatearMoneda(detalle.ajusteMonto)}</strong></article>
             </div>
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
             {detalle.comprobanteUrl && (

@@ -21,6 +21,7 @@ import {
   obtenerTareasOffline
 } from '../services/offlineStorage';
 import { obtenerRangoMesActual } from '../utils/fechas';
+import { puedeGestionarModulo } from '../constants/permisosRoles';
 
 const tipos = [
   'Chapia',
@@ -137,7 +138,7 @@ const normalizarTarea = (tarea) => ({
 const slug = (valor = '') => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').toLowerCase();
 
 const Tareas = ({ usuario }) => {
-  const esAdmin = usuario?.rol === 'Administrador';
+  const puedeGestionar = puedeGestionarModulo(usuario?.rol, 'Tareas');
   const [tareas, setTareas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [potreros, setPotreros] = useState([]);
@@ -169,18 +170,18 @@ const Tareas = ({ usuario }) => {
       setCargando(true);
       setError('');
       const filtrosActivos = Object.fromEntries(Object.entries(filtros).filter(([, valor]) => Boolean(valor)));
-      const tareasData = esAdmin ? await obtenerTareas(filtrosActivos) : await obtenerMisTareas(filtrosActivos);
+      const tareasData = puedeGestionar ? await obtenerTareas(filtrosActivos) : await obtenerMisTareas(filtrosActivos);
       const pendientes = await obtenerCambiosPendientes().catch(() => []);
       const tareasConPendientes = tareasData.map((tarea) => {
         const cambioPendiente = pendientes.find((cambio) => cambio.tipo === 'completar-tarea' && cambio.referenciaId === tarea._id);
         return cambioPendiente ? { ...tarea, estado: 'Completada', pendienteSincronizar: true } : tarea;
       });
       setTareas(tareasConPendientes);
-      if (!esAdmin) {
+      if (!puedeGestionar) {
         await guardarTareasOffline(tareasConPendientes);
       }
 
-      if (esAdmin) {
+      if (puedeGestionar) {
         const [usuariosData, potrerosData, animalesData] = await Promise.all([
           obtenerUsuarios(),
           obtenerPotreros(),
@@ -191,7 +192,7 @@ const Tareas = ({ usuario }) => {
         setAnimales(animalesData);
       }
     } catch (err) {
-      if (!esAdmin) {
+      if (!puedeGestionar) {
         const tareasOffline = await obtenerTareasOffline().catch(() => []);
         setTareas(tareasOffline);
         setError(tareasOffline.length ? 'Sin conexion. Mostrando tareas guardadas en este dispositivo.' : err.message);
@@ -367,7 +368,7 @@ const Tareas = ({ usuario }) => {
   };
 
   const reprogramarTarea = async (tarea) => {
-    if (!esAdmin) return;
+    if (!puedeGestionar) return;
     const nuevaFecha = window.prompt('Nueva fecha programada (YYYY-MM-DD):', fechaInput(tarea.fechaProgramada));
     if (!nuevaFecha) return;
 
@@ -450,10 +451,10 @@ const Tareas = ({ usuario }) => {
     <section className="tareas-page">
       <div className="panel-title">
         <div>
-          <p className="eyebrow">{esAdmin ? 'Administracion' : 'Mis tareas'}</p>
-          <h2>{esAdmin ? 'Tareas' : 'Mis tareas asignadas'}</h2>
+          <p className="eyebrow">{puedeGestionar ? 'Administracion' : 'Mis tareas'}</p>
+          <h2>{puedeGestionar ? 'Tareas' : 'Mis tareas asignadas'}</h2>
         </div>
-        {esAdmin && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva tarea</button>}
+        {puedeGestionar && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva tarea</button>}
       </div>
 
       <section className="reportes-metricas">
@@ -533,7 +534,7 @@ const Tareas = ({ usuario }) => {
             <option value="true">Solo automáticas</option>
             <option value="false">Solo manuales</option>
           </select>
-          {esAdmin && (
+          {puedeGestionar && (
             <select name="asignadoA" value={filtros.asignadoA} onChange={actualizarFiltro}>
               <option value="">Todos los responsables</option>
               {usuarios.map((usuarioItem) => (
@@ -589,13 +590,13 @@ const Tareas = ({ usuario }) => {
                 <td>
                   <div className="acciones-tabla acciones-tabla-amplia">
                     <button type="button" title="Ver detalle" onClick={() => setDetalle(tarea)}>⊙</button>
-                    {esAdmin && <button type="button" title="Editar" onClick={() => abrirEdicion(tarea)}>✎</button>}
-                    {esAdmin && <button type="button" title="Reprogramar" onClick={() => reprogramarTarea(tarea)} disabled={guardando}>↷</button>}
+                    {puedeGestionar && <button type="button" title="Editar" onClick={() => abrirEdicion(tarea)}>✎</button>}
+                    {puedeGestionar && <button type="button" title="Reprogramar" onClick={() => reprogramarTarea(tarea)} disabled={guardando}>↷</button>}
                     {tarea.estado === 'Pendiente' && <button type="button" title="En proceso" onClick={() => cambiarEstado(tarea, 'En proceso')} disabled={guardando}>▶</button>}
                     {tarea.estado !== 'Completada' && <button type="button" title="Completar" onClick={() => completar(tarea)} disabled={guardando}>✓</button>}
                     {['En proceso', 'Completada'].includes(tarea.estado) && <button type="button" title="Reabrir como pendiente" onClick={() => cambiarEstado(tarea, 'Pendiente')} disabled={guardando}>↶</button>}
-                    {esAdmin && !['Completada', 'Cancelada'].includes(tarea.estado) && <button type="button" title="Cancelar tarea" onClick={() => cancelarTarea(tarea)} disabled={guardando}>×</button>}
-                    {esAdmin && <button type="button" title="Eliminar" onClick={() => borrar(tarea)}>⌫</button>}
+                    {puedeGestionar && !['Completada', 'Cancelada'].includes(tarea.estado) && <button type="button" title="Cancelar tarea" onClick={() => cancelarTarea(tarea)} disabled={guardando}>×</button>}
+                    {puedeGestionar && <button type="button" title="Eliminar" onClick={() => borrar(tarea)}>⌫</button>}
                   </div>
                 </td>
               </tr>
@@ -683,12 +684,12 @@ const Tareas = ({ usuario }) => {
                   Reabrir como pendiente
                 </button>
               )}
-              {esAdmin && (
+              {puedeGestionar && (
                 <button className="boton-link" type="button" onClick={() => reprogramarTarea(detalle)} disabled={guardando}>
                   Reprogramar
                 </button>
               )}
-              {esAdmin && !['Completada', 'Cancelada'].includes(detalle.estado) && (
+              {puedeGestionar && !['Completada', 'Cancelada'].includes(detalle.estado) && (
                 <button className="boton-link danger-link" type="button" onClick={() => cancelarTarea(detalle)} disabled={guardando}>
                   Cancelar tarea
                 </button>

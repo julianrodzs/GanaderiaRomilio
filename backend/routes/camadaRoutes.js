@@ -1,8 +1,9 @@
 const { Router } = require('express');
 const router = Router();
-const { autorizarRoles } = require('../middleware/auth');
-const puedeVer = autorizarRoles('Administrador', 'Encargado');
-const soloAdministrador = autorizarRoles('Administrador');
+const { autorizarPermiso } = require('../middleware/auth');
+const puedeVer = autorizarPermiso('camadas.ver');
+const puedeGestionar = autorizarPermiso('camadas.gestionar');
+const puedeEliminar = autorizarPermiso('reproduccion.eliminar');
 
 const {
     getCamadas,
@@ -18,16 +19,16 @@ const {
 
 router.route('/')
     .get(puedeVer, getCamadas)
-    .post(soloAdministrador, createCamada);
+    .post(puedeGestionar, createCamada);
 
 router.get('/madre/:madreId', puedeVer, getCamadasPorMadre);
-router.patch('/:id/destete', soloAdministrador, registrarDestete);
-router.patch('/:id/cerrar', soloAdministrador, cerrarCamada);
-router.patch('/:id/cancelar', soloAdministrador, cancelarCamada);
+router.patch('/:id/destete', puedeGestionar, registrarDestete);
+router.patch('/:id/cerrar', puedeGestionar, cerrarCamada);
+router.patch('/:id/cancelar', puedeGestionar, cancelarCamada);
 
 router.route('/:id')
     .get(puedeVer, getCamada)
-    .put(soloAdministrador, updateCamada)
-    .delete(soloAdministrador, deleteCamada);
+    .put(puedeGestionar, updateCamada)
+    .delete(puedeEliminar, deleteCamada);
 
 module.exports = router;

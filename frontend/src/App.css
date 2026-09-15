@@ -1284,7 +1284,7 @@
 
 .venta-totales {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px;
 }
 
@@ -2738,6 +2738,19 @@
 .usuario-form-grid textarea:focus {
   border-color: #204b32;
   box-shadow: 0 0 0 3px rgba(32, 75, 50, 0.12);
+}
+
+.auditoria-json {
+  max-height: 320px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  color: #09160e;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
 }
 
 .tabla-accion-texto {

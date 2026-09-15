@@ -105,6 +105,17 @@ export const eliminarUsuario = (id) => {
   });
 };
 
+export const obtenerAuditorias = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/auditoria${query ? `?${query}` : ''}`);
+};
+
+export const obtenerAuditoria = (id) => request(`/auditoria/${id}`);
+
 export const obtenerTareas = (filtros = {}) => {
   const params = new URLSearchParams();
   Object.entries(filtros).forEach(([clave, valor]) => {

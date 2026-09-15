@@ -29,6 +29,20 @@ export const obtenerRangoUltimosAnios = (cantidadAnios = 2) => {
   };
 };
 
+export const obtenerRangoReproduccion = ({ aniosAtras = 2, aniosAdelante = 1 } = {}) => {
+  const hoy = new Date();
+  const inicio = new Date(hoy);
+  const fin = new Date(hoy);
+
+  inicio.setFullYear(inicio.getFullYear() - aniosAtras);
+  fin.setFullYear(fin.getFullYear() + aniosAdelante);
+
+  return {
+    fechaInicio: formatearFechaInput(inicio),
+    fechaFin: formatearFechaInput(fin)
+  };
+};
+
 export const fechaEnRango = (fecha, rango) => {
   if (!fecha) return false;
 

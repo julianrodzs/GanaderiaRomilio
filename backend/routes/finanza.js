@@ -1,5 +1,10 @@
 const { Router } = require('express');
 const router = Router();
+const { autorizarPermiso } = require('../middleware/auth');
+const puedeVer = autorizarPermiso('finanzas.ver');
+const puedeGestionar = autorizarPermiso('finanzas.gestionar');
+const puedeAdministrarCatalogos = autorizarPermiso('finanzas.administrarCatalogos');
+const puedeVerReportes = autorizarPermiso('reportes.ver');
 
 const {
     getMovimientos,
@@ -26,26 +31,26 @@ const {
 } = require('../controllers/catalogoFinanciero-controller');
 
 router.route('/')
-    .get(getMovimientos)
-    .post(createMovimiento);
+    .get(puedeVer, getMovimientos)
+    .post(puedeGestionar, createMovimiento);
 
-router.get('/resumen', getResumen);
-router.get('/consumo', getResumenConsumo);
-router.get('/planilla-resumen', getResumenPlanilla);
-router.get('/inversiones-resumen', getResumenInversiones);
-router.get('/catalogos', getCatalogosPublicos);
-router.get('/catalogos/admin', getCatalogosAdmin);
-router.post('/catalogos', crearCatalogo);
-router.put('/catalogos/:id', actualizarCatalogo);
-router.patch('/catalogos/:id/desactivar', desactivarCatalogo);
-router.patch('/catalogos/:id/activar', activarCatalogo);
-router.delete('/catalogos/:id', eliminarCatalogo);
-router.get('/destinos-resumen', getResumenDestinos);
-router.get('/revision-datos', getRevisionDatos);
-router.get('/tipo/:tipoMovimiento', getMovimientosPorTipo);
+router.get('/resumen', puedeVer, getResumen);
+router.get('/consumo', puedeVer, getResumenConsumo);
+router.get('/planilla-resumen', puedeVer, getResumenPlanilla);
+router.get('/inversiones-resumen', puedeVer, getResumenInversiones);
+router.get('/catalogos', puedeVer, getCatalogosPublicos);
+router.get('/catalogos/admin', puedeAdministrarCatalogos, getCatalogosAdmin);
+router.post('/catalogos', puedeAdministrarCatalogos, crearCatalogo);
+router.put('/catalogos/:id', puedeAdministrarCatalogos, actualizarCatalogo);
+router.patch('/catalogos/:id/desactivar', puedeAdministrarCatalogos, desactivarCatalogo);
+router.patch('/catalogos/:id/activar', puedeAdministrarCatalogos, activarCatalogo);
+router.delete('/catalogos/:id', puedeAdministrarCatalogos, eliminarCatalogo);
+router.get('/destinos-resumen', puedeVerReportes, getResumenDestinos);
+router.get('/revision-datos', puedeVer, getRevisionDatos);
+router.get('/tipo/:tipoMovimiento', puedeVer, getMovimientosPorTipo);
 
 router.route('/:id')
-    .put(updateMovimiento)
-    .delete(deleteMovimiento);
+    .put(puedeGestionar, updateMovimiento)
+    .delete(puedeGestionar, deleteMovimiento);
 
 module.exports = router;

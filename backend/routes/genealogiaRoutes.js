@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { autorizarRoles } = require('../middleware/auth');
+const { autorizarPermiso } = require('../middleware/auth');
 const {
     getArbolGenealogico,
     getDescendencia,
@@ -8,7 +8,7 @@ const {
 } = require('../controllers/genealogiaController');
 
 const router = Router();
-const puedeVer = autorizarRoles('Administrador', 'Encargado');
+const puedeVer = autorizarPermiso('inventario.ver');
 
 router.get('/animal/:animalId/arbol', puedeVer, getArbolGenealogico);
 router.get('/animal/:animalId/descendencia', puedeVer, getDescendencia);

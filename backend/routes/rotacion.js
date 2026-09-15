@@ -1,8 +1,8 @@
 const { Router } = require('express');
 const router = Router();
-const { autorizarRoles } = require('../middleware/auth');
-const puedeVer = autorizarRoles('Administrador', 'Encargado');
-const soloAdministrador = autorizarRoles('Administrador');
+const { autorizarPermiso } = require('../middleware/auth');
+const puedeVer = autorizarPermiso('potreros.ver');
+const puedeGestionar = autorizarPermiso('potreros.gestionar');
 
 const {
     getRotaciones,
@@ -14,11 +14,11 @@ const {
 
 router.route('/')
     .get(puedeVer, getRotaciones)
-    .post(soloAdministrador, createRotacion);
+    .post(puedeGestionar, createRotacion);
 
 router.route('/:id')
     .get(puedeVer, getRotacion)
-    .put(soloAdministrador, updateRotacion)
-    .delete(soloAdministrador, deleteRotacion);
+    .put(puedeGestionar, updateRotacion)
+    .delete(puedeGestionar, deleteRotacion);
 
 module.exports = router;

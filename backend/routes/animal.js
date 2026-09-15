@@ -1,8 +1,8 @@
 const { Router } = require('express');
 const router = Router();
-const { autorizarRoles } = require('../middleware/auth');
-const puedeVer = autorizarRoles('Administrador', 'Encargado');
-const soloAdministrador = autorizarRoles('Administrador');
+const { autorizarPermiso } = require('../middleware/auth');
+const puedeVer = autorizarPermiso('inventario.ver');
+const puedeGestionar = autorizarPermiso('inventario.gestionar');
 
 const {
     getAnimales,
@@ -15,13 +15,13 @@ const { updateGenealogiaAnimal } = require('../controllers/genealogiaController'
 
 router.route('/')
     .get(puedeVer, getAnimales)
-    .post(soloAdministrador, createAnimal);
+    .post(puedeGestionar, createAnimal);
 
 router.route('/:id')
     .get(puedeVer, getAnimal)
-    .put(soloAdministrador, updateAnimal)
-    .delete(soloAdministrador, deleteAnimal);
+    .put(puedeGestionar, updateAnimal)
+    .delete(puedeGestionar, deleteAnimal);
 
-router.put('/:id/genealogia', soloAdministrador, updateGenealogiaAnimal);
+router.put('/:id/genealogia', puedeGestionar, updateGenealogiaAnimal);
 
 module.exports = router;

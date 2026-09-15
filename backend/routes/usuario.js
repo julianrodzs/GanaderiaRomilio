@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const router = Router();
-const { auth, autorizarRoles } = require('../middleware/auth');
+const { auth, autorizarPermiso } = require('../middleware/auth');
+const { rateLimitLogin, rateLimitRecuperacion } = require('../middleware/rateLimit');
 
 const {
     actualizarUsuario,
@@ -15,11 +16,11 @@ const {
     solicitarRecuperacionContrasena
 } = require('../controllers/usuario-controller');
 
-const soloAdministrador = [auth, autorizarRoles('Administrador')];
+const soloAdministrador = [auth, autorizarPermiso('usuarios.gestionar')];
 
-router.post('/login', loginUsuario);
-router.post('/recuperar-contrasena', solicitarRecuperacionContrasena);
-router.post('/restablecer-contrasena', restablecerContrasena);
+router.post('/login', rateLimitLogin, loginUsuario);
+router.post('/recuperar-contrasena', rateLimitRecuperacion, solicitarRecuperacionContrasena);
+router.post('/restablecer-contrasena', rateLimitRecuperacion, restablecerContrasena);
 router.get('/perfil', auth, getPerfil);
 
 router.route('/')

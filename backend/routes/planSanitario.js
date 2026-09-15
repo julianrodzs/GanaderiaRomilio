@@ -1,5 +1,9 @@
 const { Router } = require('express');
 const router = Router();
+const { autorizarPermiso } = require('../middleware/auth');
+const puedeVer = autorizarPermiso('sanidad.ver');
+const puedeGestionar = autorizarPermiso('sanidad.gestionar');
+const puedeEliminar = autorizarPermiso('sanidad.eliminar');
 
 const {
     getPlanesSanitarios,
@@ -12,16 +16,16 @@ const {
 } = require('../controllers/planSanitario-controller');
 
 router.route('/')
-    .get(getPlanesSanitarios)
-    .post(createPlanSanitario);
+    .get(puedeVer, getPlanesSanitarios)
+    .post(puedeGestionar, createPlanSanitario);
 
-router.get('/alertas', getAlertasPlanSanitario);
+router.get('/alertas', puedeVer, getAlertasPlanSanitario);
 
 router.route('/:id')
-    .put(updatePlanSanitario)
-    .delete(deletePlanSanitario);
+    .put(puedeGestionar, updatePlanSanitario)
+    .delete(puedeEliminar, deletePlanSanitario);
 
-router.patch('/:id/registrar-aplicacion', registrarAplicacionPlan);
-router.patch('/:id/marcar-aplicado', marcarPlanAplicado);
+router.patch('/:id/registrar-aplicacion', puedeGestionar, registrarAplicacionPlan);
+router.patch('/:id/marcar-aplicado', puedeGestionar, marcarPlanAplicado);
 
 module.exports = router;

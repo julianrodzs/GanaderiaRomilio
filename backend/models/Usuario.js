@@ -9,7 +9,7 @@ const usuarioSchema = new Schema(
         telefono: { type: String, trim: true },
         rol: {
             type: String,
-            enum: ['Administrador', 'Encargado', 'Consulta'],
+            enum: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta'],
             default: 'Encargado'
         },
         estado: {

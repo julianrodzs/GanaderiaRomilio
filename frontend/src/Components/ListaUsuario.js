@@ -14,6 +14,7 @@ import Reportes from './Reportes';
 import Usuarios from '../pages/Usuarios';
 import Tareas from '../pages/Tareas';
 import Ventas from './Ventas';
+import { puedeAccederModulo, puedeGestionarModulo } from '../constants/permisosRoles';
 import {
   obtenerAnimales,
   obtenerPlanesSanitarios,
@@ -70,7 +71,10 @@ const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
 }).format(valor || 0);
 
 const ListaUsuario = ({ usuario, onLogout }) => {
-  const [vistaActiva, setVistaActiva] = useState('Dashboard');
+  const rol = usuario?.rol || 'Consulta';
+  const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
+  const obtenerVistaInicial = () => modulosOrden.find((modulo) => puedeAccederModulo(rol, modulo)) || 'Mis tareas';
+  const [vistaActiva, setVistaActiva] = useState(obtenerVistaInicial);
   const [metricas, setMetricas] = useState({
     animales: 0,
     bovinos: 0,
@@ -97,7 +101,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   });
 
   useEffect(() => {
-    if (usuario?.rol !== 'Administrador') {
+    if (!puedeAccederModulo(rol, 'Dashboard')) {
       return;
     }
 
@@ -149,7 +153,13 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     };
 
     cargarMetricas();
-  }, [usuario?.rol]);
+  }, [rol]);
+
+  useEffect(() => {
+    if (!puedeAccederModulo(rol, vistaActiva)) {
+      setVistaActiva(obtenerVistaInicial());
+    }
+  }, [rol, vistaActiva]);
 
   useEffect(() => {
     const actualizarEstadoConexion = async () => {
@@ -173,42 +183,17 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   }, []);
 
   const navegacion = <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} usuario={usuario} />;
+  const sinAcceso = (
+    <main className="dashboard-shell">
+      {navegacion}
+      <section className="vista-tabla">
+        <p className="eyebrow">Acceso</p>
+        <h2>Sin permisos para este módulo</h2>
+      </section>
+    </main>
+  );
 
-  if (usuario?.rol !== 'Administrador') {
-    if (vistaActiva === 'Inventario') {
-      return (
-        <main className="dashboard-shell">
-          {navegacion}
-          <Animales soloLectura />
-        </main>
-      );
-    }
-
-    if (vistaActiva === 'Potreros') {
-      return (
-        <main className="dashboard-shell">
-          {navegacion}
-          <Potreros soloLectura />
-        </main>
-      );
-    }
-
-    if (vistaActiva === 'Gestación' || vistaActiva === 'Reproduccion') {
-      return (
-        <main className="dashboard-shell">
-          {navegacion}
-          <Reproduccion soloLectura />
-        </main>
-      );
-    }
-
-    return (
-      <main className="dashboard-shell">
-        {navegacion}
-        <Tareas usuario={usuario} />
-      </main>
-    );
-  }
+  if (!puedeAccederModulo(rol, vistaActiva)) return sinAcceso;
 
   if (vistaActiva === 'Importar') {
     return (
@@ -223,7 +208,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Animales />
+        <Animales soloLectura={!puedeGestionarModulo(rol, 'Inventario')} />
       </main>
     );
   }
@@ -232,7 +217,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Potreros />
+        <Potreros soloLectura={!puedeGestionarModulo(rol, 'Potreros')} />
       </main>
     );
   }
@@ -241,7 +226,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Pesajes />
+        <Pesajes soloLectura={!puedeGestionarModulo(rol, 'Pesajes')} />
       </main>
     );
   }
@@ -250,16 +235,16 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <PlanSanitario />
+        <PlanSanitario soloLectura={!puedeGestionarModulo(rol, 'Sanidad')} />
       </main>
     );
   }
 
-  if (vistaActiva === 'Reproduccion') {
+  if (vistaActiva === 'Reproduccion' || vistaActiva === 'Gestación') {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Reproduccion />
+        <Reproduccion soloLectura={!puedeGestionarModulo(rol, 'Reproduccion')} />
       </main>
     );
   }
@@ -277,7 +262,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Ventas />
+        <Ventas soloLectura={!puedeGestionarModulo(rol, 'Ventas')} />
       </main>
     );
   }
@@ -286,7 +271,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Compras />
+        <Compras soloLectura={!puedeGestionarModulo(rol, 'Compras')} />
       </main>
     );
   }
@@ -318,7 +303,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     );
   }
 
-  if (vistaActiva === 'Tareas') {
+  if (vistaActiva === 'Tareas' || vistaActiva === 'Mis tareas') {
     return (
       <main className="dashboard-shell">
         {navegacion}
