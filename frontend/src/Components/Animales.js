@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   actualizarAnimal,
+  actualizarEstadoSanitarioAnimal,
   actualizarCamada,
   cancelarCamada,
   cerrarCamada,
@@ -10,6 +11,7 @@ import {
   eliminarAnimal,
   eliminarCamada,
   obtenerAnimales,
+  obtenerAnimal,
   obtenerArbolGenealogico,
   obtenerCamadas,
   obtenerDescendenciaAnimal,
@@ -21,6 +23,7 @@ import {
 import { guardarInventarioOffline, obtenerInventarioOffline } from '../services/offlineStorage';
 import FormularioAnimal from './FormularioAnimal';
 import FormularioCamada from './FormularioCamada';
+import FormularioEstadoSanitario from './FormularioEstadoSanitario';
 import SelectorEspecie from './SelectorEspecie';
 import TablaDinamica from './TablaDinamica';
 
@@ -169,7 +172,17 @@ const columnas = [
     )
   },
   { id: 'pesoActual', label: 'Peso actual', accessor: (animal) => animal.pesoActual },
-  { id: 'estado', label: 'Estado', accessor: (animal) => animal.estado }
+  { id: 'estado', label: 'Estado', accessor: (animal) => animal.estado },
+  {
+    id: 'estadoSanitario',
+    label: 'Estado sanitario',
+    accessor: (animal) => animal.estadoSanitario || 'Sano',
+    render: (animal) => (
+      <span className={`estado-badge estado-sanitario-${(animal.estadoSanitario || 'Sano').replaceAll(' ', '-').toLowerCase()}`}>
+        {animal.estadoSanitario || 'Sano'}
+      </span>
+    )
+  }
 ];
 
 const columnaCamadaOrigen = {
@@ -181,7 +194,15 @@ const columnaCamadaOrigen = {
 const filtros = [
   { id: 'categoria', accessor: obtenerCategoriaAnimal },
   { id: 'sexo', accessor: (animal) => animal.sexo },
-  { id: 'estado', accessor: (animal) => animal.estado }
+  { id: 'estado', accessor: (animal) => animal.estado },
+  {
+    id: 'estadoSanitario',
+    accessor: (animal) => animal.estadoSanitario || 'Sano',
+    opciones: ['Sano', 'En observación', 'Enfermo', 'Recuperación', 'Con tratamiento activo'],
+    predicate: (animal, valor) => valor === 'Con tratamiento activo'
+      ? Boolean(animal.tieneTratamientoActivo)
+      : (animal.estadoSanitario || 'Sano') === valor
+  }
 ];
 
 const columnasCamadas = [
@@ -235,7 +256,7 @@ const filtrosCamadas = [
   { id: 'destino', accessor: (camada) => camada.destino }
 ];
 
-const Animales = ({ soloLectura = false }) => {
+const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
   const [animales, setAnimales] = useState([]);
   const [camadas, setCamadas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -265,6 +286,8 @@ const Animales = ({ soloLectura = false }) => {
   const [errorGenealogia, setErrorGenealogia] = useState('');
   const [observacionManual, setObservacionManual] = useState('');
   const [guardandoEvento, setGuardandoEvento] = useState(false);
+  const [cambiandoEstadoSanitario, setCambiandoEstadoSanitario] = useState(false);
+  const [errorEstadoSanitario, setErrorEstadoSanitario] = useState('');
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const [vistaPorcina, setVistaPorcina] = useState('Animales');
   const etiquetaId = 'DIIO';
@@ -481,11 +504,13 @@ const Animales = ({ soloLectura = false }) => {
     setPesajesAnimal([]);
     setArbolGenealogico(null);
     setDescendenciaAnimal(null);
-    await Promise.all([
+    const [detalle] = await Promise.all([
+      obtenerAnimal(animal._id),
       cargarEventosAnimal(animal._id),
       cargarPesajesAnimal(animal._id),
       cargarGenealogiaAnimal(animal._id)
     ]);
+    setAnimalDetalle(detalle);
   };
 
   const cerrarDetalleAnimal = () => {
@@ -498,6 +523,28 @@ const Animales = ({ soloLectura = false }) => {
     setErrorEventos('');
     setErrorPesajes('');
     setErrorGenealogia('');
+    setCambiandoEstadoSanitario(false);
+    setErrorEstadoSanitario('');
+  };
+
+  const guardarEstadoSanitario = async ({ estadoSanitario, motivo }) => {
+    if (!animalDetalle?._id) return;
+    try {
+      setGuardandoEvento(true);
+      setErrorEstadoSanitario('');
+      await actualizarEstadoSanitarioAnimal(animalDetalle._id, { estadoSanitario, motivo });
+      const [detalle] = await Promise.all([
+        obtenerAnimal(animalDetalle._id),
+        cargarEventosAnimal(animalDetalle._id),
+        cargarAnimales()
+      ]);
+      setAnimalDetalle(detalle);
+      setCambiandoEstadoSanitario(false);
+    } catch (err) {
+      setErrorEstadoSanitario(err.message);
+    } finally {
+      setGuardandoEvento(false);
+    }
   };
 
   const crearObservacionManual = async (evento) => {
@@ -766,7 +813,12 @@ const Animales = ({ soloLectura = false }) => {
                       <span>{evento.moduloOrigen || 'Manual'}</span>
                     </div>
                     <div className="bitacora-contenido">
-                      <span className="estado-badge estado-Gestante">{evento.tipoEvento}</span>
+                      <div className="bitacora-badges">
+                        <span className="estado-badge estado-Gestante">{evento.tipoEvento}</span>
+                        {evento.moduloOrigen === 'Sanidad' && evento.metadata?.naturaleza && (
+                          <span className="naturaleza-sanitaria-badge">{evento.metadata.naturaleza}</span>
+                        )}
+                      </div>
                       <h3>{evento.titulo}</h3>
                       {evento.descripcion && <p>{evento.descripcion}</p>}
                     </div>
@@ -877,6 +929,30 @@ const Animales = ({ soloLectura = false }) => {
                 <strong>{formatearFecha(animalDetalle.fechaMuerte)}</strong>
               </article>
             </div>
+
+            <section className="estado-sanitario-detalle">
+              <div className="panel-title">
+                <div>
+                  <p className="eyebrow">Sanidad</p>
+                  <h2>Estado sanitario</h2>
+                </div>
+                {puedeGestionarSanidad && animalDetalle.estado === 'Activo' && (
+                  <button className="boton-secundario compacto" type="button" onClick={() => setCambiandoEstadoSanitario(true)}>
+                    Cambiar estado
+                  </button>
+                )}
+              </div>
+              <div className="detalle-animal-grid">
+                <article>
+                  <span>Estado actual</span>
+                  <strong><span className={`estado-badge estado-sanitario-${(animalDetalle.estadoSanitario || 'Sano').replaceAll(' ', '-').toLowerCase()}`}>{animalDetalle.estadoSanitario || 'Sano'}</span></strong>
+                </article>
+                <article><span>Desde</span><strong>{formatearFecha(animalDetalle.ultimoCambioEstadoSanitario?.fecha)}</strong></article>
+                <article><span>Motivo del último cambio</span><strong>{animalDetalle.ultimoCambioEstadoSanitario?.metadata?.motivo || '--'}</strong></article>
+                <article><span>Tratamiento activo</span><strong>{animalDetalle.tratamientosActivos?.length ? animalDetalle.tratamientosActivos.map((tratamiento) => tratamiento.producto).join(', ') : 'Ninguno'}</strong></article>
+                <article><span>Próxima aplicación</span><strong>{formatearFecha(animalDetalle.tratamientosActivos?.[0]?.proximaAplicacion)}</strong></article>
+              </div>
+            </section>
 
             {animalDetalle.observaciones && (
               <div className="detalle-observaciones">
@@ -1060,6 +1136,15 @@ const Animales = ({ soloLectura = false }) => {
             </section>
           </section>
         </div>
+      )}
+      {cambiandoEstadoSanitario && animalDetalle && (
+        <FormularioEstadoSanitario
+          animalInicial={animalDetalle}
+          onCancelar={() => { setCambiandoEstadoSanitario(false); setErrorEstadoSanitario(''); }}
+          onGuardar={guardarEstadoSanitario}
+          guardando={guardandoEvento}
+          error={errorEstadoSanitario}
+        />
       )}
     </>
   );

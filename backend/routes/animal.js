@@ -9,13 +9,18 @@ const {
     createAnimal,
     getAnimal,
     updateAnimal,
-    deleteAnimal
+    deleteAnimal,
+    updateEstadoSanitario,
+    updateEstadoSanitarioLote
 } = require('../controllers/animal-controller');
 const { updateGenealogiaAnimal } = require('../controllers/genealogiaController');
 
 router.route('/')
     .get(puedeVer, getAnimales)
     .post(puedeGestionar, createAnimal);
+
+router.patch('/estado-sanitario', autorizarPermiso('sanidad.gestionar'), updateEstadoSanitarioLote);
+router.patch('/:id/estado-sanitario', autorizarPermiso('sanidad.gestionar'), updateEstadoSanitario);
 
 router.route('/:id')
     .get(puedeVer, getAnimal)

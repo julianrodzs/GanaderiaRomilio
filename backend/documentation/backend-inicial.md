@@ -156,7 +156,7 @@ Notas:
 
 - El backend protege por permiso aunque el frontend oculte botones.
 - En compras y ventas, `Contador` y `Consulta` pueden ver, pero no crear, editar, anular ni eliminar.
-- En tareas, roles sin gestion solo consultan y completan tareas asignadas.
+- En tareas, Trabajador, Veterinario y Contador pueden consultar y completar tareas asignadas. Consulta es estrictamente de solo lectura.
 - Eliminar datos sensibles queda mas restringido que editar: en pesajes, sanidad, reproduccion, compras, ventas y drone solo `Administrador` elimina.
 - `Consulta` no entra al modulo Finanzas, pero puede consumir resumenes financieros incluidos dentro de Reportes.
 
@@ -361,6 +361,7 @@ Campos relevantes:
 - `fechaVenta`
 - `fechaMuerte`
 - `estado`
+- `estadoSanitario`
 - `potreroActual`
 
 Estados:
@@ -368,7 +369,15 @@ Estados:
 - `Activo`
 - `Vendido`
 - `Muerto`
-- `En tratamiento`
+
+Estados sanitarios:
+
+- `Sano`
+- `En observación`
+- `Enfermo`
+- `Recuperación`
+
+`estado` describe la situación administrativa en inventario. `estadoSanitario` describe la condición de salud. La existencia de tratamiento activo se consulta en `TratamientoSanitario` y no se duplica como booleano persistido en `Animal`.
 
 Especies:
 
@@ -380,7 +389,18 @@ La mayoria de endpoints de animales aceptan filtro:
 ```txt
 GET /api/animales?especie=Bovino
 GET /api/animales?especie=Porcino
+GET /api/animales?estadoSanitario=Enfermo
+GET /api/animales?conTratamientoActivo=true
 ```
+
+Cambios sanitarios con bitácora:
+
+```txt
+PATCH /api/animales/:id/estado-sanitario
+PATCH /api/animales/estado-sanitario
+```
+
+Ambas rutas requieren `estadoSanitario` y `motivo`. La ruta por lote también recibe `animales`. Toda actualización pasa por `estadoSanitario-service.js`, no modifica el estado general y crea un `EventoAnimal` por cambio real.
 
 ### Eventos de animal
 
@@ -541,6 +561,26 @@ Reglas de estado de potrero:
 - Solo se permite una rotacion activa por potrero.
 - Si el potrero esta en `Mantenimiento`, ese estado tiene prioridad.
 
+#### Rendimiento calculado
+
+`RotacionPotrero` es la unica fuente para las metricas de rendimiento. `Potrero` no almacena dias ocupados, animal-dias, porcentajes ni promedios.
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/api/potreros/rendimiento` | Comparativo de todos los potreros |
+| GET | `/api/potreros/:id/rendimiento` | Rendimiento e historico mensual individual |
+
+Ambas rutas aceptan `fechaInicio` y `fechaFin` en formato `AAAA-MM-DD`; sin parametros usan el mes actual.
+
+`potreroRendimiento-service.js` centraliza:
+
+- recorte de rotaciones al periodo consultado.
+- tratamiento de rotaciones activas, finalizadas y planificadas.
+- minimo de un dia para rotaciones reales del mismo dia.
+- ocupacion, promedios, animal-dias y animal-dias por hectarea.
+- descansos historicos y descanso actual.
+- agrupacion mensual y comparativo por potrero.
+
 ### Plan Sanitario
 
 Base:
@@ -602,23 +642,107 @@ Body:
 5. El backend actualiza `fechaAplicacion`.
 6. El modelo recalcula `proximaAplicacion`.
 7. El estado vuelve a calcularse segun la nueva proxima fecha.
-8. Se crean eventos reales de bitacora de sanidad para los animales afectados.
+8. Se crea un documento `AplicacionSanitaria` con naturaleza `Plan sanitario`.
+9. Desde esa aplicacion se crean eventos reales de bitacora para los animales afectados.
 
 Reglas de bitacora sanitaria:
 
 - Crear o editar un plan no crea bitacora.
-- Registrar aplicacion si crea bitacora.
+- Registrar aplicacion crea primero `AplicacionSanitaria` y luego la bitacora.
 - Si el plan tiene `animalDiio`, crea evento solo en ese animal.
 - Si el plan es `Todo el ganado`, crea evento en todos los animales activos de la especie del plan.
 - Los animales `Muerto` o `Vendido` no reciben eventos de planes grupales.
 - La fecha del evento es la fecha real de aplicacion.
-- El titulo del evento es `actividad / producto`.
+- El titulo del evento es `Aplicación sanitaria` y su metadata conserva producto, dosis, via y naturaleza.
 - El origen del evento es `Sanidad`.
 
 Nota de compatibilidad:
 
 - La ruta vieja `marcar-aplicado` sigue existiendo como alias.
 - El estado `Aplicado` se mantiene en el enum por compatibilidad con datos viejos, pero el flujo nuevo recalcula el estado del plan despues de cada aplicacion.
+
+### Aplicaciones Sanitarias
+
+`AplicacionSanitaria` es la evidencia oficial de una aplicacion realmente realizada. La bitacora del animal se deriva de este modelo y no directamente de la creacion de un plan o tratamiento.
+
+Naturalezas:
+
+- `Plan sanitario`: referencia opcional a `PlanSanitario` y sin tratamiento.
+- `Tratamiento`: requiere referencia a `TratamientoSanitario` y sin plan.
+- `Aplicacion unica`: no tiene plan ni tratamiento.
+
+Una aplicacion puede incluir varios animales en un solo documento. El servicio `aplicacionSanitaria-service.js` crea un `EventoAnimal` independiente para cada animal, todos con el ID de la aplicacion como `referenciaId`.
+
+Base:
+
+```txt
+/api/aplicaciones-sanitarias
+```
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Historial con filtros por fechas, animal, producto, naturaleza, responsable y especie |
+| GET | `/:id` | Detalle de una aplicacion real |
+| POST | `/unica` | Registra una aplicacion puntual sin recurrencia |
+
+### Tratamientos Sanitarios
+
+`TratamientoSanitario` representa un proceso finito motivado por enfermedad, lesion, recuperacion o manejo veterinario. Crear el tratamiento no crea bitacora. Solo registrar una dosis real crea `AplicacionSanitaria` y eventos individuales.
+
+Estados:
+
+- `Activo`
+- `Completado`
+- `Cancelado`
+
+Reglas:
+
+- Puede involucrar uno o varios animales activos de una misma especie.
+- La primera aplicacion es opcional al crear el tratamiento.
+- La proxima fecha se calcula desde la ultima aplicacion real, no desde `fechaInicio`.
+- Al alcanzar `cantidadAplicaciones`, se completa automaticamente, se guarda `fechaFin` y se limpia `proximaAplicacion`.
+- Completar o cancelar manualmente conserva todas las aplicaciones historicas.
+- Los animales no pueden cambiar despues de registrar la primera aplicacion.
+- Al crear un tratamiento se puede cambiar el estado sanitario de todos los animales asociados; la sugerencia inicial es `Enfermo`.
+- Completar el tratamiento no marca animales como sanos automaticamente. El usuario elige `Sano`, `Recuperación`, mantener `Enfermo` o no modificar.
+- Cancelar un tratamiento nunca cambia el estado sanitario.
+- Al crear un plan o tratamiento se requiere `asignadoA`, un usuario activo con rol `Administrador`, `Encargado` o `Veterinario`.
+- `responsable` y `veterinario` siguen siendo textos de referencia para personas externas o datos historicos; las tareas y alertas usan `asignadoA`.
+
+Base:
+
+```txt
+/api/tratamientos-sanitarios
+```
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/` | Lista y filtra tratamientos |
+| GET | `/:id` | Detalle con sus aplicaciones reales |
+| POST | `/` | Crea tratamiento; puede registrar la primera aplicacion |
+| PUT | `/:id` | Edita datos clinicos y programacion |
+| POST | `/:id/aplicaciones` | Registra una aplicacion real |
+| PATCH | `/:id/completar` | Completa manualmente |
+| PATCH | `/:id/cancelar` | Cancela sin borrar historial |
+
+### Compatibilidad y migracion sanitaria
+
+- `RegistroSanitario` se conserva sin borrarlo y queda como estructura legada/importada.
+- Las aplicaciones nuevas usan `AplicacionSanitaria`.
+- `backend/scripts/migrarAplicacionesPlanesSanitarios.js` revisa planes existentes con `fechaAplicacion`.
+- Sin argumentos funciona en simulacion y no escribe datos.
+- Para aplicar una migracion revisada se ejecuta con `--apply`.
+- La migracion es idempotente y reutiliza los eventos sanitarios legados cuando existen para evitar duplicarlos.
+- Los planes y tratamientos sincronizan tareas futuras; Tareas centraliza las alertas internas y los correos operativos.
+- `npm run migrate:estado-sanitario:check` lista animales cuyo estado legado es `En tratamiento` sin escribir datos.
+- `npm run migrate:estado-sanitario:activos` migra unicamente casos respaldados por un tratamiento activo a `estado = Activo` y `estadoSanitario = Enfermo`.
+- Los casos sin tratamiento activo quedan expresamente pendientes de revision manual; el script no infiere si corresponden a observacion, enfermedad o recuperacion.
+
+```bash
+cd backend
+npm run migrate:sanidad:check
+npm run migrate:sanidad
+```
 
 ### Reproduccion
 
@@ -656,6 +780,7 @@ Cada registro reproductivo funciona como ciclo.
 
 Campos de control:
 
+- `asignadoA`: responsable activo del seguimiento y de las tareas automaticas.
 - `estadoCiclo`: `Activo`, `Cerrado`, `Cancelado`, `No preñada`.
 - `fechaCierre`.
 - `motivoCierre`.
@@ -665,6 +790,7 @@ Campos de control:
 Reglas:
 
 - Solo un ciclo activo por animal.
+- Crear un ciclo requiere seleccionar un `Administrador`, `Encargado` o `Veterinario` activo; el creador se conserva por separado y no se vuelve responsable implicitamente.
 - Solo ciclos con `estadoCiclo: Activo` y `activoParaAlertas: true` generan alertas.
 - Al cerrar, cancelar o marcar como no preñada se cancelan tareas automaticas pendientes.
 - Los ciclos historicos no se borran.
@@ -1285,6 +1411,10 @@ Reglas:
 - `Trabajador`, `Veterinario`, `Contador` y `Consulta` ven sus tareas asignadas.
 - Los usuarios sin gestion pueden pasar sus tareas asignadas a `Pendiente`, `En proceso` o `Completada`.
 - Los usuarios sin gestion no eliminan ni reasignan tareas.
+- Una tarea puede asignarse a cualquier usuario operativo activo (`Administrador`, `Encargado`, `Trabajador`, `Veterinario` o `Contador`), nunca a `Consulta` ni a un usuario inactivo.
+- Solo `Administrador` y `Encargado` pueden cambiar manualmente `asignadoA` desde Tareas.
+- Una reasignacion manual establece `asignacionModificadaManualmente: true`; las sincronizaciones de Sanidad, Reproduccion y Camadas conservan esa decision.
+- Si la asignacion no fue modificada manualmente, un cambio de responsable en el registro de origen se propaga a sus tareas pendientes.
 
 Campos automaticos usados por reproduccion/camadas:
 
@@ -1296,6 +1426,17 @@ Campos automaticos usados por reproduccion/camadas:
 - `claveAutomatica`
 - `generaBitacora`
 - `tipoEventoBitacora`
+- `asignacionModificadaManualmente`
+
+Usuarios asignables:
+
+```txt
+GET /api/usuarios/asignables?modulo=Sanidad
+GET /api/usuarios/asignables?modulo=Reproduccion
+GET /api/usuarios/asignables?modulo=Tareas
+```
+
+El endpoint exige autenticacion y permiso de gestion del modulo. Devuelve solo nombre, apellido, correo, rol y estado de usuarios activos compatibles, sin exponer la administracion completa de usuarios.
 
 Reglas automaticas:
 
@@ -1337,9 +1478,9 @@ Endpoints:
 
 | Metodo | Ruta | Descripcion |
 | --- | --- | --- |
-| POST | `/excel` | Vista previa sin insertar |
-| POST | `/excel/confirmar` | Inserta datos enviados |
-| POST | `/excel/importar` | Importacion directa con reporte |
+| GET | `/plantilla` | Descarga la plantilla versionada con catalogos activos |
+| POST | `/excel` | Valida el archivo y crea un lote pendiente |
+| POST | `/excel/confirmar` | Confirma un lote validado por ID |
 
 Campo multipart:
 
@@ -1347,84 +1488,50 @@ Campo multipart:
 archivo
 ```
 
-Campo opcional:
+Hojas de datos exactas:
 
-```txt
-modulos=["inventario","potreros","pesajes","finanzas","rotaciones"]
+- `POTREROS`
+- `INVENTARIO`
+- `FINANZAS`
+- `PESAJES` opcional
+
+El importador no contiene detectores de hojas antiguas ni mapeos especificos por cliente. `ROTACIONES` y Sanidad se administran en sus modulos.
+
+La vista previa valida el libro completo y persiste en `ImportacionExcel`:
+
+- version y hash del archivo.
+- usuario propietario del lote.
+- estado `Pendiente`, `Con errores`, `Confirmada` o `Confirmada con errores`.
+- hojas, resumen, registros normalizados, errores y advertencias.
+
+Confirmacion:
+
+```json
+{
+  "importacionId": "...",
+  "modo": "crear_actualizar"
+}
 ```
 
-Reglas actuales:
+Modos admitidos:
 
-- Procesa solo modulos seleccionados.
-- No sobrescribe datos con celdas vacias.
-- Si existe animal/potrero, actualiza solo campos con valor.
-- Inventario se detecta por hojas que contengan `INVENTARIO` en el nombre o por hojas con encabezados minimos `DIIO` y `Sexo`.
-- Animal sin DIIO se omite.
-- Animal sin sexo se omite.
-- DIIO repetido dentro del mismo Excel se omite despues de la primera aparicion.
-- Potrero sin codigo/nombre se omite.
-- Movimiento financiero sin campos minimos se omite.
-- Si un animal no existe por DIIO o identificador de finca, se crea.
-- Si un animal ya existe por DIIO o identificador de finca, se actualiza con campos nuevos no vacios.
-- Registra historial en `ImportacionExcel`.
+- `crear_actualizar`: crea y actualiza campos no vacios de animales, potreros y pesajes.
+- `solo_crear`: omite animales, potreros y pesajes existentes.
 
-#### Inventario generico
-
-El importador principal de inventario usa encabezados y reemplaza el flujo viejo amarrado a `CONTROL DE PESO`.
-
-Una hoja se procesa como inventario cuando:
-
-- el nombre de la hoja contiene `INVENTARIO`, o
-- la hoja trae encabezados reconocibles para `DIIO` y `Sexo`.
-
-Campos minimos:
-
-- `DIIO`
-- `Sexo`
-
-Nombres de columnas aceptados:
-
-| Campo destino | Encabezados aceptados |
-| --- | --- |
-| `diio` | `DIIO`, `Arete`, `Numero DIIO`, `Número DIIO` |
-| `identificadorFinca` | Se llena internamente con el mismo DIIO para cumplir el modelo |
-| `nombre` | `ID de finca`, `ID Finca`, `Nombre animal`, `Alias` |
-| `sexo` | `Sexo`, `Genero`, `Género` |
-| `fechaNacimiento` | `Fecha de Nacimiento`, `Fecha Nacimiento`, `Nacimiento`, `Fecha de Nac.`, `F. Nacimiento`, `Fecha de` |
-| `raza` | `Raza` |
-| `madreDiio` | `Madre DIIO`, `DIIO Madre` |
-| `padreDiio` | `Padre DIIO`, `DIIO Padre` |
-| `fechaCompra` | `Fecha Compra`, `Fecha de Compra` |
-| `fechaVenta` | `Fecha Venta`, `Fecha de Venta` |
-| `fechaMuerte` | `Fecha Muerte`, `Fecha de Muerte` |
-| `fechaDestete` | `Fecha Destete`, `Fecha de Destete` |
-| `pesoNacimiento` | `Peso Nacimiento`, `Peso al Nacer` |
-| `pesoDestete` | `Peso Destete`, `Peso al Destete` |
-| `pesoActual` | `Peso Actual`, `Peso` |
-| `pesoCompra` | `Peso Compra`, `Peso de Compra` |
-| `precioCompraPorKg` | `Precio Compra Kg`, `Precio Compra por Kg`, `Precio de Compra por kilo` |
-| `precioVentaPorKg` | `Precio Venta Kg`, `Precio Venta por Kg`, `Precio de venta por kilo` |
-| `montoCompra` | `Monto Compra`, `Total compra` |
-| `montoVenta` | `Monto Venta`, `Total venta` |
-| observacion | `Estado`, `Status` |
-
-Reglas especificas:
-
-- `ID de finca` se usa como `nombre` del animal.
-- La columna `Nombre` se ignora en inventario porque en el Excel oficial puede representar propietario, criador u operador.
-- `Status` se conserva en `observaciones`; no cambia automaticamente el estado del animal.
-- `Baja` se deja para revision manual; no cambia automaticamente el estado del animal.
-- La vista previa devuelve advertencias con conteos de animales listos, omitidos sin DIIO, omitidos sin sexo y duplicados dentro del Excel.
+Finanzas siempre crea movimientos desde las filas validadas; la proteccion contra doble carga se realiza por lote confirmado y hash de archivo.
 
 Modelo `ImportacionExcel` guarda:
 
 - archivo.
-- modulos solicitados.
+- version y hash.
+- estado y modo.
 - hojas detectadas.
+- registros validados.
+- errores y advertencias.
 - resumen detectado.
 - resultado.
-- advertencias.
 - usuario.
+- fecha de confirmacion.
 
 ### Reportes
 
@@ -1512,11 +1619,13 @@ Responsable de:
 
 ### `alertasCorreo-service.js`
 
-Revisa y envia alertas:
+Revisa tareas pendientes y centraliza alertas operativas:
 
-- sanidad proxima.
-- sanidad vencida.
-- tareas automaticas de reproduccion proximas, vencidas o criticas.
+- crea notificaciones internas de tareas proximas o vencidas con `dedupKey`.
+- envia correos operativos compatibles mediante Resend cuando estan habilitados.
+- clasifica tareas originadas en Sanidad y Reproduccion para producir textos adecuados.
+
+Sanidad y Reproduccion no envian correos directamente. Generan o sincronizan tareas y este servicio procesa sus fechas.
 
 Frecuencia configurable por:
 
@@ -1568,6 +1677,8 @@ IA_SERVICE_URL=
 - `Potrero`
 - `RotacionPotrero`
 - `PlanSanitario`
+- `TratamientoSanitario`
+- `AplicacionSanitaria`
 - `RegistroSanitario`
 - `RegistroReproductivo`
 - `Camada`
@@ -1580,10 +1691,75 @@ IA_SERVICE_URL=
 - `ConteoDrone`
 - `AlertaCorreo`
 - `ImportacionExcel`
+- `Notificacion`
+
+## Centro de alertas interno
+
+### Modelo `Notificacion`
+
+Cada documento pertenece a un unico usuario para mantener lectura independiente:
+
+- `destinatario`: usuario que recibe la alerta.
+- `actor`: usuario que produjo la accion; puede ser `null` para procesos automaticos.
+- `naturaleza`: `Operativa` o `Informativa`.
+- `tipo`, `titulo`, `mensaje`.
+- `moduloOrigen`, `entidadTipo`, `entidadId`, `url`.
+- `leida`, `fechaLectura`.
+- `dedupKey`: evita duplicados de procesos periodicos.
+- `metadata`: contexto extensible.
+
+No contiene `fincaId` ni `tenantId`; la aplicacion aun no es multi-finca.
+
+### Endpoints
+
+| Metodo | Ruta | Funcion |
+| --- | --- | --- |
+| GET | `/api/notificaciones` | Lista solo las notificaciones del JWT |
+| GET | `/api/notificaciones/no-leidas/count` | Cuenta solo las no leidas propias |
+| PATCH | `/api/notificaciones/:id/leida` | Marca una notificacion propia |
+| PATCH | `/api/notificaciones/marcar-todas-leidas` | Marca todas las propias |
+
+Filtros GET: `leida`, `naturaleza`, `tipo`, `moduloOrigen`, `page`, `limit`.
+
+### Reglas por rol
+
+| Actor | Destinatarios informativos |
+| --- | --- |
+| Trabajador | Encargado y Administrador |
+| Veterinario | Encargado y Administrador |
+| Encargado | Administrador |
+| Contador | Administrador, como rol financiero equivalente al consultor operativo |
+| Administrador | No escala su propia actividad |
+| Consulta | No genera actividad; es solo lectura |
+
+Las tareas asignadas, proximas y vencidas se entregan al responsable independientemente de la jerarquia anterior.
+
+### Fuentes
+
+- Tareas: asignacion, modificacion, finalizacion, proximidad y vencimiento.
+- Sanidad: tratamiento, aplicacion real y cambio de estado sanitario.
+- Pesajes: alta y modificacion.
+- Reproduccion: nuevo ciclo, modificacion, parto, cierre, cancelacion y no preñada.
+- Finanzas: alta, modificacion y eliminacion de movimientos por actores que escalan actividad.
+
+Las notificaciones informativas nunca envian correo. Las operativas nacen de tareas y conservan compatibilidad con el correo actual.
+
+### Entrega
+
+La entrega actual usa persistencia MongoDB, carga inicial, recarga al recuperar foco y sondeo de 45 segundos. `notificacion-service.js` expone `configurarEmisorTiempoReal()` y `emitirNotificacionTiempoReal()` como punto de extension para Socket.IO autenticado en el futuro; no se agrego infraestructura WebSocket innecesaria en este sprint.
+
+### Sincronizacion sanitaria existente
+
+```bash
+npm run migrate:tareas-sanidad:check
+npm run migrate:tareas-sanidad
+```
+
+La simulacion cuenta planes y tratamientos candidatos. La aplicacion sincroniza tareas futuras sin borrar historial sanitario.
 
 ## Compatibilidades mantenidas
 
-- `RegistroSanitario` no se elimina, aunque el modulo principal es `PlanSanitario`.
+- `RegistroSanitario` no se elimina; las aplicaciones nuevas se registran en `AplicacionSanitaria`.
 - `Costo` no se elimina, aunque el modulo principal es `MovimientoFinanciero`.
 - Endpoints viejos de recuperacion bajo `/api/usuarios` siguen disponibles como compatibilidad:
   - `/api/usuarios/recuperar-contrasena`

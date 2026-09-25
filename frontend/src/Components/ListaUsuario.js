@@ -13,6 +13,7 @@ import Reproduccion from './Reproduccion';
 import Reportes from './Reportes';
 import Usuarios from '../pages/Usuarios';
 import Tareas from '../pages/Tareas';
+import CentroNotificaciones from '../pages/CentroNotificaciones';
 import Ventas from './Ventas';
 import { puedeAccederModulo, puedeGestionarModulo } from '../constants/permisosRoles';
 import {
@@ -75,6 +76,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
   const obtenerVistaInicial = () => modulosOrden.find((modulo) => puedeAccederModulo(rol, modulo)) || 'Mis tareas';
   const [vistaActiva, setVistaActiva] = useState(obtenerVistaInicial);
+  const [tareaInicialId, setTareaInicialId] = useState('');
   const [metricas, setMetricas] = useState({
     animales: 0,
     bovinos: 0,
@@ -182,7 +184,35 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     };
   }, []);
 
-  const navegacion = <Navegacion vistaActiva={vistaActiva} onCambiarVista={setVistaActiva} onLogout={onLogout} usuario={usuario} />;
+  const navegarNotificacion = (notificacion) => {
+    const entidadId = notificacion?.entidadId || '';
+    const modulo = notificacion?.moduloOrigen;
+    if (notificacion?.entidadTipo === 'Tarea' || modulo === 'Tareas') {
+      setTareaInicialId(entidadId);
+      setVistaActiva(puedeAccederModulo(rol, 'Tareas') ? 'Tareas' : 'Mis tareas');
+      return;
+    }
+    if (modulo === 'Sanidad') setVistaActiva('Sanidad');
+    else if (modulo === 'Reproduccion') setVistaActiva('Reproduccion');
+    else if (modulo === 'Pesajes' || notificacion?.entidadTipo === 'Animal') setVistaActiva('Inventario');
+    else if (modulo === 'Finanzas') setVistaActiva('Finanzas');
+    else setVistaActiva('Notificaciones');
+  };
+
+  const cambiarVista = (vista) => {
+    setTareaInicialId('');
+    setVistaActiva(vista);
+  };
+
+  const propsNavegacion = {
+    vistaActiva,
+    onCambiarVista: cambiarVista,
+    onLogout,
+    usuario,
+    onAbrirNotificaciones: () => setVistaActiva('Notificaciones'),
+    onNavegarNotificacion: navegarNotificacion
+  };
+  const navegacion = <Navegacion {...propsNavegacion} />;
   const sinAcceso = (
     <main className="dashboard-shell">
       {navegacion}
@@ -194,6 +224,15 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   );
 
   if (!puedeAccederModulo(rol, vistaActiva)) return sinAcceso;
+
+  if (vistaActiva === 'Notificaciones') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <CentroNotificaciones onNavegar={navegarNotificacion} />
+      </main>
+    );
+  }
 
   if (vistaActiva === 'Importar') {
     return (
@@ -208,7 +247,10 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Animales soloLectura={!puedeGestionarModulo(rol, 'Inventario')} />
+        <Animales
+          soloLectura={!puedeGestionarModulo(rol, 'Inventario')}
+          puedeGestionarSanidad={puedeGestionarModulo(rol, 'Sanidad')}
+        />
       </main>
     );
   }
@@ -252,7 +294,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   if (vistaActiva === 'Finanzas' || vistaActiva === 'Costos') {
     return (
       <main className="dashboard-shell">
-        <Navegacion vistaActiva="Finanzas" onCambiarVista={setVistaActiva} onLogout={onLogout} usuario={usuario} />
+        <Navegacion {...propsNavegacion} vistaActiva="Finanzas" />
         <Finanzas />
       </main>
     );
@@ -307,7 +349,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Tareas usuario={usuario} />
+        <Tareas usuario={usuario} tareaInicialId={tareaInicialId} />
       </main>
     );
   }

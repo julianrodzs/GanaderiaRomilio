@@ -2,7 +2,7 @@ const { Router } = require('express');
 const multer = require('multer');
 const { autorizarPermiso } = require('../middleware/auth');
 
-const { previewExcel, confirmarExcel, importarExcelDirecto } = require('../controllers/importar-controller');
+const { descargarPlantilla, previewExcel, confirmarExcel } = require('../controllers/importar-controller');
 
 const router = Router();
 const puedeImportar = autorizarPermiso('importar.gestionar');
@@ -24,8 +24,8 @@ const upload = multer({
     }
 });
 
+router.get('/plantilla', puedeImportar, descargarPlantilla);
 router.post('/excel', puedeImportar, upload.single('archivo'), previewExcel);
 router.post('/excel/confirmar', puedeImportar, confirmarExcel);
-router.post('/excel/importar', puedeImportar, upload.single('archivo'), importarExcelDirecto);
 
 module.exports = router;

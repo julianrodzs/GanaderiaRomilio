@@ -11,6 +11,7 @@ const {
     getPerfil,
     getUsuarioById,
     getUsuarios,
+    getUsuariosAsignables,
     loginUsuario,
     restablecerContrasena,
     solicitarRecuperacionContrasena
@@ -22,6 +23,7 @@ router.post('/login', rateLimitLogin, loginUsuario);
 router.post('/recuperar-contrasena', rateLimitRecuperacion, solicitarRecuperacionContrasena);
 router.post('/restablecer-contrasena', rateLimitRecuperacion, restablecerContrasena);
 router.get('/perfil', auth, getPerfil);
+router.get('/asignables', auth, getUsuariosAsignables);
 
 router.route('/')
     .get(soloAdministrador, getUsuarios)

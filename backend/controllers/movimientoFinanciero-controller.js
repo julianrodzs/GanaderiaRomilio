@@ -1,7 +1,27 @@
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const { normalizarMovimientoFinanciero } = require('../services/normalizacionFinanciera-service');
+const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 
 const movimientoFinancieroCtrl = {};
+
+const formatearMonto = (movimiento) => new Intl.NumberFormat('es-CR', {
+    style: 'currency',
+    currency: movimiento.moneda || 'CRC',
+    maximumFractionDigits: 0
+}).format(movimiento.monto || 0);
+
+const notificarMovimiento = (req, movimiento, tipo, titulo, verbo) => notificarAccionSegura({
+    actor: req.usuario,
+    naturaleza: 'Informativa',
+    tipo,
+    titulo,
+    mensaje: `${nombreUsuario(req.usuario)} ${verbo} ${movimiento.naturaleza === 'Ingreso' ? 'un ingreso' : 'un egreso'} de ${formatearMonto(movimiento)} en la categoría ${movimiento.categoria || 'Sin categoría'}.`,
+    moduloOrigen: 'Finanzas',
+    entidadTipo: 'MovimientoFinanciero',
+    entidadId: movimiento._id,
+    url: `/finanzas/${movimiento._id}`,
+    metadata: { monto: movimiento.monto, moneda: movimiento.moneda, categoria: movimiento.categoria }
+});
 
 const poblarReferencias = (query) => query
     .populate('potrero')
@@ -93,6 +113,8 @@ movimientoFinancieroCtrl.createMovimiento = async (req, res) => {
         const movimiento = await poblarReferencias(
             MovimientoFinanciero.findById(movimientoGuardado._id)
         );
+
+        await notificarMovimiento(req, movimiento, 'MOVIMIENTO_FINANCIERO_CREADO', 'Movimiento financiero registrado', 'registró');
 
         res.status(201).json(movimiento);
     } catch (error) {
@@ -622,6 +644,8 @@ movimientoFinancieroCtrl.updateMovimiento = async (req, res) => {
             MovimientoFinanciero.findById(movimientoActualizado._id)
         );
 
+        await notificarMovimiento(req, movimiento, 'MOVIMIENTO_FINANCIERO_MODIFICADO', 'Movimiento financiero actualizado', 'actualizó');
+
         res.json(movimiento);
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al actualizar movimiento financiero', error: error.message });
@@ -635,6 +659,8 @@ movimientoFinancieroCtrl.deleteMovimiento = async (req, res) => {
         if (!movimiento) {
             return res.status(404).json({ mensaje: 'Movimiento financiero no encontrado' });
         }
+
+        await notificarMovimiento(req, movimiento, 'MOVIMIENTO_FINANCIERO_ELIMINADO', 'Movimiento financiero eliminado', 'eliminó');
 
         res.json({ mensaje: 'Movimiento financiero eliminado' });
     } catch (error) {

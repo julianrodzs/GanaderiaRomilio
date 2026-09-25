@@ -1,7 +1,8 @@
 import React from 'react';
 import { puedeAccederModulo } from '../constants/permisosRoles';
+import CampanaNotificaciones from './CampanaNotificaciones';
 
-const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuario }) => {
+const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuario, onAbrirNotificaciones, onNavegarNotificacion }) => {
   const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone'];
   const rol = usuario?.rol || 'Consulta';
   const items = [...itemsBase, 'Mis tareas', 'Usuarios'].filter((item) => puedeAccederModulo(rol, item));
@@ -26,6 +27,7 @@ const Navegacion = ({ vistaActiva = 'Dashboard', onCambiarVista, onLogout, usuar
           </button>
         ))}
       </nav>
+      <CampanaNotificaciones onAbrirCentro={onAbrirNotificaciones} onNavegar={onNavegarNotificacion} />
     </header>
   );
 };

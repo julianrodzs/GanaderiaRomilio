@@ -1,6 +1,7 @@
 const { Tarea } = require('../models/Tarea');
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const reproduccionBovinaConfig = require('../config/reproduccionBovinaConfig');
+const { ejecutarNotificacionSegura, notificarTareaAsignada } = require('./tarea-notificacion-service');
 
 const formatearFecha = (fecha) => {
     if (!fecha) return '--';
@@ -17,7 +18,7 @@ const obtenerCodigoAnimal = (animal) => {
     return animal.diio || animal.identificadorFinca || animal.nombre || 'vaca';
 };
 
-const crearTareaBase = ({ registro, animal, usuarioId, config, fechaProgramada, descripcion }) => ({
+const crearTareaBase = ({ registro, animal, usuarioId, asignadoA, config, fechaProgramada, descripcion }) => ({
     titulo: `${config.titulo} - ${obtenerCodigoAnimal(animal)}`,
     descripcion,
     tipo: config.tipo,
@@ -25,7 +26,7 @@ const crearTareaBase = ({ registro, animal, usuarioId, config, fechaProgramada, 
     prioridad: config.prioridad,
     fechaProgramada,
     fechaLimite: fechaProgramada,
-    asignadoA: usuarioId,
+    asignadoA,
     creadoPor: usuarioId,
     animal: animal._id || animal,
     moduloOrigen: 'Reproduccion',
@@ -41,12 +42,14 @@ const crearTareaBase = ({ registro, animal, usuarioId, config, fechaProgramada, 
 const crearDefinicionesTareasBovinas = ({ registro, animal, usuarioId }) => {
     const config = reproduccionBovinaConfig.tareasAutomaticas;
     const tareas = [];
+    const asignadoA = registro.asignadoA?._id || registro.asignadoA;
 
     if (registro.fechaPartoEstimada && !registro.fechaPartoReal) {
         tareas.push(crearTareaBase({
             registro,
             animal,
             usuarioId,
+            asignadoA,
             config: config.partoEstimado,
             fechaProgramada: registro.fechaPartoEstimada,
             descripcion: `Parto estimado para ${formatearFecha(registro.fechaPartoEstimada)}. Revisar condición de la madre y preparar seguimiento.`
@@ -58,6 +61,7 @@ const crearDefinicionesTareasBovinas = ({ registro, animal, usuarioId }) => {
             registro,
             animal,
             usuarioId,
+            asignadoA,
             config: config.proximoCelo,
             fechaProgramada: registro.fechaProximoCelo,
             descripcion: `Próximo celo estimado para ${formatearFecha(registro.fechaProximoCelo)}. Revisar si aplica monta o inseminación.`
@@ -69,6 +73,7 @@ const crearDefinicionesTareasBovinas = ({ registro, animal, usuarioId }) => {
             registro,
             animal,
             usuarioId,
+            asignadoA,
             config: config.destete,
             fechaProgramada: registro.fechaDestete,
             descripcion: `Destete estimado para ${formatearFecha(registro.fechaDestete)}. Confirmar condición de la cría y de la madre.`
@@ -82,7 +87,7 @@ const sincronizarTareasBovinas = async ({ registro, animal, usuarioId }) => {
     const especie = registro.especie || animal?.especie || 'Bovino';
     const cicloActivo = (registro.estadoCiclo || 'Activo') === 'Activo' && registro.activoParaAlertas !== false;
 
-    if (especie !== 'Bovino' || !usuarioId || !cicloActivo) {
+    if (especie !== 'Bovino' || !usuarioId || !registro.asignadoA || !cicloActivo) {
         return { creadas: 0, actualizadas: 0, canceladas: 0 };
     }
 
@@ -101,13 +106,16 @@ const sincronizarTareasBovinas = async ({ registro, animal, usuarioId }) => {
         const existente = existentesPorClave.get(definicion.claveAutomatica);
 
         if (!existente) {
-            await Tarea.create(definicion);
+            const tarea = await Tarea.create(definicion);
+            await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, usuarioId));
             creadas += 1;
             continue;
         }
 
         if (existente.estado === 'Pendiente') {
+            const responsableActual = existente.asignadoA;
             Object.assign(existente, definicion);
+            if (existente.asignacionModificadaManualmente) existente.asignadoA = responsableActual;
             await existente.save();
             actualizadas += 1;
         }

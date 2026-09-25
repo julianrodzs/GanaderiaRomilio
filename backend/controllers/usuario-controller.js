@@ -6,6 +6,8 @@ const {
     enviarCorreoRecuperacion
 } = require('../services/correoElectronico-service');
 const { generarToken } = require('../middleware/auth');
+const { rolTienePermiso } = require('../config/permisosRoles');
+const { listarUsuariosAsignables } = require('../services/usuarioAsignable-service');
 
 const usuarioCtrl = {};
 const MENSAJE_RECUPERACION = 'Si el correo existe, se enviarán instrucciones para recuperar la contraseña.';
@@ -45,6 +47,27 @@ usuarioCtrl.getUsuarios = async (req, res) => {
         res.json(usuarios);
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener usuarios', error: error.message });
+    }
+};
+
+usuarioCtrl.getUsuariosAsignables = async (req, res) => {
+    try {
+        const modulo = req.query.modulo;
+        const permisoPorModulo = {
+            Sanidad: 'sanidad.gestionar',
+            Reproduccion: 'reproduccion.gestionar',
+            Tareas: 'tareas.gestionar'
+        };
+        const permiso = permisoPorModulo[modulo];
+
+        if (!permiso) return res.status(400).json({ mensaje: 'Módulo de asignación no válido' });
+        if (!rolTienePermiso(req.usuario?.rol, permiso)) {
+            return res.status(403).json({ mensaje: 'No tienes permisos para consultar responsables de este módulo' });
+        }
+
+        res.json(await listarUsuariosAsignables(modulo));
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener usuarios asignables', error: error.message });
     }
 };
 

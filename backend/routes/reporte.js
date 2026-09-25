@@ -21,7 +21,8 @@ const {
     getReporteCamadas,
     getReporteReproductivoPorcino,
     getReporteTareasCamadas,
-    getReporteEconomicoCamadas
+    getReporteEconomicoCamadas,
+    getReporteSanidad
 } = require('../controllers/reporte-controller');
 
 router.use(puedeVer);
@@ -44,5 +45,6 @@ router.get('/porcinos/camadas', getReporteCamadas);
 router.get('/porcinos/reproduccion', getReporteReproductivoPorcino);
 router.get('/porcinos/tareas-camadas', getReporteTareasCamadas);
 router.get('/porcinos/economia-camadas', getReporteEconomicoCamadas);
+router.get('/sanidad', getReporteSanidad);
 
 module.exports = router;

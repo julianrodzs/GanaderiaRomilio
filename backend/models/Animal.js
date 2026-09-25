@@ -59,8 +59,13 @@ const animalSchema = new Schema(
         fechaMuerte: { type: Date },
         estado: {
             type: String,
-            enum: ['Activo', 'Vendido', 'Muerto', 'En tratamiento'],
+            enum: ['Activo', 'Vendido', 'Muerto'],
             default: 'Activo'
+        },
+        estadoSanitario: {
+            type: String,
+            enum: ['Sano', 'En observación', 'Enfermo', 'Recuperación'],
+            default: 'Sano'
         },
         potreroActual: { type: Schema.Types.ObjectId, ref: 'Potrero' },
         fotoUrl: { type: String, trim: true },
@@ -72,6 +77,7 @@ const animalSchema = new Schema(
 );
 
 animalSchema.index({ estado: 1 });
+animalSchema.index({ estadoSanitario: 1 });
 animalSchema.index({ sexo: 1 });
 animalSchema.index({ potreroActual: 1 });
 animalSchema.index({ especie: 1, estado: 1 });

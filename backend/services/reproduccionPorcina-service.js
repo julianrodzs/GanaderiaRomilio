@@ -1,6 +1,7 @@
 const { Tarea } = require('../models/Tarea');
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const reproduccionPorcinaConfig = require('../config/reproduccionPorcinaConfig');
+const { ejecutarNotificacionSegura, notificarTareaAsignada } = require('./tarea-notificacion-service');
 
 const sumarDias = (fecha, dias) => {
     if (!fecha) return null;
@@ -24,14 +25,14 @@ const obtenerCodigoAnimal = (animal) => {
     return animal.diio || animal.identificadorFinca || animal.nombre || 'chancha';
 };
 
-const crearTareaBase = ({ registro, animal, usuarioId, clave, titulo, descripcion, tipo, fechaProgramada, prioridad = 'Media', categoriaAutomatica, generaBitacora = false, tipoEventoBitacora }) => ({
+const crearTareaBase = ({ registro, animal, usuarioId, asignadoA, clave, titulo, descripcion, tipo, fechaProgramada, prioridad = 'Media', categoriaAutomatica, generaBitacora = false, tipoEventoBitacora }) => ({
     titulo,
     descripcion,
     tipo,
     estado: 'Pendiente',
     prioridad,
     fechaProgramada,
-    asignadoA: usuarioId,
+    asignadoA,
     creadoPor: usuarioId,
     animal: animal._id || animal,
     moduloOrigen: 'Reproduccion',
@@ -46,6 +47,7 @@ const crearTareaBase = ({ registro, animal, usuarioId, clave, titulo, descripcio
 
 const crearDefinicionesTareasPorcinas = ({ registro, animal, usuarioId }) => {
     const codigo = obtenerCodigoAnimal(animal);
+    const asignadoA = registro.asignadoA?._id || registro.asignadoA;
     const ventana = `${formatearFecha(registro.fechaInicioVentanaParto)} a ${formatearFecha(registro.fechaFinVentanaParto)}`;
     const tareasChancha = [
         ['revisar-celo', 'Revisar celo', 'Reproducción', registro.fechaRevisionCelo, 'Reproducción porcina', 'Revisión de celo programada 21 días después de la inseminación/monta.', true, 'Monta'],
@@ -56,6 +58,7 @@ const crearDefinicionesTareasPorcinas = ({ registro, animal, usuarioId }) => {
         registro,
         animal,
         usuarioId,
+        asignadoA,
         clave,
         titulo: `${titulo} - ${codigo}`,
         descripcion,
@@ -73,7 +76,7 @@ const sincronizarTareasPorcinas = async ({ registro, animal, usuarioId }) => {
     const especie = registro.especie || animal?.especie;
     const fechaBase = registro.fechaInseminacion || registro.fechaMonta;
 
-    if (especie !== 'Porcino' || !fechaBase || !usuarioId) {
+    if (especie !== 'Porcino' || !fechaBase || !usuarioId || !registro.asignadoA) {
         return { creadas: 0, actualizadas: 0, canceladas: 0 };
     }
 
@@ -92,13 +95,16 @@ const sincronizarTareasPorcinas = async ({ registro, animal, usuarioId }) => {
         const existente = existentesPorClave.get(definicion.claveAutomatica);
 
         if (!existente) {
-            await Tarea.create(definicion);
+            const tarea = await Tarea.create(definicion);
+            await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, usuarioId));
             creadas += 1;
             continue;
         }
 
         if (existente.estado === 'Pendiente') {
+            const responsableActual = existente.asignadoA;
             Object.assign(existente, definicion);
+            if (existente.asignacionModificadaManualmente) existente.asignadoA = responsableActual;
             await existente.save();
             actualizadas += 1;
         }

@@ -219,6 +219,38 @@ Transformaciones:
 - Ordena alertas por `proximaAplicacion` ascendente.
 - Limita a 8.
 
+Reporte sanitario ampliado:
+
+```txt
+GET /api/reportes/sanidad?fechaInicio=&fechaFin=&especie=
+```
+
+Fuentes:
+
+- `AplicacionSanitaria` para contar exclusivamente aplicaciones realizadas.
+- `TratamientoSanitario` para estados y proximas aplicaciones.
+- `PlanSanitario` para aplicaciones recurrentes proximas o vencidas.
+
+Respuesta:
+
+```js
+totalAplicaciones
+aplicacionesPorNaturaleza
+tratamientosPorEstado
+productosMasAplicados
+animalesMasTratados
+proximosTratamientos
+proximosPlanes
+```
+
+Reglas:
+
+- Crear un plan o tratamiento no incrementa `totalAplicaciones`.
+- `aplicacionesPorNaturaleza` diferencia `Plan sanitario`, `Tratamiento` y `Aplicación única`.
+- Los productos se cuentan por documento de aplicacion real.
+- Para animales con mas tratamientos se expanden los animales de aplicaciones cuya naturaleza es `Tratamiento`.
+- Las proximas aplicaciones de tratamientos solo incluyen tratamientos `Activo` con `proximaAplicacion`.
+
 ### Finanzas generales
 
 Respuesta:
@@ -919,7 +951,8 @@ Filtro:
 
 ```js
 sexo: 'Hembra'
-estado: { $in: ['Activo', 'En tratamiento'] }
+estado: 'Activo'
+especie: 'Bovino'
 ```
 
 Luego se descartan hembras menores de 24 meses o sin edad calculable.
@@ -2187,7 +2220,8 @@ Compras de animales generan `MovimientoFinanciero` con:
 ```js
 tipoMovimiento = 'Compra de animales'
 naturaleza = 'Egreso'
-categoria = 'Compra de animales'
+categoria = 'Ganado' para bovinos | 'Porcinos' para porcinos
+destinoUso = 'Finca'
 producto = 'Bovinos comprados' | 'Porcinos comprados'
 cantidad = pesoTotalKg
 unidad = 'KG'
@@ -2202,6 +2236,7 @@ Ventas de animales generan `MovimientoFinanciero` con:
 tipoMovimiento = 'Venta de animales'
 naturaleza = 'Ingreso'
 categoria = 'Ventas'
+destinoUso = 'Finca'
 producto = 'Bovinos vendidos' | 'Porcinos vendidos'
 cantidad = pesoTotalKg
 unidad = 'KG'

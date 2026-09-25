@@ -6,11 +6,16 @@ const puedeGestionar = autorizarPermiso('potreros.gestionar');
 
 const {
     getPotreros,
+    getRendimientoPotreros,
+    getRendimientoPotrero,
     createPotrero,
     getPotrero,
     updatePotrero,
     deletePotrero
 } = require('../controllers/potrero-controller');
+
+router.get('/rendimiento', puedeVer, getRendimientoPotreros);
+router.get('/:id/rendimiento', puedeVer, getRendimientoPotrero);
 
 router.route('/')
     .get(puedeVer, getPotreros)

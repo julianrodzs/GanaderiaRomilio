@@ -2,6 +2,10 @@ const Animal = require('../models/Animal');
 const CompraAnimal = require('../models/CompraAnimal');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const { eliminarEventosPorReferencia, upsertEventoAnimal } = require('../services/eventoAnimal-service');
+const {
+    DESTINO_USO_MOVIMIENTOS_ANIMALES,
+    obtenerCategoriaCompraAnimales
+} = require('../config/catalogosFinancieros');
 
 const compraAnimalCtrl = {};
 
@@ -150,7 +154,7 @@ const crearMovimientoCompra = async (compra) => {
             fecha: compra.fechaCompra,
             tipoMovimiento: 'Compra de animales',
             naturaleza: 'Egreso',
-            categoria: 'Compra de animales',
+            categoria: obtenerCategoriaCompraAnimales(compra.especie),
             descripcion: `Compra de ${compra.especie === 'Porcino' ? 'porcino(s)' : 'bovino(s)'} a ${compra.proveedor}`,
             producto: compra.especie === 'Porcino' ? 'Porcinos comprados' : 'Bovinos comprados',
             cantidad: compra.pesoTotalKg,
@@ -159,6 +163,7 @@ const crearMovimientoCompra = async (compra) => {
             monto: compra.montoTotal,
             moneda: 'CRC',
             proveedor: compra.proveedor,
+            destinoUso: DESTINO_USO_MOVIMIENTOS_ANIMALES,
             comprobante: compra.comprobanteUrl,
             observaciones: compra.observaciones,
             referenciaId: compra._id,

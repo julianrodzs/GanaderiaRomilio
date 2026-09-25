@@ -10,6 +10,7 @@ import {
   marcarCicloNoPrenada,
   obtenerAnimales,
   obtenerRegistrosReproductivos,
+  obtenerUsuariosAsignables,
   registrarTerneroDesdeParto
 } from '../services/api';
 import { guardarGestacionOffline, obtenerGestacionOffline } from '../services/offlineStorage';
@@ -37,6 +38,11 @@ const etiquetaAnimal = (animal) => {
   return `${codigo}${animal?.nombre ? ` - ${animal.nombre}` : ''}`;
 };
 
+const etiquetaUsuario = (usuario) => {
+  if (!usuario) return '--';
+  return [usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo || '--';
+};
+
 const estadoTerneroInicial = {
   diio: '',
   identificadorFinca: '',
@@ -52,6 +58,7 @@ const estadoTerneroInicial = {
 const columnas = [
   { id: 'diio', label: 'DIIO', accessor: (registro) => obtenerAnimal(registro).diio || obtenerAnimal(registro).identificadorFinca },
   { id: 'nombre', label: 'Nombre', accessor: (registro) => obtenerAnimal(registro).nombre },
+  { id: 'responsable', label: 'Responsable', accessor: (registro) => etiquetaUsuario(registro.asignadoA) },
   {
     id: 'estado',
     label: 'Estado reproductivo',
@@ -124,6 +131,7 @@ const fechasRegistro = (registro) => [
 const Reproduccion = ({ soloLectura = false }) => {
   const [registros, setRegistros] = useState([]);
   const [animales, setAnimales] = useState([]);
+  const [usuariosAsignables, setUsuariosAsignables] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -159,12 +167,14 @@ const Reproduccion = ({ soloLectura = false }) => {
   const cargarDatos = async () => {
     try {
       setError('');
-      const [registrosData, animalesData] = await Promise.all([
+      const [registrosData, animalesData, usuariosData] = await Promise.all([
         obtenerRegistrosReproductivos({ especie }),
-        obtenerAnimales({ especie })
+        obtenerAnimales({ especie }),
+        soloLectura ? Promise.resolve([]) : obtenerUsuariosAsignables('Reproduccion')
       ]);
       setRegistros(registrosData);
       setAnimales(animalesData);
+      setUsuariosAsignables(usuariosData || []);
       if (soloLectura) {
         await guardarGestacionOffline(registrosData);
       }
@@ -408,6 +418,7 @@ const Reproduccion = ({ soloLectura = false }) => {
           guardando={guardando}
           error={errorFormulario}
           especie={especie}
+          usuariosAsignables={usuariosAsignables}
         />
         {conflictoCiclo && (
           <div className="modal-backdrop">

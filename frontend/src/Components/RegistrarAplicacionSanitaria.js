@@ -6,6 +6,8 @@ const RegistrarAplicacionSanitaria = ({ plan, onCancelar, onRegistrar, guardando
   const [formulario, setFormulario] = useState({
     fechaAplicacion: fechaHoy(),
     responsable: plan?.responsable || '',
+    dosis: plan?.dosis || '',
+    viaAplicacion: plan?.viaAplicacion || '',
     observaciones: ''
   });
 
@@ -57,6 +59,26 @@ const RegistrarAplicacionSanitaria = ({ plan, onCancelar, onRegistrar, guardando
                 value={formulario.responsable}
                 onChange={actualizarCampo}
                 placeholder="Encargado de finca"
+              />
+            </label>
+
+            <label>
+              Dosis aplicada
+              <input
+                name="dosis"
+                value={formulario.dosis}
+                onChange={actualizarCampo}
+                placeholder="20 ml"
+              />
+            </label>
+
+            <label>
+              Vía de aplicación
+              <input
+                name="viaAplicacion"
+                value={formulario.viaAplicacion}
+                onChange={actualizarCampo}
+                placeholder="Intramuscular"
               />
             </label>
           </div>

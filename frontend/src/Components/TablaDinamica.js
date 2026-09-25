@@ -59,6 +59,7 @@ const TablaDinamica = ({
     const filtrados = porTexto.filter((fila) => filtros.every((filtro) => {
       const valorActivo = filtrosActivos[filtro.id];
       if (!valorActivo || valorActivo === 'Todos') return true;
+      if (filtro.predicate) return filtro.predicate(fila, valorActivo);
       return String(filtro.accessor(fila)) === valorActivo;
     }));
 
@@ -86,7 +87,7 @@ const TablaDinamica = ({
   const opcionesFiltros = useMemo(() => {
     return Object.fromEntries(filtros.map((filtro) => [
       filtro.id,
-      ['Todos', ...Array.from(new Set(datos.map((fila) => filtro.accessor(fila)).filter(Boolean))).sort()]
+      ['Todos', ...(filtro.opciones || Array.from(new Set(datos.map((fila) => filtro.accessor(fila)).filter(Boolean))).sort())]
     ]));
   }, [datos, filtros]);
 
@@ -96,6 +97,7 @@ const TablaDinamica = ({
       direccion: actual.campo === campo && actual.direccion === 'asc' ? 'desc' : 'asc'
     }));
   };
+  const tieneAcciones = mostrarAcciones && (Boolean(accionesExtra) || Boolean(onEditar) || Boolean(onEliminar));
 
   return (
     <section className="vista-tabla">
@@ -144,7 +146,7 @@ const TablaDinamica = ({
                   </button>
                 </th>
               ))}
-              {mostrarAcciones && <th>Acciones</th>}
+              {tieneAcciones && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -153,12 +155,12 @@ const TablaDinamica = ({
                 {columnas.map((columna) => (
                   <td key={columna.id} className={columna.className || undefined}>{renderizarValor(fila, columna)}</td>
                 ))}
-                {mostrarAcciones && (
+                {tieneAcciones && (
                   <td>
                     <div className="acciones-tabla">
                       {accionesExtra?.(fila)}
-                      <button type="button" aria-label="Editar" title="Editar" onClick={() => onEditar?.(fila)}>✎</button>
-                      <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => onEliminar?.(fila)}>⌫</button>
+                      {onEditar && <button type="button" aria-label="Editar" title="Editar" onClick={() => onEditar(fila)}>✎</button>}
+                      {onEliminar && <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => onEliminar(fila)}>⌫</button>}
                     </div>
                   </td>
                 )}

@@ -129,6 +129,7 @@ const calcularEstadoReproductivo = ({
 const registroReproductivoSchema = new Schema(
     {
         animal: { type: Schema.Types.ObjectId, ref: 'Animal', required: true },
+        asignadoA: { type: Schema.Types.ObjectId, ref: 'Usuario' },
         especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino' },
         diasDestetePorcino: { type: Number, min: 1, default: 28 },
         diasCeloPostDestetePorcino: { type: Number, min: 1, default: 5 },

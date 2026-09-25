@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
+import SelectorAnimalesSanidad from './SelectorAnimalesSanidad';
 
 const estadoInicial = {
   grupoGanado: 'Todo el ganado',
   especie: 'Bovino',
+  animales: [],
   animalDiio: '',
   actividad: '',
   producto: '',
   marca: '',
   dosis: '',
+  viaAplicacion: '',
   criterioPeso: '',
   fechaAplicacion: '',
   frecuenciaCantidad: 1,
   frecuenciaUnidad: 'meses',
+  asignadoA: '',
   responsable: '',
   observaciones: ''
 };
@@ -22,6 +26,7 @@ const grupos = [
   'Toros',
   'Vacas preñadas',
   'Vacas paridas',
+  'Animales seleccionados',
   'Todo el ganado'
 ];
 
@@ -34,21 +39,28 @@ const formatearFechaInput = (fecha) => {
 const normalizarPlan = (plan) => ({
   ...estadoInicial,
   ...plan,
+  animales: (plan?.animales || []).map((animal) => animal?._id || animal),
+  asignadoA: plan?.asignadoA?._id || plan?.asignadoA || '',
   fechaAplicacion: formatearFechaInput(plan?.fechaAplicacion),
   frecuenciaCantidad: plan?.frecuenciaCantidad ?? 1
 });
 
-const FormularioPlanSanitario = ({ onCancelar, onGuardar, onRegistrarAplicacion, guardando, error, planInicial, modo = 'crear', especie = 'Bovino' }) => {
+const FormularioPlanSanitario = ({ onCancelar, onGuardar, onRegistrarAplicacion, guardando, error, planInicial, modo = 'crear', especie = 'Bovino', animalesOpciones = [], usuariosAsignables = [] }) => {
   const [formulario, setFormulario] = useState(() => ({
     ...normalizarPlan(planInicial),
     especie: planInicial?.especie || especie
   }));
   const etiquetaId = 'DIIO';
-  const mostrarAnimalDiio = formulario.grupoGanado !== 'Todo el ganado' || Boolean(formulario.animalDiio);
+  const mostrarSeleccionAnimales = formulario.grupoGanado !== 'Todo el ganado';
 
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
-    setFormulario((actual) => ({ ...actual, [name]: value }));
+    setFormulario((actual) => {
+      if (name === 'grupoGanado' && value === 'Todo el ganado') {
+        return { ...actual, grupoGanado: value, animales: [], animalDiio: '' };
+      }
+      return { ...actual, [name]: value };
+    });
   };
 
   const enviarFormulario = (evento) => {
@@ -75,7 +87,7 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, onRegistrarAplicacion,
         <div className="form-grid">
           <label>
             Especie
-            <select name="especie" value={formulario.especie} onChange={actualizarCampo} required>
+            <select name="especie" value={formulario.especie} onChange={actualizarCampo} required disabled>
               <option value="Bovino">Bovino</option>
               <option value="Porcino">Porcino</option>
             </select>
@@ -102,14 +114,30 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, onRegistrarAplicacion,
           </label>
         </div>
 
-        {mostrarAnimalDiio && (
+        {mostrarSeleccionAnimales && (
           <label>
-            {etiquetaId} del animal
+            Animales del plan
+            <SelectorAnimalesSanidad
+              animales={animalesOpciones}
+              seleccionados={formulario.animales}
+              onChange={(seleccionados) => setFormulario((actual) => ({
+                ...actual,
+                animales: seleccionados,
+                grupoGanado: seleccionados.length ? 'Animales seleccionados' : actual.grupoGanado,
+                animalDiio: seleccionados.length ? '' : actual.animalDiio
+              }))}
+            />
+          </label>
+        )}
+
+        {mostrarSeleccionAnimales && formulario.animales.length === 0 && (
+          <label>
+            {etiquetaId} individual
             <input
               name="animalDiio"
               value={formulario.animalDiio}
               onChange={actualizarCampo}
-              placeholder="Opcional para casos individuales"
+              placeholder="Compatibilidad con planes existentes"
             />
           </label>
         )}
@@ -157,9 +185,31 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, onRegistrarAplicacion,
               placeholder="Por cada 50 kg"
             />
           </label>
+
+          <label>
+            Vía de aplicación
+            <input
+              name="viaAplicacion"
+              value={formulario.viaAplicacion}
+              onChange={actualizarCampo}
+              placeholder="Intramuscular"
+            />
+          </label>
         </div>
 
         <div className="form-grid">
+          <label>
+            Responsable de las tareas
+            <select name="asignadoA" value={formulario.asignadoA} onChange={actualizarCampo} required>
+              <option value="">Seleccionar responsable</option>
+              {usuariosAsignables.map((usuario) => (
+                <option key={usuario._id} value={usuario._id}>
+                  {[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo} - {usuario.rol}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <label>
             Fecha de aplicacion
             <input
@@ -172,7 +222,7 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, onRegistrarAplicacion,
           </label>
 
           <label>
-            Responsable
+            Responsable externo / referencia
             <input
               name="responsable"
               value={formulario.responsable}

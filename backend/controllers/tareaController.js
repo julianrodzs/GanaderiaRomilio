@@ -2,6 +2,13 @@ const { Tarea } = require('../models/Tarea');
 const { rolTienePermiso } = require('../config/permisosRoles');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const { upsertEventoCamada, eliminarEventosCamadaPorReferencia } = require('../services/eventoCamada-service');
+const {
+    ejecutarNotificacionSegura,
+    notificarTareaAsignada,
+    notificarTareaCompletada,
+    notificarTareaModificada
+} = require('../services/tarea-notificacion-service');
+const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
 
 const tareaCtrl = {};
 const POPULATE_TAREA = [
@@ -15,6 +22,7 @@ const POPULATE_TAREA = [
 const puedeGestionarTareas = (req) => rolTienePermiso(req.usuario?.rol, 'tareas.gestionar');
 const puedeVerTodasLasTareas = (req) => rolTienePermiso(req.usuario?.rol, 'tareas.verTodas');
 const esAsignado = (req, tarea) => String(tarea.asignadoA?._id || tarea.asignadoA) === String(req.usuario?.id);
+const esModoConsulta = (req) => req.usuario?.rol === 'Consulta';
 
 const construirFiltros = (query = {}) => {
     const filtros = {};
@@ -49,6 +57,7 @@ const obtenerTareaPoblada = (id) => Tarea.findById(id).populate(POPULATE_TAREA);
 
 const limpiarDatosTarea = (datos) => {
     const datosLimpios = { ...datos };
+    delete datosLimpios.asignacionModificadaManualmente;
 
     ['potrero', 'animal', 'fechaLimite'].forEach((campo) => {
         if (datosLimpios[campo] === '' || datosLimpios[campo] === 'null') {
@@ -215,6 +224,8 @@ tareaCtrl.crearTarea = async (req, res) => {
             return res.status(403).json({ mensaje: 'No tienes permisos para crear tareas' });
         }
 
+        await validarUsuarioAsignable(req.body.asignadoA, 'Tareas');
+
         const nuevaTarea = new Tarea({
             ...aplicarFechaCompletadaPorEstado(limpiarDatosTarea(req.body)),
             creadoPor: req.usuario.id
@@ -222,6 +233,8 @@ tareaCtrl.crearTarea = async (req, res) => {
         const tareaGuardada = await nuevaTarea.save();
         await sincronizarBitacoraTarea(tareaGuardada, req.usuario?.id);
         const tarea = await obtenerTareaPoblada(tareaGuardada._id);
+
+        await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, req.usuario));
 
         res.status(201).json(tarea);
     } catch (error) {
@@ -235,9 +248,20 @@ tareaCtrl.actualizarTarea = async (req, res) => {
             return res.status(403).json({ mensaje: 'No tienes permisos para editar tareas' });
         }
 
+        if (Object.prototype.hasOwnProperty.call(req.body, 'asignadoA')) {
+            await validarUsuarioAsignable(req.body.asignadoA, 'Tareas');
+        }
+
+        const tareaAnterior = await Tarea.findById(req.params.id).lean();
+        const datosActualizados = aplicarFechaCompletadaPorEstado(limpiarDatosTarea(req.body));
+        const asignacionCambioManualmente = Object.prototype.hasOwnProperty.call(req.body, 'asignadoA')
+            && String(tareaAnterior?.asignadoA || '') !== String(req.body.asignadoA || '');
+        if (asignacionCambioManualmente) {
+            datosActualizados.asignacionModificadaManualmente = true;
+        }
         const tarea = await Tarea.findByIdAndUpdate(
             req.params.id,
-            aplicarFechaCompletadaPorEstado(limpiarDatosTarea(req.body)),
+            datosActualizados,
             { new: true, runValidators: true }
         ).populate(POPULATE_TAREA);
 
@@ -246,6 +270,15 @@ tareaCtrl.actualizarTarea = async (req, res) => {
         }
 
         await sincronizarBitacoraTarea(tarea, req.usuario?.id);
+        const cambioAsignado = String(tareaAnterior?.asignadoA || '') !== String(tarea.asignadoA?._id || tarea.asignadoA || '');
+        if (cambioAsignado) {
+            await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, req.usuario));
+        }
+        await ejecutarNotificacionSegura(() => (
+            tarea.estado === 'Completada' && tareaAnterior?.estado !== 'Completada'
+                ? notificarTareaCompletada(tarea, req.usuario)
+                : notificarTareaModificada(tarea, req.usuario)
+        ));
         res.json(tarea);
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al actualizar tarea', error: error.message });
@@ -260,6 +293,12 @@ tareaCtrl.cambiarEstadoTarea = async (req, res) => {
         if (!tarea) {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
         }
+
+        if (esModoConsulta(req)) {
+            return res.status(403).json({ mensaje: 'El modo Consulta es de solo lectura' });
+        }
+
+        const estadoAnterior = tarea.estado;
 
         if (!puedeGestionarTareas(req)) {
             if (!esAsignado(req, tarea)) {
@@ -280,6 +319,11 @@ tareaCtrl.cambiarEstadoTarea = async (req, res) => {
 
         const tareaActualizada = await tarea.save();
         await sincronizarBitacoraTarea(tareaActualizada, req.usuario?.id);
+        await ejecutarNotificacionSegura(() => (
+            estado === 'Completada' && estadoAnterior !== 'Completada'
+                ? notificarTareaCompletada(tareaActualizada, req.usuario)
+                : notificarTareaModificada(tareaActualizada, req.usuario)
+        ));
         res.json(await obtenerTareaPoblada(tareaActualizada._id));
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al cambiar estado de tarea', error: error.message });
@@ -292,6 +336,10 @@ tareaCtrl.completarTarea = async (req, res) => {
 
         if (!tarea) {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
+        }
+
+        if (esModoConsulta(req)) {
+            return res.status(403).json({ mensaje: 'El modo Consulta es de solo lectura' });
         }
 
         if (!puedeGestionarTareas(req) && !esAsignado(req, tarea)) {
@@ -311,6 +359,7 @@ tareaCtrl.completarTarea = async (req, res) => {
 
         const tareaActualizada = await tarea.save();
         await sincronizarBitacoraTarea(tareaActualizada, req.usuario?.id);
+        await ejecutarNotificacionSegura(() => notificarTareaCompletada(tareaActualizada, req.usuario));
         res.json(await obtenerTareaPoblada(tareaActualizada._id));
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al completar tarea', error: error.message });
@@ -340,6 +389,10 @@ tareaCtrl.eliminarTarea = async (req, res) => {
 tareaCtrl.agregarComentario = async (req, res) => {
     try {
         const { texto } = req.body;
+
+        if (esModoConsulta(req)) {
+            return res.status(403).json({ mensaje: 'El modo Consulta es de solo lectura' });
+        }
 
         if (!texto) {
             return res.status(400).json({ mensaje: 'El comentario es requerido' });

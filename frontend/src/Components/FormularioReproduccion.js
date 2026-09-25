@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 const estadoInicial = {
   animal: '',
+  asignadoA: '',
   especie: 'Bovino',
   diasDestetePorcino: 28,
   diasCeloPostDestetePorcino: 5,
@@ -70,6 +71,7 @@ const normalizarRegistro = (registro) => ({
   ...estadoInicial,
   ...registro,
   animal: obtenerAnimalId(registro?.animal),
+  asignadoA: registro?.asignadoA?._id || registro?.asignadoA || '',
   fechaInseminacion: formatearFechaInput(registro?.fechaInseminacion || registro?.fechaMonta),
   fechaMonta: formatearFechaInput(registro?.fechaMonta),
   fechaPartoEstimada: formatearFechaInput(registro?.fechaPartoEstimada),
@@ -111,7 +113,8 @@ const FormularioReproduccion = ({
   onGuardar,
   guardando,
   error,
-  especie = 'Bovino'
+  especie = 'Bovino',
+  usuariosAsignables = []
 }) => {
   const hembras = animales.filter((animal) => animal.sexo === 'Hembra');
   const [formulario, setFormulario] = useState(() => {
@@ -199,6 +202,18 @@ const FormularioReproduccion = ({
         </label>
 
         <div className="form-grid">
+          <label>
+            Responsable del seguimiento
+            <select name="asignadoA" value={formulario.asignadoA} onChange={actualizarCampo} required>
+              <option value="">Seleccionar responsable</option>
+              {usuariosAsignables.map((usuario) => (
+                <option key={usuario._id} value={usuario._id}>
+                  {[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo} - {usuario.rol}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <label>
             Especie
             <select name="especie" value={formulario.especie} onChange={actualizarCampo} required>

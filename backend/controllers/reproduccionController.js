@@ -12,10 +12,27 @@ const {
     obtenerCicloActivoPorAnimal,
     cancelarTareasAutomaticasDelCiclo
 } = require('../services/reproduccion-service');
+const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
+const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
 
 const reproduccionCtrl = {};
 
-const poblarAnimal = (query) => query.populate('animal');
+const notificarRegistroReproductivo = (req, registro, animal, tipo, titulo, accion) => notificarAccionSegura({
+    actor: req.usuario,
+    naturaleza: 'Informativa',
+    tipo,
+    titulo,
+    mensaje: `${nombreUsuario(req.usuario)} ${accion} el ciclo reproductivo de ${animal?.diio || animal?.identificadorFinca || animal?.nombre || 'un animal'}.`,
+    moduloOrigen: 'Reproduccion',
+    entidadTipo: 'RegistroReproductivo',
+    entidadId: registro._id,
+    url: `/reproduccion/${registro._id}`,
+    metadata: { animalId: animal?._id || registro.animal, especie: registro.especie || animal?.especie }
+});
+
+const poblarAnimal = (query) => query
+    .populate('animal')
+    .populate('asignadoA', 'nombre apellido correo rol estado');
 
 const crearFiltroEspecie = (especie) => {
     if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
@@ -147,6 +164,7 @@ reproduccionCtrl.getRegistros = async (req, res) => {
 
 reproduccionCtrl.createRegistro = async (req, res) => {
     try {
+        await validarUsuarioAsignable(req.body.asignadoA, 'Reproduccion');
         const validacion = await validarHembra(req.body.animal);
 
         if (!validacion.valido) {
@@ -166,6 +184,15 @@ reproduccionCtrl.createRegistro = async (req, res) => {
             usuarioId: req.usuario?.id
         });
         const registro = await poblarAnimal(RegistroReproductivo.findById(registroGuardado._id));
+
+        await notificarRegistroReproductivo(
+            req,
+            registroGuardado,
+            validacion.animal,
+            'CICLO_REPRODUCTIVO_CREADO',
+            'Ciclo reproductivo registrado',
+            'registró'
+        );
 
         res.status(201).json(registro);
     } catch (error) {
@@ -309,7 +336,14 @@ reproduccionCtrl.getRegistrosPorAnimal = async (req, res) => {
 
 reproduccionCtrl.updateRegistro = async (req, res) => {
     try {
+        const registroAnterior = await RegistroReproductivo.findById(req.params.id).lean();
+        if (!registroAnterior) {
+            return res.status(404).json({ mensaje: 'Registro reproductivo no encontrado' });
+        }
         let animalValidado = null;
+        if (Object.prototype.hasOwnProperty.call(req.body, 'asignadoA')) {
+            await validarUsuarioAsignable(req.body.asignadoA, 'Reproduccion');
+        }
         if (req.body.animal) {
             const validacion = await validarHembra(req.body.animal);
 
@@ -347,6 +381,35 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
         });
         const registro = await poblarAnimal(RegistroReproductivo.findById(registroActualizado._id));
 
+        const partoNuevo = Boolean(registroActualizado.fechaPartoReal)
+            && fechaKey(registroActualizado.fechaPartoReal) !== fechaKey(registroAnterior.fechaPartoReal);
+        const desteteNuevo = Boolean(req.body.fechaDestete)
+            && fechaKey(registroActualizado.fechaDestete) !== fechaKey(registroAnterior.fechaDestete);
+        const tipoNotificacion = partoNuevo
+            ? 'PARTO_REGISTRADO'
+            : desteteNuevo
+                ? 'DESTETE_REGISTRADO'
+                : 'CICLO_REPRODUCTIVO_MODIFICADO';
+        const tituloNotificacion = partoNuevo
+            ? 'Parto registrado'
+            : desteteNuevo
+                ? 'Destete registrado'
+                : 'Ciclo reproductivo actualizado';
+        const accionNotificacion = partoNuevo
+            ? 'registró un parto en'
+            : desteteNuevo
+                ? 'registró un destete en'
+                : 'actualizó';
+
+        await notificarRegistroReproductivo(
+            req,
+            registroActualizado,
+            animalValidado || registro.animal,
+            tipoNotificacion,
+            tituloNotificacion,
+            accionNotificacion
+        );
+
         res.json(registro);
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al actualizar registro reproductivo', error: error.message });
@@ -370,11 +433,13 @@ reproduccionCtrl.deleteRegistro = async (req, res) => {
     }
 };
 
-const ejecutarCierreCiclo = async ({ req, res, accion }) => {
+const ejecutarCierreCiclo = async ({ req, res, accion, tipo, titulo, verbo }) => {
     try {
         const motivo = req.body?.motivo || req.body?.motivoCierre;
         const registroActualizado = await accion(req.params.id, motivo, req.usuario?.id);
         const registro = await poblarAnimal(RegistroReproductivo.findById(registroActualizado._id));
+
+        await notificarRegistroReproductivo(req, registroActualizado, registro.animal, tipo, titulo, verbo);
 
         res.json(registro);
     } catch (error) {
@@ -385,19 +450,28 @@ const ejecutarCierreCiclo = async ({ req, res, accion }) => {
 reproduccionCtrl.cerrarCiclo = (req, res) => ejecutarCierreCiclo({
     req,
     res,
-    accion: cerrarCicloReproductivo
+    accion: cerrarCicloReproductivo,
+    tipo: 'CICLO_REPRODUCTIVO_CERRADO',
+    titulo: 'Ciclo reproductivo cerrado',
+    verbo: 'cerró'
 });
 
 reproduccionCtrl.cancelarCiclo = (req, res) => ejecutarCierreCiclo({
     req,
     res,
-    accion: cancelarCicloReproductivo
+    accion: cancelarCicloReproductivo,
+    tipo: 'CICLO_REPRODUCTIVO_CANCELADO',
+    titulo: 'Ciclo reproductivo cancelado',
+    verbo: 'canceló'
 });
 
 reproduccionCtrl.marcarNoPrenada = (req, res) => ejecutarCierreCiclo({
     req,
     res,
-    accion: marcarCicloNoPrenada
+    accion: marcarCicloNoPrenada,
+    tipo: 'CICLO_NO_PRENADA',
+    titulo: 'Animal marcado como no preñado',
+    verbo: 'marcó como no preñado'
 });
 
 module.exports = reproduccionCtrl;

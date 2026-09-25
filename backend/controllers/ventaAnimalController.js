@@ -4,6 +4,7 @@ const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const VentaAnimal = require('../models/VentaAnimal');
 const { eliminarEventosPorReferencia, upsertEventoAnimal } = require('../services/eventoAnimal-service');
 const { eliminarEventosCamadaPorReferencia, upsertEventoCamada } = require('../services/eventoCamada-service');
+const { DESTINO_USO_MOVIMIENTOS_ANIMALES } = require('../config/catalogosFinancieros');
 
 const ventaAnimalCtrl = {};
 
@@ -265,6 +266,7 @@ const aplicarVentaConfirmada = async (venta, usuarioId) => {
             monto: venta.montoTotal,
             moneda: 'CRC',
             proveedor: venta.comprador,
+            destinoUso: DESTINO_USO_MOVIMIENTOS_ANIMALES,
             comprobante: venta.comprobanteUrl,
             observaciones: venta.observaciones,
             referenciaId: venta._id,

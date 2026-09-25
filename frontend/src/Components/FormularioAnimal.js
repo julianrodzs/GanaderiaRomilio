@@ -44,6 +44,7 @@ const formatearFechaInput = (fecha) => {
 const normalizarAnimal = (animal) => ({
   ...estadoInicial,
   ...animal,
+  estado: animal?.estado === 'En tratamiento' ? 'Activo' : animal?.estado || 'Activo',
   padre: animal?.padre?._id || animal?.padre || '',
   madre: animal?.madre?._id || animal?.madre || '',
   camadaOrigen: animal?.camadaOrigen?._id || animal?.camadaOrigen || '',
@@ -356,7 +357,6 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
               <option value="Activo">Activo</option>
               <option value="Vendido">Vendido</option>
               <option value="Muerto">Muerto</option>
-              <option value="En tratamiento">En tratamiento</option>
             </select>
           </label>
 

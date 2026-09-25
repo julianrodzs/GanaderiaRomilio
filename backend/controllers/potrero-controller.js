@@ -1,6 +1,10 @@
 const potreroCtrl = {};
 
 const Potrero = require('../models/Potrero');
+const {
+    calcularComparativoPotreros,
+    obtenerRendimientoPotrero
+} = require('../services/potreroRendimiento-service');
 
 potreroCtrl.getPotreros = async (req, res) => {
     try {
@@ -32,6 +36,24 @@ potreroCtrl.getPotrero = async (req, res) => {
         res.json(potrero);
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener potrero', error: error.message });
+    }
+};
+
+potreroCtrl.getRendimientoPotreros = async (req, res) => {
+    try {
+        res.json(await calcularComparativoPotreros(req.query));
+    } catch (error) {
+        res.status(400).json({ mensaje: 'Error al calcular el rendimiento de los potreros', error: error.message });
+    }
+};
+
+potreroCtrl.getRendimientoPotrero = async (req, res) => {
+    try {
+        const rendimiento = await obtenerRendimientoPotrero(req.params.id, req.query);
+        if (!rendimiento) return res.status(404).json({ mensaje: 'Potrero no encontrado' });
+        res.json(rendimiento);
+    } catch (error) {
+        res.status(400).json({ mensaje: 'Error al calcular el rendimiento del potrero', error: error.message });
     }
 };
 

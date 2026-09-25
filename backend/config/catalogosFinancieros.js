@@ -104,6 +104,12 @@ const METODOS_PAGO_FINANCIERO = [
 
 const MONEDAS_FINANCIERAS = ['CRC', 'USD'];
 
+const DESTINO_USO_MOVIMIENTOS_ANIMALES = 'Finca';
+
+const obtenerCategoriaCompraAnimales = (especie) => (
+    especie === 'Porcino' ? 'Porcinos' : 'Ganado'
+);
+
 const obtenerCatalogosFinancieros = () => ({
     tiposMovimiento: TIPOS_MOVIMIENTO_FINANCIERO,
     naturalezas: NATURALEZAS_FINANCIERAS,
@@ -129,5 +135,7 @@ module.exports = {
     ESTADOS_ACTIVO_FINANCIERO,
     METODOS_PAGO_FINANCIERO,
     MONEDAS_FINANCIERAS,
+    DESTINO_USO_MOVIMIENTOS_ANIMALES,
+    obtenerCategoriaCompraAnimales,
     obtenerCatalogosFinancieros
 };

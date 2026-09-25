@@ -17,7 +17,8 @@ const camadaCtrl = {};
 
 const poblarCamada = (query) => query
     .populate('madre', 'diio identificadorFinca nombre sexo especie categoria')
-    .populate('registroReproductivo');
+    .populate('registroReproductivo')
+    .populate('asignadoA', 'nombre apellido correo rol estado');
 
 const CATEGORIAS_FINCA = ['Chancha', 'Verraco', 'Reemplazo'];
 const CATEGORIAS_ENGORDE = ['Engorde'];
@@ -233,7 +234,13 @@ camadaCtrl.getCamadasPorMadre = async (req, res) => {
 camadaCtrl.createCamada = async (req, res) => {
     try {
         const madre = await validarMadrePorcina(req.body.madre);
-        const datos = await prepararDatosCamada(req.body);
+        const registro = req.body.registroReproductivo
+            ? await RegistroReproductivo.findById(req.body.registroReproductivo).select('asignadoA')
+            : null;
+        const datos = await prepararDatosCamada({
+            ...req.body,
+            asignadoA: req.body.asignadoA || registro?.asignadoA
+        });
         const camada = new Camada(datos);
         const camadaGuardada = await camada.save();
 

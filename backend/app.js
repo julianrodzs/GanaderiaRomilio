@@ -26,6 +26,7 @@ app.get('/', (req, res)=>{
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/usuarios', require('./routes/usuario'));
 app.use('/api/auditoria', auth, require('./routes/auditoriaRoutes'));
+app.use('/api/notificaciones', auth, require('./routes/notificacionRoutes'));
 app.use('/api/tareas', require('./routes/tareaRoutes'));
 app.use('/api/animales', auth, require('./routes/animal'));
 app.use('/api/camadas', auth, require('./routes/camadaRoutes'));
@@ -36,6 +37,8 @@ app.use('/api/potreros', auth, require('./routes/potrero'));
 app.use('/api/pesajes', auth, require('./routes/pesaje'));
 app.use('/api/sanidad', auth, require('./routes/sanidad'));
 app.use('/api/plan-sanitario', auth, require('./routes/planSanitario'));
+app.use('/api/tratamientos-sanitarios', auth, require('./routes/tratamientoSanitarioRoutes'));
+app.use('/api/aplicaciones-sanitarias', auth, require('./routes/aplicacionSanitariaRoutes'));
 app.use('/api/reproduccion', auth, require('./routes/reproduccionRoutes'));
 app.use('/api/costos', auth, require('./routes/costo'));
 app.use('/api/finanzas', auth, require('./routes/finanza'));

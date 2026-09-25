@@ -7,7 +7,7 @@ Aplicacion web fullstack para administrar una finca ganadera orientada a cria, a
 La aplicacion ya cuenta con:
 
 - Autenticacion con JWT.
-- Roles `Administrador`, `Encargado` y `Consulta`.
+- Roles `Administrador`, `Encargado`, `Trabajador`, `Veterinario`, `Contador` y `Consulta`.
 - Recuperacion segura de contrasena por correo con token temporal.
 - Administracion de usuarios.
 - Inventario de animales con detalle, genealogia basica, datos productivos y bitacora.
@@ -127,6 +127,9 @@ VITE_API_URL=http://localhost:4000/api
 - Roles preparados:
   - `Administrador`: acceso completo.
   - `Encargado`: acceso limitado, especialmente tareas y vistas operativas.
+  - `Trabajador`: inventario, potreros y tareas asignadas.
+  - `Veterinario`: pesajes, sanidad, reproduccion y tareas asignadas.
+  - `Contador`: finanzas y consulta comercial/reportes.
   - `Consulta`: rol preparado para solo lectura.
 - Recuperacion de contrasena:
   - `POST /api/auth/forgot-password`
@@ -243,6 +246,20 @@ Potreros incluyen:
 
 Rotaciones guardan historico de entrada/salida, dias de ocupacion y descanso.
 
+#### Rendimiento de potreros
+
+La seccion `Rendimiento` calcula el uso de cada potrero desde `RotacionPotrero`; no guarda metricas derivadas en `Potrero`.
+
+- Comparativo general con periodo mensual, 3 meses, 6 meses, anual o personalizado.
+- Detalle individual con informacion, rendimiento y rotaciones.
+- Dias ocupados, porcentaje de ocupacion, rotaciones, animales promedio y animal-dias.
+- Animal-dias por hectarea cuando el potrero tiene area valida.
+- Descanso promedio, minimo, maximo, ultimo y actual.
+- Historico mensual de animal-dias.
+- Las rotaciones `Finalizada` cuentan hasta su salida y las `Activa` hasta hoy.
+- Las rotaciones `Planificada` se separan como uso proyectado y no alteran resultados reales.
+- Una rotacion real cuya entrada y salida ocurren el mismo dia cuenta como un dia.
+
 ### Reproduccion/Gestacion bovina
 
 Gestiona registros reproductivos por animal:
@@ -347,7 +364,7 @@ Al registrar destete real:
 
 ### Sanidad
 
-Modulo principal: `PlanSanitario`.
+El modulo sanitario integra planes recurrentes, tratamientos temporales y aplicaciones unicas.
 
 Permite planes por grupo o animales especificos:
 
@@ -365,7 +382,7 @@ Flujo actual:
 2. El sistema calcula `proximaAplicacion`.
 3. El estado se calcula segun esa proxima fecha.
 4. Cuando se aplica realmente el producto, se usa la accion `Registrar aplicacion`.
-5. Esa accion actualiza `fechaAplicacion`, recalcula la siguiente fecha y crea bitacora.
+5. Esa accion crea `AplicacionSanitaria`, actualiza `fechaAplicacion`, recalcula la siguiente fecha y crea bitacora por animal.
 
 La accion esta disponible:
 
@@ -375,6 +392,26 @@ La accion esta disponible:
 Si el plan es individual, la bitacora queda en ese animal. Si es `Todo el ganado`, se crea evento para todos los animales activos de la especie seleccionada.
 
 El modelo `RegistroSanitario` se mantiene por compatibilidad.
+
+Pestanas disponibles:
+
+- `Planes`: programacion recurrente.
+- `Tratamientos`: procesos finitos con aplicaciones reales y proxima fecha calculada desde la ultima dosis aplicada.
+- `Historial de aplicaciones`: fuente central basada en `AplicacionSanitaria`.
+
+`Registrar aplicacion unica` permite documentar una aplicacion puntual para uno o varios animales sin crear plan ni tratamiento. Crear un tratamiento sin marcar su primera aplicacion no crea bitacora ni cuenta como medicamento aplicado.
+
+Estado sanitario del animal:
+
+- El estado general de inventario se limita a `Activo`, `Vendido` y `Muerto`.
+- La condición sanitaria usa `Sano`, `En observación`, `Enfermo` o `Recuperación`.
+- Un tratamiento activo se obtiene desde `TratamientoSanitario`; no se guarda un indicador duplicado en `Animal`.
+- Cada cambio sanitario exige motivo y genera bitácora individual.
+- Inventario muestra la condición sanitaria y permite filtrar por ella o por tratamiento activo.
+- Al crear un tratamiento puede actualizarse la condición de todos los animales seleccionados.
+- Al completar, el usuario decide si pasan a sanos, recuperación, permanecen enfermos o no se modifican. Cancelar no cambia la condición.
+
+Para revisar datos antiguos con estado `En tratamiento`, ejecutar primero `npm run migrate:estado-sanitario:check` dentro de `backend`. El comando de aplicación automática solo cubre animales que todavía tienen un tratamiento activo; los demás requieren decisión manual.
 
 ### Pesajes historicos
 
@@ -547,7 +584,15 @@ Permite asignar tareas a usuarios:
 - relacion opcional con potrero o animal.
 - comentarios y evidencia.
 
-Administrador puede gestionar todas. Encargado ve y actualiza sus tareas.
+Administrador y Encargado pueden gestionar y reasignar tareas. Los formularios de Sanidad y Reproduccion exigen seleccionar un responsable activo compatible (`Administrador`, `Encargado` o `Veterinario`) y no asignan automaticamente la tarea a quien crea el registro.
+
+La autoria y la responsabilidad son datos distintos:
+
+- `creadoPor`: usuario que registro la operacion.
+- `asignadoA`: usuario responsable de ejecutar y recibir alertas de la tarea.
+- `asignacionModificadaManualmente`: protege una reasignacion hecha desde Tareas para que una sincronizacion posterior del registro de origen no la sobrescriba.
+
+Los campos de texto `responsable` y `veterinario` en Sanidad se conservan para referencias externas o historicas; no sustituyen al usuario asignado.
 
 Las tareas automaticas de reproduccion/camadas usan:
 
@@ -576,75 +621,33 @@ Tareas de alimentacion rutinaria quedan como operacion diaria, no como evento hi
 
 ### Importacion Excel
 
-El importador actual trabaja por modulos:
+El importador usa una plantilla versionada y el mismo contrato para cualquier finca. No intenta reconocer hojas o columnas por semejanza.
 
-- Inventario
-- Potreros
-- Pesajes
-- Finanzas
-- Rotaciones
+Hojas admitidas:
 
-Reglas:
+- `POTREROS`: requiere `CODIGO` y `NOMBRE`.
+- `INVENTARIO`: requiere `DIIO`, `ESPECIE`, `SEXO` y `CATEGORIA`.
+- `FINANZAS`: requiere fecha, naturaleza, tipo, categoria, descripcion, monto y moneda.
+- `PESAJES`: opcional; requiere `DIIO`, `FECHA` y `PESO_KG`.
 
-- El usuario elige que modulos procesar.
-- El Excel puede tener varias hojas o ser especifico de un modulo.
-- Los campos opcionales vacios no borran datos existentes.
-- Inventario se detecta por hojas que contengan `INVENTARIO` en el nombre o por hojas con encabezados minimos `DIIO` y `Sexo`.
-- Animales sin DIIO se omiten.
-- Animales sin sexo se omiten.
-- DIIO repetido dentro del mismo Excel se omite despues de la primera aparicion.
-- Potreros sin codigo/nombre se omiten.
-- Finanzas sin datos minimos se omite.
-- Si un animal ya existe por DIIO o identificador de finca, se actualizan solo campos con valor.
-- Si un animal no existe, se crea.
-- Se guarda historial en `ImportacionExcel`.
+Flujo:
 
-#### Inventario Excel
+1. Descargar la plantilla desde Importar. Incluye instrucciones y los catalogos financieros activos.
+2. Completar solamente las hojas necesarias; las fechas usan `DD/MM/AAAA`.
+3. Subir el `.xlsx` para validar encabezados, valores, duplicados y relaciones.
+4. Revisar conteos, errores y muestras. Aun no se ha escrito ningun dato.
+5. Confirmar con `crear y actualizar` o `solo crear nuevos`.
 
-El importador de inventario ya no depende de la hoja antigua de control de peso. El formato principal esperado es una tabla de inventario con encabezados.
+Reglas importantes:
 
-Deteccion de hoja:
-
-- Nombre de hoja que incluya `INVENTARIO`.
-- O cualquier hoja que tenga columnas reconocibles para `DIIO` y `Sexo`.
-
-Campos minimos por fila:
-
-- `DIIO`.
-- `Sexo`.
-
-Columnas aceptadas:
-
-| Campo en Animal | Nombres de columna aceptados |
-| --- | --- |
-| `diio` | `DIIO`, `Arete`, `Numero DIIO`, `Número DIIO` |
-| `nombre` | `ID de finca`, `ID Finca`, `Nombre animal`, `Alias` |
-| `sexo` | `Sexo`, `Genero`, `Género` |
-| `fechaNacimiento` | `Fecha de Nacimiento`, `Fecha Nacimiento`, `Nacimiento`, `Fecha de Nac.`, `F. Nacimiento`, `Fecha de` |
-| `raza` | `Raza` |
-| `madreDiio` | `Madre DIIO`, `DIIO Madre` |
-| `padreDiio` | `Padre DIIO`, `DIIO Padre` |
-| `fechaCompra` | `Fecha Compra`, `Fecha de Compra` |
-| `fechaVenta` | `Fecha Venta`, `Fecha de Venta` |
-| `fechaMuerte` | `Fecha Muerte`, `Fecha de Muerte` |
-| `fechaDestete` | `Fecha Destete`, `Fecha de Destete` |
-| `pesoNacimiento` | `Peso Nacimiento`, `Peso al Nacer` |
-| `pesoDestete` | `Peso Destete`, `Peso al Destete` |
-| `pesoActual` | `Peso Actual`, `Peso` |
-| `pesoCompra` | `Peso Compra`, `Peso de Compra` |
-| `precioCompraPorKg` | `Precio Compra Kg`, `Precio Compra por Kg`, `Precio de Compra por kilo` |
-| `precioVentaPorKg` | `Precio Venta Kg`, `Precio Venta por Kg`, `Precio de venta por kilo` |
-| `montoCompra` | `Monto Compra`, `Total compra` |
-| `montoVenta` | `Monto Venta`, `Total venta` |
-| observacion de importacion | `Estado`, `Status` |
-
-Notas:
-
-- `ID de finca` se interpreta como nombre o alias del animal.
-- La columna generica `Nombre` del formato oficial se ignora para evitar confundirla con el nombre del propietario, criador u operador.
-- `Status` no cambia automaticamente el estado del animal; se guarda como observacion para revision manual.
-- La fecha de baja no cambia el estado automaticamente por ahora; se revisa manualmente.
-- En la vista previa se reportan animales listos, omitidos sin DIIO, omitidos sin sexo y duplicados dentro del Excel.
+- Los campos opcionales vacios nunca borran datos existentes.
+- Un DIIO no puede repetirse dentro del libro.
+- Especie, sexo y categoria no se infieren.
+- Las categorias y destinos financieros deben estar activos en los catalogos de Finanzas.
+- Un pesaje debe referenciar un DIIO existente o incluido en `INVENTARIO`.
+- La confirmacion usa el lote validado guardado en backend y solo puede ejecutarse una vez.
+- El mismo archivo confirmado no puede volver a importarse por accidente.
+- Rotaciones y Sanidad no forman parte del importador estandar.
 
 ### Drone
 
@@ -663,23 +666,55 @@ Devuelve:
 - detecciones.
 - imagen procesada.
 
-## Correos y alertas
+## Centro de alertas y correos
 
 El backend usa Resend.
 
-Alertas actuales:
+Las notificaciones internas se persisten por destinatario en `Notificacion`. La campana consulta al cargar, al recuperar el foco y cada 45 segundos. Cada usuario conserva independientemente su estado leida/no leida.
 
-- Sanidad proxima.
-- Sanidad vencida.
-- Proximo celo estimado.
-- Parto estimado proximo.
-- Destete proximo.
+Arquitectura operativa:
+
+```txt
+Sanidad / Reproduccion / Camadas
+  -> Tarea con fecha y responsable
+  -> Notificacion operativa proxima o vencida
+  -> Correo operativo, si esta habilitado
+```
+
+Sanidad y Reproduccion no envian directamente correos de fechas futuras. Las tareas centralizan:
+
+- tarea asignada.
+- tarea proxima.
+- tarea vencida.
+- aplicacion sanitaria proxima o vencida.
+- actividad reproductiva proxima o vencida.
+
+Las acciones realizadas por usuarios generan notificaciones informativas sin correo. Incluyen tareas, tratamientos, aplicaciones sanitarias, estado sanitario, pesajes, ciclos reproductivos y movimientos financieros relevantes.
 
 Destinatarios:
 
 - Si `EMAIL_TEST_TO` existe, se envia solo a ese correo.
 - Si no, se envia a usuarios con rol `Administrador`.
 - Si no hay administradores, usa `EMAIL_ADMIN`.
+
+Endpoints autenticados:
+
+- `GET /api/notificaciones`
+- `GET /api/notificaciones/no-leidas/count`
+- `PATCH /api/notificaciones/:id/leida`
+- `PATCH /api/notificaciones/marcar-todas-leidas`
+
+El servidor siempre toma el destinatario desde el JWT. No se acepta un `usuarioId` externo para consultar o marcar alertas.
+
+Para sincronizar tareas de planes y tratamientos existentes:
+
+```bash
+cd backend
+npm run migrate:tareas-sanidad:check
+npm run migrate:tareas-sanidad
+```
+
+El primer comando solo revisa. El segundo crea o actualiza tareas pendientes sin modificar aplicaciones ni bitacoras historicas.
 
 ## PWA y modo movil
 

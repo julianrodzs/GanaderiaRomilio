@@ -58,17 +58,21 @@ const planSanitarioSchema = new Schema(
     {
         grupoGanado: { type: String, required: true, trim: true },
         especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino' },
+        animales: [{ type: Schema.Types.ObjectId, ref: 'Animal' }],
         animalDiio: { type: String, trim: true },
         actividad: { type: String, required: true, trim: true },
         producto: { type: String, required: true, trim: true },
         marca: { type: String, trim: true },
         dosis: { type: String, trim: true },
+        viaAplicacion: { type: String, trim: true },
         criterioPeso: { type: String, trim: true },
         fechaAplicacion: { type: Date, required: true },
         frecuenciaCantidad: { type: Number, required: true, min: 1 },
         frecuenciaUnidad: { type: String, enum: FRECUENCIAS, required: true },
         proximaAplicacion: { type: Date },
         responsable: { type: String, trim: true },
+        asignadoA: { type: Schema.Types.ObjectId, ref: 'Usuario' },
+        creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
         estado: { type: String, enum: ESTADOS, default: 'Vigente' },
         observaciones: { type: String, trim: true }
     },
@@ -115,6 +119,7 @@ planSanitarioSchema.pre('findOneAndUpdate', function calcularProximaEnUpdate(nex
 planSanitarioSchema.index({ estado: 1, proximaAplicacion: 1 });
 planSanitarioSchema.index({ grupoGanado: 1 });
 planSanitarioSchema.index({ especie: 1, estado: 1 });
+planSanitarioSchema.index({ animales: 1 });
 
 const PlanSanitario = model('PlanSanitario', planSanitarioSchema);
 

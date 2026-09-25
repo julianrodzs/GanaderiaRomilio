@@ -5,7 +5,14 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "test": "node --test tests/*.test.js",
+    "migrate:sanidad:check": "node scripts/migrarAplicacionesPlanesSanitarios.js",
+    "migrate:sanidad": "node scripts/migrarAplicacionesPlanesSanitarios.js --apply",
+    "migrate:estado-sanitario:check": "node scripts/revisarEstadoSanitarioLegado.js",
+    "migrate:estado-sanitario:activos": "node scripts/revisarEstadoSanitarioLegado.js --apply-activos",
+    "migrate:tareas-sanidad:check": "node scripts/sincronizarTareasSanidad.js",
+    "migrate:tareas-sanidad": "node scripts/sincronizarTareasSanidad.js --apply"
   },
   "keywords": [],
   "author": "",

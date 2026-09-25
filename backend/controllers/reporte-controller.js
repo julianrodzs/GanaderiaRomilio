@@ -8,6 +8,8 @@ const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const Pesaje = require('../models/Pesaje');
 const Camada = require('../models/Camada');
 const { Tarea } = require('../models/Tarea');
+const { AplicacionSanitaria } = require('../models/AplicacionSanitaria');
+const { TratamientoSanitario } = require('../models/TratamientoSanitario');
 
 const reporteCtrl = {};
 
@@ -916,7 +918,7 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
 
         const filtroHembras = {
             sexo: 'Hembra',
-            estado: { $in: ['Activo', 'En tratamiento'] },
+            estado: 'Activo',
             ...crearFiltroEspecieAnimal('Bovino')
         };
 
@@ -1828,6 +1830,108 @@ reporteCtrl.getReporteEconomicoCamadas = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener reporte economico por camada', error: error.message });
+    }
+};
+
+reporteCtrl.getReporteSanidad = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin, especie } = req.query;
+        const filtroAplicaciones = {
+            ...crearFiltroFechas('fechaAplicacion', fechaInicio, fechaFin),
+            ...(especie ? { especie } : {})
+        };
+        const filtroTratamientosPeriodo = {
+            ...crearFiltroFechas('fechaInicio', fechaInicio, fechaFin),
+            ...(especie ? { especie } : {})
+        };
+        const filtroEspecie = especie ? { especie } : {};
+
+        const [
+            totalAplicaciones,
+            aplicacionesPorNaturaleza,
+            tratamientosPorEstado,
+            productosMasAplicados,
+            animalesMasTratados,
+            proximosTratamientos,
+            proximosPlanes
+        ] = await Promise.all([
+            AplicacionSanitaria.countDocuments(filtroAplicaciones),
+            AplicacionSanitaria.aggregate([
+                { $match: filtroAplicaciones },
+                { $group: { _id: '$naturaleza', cantidad: { $sum: 1 } } },
+                { $sort: { cantidad: -1 } }
+            ]),
+            TratamientoSanitario.aggregate([
+                { $match: filtroTratamientosPeriodo },
+                { $group: { _id: '$estado', cantidad: { $sum: 1 } } },
+                { $sort: { cantidad: -1 } }
+            ]),
+            AplicacionSanitaria.aggregate([
+                { $match: filtroAplicaciones },
+                { $group: { _id: '$producto', cantidad: { $sum: 1 } } },
+                { $sort: { cantidad: -1, _id: 1 } },
+                { $limit: 8 }
+            ]),
+            AplicacionSanitaria.aggregate([
+                { $match: { ...filtroAplicaciones, naturaleza: 'Tratamiento' } },
+                { $unwind: '$animales' },
+                { $group: { _id: '$animales', cantidad: { $sum: 1 } } },
+                { $sort: { cantidad: -1 } },
+                { $limit: 8 },
+                {
+                    $lookup: {
+                        from: 'animals',
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'animal'
+                    }
+                },
+                { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } }
+            ]),
+            TratamientoSanitario.find({
+                ...filtroEspecie,
+                estado: 'Activo',
+                proximaAplicacion: { $ne: null }
+            })
+                .populate('animales', 'diio identificadorFinca nombre')
+                .sort({ proximaAplicacion: 1 })
+                .limit(8)
+                .lean(),
+            PlanSanitario.find({
+                ...crearFiltroEspecieAnimal(especie),
+                estado: { $in: ['Próximo', 'Vencido'] }
+            })
+                .sort({ proximaAplicacion: 1 })
+                .limit(8)
+                .lean()
+        ]);
+
+        res.json({
+            filtros: { fechaInicio: fechaInicio || null, fechaFin: fechaFin || null, especie: especie || null },
+            totalAplicaciones,
+            aplicacionesPorNaturaleza: aplicacionesPorNaturaleza.map((item) => ({
+                naturaleza: item._id === 'Aplicacion unica' ? 'Aplicación única' : item._id,
+                cantidad: item.cantidad
+            })),
+            tratamientosPorEstado: tratamientosPorEstado.map((item) => ({
+                estado: item._id,
+                cantidad: item.cantidad
+            })),
+            productosMasAplicados: productosMasAplicados.map((item) => ({
+                producto: item._id,
+                cantidad: item.cantidad
+            })),
+            animalesMasTratados: animalesMasTratados.map((item) => ({
+                animalId: item._id,
+                diio: item.animal?.diio || item.animal?.identificadorFinca,
+                nombre: item.animal?.nombre,
+                cantidad: item.cantidad
+            })),
+            proximosTratamientos,
+            proximosPlanes
+        });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener reporte sanitario', error: error.message });
     }
 };
 

@@ -1,5 +1,6 @@
 const Camada = require('../models/Camada');
 const { Tarea } = require('../models/Tarea');
+const { ejecutarNotificacionSegura, notificarTareaAsignada } = require('./tarea-notificacion-service');
 const { upsertEventoAnimal } = require('./eventoAnimal-service');
 const { upsertEventoCamada } = require('./eventoCamada-service');
 const reproduccionPorcinaConfig = require('../config/reproduccionPorcinaConfig');
@@ -59,14 +60,14 @@ const calcularFechasCamada = (datos) => {
     };
 };
 
-const crearDefinicionTarea = ({ camada, madre, usuarioId, clave, titulo, descripcion, tipo, fechaProgramada, categoriaAutomatica, generaBitacora = false, tipoEventoBitacora }) => ({
+const crearDefinicionTarea = ({ camada, madre, usuarioId, asignadoA, clave, titulo, descripcion, tipo, fechaProgramada, categoriaAutomatica, generaBitacora = false, tipoEventoBitacora }) => ({
     titulo: `${titulo} - ${camada.codigoCamada}`,
     descripcion,
     tipo,
     estado: 'Pendiente',
     prioridad: 'Media',
     fechaProgramada,
-    asignadoA: usuarioId,
+    asignadoA,
     creadoPor: usuarioId,
     animal: madre._id || madre,
     moduloOrigen: 'Reproduccion',
@@ -81,6 +82,7 @@ const crearDefinicionTarea = ({ camada, madre, usuarioId, clave, titulo, descrip
 
 const crearDefinicionesTareasCamada = ({ camada, madre, usuarioId }) => {
     const fechas = calcularFechasCamada(camada);
+    const asignadoA = camada.asignadoA?._id || camada.asignadoA;
     const destino = camada.destino || 'No definido';
     const codigoMadre = obtenerCodigoMadre(madre);
     const totalDistribuido = (camada.criasParaFinca || 0) + (camada.criasParaVenta || 0) + (camada.criasParaEngorde || 0);
@@ -128,6 +130,7 @@ const crearDefinicionesTareasCamada = ({ camada, madre, usuarioId }) => {
             camada,
             madre,
             usuarioId,
+            asignadoA,
             clave,
             titulo,
             descripcion: `${titulo} de la camada ${camada.codigoCamada}, madre ${codigoMadre}. Fecha base de nacimiento: ${formatearFecha(camada.fechaNacimiento)}.`,
@@ -140,7 +143,7 @@ const crearDefinicionesTareasCamada = ({ camada, madre, usuarioId }) => {
 };
 
 const sincronizarTareasCamada = async ({ camada, madre, usuarioId }) => {
-    if (!usuarioId || !madre || ['Cancelada', 'Cerrada', 'Vendida'].includes(camada.estado)) {
+    if (!usuarioId || !camada.asignadoA || !madre || ['Cancelada', 'Cerrada', 'Vendida'].includes(camada.estado)) {
         return { creadas: 0, actualizadas: 0, canceladas: 0 };
     }
 
@@ -159,13 +162,16 @@ const sincronizarTareasCamada = async ({ camada, madre, usuarioId }) => {
         const existente = existentesPorClave.get(definicion.claveAutomatica);
 
         if (!existente) {
-            await Tarea.create(definicion);
+            const tarea = await Tarea.create(definicion);
+            await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, usuarioId));
             creadas += 1;
             continue;
         }
 
         if (existente.estado === 'Pendiente') {
+            const responsableActual = existente.asignadoA;
             Object.assign(existente, definicion);
+            if (existente.asignacionModificadaManualmente) existente.asignadoA = responsableActual;
             await existente.save();
             actualizadas += 1;
         }

@@ -1,6 +1,7 @@
 const ROLES = ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta'];
 
 const TODOS_LOS_ROLES = [...ROLES];
+const ROLES_OPERATIVOS = ROLES.filter((rol) => rol !== 'Consulta');
 
 const permisosPorModulo = {
     dashboard: {
@@ -10,7 +11,7 @@ const permisosPorModulo = {
         verTodas: ['Administrador', 'Encargado'],
         gestionar: ['Administrador', 'Encargado'],
         verAsignadas: TODOS_LOS_ROLES,
-        completarAsignadas: TODOS_LOS_ROLES
+        completarAsignadas: ROLES_OPERATIVOS
     },
     importar: {
         gestionar: ['Administrador']

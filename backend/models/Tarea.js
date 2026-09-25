@@ -31,6 +31,7 @@ const tareaSchema = new Schema(
         fechaLimite: { type: Date },
         fechaCompletada: { type: Date },
         asignadoA: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true },
+        asignacionModificadaManualmente: { type: Boolean, default: false },
         creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
         potrero: { type: Schema.Types.ObjectId, ref: 'Potrero' },
         animal: { type: Schema.Types.ObjectId, ref: 'Animal' },

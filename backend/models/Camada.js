@@ -7,6 +7,7 @@ const camadaSchema = new Schema(
     {
         madre: { type: Schema.Types.ObjectId, ref: 'Animal', required: true },
         registroReproductivo: { type: Schema.Types.ObjectId, ref: 'RegistroReproductivo' },
+        asignadoA: { type: Schema.Types.ObjectId, ref: 'Usuario' },
         codigoCamada: { type: String, required: true, unique: true, trim: true },
         fechaNacimiento: { type: Date, required: true },
         fechaDesteteEstimada: { type: Date },

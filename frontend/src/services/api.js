@@ -85,6 +85,10 @@ export const obtenerPerfilUsuario = () => request('/usuarios/perfil');
 
 export const obtenerUsuarios = () => request('/usuarios');
 
+export const obtenerUsuariosAsignables = (modulo) => (
+  request(`/usuarios/asignables?modulo=${encodeURIComponent(modulo)}`)
+);
+
 export const actualizarUsuario = (id, usuario) => {
   return request(`/usuarios/${id}`, {
     method: 'PUT',
@@ -134,6 +138,27 @@ export const obtenerMisTareas = (filtros = {}) => {
   return request(`/tareas/mis-tareas${query ? `?${query}` : ''}`);
 };
 
+export const obtenerTarea = (id) => request(`/tareas/${id}`);
+
+export const obtenerNotificaciones = (filtros = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor !== undefined && valor !== null && valor !== '') params.append(clave, valor);
+  });
+  const query = params.toString();
+  return request(`/notificaciones${query ? `?${query}` : ''}`);
+};
+
+export const obtenerCantidadNotificacionesNoLeidas = () => request('/notificaciones/no-leidas/count');
+
+export const marcarNotificacionLeida = (id) => request(`/notificaciones/${id}/leida`, {
+  method: 'PATCH'
+});
+
+export const marcarTodasNotificacionesLeidas = () => request('/notificaciones/marcar-todas-leidas', {
+  method: 'PATCH'
+});
+
 export const crearTarea = (tarea) => {
   return request('/tareas', {
     method: 'POST',
@@ -179,12 +204,9 @@ export const eliminarTarea = (id) => {
   });
 };
 
-export const previsualizarExcel = (archivo, modulos = []) => {
+export const previsualizarExcel = (archivo) => {
   const formData = new FormData();
   formData.append('archivo', archivo);
-  if (modulos.length > 0) {
-    formData.append('modulos', JSON.stringify(modulos));
-  }
 
   return request('/importar/excel', {
     method: 'POST',
@@ -192,30 +214,27 @@ export const previsualizarExcel = (archivo, modulos = []) => {
   });
 };
 
-export const importarExcel = (archivo, modulos = [], opciones = {}) => {
-  const formData = new FormData();
-  formData.append('archivo', archivo);
-  if (modulos.length > 0) {
-    formData.append('modulos', JSON.stringify(modulos));
-  }
-  if (opciones.finanzasFechaInicio) {
-    formData.append('finanzasFechaInicio', opciones.finanzasFechaInicio);
-  }
-  if (opciones.finanzasFechaFin) {
-    formData.append('finanzasFechaFin', opciones.finanzasFechaFin);
-  }
-
-  return request('/importar/excel/importar', {
+export const confirmarImportacionExcel = (importacionId, modo) => {
+  return request('/importar/excel/confirmar', {
     method: 'POST',
-    body: formData
+    body: JSON.stringify({ importacionId, modo })
   });
 };
 
-export const confirmarImportacionExcel = (registros) => {
-  return request('/importar/excel/confirmar', {
-    method: 'POST',
-    body: JSON.stringify({ registros })
+export const descargarPlantillaImportacion = async () => {
+  if (!API_URL) throw new Error('VITE_API_URL no configurado');
+  const token = obtenerTokenSesion();
+  const respuesta = await fetch(`${API_URL}/importar/plantilla`, {
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
   });
+
+  if (!respuesta.ok) {
+    const data = await respuesta.json().catch(() => ({}));
+    throw new Error(data.mensaje || 'No se pudo descargar la plantilla');
+  }
+
+  return respuesta.blob();
 };
 
 const construirQuery = (filtros = {}) => {
@@ -228,6 +247,8 @@ const construirQuery = (filtros = {}) => {
 };
 
 export const obtenerAnimales = (filtros = {}) => request(`/animales${construirQuery(filtros)}`);
+
+export const obtenerAnimal = (id) => request(`/animales/${id}`);
 
 export const crearAnimal = (animal) => {
   return request('/animales', {
@@ -242,6 +263,16 @@ export const actualizarAnimal = (id, animal) => {
     body: JSON.stringify(animal)
   });
 };
+
+export const actualizarEstadoSanitarioAnimal = (id, datos) => request(`/animales/${id}/estado-sanitario`, {
+  method: 'PATCH',
+  body: JSON.stringify(datos)
+});
+
+export const actualizarEstadoSanitarioAnimales = (datos) => request('/animales/estado-sanitario', {
+  method: 'PATCH',
+  body: JSON.stringify(datos)
+});
 
 export const eliminarAnimal = (id) => {
   return request(`/animales/${id}`, {
@@ -373,6 +404,10 @@ export const eliminarEventoAnimal = (id) => {
 
 export const obtenerPotreros = () => request('/potreros');
 
+export const obtenerRendimientoPotreros = (filtros = {}) => request(`/potreros/rendimiento${construirQuery(filtros)}`);
+
+export const obtenerRendimientoPotrero = (id, filtros = {}) => request(`/potreros/${id}/rendimiento${construirQuery(filtros)}`);
+
 export const crearPotrero = (potrero) => {
   return request('/potreros', {
     method: 'POST',
@@ -443,6 +478,44 @@ export const registrarAplicacionPlanSanitario = (id, datos) => {
     body: JSON.stringify(datos)
   });
 };
+
+export const obtenerTratamientosSanitarios = (filtros = {}) => request(`/tratamientos-sanitarios${construirQuery(filtros)}`);
+
+export const obtenerTratamientoSanitario = (id) => request(`/tratamientos-sanitarios/${id}`);
+
+export const crearTratamientoSanitario = (tratamiento) => request('/tratamientos-sanitarios', {
+  method: 'POST',
+  body: JSON.stringify(tratamiento)
+});
+
+export const actualizarTratamientoSanitario = (id, tratamiento) => request(`/tratamientos-sanitarios/${id}`, {
+  method: 'PUT',
+  body: JSON.stringify(tratamiento)
+});
+
+export const registrarAplicacionTratamiento = (id, datos) => request(`/tratamientos-sanitarios/${id}/aplicaciones`, {
+  method: 'POST',
+  body: JSON.stringify(datos)
+});
+
+export const completarTratamientoSanitario = (id, datos = {}) => request(`/tratamientos-sanitarios/${id}/completar`, {
+  method: 'PATCH',
+  body: JSON.stringify(datos)
+});
+
+export const cancelarTratamientoSanitario = (id, datos = {}) => request(`/tratamientos-sanitarios/${id}/cancelar`, {
+  method: 'PATCH',
+  body: JSON.stringify(datos)
+});
+
+export const obtenerAplicacionesSanitarias = (filtros = {}) => request(`/aplicaciones-sanitarias${construirQuery(filtros)}`);
+
+export const obtenerAplicacionSanitaria = (id) => request(`/aplicaciones-sanitarias/${id}`);
+
+export const crearAplicacionSanitariaUnica = (aplicacion) => request('/aplicaciones-sanitarias/unica', {
+  method: 'POST',
+  body: JSON.stringify(aplicacion)
+});
 
 export const obtenerRegistrosReproductivos = (filtros = {}) => request(`/reproduccion${construirQuery(filtros)}`);
 
@@ -875,6 +948,10 @@ export const obtenerReporteTareasCamadas = (filtros = {}) => {
 
 export const obtenerReporteEconomicoCamadas = (filtros = {}) => {
   return request(`/reportes/porcinos/economia-camadas${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteSanidad = (filtros = {}) => {
+  return request(`/reportes/sanidad${construirQueryProductos(filtros)}`);
 };
 
 export { API_URL };

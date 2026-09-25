@@ -2,7 +2,14 @@ const animalCtrl = {};
 
 const Animal = require('../models/Animal');
 const Camada = require('../models/Camada');
+const EventoAnimal = require('../models/EventoAnimal');
+const { TratamientoSanitario } = require('../models/TratamientoSanitario');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
+const {
+    actualizarEstadoSanitarioAnimal,
+    actualizarEstadoSanitarioAnimales,
+    estadoSanitarioActual
+} = require('../services/estadoSanitario-service');
 const {
     prepararDatosGenealogia,
     validarRelacionGenealogica
@@ -35,6 +42,26 @@ const crearFiltroEspecie = (especie) => {
     if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
     if (especie === 'Porcino') return { especie };
     return {};
+};
+
+const enriquecerConEstadoSanitario = async (animales) => {
+    const ids = animales.map((animal) => animal._id);
+    const tratamientos = ids.length
+        ? await TratamientoSanitario.find({ estado: 'Activo', animales: { $in: ids } })
+            .select('animales')
+            .lean()
+        : [];
+    const animalesConTratamiento = new Set(
+        tratamientos.flatMap((tratamiento) => tratamiento.animales.map((id) => id.toString()))
+    );
+
+    return animales.map((animal) => ({
+        ...animal,
+        estado: animal.estado === 'En tratamiento' ? 'Activo' : animal.estado,
+        estadoSanitario: estadoSanitarioActual(animal),
+        tieneTratamientoActivo: animalesConTratamiento.has(animal._id.toString()),
+        requiereMigracionEstado: animal.estado === 'En tratamiento'
+    }));
 };
 
 const prepararRelacionCamada = async (datos) => {
@@ -176,12 +203,21 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
 
 animalCtrl.getAnimales = async (req, res) => {
     try {
-        const animales = await Animal.find(crearFiltroEspecie(req.query.especie))
+        const encontrados = await Animal.find(crearFiltroEspecie(req.query.especie))
             .populate('potreroActual')
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo especie')
             .populate('madre', 'diio identificadorFinca nombre sexo especie')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean();
+        let animales = await enriquecerConEstadoSanitario(encontrados);
+
+        if (req.query.estadoSanitario) {
+            animales = animales.filter((animal) => animal.estadoSanitario === req.query.estadoSanitario);
+        }
+        if (req.query.conTratamientoActivo === 'true') {
+            animales = animales.filter((animal) => animal.tieneTratamientoActivo);
+        }
         res.json(animales);
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener animales', error: error.message });
@@ -190,6 +226,9 @@ animalCtrl.getAnimales = async (req, res) => {
 
 animalCtrl.createAnimal = async (req, res) => {
     try {
+        if (req.body.estado === 'En tratamiento') {
+            return res.status(400).json({ mensaje: 'Use estadoSanitario y TratamientoSanitario; En tratamiento ya no es un estado de inventario' });
+        }
         let datos = prepararDatosGenealogia({
             ...req.body,
             diio: limpiarDiio(req.body.diio)
@@ -213,13 +252,34 @@ animalCtrl.getAnimal = async (req, res) => {
             .populate('potreroActual')
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo')
-            .populate('madre', 'diio identificadorFinca nombre sexo');
+            .populate('madre', 'diio identificadorFinca nombre sexo')
+            .lean();
 
         if (!animal) {
             return res.status(404).json({ mensaje: 'Animal no encontrado' });
         }
 
-        res.json(animal);
+        const [ultimoCambio, tratamientosActivos] = await Promise.all([
+            EventoAnimal.findOne({
+                animal: animal._id,
+                tipoEvento: 'Sanidad',
+                'metadata.tipoCambio': 'Estado sanitario'
+            }).sort({ fecha: -1 }).lean(),
+            TratamientoSanitario.find({ animales: animal._id, estado: 'Activo' })
+                .select('producto motivo proximaAplicacion fechaInicio aplicacionesRealizadas cantidadAplicaciones')
+                .sort({ fechaInicio: -1 })
+                .lean()
+        ]);
+
+        res.json({
+            ...animal,
+            estado: animal.estado === 'En tratamiento' ? 'Activo' : animal.estado,
+            estadoSanitario: estadoSanitarioActual(animal),
+            tieneTratamientoActivo: tratamientosActivos.length > 0,
+            tratamientosActivos,
+            ultimoCambioEstadoSanitario: ultimoCambio,
+            requiereMigracionEstado: animal.estado === 'En tratamiento'
+        });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener animal', error: error.message });
     }
@@ -235,6 +295,11 @@ animalCtrl.updateAnimal = async (req, res) => {
 
         if (!animalAnterior) {
             return res.status(404).json({ mensaje: 'Animal no encontrado' });
+        }
+
+        delete datos.estadoSanitario;
+        if (datos.estado === 'En tratamiento') {
+            return res.status(400).json({ mensaje: 'En tratamiento ya no es un estado de inventario. Use el estado sanitario.' });
         }
 
         if (datos.diio !== undefined && limpiarDiio(animalAnterior.diio) !== datos.diio) {
@@ -265,6 +330,43 @@ animalCtrl.updateAnimal = async (req, res) => {
         res.json(animal);
     } catch (error) {
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar animal', error: error.message });
+    }
+};
+
+animalCtrl.updateEstadoSanitario = async (req, res) => {
+    try {
+        const resultado = await actualizarEstadoSanitarioAnimal(
+            req.params.id,
+            req.body.estadoSanitario,
+            req.body.motivo,
+            req.usuario?.id,
+            req.body.tratamientoId
+        );
+        res.json({
+            animal: resultado.animal,
+            evento: resultado.evento,
+            sinCambios: resultado.sinCambios
+        });
+    } catch (error) {
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al cambiar el estado sanitario' });
+    }
+};
+
+animalCtrl.updateEstadoSanitarioLote = async (req, res) => {
+    try {
+        const resultados = await actualizarEstadoSanitarioAnimales(
+            req.body.animales,
+            req.body.estadoSanitario,
+            req.body.motivo,
+            req.usuario?.id,
+            req.body.tratamientoId
+        );
+        res.json({
+            actualizados: resultados.filter((resultado) => !resultado.sinCambios).length,
+            sinCambios: resultados.filter((resultado) => resultado.sinCambios).length
+        });
+    } catch (error) {
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al cambiar los estados sanitarios' });
     }
 };
 

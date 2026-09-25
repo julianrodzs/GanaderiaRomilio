@@ -12,6 +12,7 @@ import {
 import { guardarPotrerosOffline, obtenerPotrerosOffline } from '../services/offlineStorage';
 import FormularioPotrero from './FormularioPotrero';
 import FormularioRotacion from './FormularioRotacion';
+import RendimientoPotreros, { DetallePotrero } from './RendimientoPotreros';
 import TablaDinamica from './TablaDinamica';
 import { fechaEnRango, obtenerRangoMesActual } from '../utils/fechas';
 
@@ -70,6 +71,7 @@ const Potreros = ({ soloLectura = false }) => {
   const [tipoFormulario, setTipoFormulario] = useState('potrero');
   const [potreroSeleccionado, setPotreroSeleccionado] = useState(null);
   const [rotacionSeleccionada, setRotacionSeleccionada] = useState(null);
+  const [potreroDetalle, setPotreroDetalle] = useState(null);
   const [filtroRotacionesFecha, setFiltroRotacionesFecha] = useState(obtenerRangoMesActual);
 
   const cargarDatos = async () => {
@@ -261,8 +263,13 @@ const Potreros = ({ soloLectura = false }) => {
         onAgregar={soloLectura ? undefined : abrirNuevoPotrero}
         onEditar={soloLectura ? undefined : abrirEdicionPotrero}
         onEliminar={soloLectura ? undefined : borrarPotrero}
-        mostrarAcciones={!soloLectura}
+        accionesExtra={(potrero) => (
+          <button type="button" aria-label="Ver detalle y rendimiento" title="Ver detalle y rendimiento" onClick={() => setPotreroDetalle(potrero)}>◉</button>
+        )}
+        mostrarAcciones
       />
+
+      <RendimientoPotreros />
 
       <section className="finanzas-panel">
         <div className="finanzas-rango-fechas">
@@ -301,6 +308,14 @@ const Potreros = ({ soloLectura = false }) => {
           mostrarAcciones={!soloLectura}
         />
       </section>
+
+      {potreroDetalle && (
+        <DetallePotrero
+          potrero={potreroDetalle}
+          rotaciones={rotaciones}
+          onCerrar={() => setPotreroDetalle(null)}
+        />
+      )}
     </section>
   );
 };

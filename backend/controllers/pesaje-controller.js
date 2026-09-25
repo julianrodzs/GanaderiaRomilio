@@ -3,6 +3,7 @@ const pesajeCtrl = {};
 const Pesaje = require('../models/Pesaje');
 const Animal = require('../models/Animal');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
+const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 
 const poblarPesaje = (query) => query
     .populate('animal')
@@ -80,6 +81,18 @@ pesajeCtrl.createPesaje = async (req, res) => {
         await registrarEventoPesaje(pesajeGuardado, req.usuario?.id);
         await actualizarPesoActualAnimal(pesajeGuardado.animal);
         const pesaje = await poblarPesaje(Pesaje.findById(pesajeGuardado._id));
+        await notificarAccionSegura({
+            actor: req.usuario,
+            naturaleza: 'Informativa',
+            tipo: 'PESAJE_REGISTRADO',
+            titulo: 'Pesaje registrado',
+            mensaje: `${nombreUsuario(req.usuario)} registró un pesaje de ${pesaje.peso} kg para ${pesaje.animal?.diio || pesaje.animal?.identificadorFinca || pesaje.animal?.nombre || 'un animal'}.`,
+            moduloOrigen: 'Pesajes',
+            entidadTipo: 'Animal',
+            entidadId: pesaje.animal?._id || pesaje.animal,
+            url: `/inventario/animal/${pesaje.animal?._id || pesaje.animal}`,
+            metadata: { pesajeId: pesaje._id, peso: pesaje.peso }
+        });
         res.status(201).json(pesaje);
     } catch (error) {
         res.status(400).json({ mensaje: 'Error al crear pesaje', error: error.message });
@@ -142,6 +155,19 @@ pesajeCtrl.updatePesaje = async (req, res) => {
         await registrarEventoPesaje(pesaje, req.usuario?.id);
         await actualizarPesoActualAnimal(pesaje.animal);
         const pesajeActualizado = await poblarPesaje(Pesaje.findById(pesaje._id));
+
+        await notificarAccionSegura({
+            actor: req.usuario,
+            naturaleza: 'Informativa',
+            tipo: 'PESAJE_MODIFICADO',
+            titulo: 'Pesaje actualizado',
+            mensaje: `${nombreUsuario(req.usuario)} actualizó a ${pesajeActualizado.peso} kg el pesaje de ${pesajeActualizado.animal?.diio || pesajeActualizado.animal?.identificadorFinca || pesajeActualizado.animal?.nombre || 'un animal'}.`,
+            moduloOrigen: 'Pesajes',
+            entidadTipo: 'Animal',
+            entidadId: pesajeActualizado.animal?._id || pesajeActualizado.animal,
+            url: `/inventario/animal/${pesajeActualizado.animal?._id || pesajeActualizado.animal}`,
+            metadata: { pesajeId: pesajeActualizado._id, peso: pesajeActualizado.peso }
+        });
 
         res.json(pesajeActualizado);
     } catch (error) {

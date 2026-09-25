@@ -11,6 +11,7 @@ import {
   obtenerReporteProductosResumen,
   obtenerReporteCrecimientoPesajes,
   obtenerReporteReproductivoPorcino,
+  obtenerReporteSanidad,
   obtenerReporteTareasCamadas,
   obtenerResumenVentas,
   obtenerResumenDestinosFinancieros,
@@ -185,6 +186,7 @@ const Reportes = () => {
   const [productosReporte, setProductosReporte] = useState(null);
   const [porcinosReporte, setPorcinosReporte] = useState(null);
   const [destinosFinancieros, setDestinosFinancieros] = useState([]);
+  const [sanidadReporte, setSanidadReporte] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const etiquetaId = 'DIIO';
@@ -236,7 +238,8 @@ const Reportes = () => {
         camadasData,
         reproduccionPorcinaData,
         tareasCamadasData,
-        economiaCamadasData
+        economiaCamadasData,
+        sanidadData
       ] = await Promise.all([
         obtenerResumenReportes({
           ...filtrosGenerales,
@@ -263,7 +266,8 @@ const Reportes = () => {
         obtenerReporteCamadas(filtrosGenerales),
         obtenerReporteReproductivoPorcino(filtrosGenerales),
         obtenerReporteTareasCamadas(filtrosGenerales),
-        obtenerReporteEconomicoCamadas(filtrosGenerales)
+        obtenerReporteEconomicoCamadas(filtrosGenerales),
+        obtenerReporteSanidad(filtrosGenerales)
       ]);
       setReporte(data);
       setProductividad(productividadData);
@@ -286,6 +290,7 @@ const Reportes = () => {
         tareasCamadas: tareasCamadasData,
         economia: economiaCamadasData
       });
+      setSanidadReporte(sanidadData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1187,6 +1192,65 @@ const Reportes = () => {
                 </div>
               ))}
             </article>
+
+            {sanidadReporte && (
+              <article className="reporte-panel">
+                <p className="eyebrow">Sanidad · Aplicaciones reales</p>
+                <h2>{formatearNumero(sanidadReporte.totalAplicaciones)} aplicaciones</h2>
+                {(sanidadReporte.aplicacionesPorNaturaleza || []).map((item) => (
+                  <BarraReporte
+                    key={item.naturaleza}
+                    label={item.naturaleza}
+                    valor={item.cantidad}
+                    detalle={`${item.cantidad} aplicaciones`}
+                    maximo={sanidadReporte.totalAplicaciones}
+                  />
+                ))}
+                {sanidadReporte.totalAplicaciones === 0 && <span className="reporte-vacio">Sin aplicaciones realizadas en este período.</span>}
+              </article>
+            )}
+
+            {sanidadReporte && (
+              <article className="reporte-panel">
+                <p className="eyebrow">Sanidad · Tratamientos</p>
+                <h2>Estado y próximas aplicaciones</h2>
+                {(sanidadReporte.tratamientosPorEstado || []).map((item) => (
+                  <div className="reporte-lista-item" key={item.estado}>
+                    <strong>{item.estado}</strong>
+                    <span>{item.cantidad} tratamientos iniciados en el período</span>
+                  </div>
+                ))}
+                {(sanidadReporte.proximosTratamientos || []).slice(0, 4).map((tratamiento) => (
+                  <div className="reporte-lista-item" key={tratamiento._id}>
+                    <strong>{tratamiento.producto}</strong>
+                    <span>{formatearFecha(tratamiento.proximaAplicacion)} · {tratamiento.animales?.length || 0} animales</span>
+                  </div>
+                ))}
+              </article>
+            )}
+
+            {sanidadReporte && (
+              <article className="reporte-panel reporte-panel-amplio">
+                <p className="eyebrow">Sanidad · Uso real</p>
+                <h2>Productos y animales con más tratamientos</h2>
+                <div className="reportes-metricas">
+                  {(sanidadReporte.productosMasAplicados || []).slice(0, 6).map((item) => (
+                    <article key={item.producto}>
+                      <span>{item.producto}</span>
+                      <strong>{item.cantidad}</strong>
+                      <small>aplicaciones</small>
+                    </article>
+                  ))}
+                  {(sanidadReporte.animalesMasTratados || []).slice(0, 6).map((item) => (
+                    <article key={item.animalId}>
+                      <span>{item.diio || '--'} {item.nombre || ''}</span>
+                      <strong>{item.cantidad}</strong>
+                      <small>aplicaciones de tratamiento</small>
+                    </article>
+                  ))}
+                </div>
+              </article>
+            )}
 
             <article className="reporte-panel">
               <p className="eyebrow">Potreros</p>

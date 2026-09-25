@@ -8,9 +8,10 @@ import {
   eliminarTarea,
   obtenerAnimales,
   obtenerMisTareas,
+  obtenerTarea,
   obtenerPotreros,
   obtenerTareas,
-  obtenerUsuarios,
+  obtenerUsuariosAsignables,
   API_URL
 } from '../services/api';
 import {
@@ -137,8 +138,9 @@ const normalizarTarea = (tarea) => ({
 
 const slug = (valor = '') => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').toLowerCase();
 
-const Tareas = ({ usuario }) => {
+const Tareas = ({ usuario, tareaInicialId = '' }) => {
   const puedeGestionar = puedeGestionarModulo(usuario?.rol, 'Tareas');
+  const soloLectura = usuario?.rol === 'Consulta';
   const [tareas, setTareas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [potreros, setPotreros] = useState([]);
@@ -183,7 +185,7 @@ const Tareas = ({ usuario }) => {
 
       if (puedeGestionar) {
         const [usuariosData, potrerosData, animalesData] = await Promise.all([
-          obtenerUsuarios(),
+          obtenerUsuariosAsignables('Tareas'),
           obtenerPotreros(),
           obtenerAnimales()
         ]);
@@ -252,6 +254,13 @@ const Tareas = ({ usuario }) => {
     return () => window.removeEventListener('online', sincronizarCambiosPendientes);
   }, [usuario?.rol]);
 
+  useEffect(() => {
+    if (!tareaInicialId) return;
+    obtenerTarea(tareaInicialId)
+      .then((tarea) => setDetalle(tarea))
+      .catch((err) => setError(err.message));
+  }, [tareaInicialId]);
+
   const resumen = useMemo(() => ({
     total: tareas.length,
     pendientes: tareas.filter((tarea) => tarea.estado === 'Pendiente').length,
@@ -261,21 +270,6 @@ const Tareas = ({ usuario }) => {
     automaticasPorcinas: tareas.filter((tarea) => tarea.especie === 'Porcino' && tarea.creadoAutomaticamente).length,
     porcinasHoy: tareas.filter((tarea) => tarea.especie === 'Porcino' && esTareaDeHoy(tarea)).length
   }), [tareas]);
-
-  const proximasPorcinas = useMemo(() => {
-    return tareas
-      .filter((tarea) => tarea.especie === 'Porcino' && !['Completada', 'Cancelada'].includes(tarea.estado))
-      .sort((a, b) => new Date(a.fechaProgramada || 0) - new Date(b.fechaProgramada || 0))
-      .slice(0, 6);
-  }, [tareas]);
-
-  const verTareasPorcinas = () => {
-    setFiltros((actual) => ({
-      ...actual,
-      especie: 'Porcino',
-      creadoAutomaticamente: 'true'
-    }));
-  };
 
   const verTareasAutomaticas = () => {
     setFiltros((actual) => ({
@@ -467,32 +461,6 @@ const Tareas = ({ usuario }) => {
         <article><span>Porcinas hoy</span><strong>{resumen.porcinasHoy}</strong></article>
       </section>
 
-      <section className="tareas-porcinas-panel">
-        <div className="panel-title">
-          <div>
-            <p className="eyebrow">Porcinos</p>
-            <h2>Próximas tareas porcinas</h2>
-          </div>
-          <div className="tareas-panel-actions">
-            <button className="boton-link" type="button" onClick={verTareasPorcinas}>Ver porcinas pendientes</button>
-            <button className="boton-link" type="button" onClick={verTareasAutomaticas}>Ver automáticas</button>
-          </div>
-        </div>
-        {proximasPorcinas.length === 0 ? (
-          <div className="reporte-vacio">No hay tareas porcinas pendientes en el rango seleccionado.</div>
-        ) : (
-          <div className="tareas-porcinas-grid">
-            {proximasPorcinas.map((tarea) => (
-              <article key={tarea._id}>
-                <span>{formatearFecha(tarea.fechaProgramada)}</span>
-                <strong>{tarea.titulo}</strong>
-                <small>{tarea.categoriaAutomatica || tarea.tipo} · {textoTiempoTarea(tarea)} · {tarea.estado}</small>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
       <div className="tareas-filtros">
         <div className="finanzas-rango-fechas tareas-rango-fechas">
           <label>
@@ -507,7 +475,6 @@ const Tareas = ({ usuario }) => {
 
         <div className="tabla-toolbar tareas-filtros-secundarios">
           <button className="boton-link filtro-rapido" type="button" onClick={limpiarFiltros}>Mes actual</button>
-          <button className="boton-link filtro-rapido" type="button" onClick={verTareasPorcinas}>Porcinas pendientes</button>
           <button className="boton-link filtro-rapido" type="button" onClick={verTareasAutomaticas}>Automáticas</button>
           <select name="estado" value={filtros.estado} onChange={actualizarFiltro}>
             <option value="">Todos los estados</option>
@@ -592,9 +559,9 @@ const Tareas = ({ usuario }) => {
                     <button type="button" title="Ver detalle" onClick={() => setDetalle(tarea)}>⊙</button>
                     {puedeGestionar && <button type="button" title="Editar" onClick={() => abrirEdicion(tarea)}>✎</button>}
                     {puedeGestionar && <button type="button" title="Reprogramar" onClick={() => reprogramarTarea(tarea)} disabled={guardando}>↷</button>}
-                    {tarea.estado === 'Pendiente' && <button type="button" title="En proceso" onClick={() => cambiarEstado(tarea, 'En proceso')} disabled={guardando}>▶</button>}
-                    {tarea.estado !== 'Completada' && <button type="button" title="Completar" onClick={() => completar(tarea)} disabled={guardando}>✓</button>}
-                    {['En proceso', 'Completada'].includes(tarea.estado) && <button type="button" title="Reabrir como pendiente" onClick={() => cambiarEstado(tarea, 'Pendiente')} disabled={guardando}>↶</button>}
+                    {!soloLectura && tarea.estado === 'Pendiente' && <button type="button" title="En proceso" onClick={() => cambiarEstado(tarea, 'En proceso')} disabled={guardando}>▶</button>}
+                    {!soloLectura && tarea.estado !== 'Completada' && <button type="button" title="Completar" onClick={() => completar(tarea)} disabled={guardando}>✓</button>}
+                    {!soloLectura && ['En proceso', 'Completada'].includes(tarea.estado) && <button type="button" title="Reabrir como pendiente" onClick={() => cambiarEstado(tarea, 'Pendiente')} disabled={guardando}>↶</button>}
                     {puedeGestionar && !['Completada', 'Cancelada'].includes(tarea.estado) && <button type="button" title="Cancelar tarea" onClick={() => cancelarTarea(tarea)} disabled={guardando}>×</button>}
                     {puedeGestionar && <button type="button" title="Eliminar" onClick={() => borrar(tarea)}>⌫</button>}
                   </div>
@@ -666,14 +633,14 @@ const Tareas = ({ usuario }) => {
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
             {detalle.evidenciaUrl && <img className="tarea-evidencia" src={evidenciaCompletaUrl(detalle.evidenciaUrl)} alt="Evidencia de tarea" />}
 
-            {detalle.estado !== 'Completada' && (
+            {!soloLectura && detalle.estado !== 'Completada' && (
               <div className="form-card tarea-completar-card">
                 <label>Observaciones al completar<textarea rows="3" value={observacionesCompletar} onChange={(evento) => setObservacionesCompletar(evento.target.value)} /></label>
                 <label>Evidencia<input type="file" accept="image/*" onChange={(evento) => setEvidencia(evento.target.files?.[0] || null)} /></label>
                 <button className="boton-primario compacto" type="button" onClick={() => completar(detalle)} disabled={guardando}>{guardando ? 'Completando...' : 'Completar tarea'}</button>
               </div>
             )}
-            <div className="tarea-detalle-acciones">
+            {!soloLectura && <div className="tarea-detalle-acciones">
               {detalle.estado === 'Pendiente' && (
                 <button className="boton-link" type="button" onClick={() => cambiarEstado(detalle, 'En proceso')} disabled={guardando}>
                   Pasar a en proceso
@@ -694,12 +661,12 @@ const Tareas = ({ usuario }) => {
                   Cancelar tarea
                 </button>
               )}
-            </div>
+            </div>}
 
-            <form className="form-card" onSubmit={agregarComentario}>
+            {!soloLectura && <form className="form-card" onSubmit={agregarComentario}>
               <label>Comentario<textarea rows="3" value={comentario} onChange={(evento) => setComentario(evento.target.value)} /></label>
               <button className="boton-primario compacto" type="submit">Agregar comentario</button>
-            </form>
+            </form>}
             <div className="tarea-comentarios">
               {detalle.comentarios?.map((item) => (
                 <article key={item._id || item.fecha}>
