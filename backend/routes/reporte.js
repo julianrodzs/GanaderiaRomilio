@@ -2,6 +2,9 @@ const { Router } = require('express');
 const router = Router();
 const { autorizarPermiso } = require('../middleware/auth');
 const puedeVer = autorizarPermiso('reportes.ver');
+const { requireFeature } = require('../middleware/plan');
+const analiticaProductiva = requireFeature('analiticaProductiva');
+const analiticaEconomica = requireFeature('analiticaEconomica');
 
 const {
     getResumenReportes,
@@ -22,17 +25,26 @@ const {
     getReporteReproductivoPorcino,
     getReporteTareasCamadas,
     getReporteEconomicoCamadas,
-    getReporteSanidad
+    getReporteSanidad,
+    getReporteComprasAnimales,
+    getCrecimientoPorcino,
+    getEficienciaEngorde,
+    getConfiguracionProductiva,
+    updateConfiguracionProductiva
 } = require('../controllers/reporte-controller');
 
 router.use(puedeVer);
 
 router.get('/resumen', getResumenReportes);
-router.get('/productividad', getProductividadCria);
-router.get('/finanzas-cria', getFinanzasCria);
-router.get('/sustentabilidad-cria', getSustentabilidadCria);
-router.get('/vacas-improductivas', getVacasImproductivas);
-router.get('/crecimiento-pesajes', getCrecimientoPesajes);
+router.get('/productividad', analiticaProductiva, getProductividadCria);
+router.get('/finanzas-cria', analiticaEconomica, getFinanzasCria);
+router.get('/sustentabilidad-cria', analiticaEconomica, getSustentabilidadCria);
+router.get('/vacas-improductivas', analiticaProductiva, getVacasImproductivas);
+router.get('/crecimiento-pesajes', analiticaProductiva, getCrecimientoPesajes);
+router.get('/porcinos/crecimiento', analiticaProductiva, getCrecimientoPorcino);
+router.get('/engorde', analiticaProductiva, getEficienciaEngorde);
+router.get('/configuracion-productiva', analiticaProductiva, getConfiguracionProductiva);
+router.put('/configuracion-productiva', analiticaProductiva, autorizarPermiso('reportes.configurar'), updateConfiguracionProductiva);
 router.get('/productos/resumen', getProductosResumen);
 router.get('/productos/por-producto', getProductosPorProducto);
 router.get('/productos/por-categoria', getProductosPorCategoria);
@@ -42,9 +54,10 @@ router.get('/productos/proveedores', getProductosProveedores);
 router.get('/productos/destinos', getProductosDestinos);
 router.get('/productos/top', getProductosTop);
 router.get('/porcinos/camadas', getReporteCamadas);
-router.get('/porcinos/reproduccion', getReporteReproductivoPorcino);
+router.get('/porcinos/reproduccion', analiticaProductiva, getReporteReproductivoPorcino);
 router.get('/porcinos/tareas-camadas', getReporteTareasCamadas);
-router.get('/porcinos/economia-camadas', getReporteEconomicoCamadas);
+router.get('/porcinos/economia-camadas', analiticaEconomica, getReporteEconomicoCamadas);
 router.get('/sanidad', getReporteSanidad);
+router.get('/compras-animales', analiticaEconomica, getReporteComprasAnimales);
 
 module.exports = router;

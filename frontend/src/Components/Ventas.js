@@ -8,7 +8,7 @@ import {
   obtenerCamadas,
   obtenerResumenVentas,
   obtenerVentas,
-  API_URL
+  abrirArchivoProtegido
 } from '../services/api';
 import { obtenerRangoMesActual } from '../utils/fechas';
 import SelectorEspecie from './SelectorEspecie';
@@ -369,11 +369,6 @@ const Ventas = ({ soloLectura = false }) => {
     }
   };
 
-  const comprobanteUrl = (url) => {
-    if (!url) return '';
-    return `${API_URL.replace('/api', '')}${url}`;
-  };
-
   if (modoFormulario) {
     return (
       <section className="vista-tabla ventas-page">
@@ -670,9 +665,9 @@ const Ventas = ({ soloLectura = false }) => {
             </div>
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
             {detalle.comprobanteUrl && (
-              <a className="boton-primario compacto venta-comprobante-link" href={comprobanteUrl(detalle.comprobanteUrl)} target="_blank" rel="noreferrer">
+              <button className="boton-primario compacto venta-comprobante-link" type="button" onClick={() => abrirArchivoProtegido(detalle.comprobanteUrl)}>
                 Ver comprobante
-              </a>
+              </button>
             )}
             <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
               <table>

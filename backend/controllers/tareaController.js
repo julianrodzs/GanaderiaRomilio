@@ -1,5 +1,6 @@
 const { Tarea } = require('../models/Tarea');
 const { rolTienePermiso } = require('../config/permisosRoles');
+const { urlArchivoOrganizacion } = require('../middleware/uploadOrganizacion');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const { upsertEventoCamada, eliminarEventosCamadaPorReferencia } = require('../services/eventoCamada-service');
 const {
@@ -350,7 +351,7 @@ tareaCtrl.completarTarea = async (req, res) => {
         tarea.fechaCompletada = new Date();
 
         if (req.file) {
-            tarea.evidenciaUrl = `/uploads/tareas/${req.file.filename}`;
+            tarea.evidenciaUrl = urlArchivoOrganizacion('tareas', req.file);
         }
 
         if (req.body.observaciones) {

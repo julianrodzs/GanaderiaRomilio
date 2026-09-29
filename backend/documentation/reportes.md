@@ -1,5 +1,15 @@
 # Reportes - Variables, origen y transformaciones
 
+## Disponibilidad por plan
+
+Los resumenes operativos de inventario, potreros, sanidad, finanzas, ventas, productos, dron, camadas y tareas por camada son reportes basicos disponibles desde Esencial.
+
+La analitica productiva requiere Gestion o superior: IPG, vacas a revisar, partos por vaca y ano, crecimiento por pesajes, reproduccion porcina avanzada y rendimiento de potreros.
+
+ICP e IEE se documentan en `indices-productivos.md`. Ambos son indicadores de finca calculados por periodo. ICP normaliza crecimiento porcino por etapa; IEE normaliza el engorde bovino y porcino contra metas propias antes de consolidarlo por animal-dias.
+
+La analitica economica requiere Pro o superior: finanzas y sustentabilidad de cria, compras avanzadas, economia por camada, ventas por origen y rotacion del inventario vendido. Los endpoints protegidos responden `403 PLAN_FEATURE_NOT_AVAILABLE` cuando el plan no incluye la capacidad.
+
 Este documento explica de donde salen los datos de los reportes de GanaderiaRomilio, que variables usa cada uno y como se transforman.
 
 ## Convenciones generales
@@ -806,6 +816,161 @@ precioCompraPromedioKg = montoComprasAnimales / pesoCompraTotal
 ```
 
 Si el peso total es cero, devuelve `0`.
+
+## Analisis de compras de animales
+
+Endpoint:
+
+```txt
+GET /api/reportes/compras-animales
+```
+
+Query:
+
+- `fechaInicio`
+- `fechaFin`
+- `especie`: `Bovino`, `Porcino` o vacio para todos.
+- `sexo`: `Macho`, `Hembra` o vacio.
+- `proveedor`: coincidencia parcial.
+- `raza`: coincidencia parcial.
+
+Frontend:
+
+```js
+obtenerReporteComprasAnimales({
+  fechaInicio,
+  fechaFin,
+  especie,
+  sexo,
+  proveedor,
+  raza
+})
+```
+
+Archivos principales:
+
+- `backend/services/reporteComprasAnimales-service.js`
+- `frontend/src/Components/ReporteComprasAnimales.js`
+
+### Origen de datos
+
+- `CompraAnimal`: compra, proveedor, especie, peso, precio registrado, monto calculado y monto final.
+- `Animal`: estado actual, sexo, categoria, monto de venta y fechas de salida.
+- `Pesaje`: ultimo peso real posterior a la compra.
+- `TratamientoSanitario`: tratamientos iniciados durante los primeros 60 dias posteriores a la compra.
+
+Solo se consideran compras con:
+
+```txt
+estado = Confirmada
+fechaCompra dentro del rango solicitado
+```
+
+Los registros bovinos antiguos sin `especie` se consideran `Bovino` por compatibilidad.
+
+### Distribucion del monto final
+
+El precio registrado por animal produce un subtotal:
+
+```txt
+subtotalCalculado = pesoCompraKg * precioKg
+```
+
+Cuando la compra tiene un `montoFinal`, el costo oficial de cada animal se distribuye segun su participacion en el monto calculado:
+
+```txt
+proporcionAnimal = subtotalCalculadoAnimal / montoCalculadoCompra
+montoAsignadoAnimal = montoTotalCompra * proporcionAnimal
+ajusteAsignadoAnimal = montoAsignadoAnimal - subtotalCalculadoAnimal
+```
+
+Esta regla permite filtrar por sexo o raza sin atribuir a los animales filtrados el monto completo de la compra.
+
+### Indicadores de inversion y precio
+
+```txt
+totalInvertido = suma(montoAsignadoAnimal)
+totalKg = suma(pesoCompraKg)
+precioEfectivoKg = totalInvertido / totalKg
+costoPromedioAnimal = totalInvertido / cantidadAnimales
+pesoPromedioEntrada = totalKg / cantidadAnimales
+ajusteMonto = totalInvertido - montoCalculado
+porcentajeAjuste = ajusteMonto / montoCalculado * 100
+```
+
+`precioEfectivoKg` es ponderado por peso. No es un promedio simple de los precios por animal.
+
+### Seguimiento posterior
+
+Para animales vendidos se usa:
+
+- `Animal.pesoVenta`
+- `Animal.fechaVenta`
+- `Animal.montoVenta`
+
+Para animales activos o muertos se usa el ultimo `Pesaje` registrado entre la compra y la fecha actual o de muerte.
+
+```txt
+gananciaKg = pesoFinal - pesoCompraKg
+gananciaDiaria = gananciaKg / diasDesdeCompra
+margenBruto = montoVenta - montoAsignadoCompra
+```
+
+El margen bruto no incluye alimentacion, sanidad, mano de obra ni otros gastos operativos. No debe interpretarse como utilidad neta.
+
+`tratadoPrimeros60Dias` indica que el animal estuvo asociado a un `TratamientoSanitario` cuya `fechaInicio` cayo entre la fecha de compra y los siguientes 60 dias.
+
+### Analisis por sexo
+
+`porSexo` separa machos y hembras y devuelve para cada grupo:
+
+- animales y porcentaje del total.
+- kilos e inversion.
+- peso promedio de entrada.
+- precio efectivo por kg.
+- costo promedio por animal.
+- ganancia diaria promedio cuando existen pesajes posteriores.
+- tratamientos en los primeros 60 dias.
+- mortalidad.
+- margen bruto de animales vendidos.
+
+La comparacion por sexo siempre debe leerse junto con especie, rango de peso y proveedor. Diferencias de composicion pueden afectar el precio y el crecimiento.
+
+### Proveedores, meses y rangos de peso
+
+La respuesta tambien incluye:
+
+```js
+porMes
+porEspecie
+proveedores
+rangosPeso
+puntosPesoPrecio
+compras
+```
+
+- `porMes`: inversion, animales, kilos, precio efectivo y ajuste por mes.
+- `porEspecie`: mantiene separados peso, precio, crecimiento, sexo y mortalidad de bovinos y porcinos cuando el filtro general usa `Todos`.
+- `proveedores`: costo de entrada y resultado posterior por proveedor.
+- `rangosPeso`: compara grupos de peso propios de bovinos y porcinos.
+- `puntosPesoPrecio`: relacion visual entre peso de entrada y precio efectivo por animal.
+- `compras`: seguimiento por documento de compra, utilizado como lote de ingreso.
+
+Rangos bovinos:
+
+- menos de 200 kg.
+- 200 a 299 kg.
+- 300 a 399 kg.
+- 400 kg o mas.
+
+Rangos porcinos:
+
+- menos de 25 kg.
+- 25 a 59 kg.
+- 60 a 99 kg.
+- 100 kg o mas.
+
+No se mezclan bovinos y porcinos cuando se selecciona una especie. La opcion `Todos` muestra inversion total y un resumen separado por especie; la interfaz pide seleccionar una especie antes de graficar tendencias de precio o la relacion peso-precio.
 
 ## Partos por vaca y ano
 

@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const importacionExcelSchema = new Schema(
     {
@@ -43,5 +44,8 @@ const importacionExcelSchema = new Schema(
         timestamps: true
     }
 );
+
+importacionExcelSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+importacionExcelSchema.index({ organizacionId: 1, fincaId: 1, hashArchivo: 1 });
 
 module.exports = model('ImportacionExcel', importacionExcelSchema);

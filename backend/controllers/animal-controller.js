@@ -14,6 +14,9 @@ const {
     prepararDatosGenealogia,
     validarRelacionGenealogica
 } = require('../services/genealogiaService');
+const { asegurarPuedeCrearAnimal, puedeUsarEspecie } = require('../services/plan-service');
+const { validarObjetivoProductivoFinca } = require('../services/finca-service');
+const { respuestaErrorPlan } = require('../middleware/plan');
 
 const limpiarDiio = (diio) => {
     if (diio === undefined) return undefined;
@@ -234,14 +237,23 @@ animalCtrl.createAnimal = async (req, res) => {
             diio: limpiarDiio(req.body.diio)
         });
         datos = await prepararRelacionCamada(datos);
+        await validarObjetivoProductivoFinca({
+            fincaId: req.fincaId,
+            especie: datos.especie || 'Bovino',
+            objetivoProductivo: datos.objetivoProductivo
+        });
         await validarDiioDisponible(datos.diio);
         await validarRelacionGenealogica(null, datos.padre, datos.madre);
+        if ((datos.estado || 'Activo') === 'Activo') {
+            await asegurarPuedeCrearAnimal({ organizacionId: req.organizacionId, especie: datos.especie || 'Bovino' });
+        }
 
         const nuevoAnimal = new Animal(datos);
         const animalGuardado = await nuevoAnimal.save();
         await crearEventosInventario({ animal: animalGuardado, usuarioId: req.usuario?.id });
         res.status(201).json(animalGuardado);
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al crear animal', error: error.message });
     }
 };
@@ -310,6 +322,32 @@ animalCtrl.updateAnimal = async (req, res) => {
             especie: datos.especie || animalAnterior.especie,
             camadaOrigen: datos.camadaOrigen !== undefined ? datos.camadaOrigen : animalAnterior.camadaOrigen
         });
+        const especieFinal = datos.especie || animalAnterior.especie || 'Bovino';
+        const estadoFinal = datos.estado || animalAnterior.estado;
+        const objetivoFinal = datos.objetivoProductivo !== undefined
+            ? datos.objetivoProductivo
+            : animalAnterior.objetivoProductivo;
+        if (especieFinal !== animalAnterior.especie || String(objetivoFinal || '') !== String(animalAnterior.objetivoProductivo || '')) {
+            await validarObjetivoProductivoFinca({
+                fincaId: req.fincaId,
+                especie: especieFinal,
+                objetivoProductivo: objetivoFinal
+            });
+        }
+        if (estadoFinal === 'Activo') {
+            const especieDisponible = await puedeUsarEspecie(especieFinal, req.organizacionId);
+            if (!especieDisponible.permitido) {
+                const error = new Error(especieDisponible.message);
+                error.name = 'PlanError';
+                error.code = especieDisponible.code;
+                error.status = 403;
+                error.especiePermitida = especieDisponible.especiePermitida;
+                throw error;
+            }
+            if (animalAnterior.estado !== 'Activo') {
+                await asegurarPuedeCrearAnimal({ organizacionId: req.organizacionId, especie: especieFinal });
+            }
+        }
         await validarRelacionGenealogica(req.params.id, datos.padre, datos.madre);
 
         const animal = await Animal.findByIdAndUpdate(req.params.id, datos, {
@@ -329,6 +367,7 @@ animalCtrl.updateAnimal = async (req, res) => {
 
         res.json(animal);
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar animal', error: error.message });
     }
 };

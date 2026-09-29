@@ -17,6 +17,11 @@ const usuarioSchema = new Schema(
             enum: ['Activo', 'Inactivo'],
             default: 'Activo'
         },
+        esSuperAdministrador: {
+            type: Boolean,
+            default: false,
+            index: true
+        },
         ultimoAcceso: { type: Date },
         resetPasswordToken: { type: String },
         resetPasswordExpires: { type: Date },

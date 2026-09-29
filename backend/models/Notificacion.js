@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const notificacionSchema = new Schema(
     {
@@ -20,10 +21,11 @@ const notificacionSchema = new Schema(
     { timestamps: true }
 );
 
+notificacionSchema.plugin(aplicarAislamientoOrganizacion);
 notificacionSchema.index({ destinatario: 1, createdAt: -1 });
 notificacionSchema.index({ destinatario: 1, leida: 1, createdAt: -1 });
 notificacionSchema.index(
-    { destinatario: 1, dedupKey: 1 },
+    { organizacionId: 1, destinatario: 1, dedupKey: 1 },
     {
         unique: true,
         partialFilterExpression: { dedupKey: { $type: 'string' } }

@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const TIPOS_EVENTO = [
     'Nacimiento',
@@ -47,6 +48,7 @@ const eventoAnimalSchema = new Schema(
     }
 );
 
+eventoAnimalSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 eventoAnimalSchema.index({ animal: 1, fecha: -1 });
 eventoAnimalSchema.index({ animal: 1, moduloOrigen: 1, referenciaId: 1, tipoEvento: 1 });
 

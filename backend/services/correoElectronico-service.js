@@ -1,5 +1,6 @@
 const crypto = require('crypto');
-const Usuario = require('../models/Usuario');
+const { obtenerOrganizacionActual } = require('../context/organizacion-context');
+const { Membresia } = require('../models/Membresia');
 
 const crearTokenRecuperacion = () => crypto.randomBytes(32).toString('hex');
 
@@ -10,23 +11,31 @@ const obtenerRemitenteRecuperacion = () => (
     || 'Ganaderia Romilio <notificaciones@alertas.ganaderiaromilio.com>'
 );
 
-const obtenerDestinatariosAdministradores = async () => {
+const obtenerDestinatariosAdministradores = async (organizacionId = obtenerOrganizacionActual()) => {
     if (process.env.EMAIL_TEST_TO) {
         return [process.env.EMAIL_TEST_TO];
     }
 
-    const administradores = await Usuario.find({ rol: 'Administrador' }).select('correo nombre apellido');
-    const correosAdministradores = administradores
-        .map((usuario) => usuario.correo)
+    if (!organizacionId) return [];
+
+    const membresias = await Membresia.find({
+        organizacionId,
+        rol: 'Administrador',
+        estado: 'Activo'
+    }).populate({
+        path: 'usuario',
+        match: { estado: 'Activo' },
+        select: 'correo nombre apellido'
+    });
+    const correosAdministradores = membresias
+        .map((membresia) => membresia.usuario?.correo)
         .filter(Boolean);
 
     if (correosAdministradores.length > 0) {
         return correosAdministradores;
     }
 
-    return process.env.EMAIL_ADMIN
-        ? [process.env.EMAIL_ADMIN]
-        : [];
+    return [];
 };
 
 const enviarCorreoResend = async ({ to, subject, html, text, from }) => {
@@ -117,9 +126,30 @@ const enviarCorreoRecuperacion = async ({ correo, nombre, token }) => {
     };
 };
 
+const enviarCorreoInvitacion = async ({ correo, nombre, organizacion, token }) => {
+    const enlaceBase = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const enlaceInvitacion = `${enlaceBase}/restablecer-contrasena/${token}`;
+    const resultado = await enviarCorreoResend({
+        from: obtenerRemitenteRecuperacion(),
+        to: correo,
+        subject: `Invitacion a ${organizacion} - Ganaderia Romilio`,
+        text: `Hola ${nombre || ''}. Tu cuenta para ${organizacion} esta lista. Crea tu contrasena desde este enlace: ${enlaceInvitacion}`,
+        html: `
+            <p>Hola ${nombre || ''},</p>
+            <p>Tu cuenta para <strong>${organizacion}</strong> ya esta disponible en Ganaderia Romilio.</p>
+            <p>Crea tu contrasena desde el siguiente enlace:</p>
+            <p><a href="${enlaceInvitacion}">${enlaceInvitacion}</a></p>
+            <p>El enlace vence en 24 horas.</p>
+        `
+    });
+
+    return { ...resultado, enlaceInvitacion };
+};
+
 module.exports = {
     crearTokenRecuperacion,
     enviarCorreoAdministradores,
+    enviarCorreoInvitacion,
     enviarCorreoRecuperacion,
     enviarCorreoResend,
     obtenerDestinatariosAdministradores

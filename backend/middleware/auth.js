@@ -1,5 +1,8 @@
 const crypto = require('crypto');
 const { obtenerRolesPermiso, rolTienePermiso } = require('../config/permisosRoles');
+const { ejecutarConOrganizacion } = require('../context/organizacion-context');
+const { Membresia } = require('../models/Membresia');
+require('../models/Organizacion');
 const Usuario = require('../models/Usuario');
 
 const base64UrlDecode = (valor) => {
@@ -77,7 +80,7 @@ const auth = async (req, res, next) => {
         }
 
         const datosToken = verificarToken(token);
-        const usuario = await Usuario.findById(datosToken.id).select('nombre apellido correo rol estado');
+        const usuario = await Usuario.findById(datosToken.id).select('nombre apellido correo estado esSuperAdministrador');
 
         if (!usuario) {
             return res.status(401).json({ mensaje: 'Usuario no encontrado' });
@@ -87,17 +90,83 @@ const auth = async (req, res, next) => {
             return res.status(403).json({ mensaje: 'Usuario inactivo. Contacta al administrador.' });
         }
 
+        const filtroMembresia = {
+            usuario: usuario._id,
+            estado: 'Activo'
+        };
+        if (datosToken.organizacionId) filtroMembresia.organizacionId = datosToken.organizacionId;
+
+        const membresia = await Membresia.findOne(filtroMembresia)
+            .sort({ esPrincipal: -1, createdAt: 1 })
+            .populate('organizacionId', 'nombre slug estado zonaHoraria fincaPrincipal');
+
+        if (!membresia) {
+            return res.status(403).json({ mensaje: 'El usuario no tiene acceso activo a una organización.' });
+        }
+
+        const organizacion = membresia.organizacionId;
+        if (!organizacion || organizacion.estado !== 'Activa') {
+            return res.status(403).json({ mensaje: 'La organización no está activa.' });
+        }
+
         req.usuario = {
             id: usuario._id.toString(),
             nombre: usuario.nombre,
             apellido: usuario.apellido,
             correo: usuario.correo,
-            rol: usuario.rol || 'Encargado',
-            estado: usuario.estado
+            rol: membresia.rol,
+            estado: membresia.estado,
+            esSuperAdministrador: usuario.esSuperAdministrador === true,
+            membresiaId: membresia._id.toString(),
+            organizacionId: organizacion._id.toString()
         };
-        next();
+        req.organizacionId = organizacion._id.toString();
+        req.organizacion = organizacion;
+        req.fincaId = organizacion.fincaPrincipal?.toString() || null;
+        req.fincaPrincipalId = req.fincaId;
+
+        return ejecutarConOrganizacion(req.organizacionId, next, req.fincaId);
     } catch (error) {
         res.status(401).json({ mensaje: 'No autorizado', error: error.message });
+    }
+};
+
+const authPlataforma = async (req, res, next) => {
+    try {
+        const authorization = req.headers.authorization || '';
+        const [tipo, token] = authorization.split(' ');
+
+        if (tipo !== 'Bearer' || !token) {
+            return res.status(401).json({ mensaje: 'Token de autenticacion requerido' });
+        }
+
+        const datosToken = verificarToken(token);
+        const usuario = await Usuario.findById(datosToken.id)
+            .select('nombre apellido correo estado esSuperAdministrador');
+
+        if (!usuario) return res.status(401).json({ mensaje: 'Usuario no encontrado' });
+        if (usuario.estado !== 'Activo') {
+            return res.status(403).json({ mensaje: 'Usuario inactivo. Contacta al administrador.' });
+        }
+        if (usuario.esSuperAdministrador !== true) {
+            return res.status(403).json({ mensaje: 'Acceso exclusivo para administradores de la plataforma.' });
+        }
+
+        req.usuarioPlataforma = {
+            id: usuario._id.toString(),
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+            correo: usuario.correo
+        };
+        req.usuario = {
+            ...req.usuarioPlataforma,
+            rol: 'SuperAdministrador',
+            estado: usuario.estado,
+            esSuperAdministrador: true
+        };
+        return next();
+    } catch (error) {
+        return res.status(401).json({ mensaje: 'No autorizado', error: error.message });
     }
 };
 
@@ -129,6 +198,7 @@ module.exports = {
     autorizarPermiso,
     autorizarRoles,
     auth,
+    authPlataforma,
     generarToken,
     obtenerRolesPermiso,
     rolTienePermiso,

@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const TIPOS_EVENTO_CAMADA = [
     'Camada registrada',
@@ -42,6 +43,7 @@ const eventoCamadaSchema = new Schema(
     }
 );
 
+eventoCamadaSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 eventoCamadaSchema.index({ camada: 1, fecha: -1 });
 eventoCamadaSchema.index({ camada: 1, moduloOrigen: 1, referenciaId: 1, tipoEvento: 1 });
 

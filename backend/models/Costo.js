@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const costoSchema = new Schema(
     {
@@ -14,5 +15,7 @@ const costoSchema = new Schema(
         timestamps: true
     }
 );
+
+costoSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 
 module.exports = model('Costo', costoSchema);

@@ -59,7 +59,8 @@ const permisosPorModulo = {
         administrarCatalogos: ['Administrador']
     },
     reportes: {
-        ver: ['Administrador', 'Contador', 'Consulta']
+        ver: ['Administrador', 'Contador', 'Consulta'],
+        configurar: ['Administrador']
     },
     drone: {
         ver: ['Administrador', 'Encargado'],

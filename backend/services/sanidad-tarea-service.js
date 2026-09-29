@@ -1,4 +1,5 @@
-const Usuario = require('../models/Usuario');
+const { obtenerOrganizacionActual } = require('../context/organizacion-context');
+const { Membresia } = require('../models/Membresia');
 const { Tarea } = require('../models/Tarea');
 const {
     ejecutarNotificacionSegura,
@@ -9,8 +10,12 @@ const fechaKey = (fecha) => new Date(fecha).toISOString().slice(0, 10);
 
 const resolverAsignado = async (usuarioPreferido) => {
     if (!usuarioPreferido) return null;
-    const usuario = await Usuario.findOne({ _id: usuarioPreferido, estado: 'Activo' }).select('_id');
-    return usuario?._id || null;
+    const membresia = await Membresia.findOne({
+        organizacionId: obtenerOrganizacionActual(),
+        usuario: usuarioPreferido,
+        estado: 'Activo'
+    }).populate({ path: 'usuario', match: { estado: 'Activo' }, select: '_id' });
+    return membresia?.usuario?._id || null;
 };
 
 const cancelarTareasDistintas = async ({ referenciaId, categoriaAutomatica, claveActual }) => {

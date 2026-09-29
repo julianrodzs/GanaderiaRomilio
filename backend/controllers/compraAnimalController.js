@@ -1,11 +1,15 @@
 const Animal = require('../models/Animal');
 const CompraAnimal = require('../models/CompraAnimal');
+const { urlArchivoOrganizacion } = require('../middleware/uploadOrganizacion');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const { eliminarEventosPorReferencia, upsertEventoAnimal } = require('../services/eventoAnimal-service');
 const {
     DESTINO_USO_MOVIMIENTOS_ANIMALES,
     obtenerCategoriaCompraAnimales
 } = require('../config/catalogosFinancieros');
+const { asegurarPuedeCrearAnimal } = require('../services/plan-service');
+const { validarObjetivoProductivoFinca } = require('../services/finca-service');
+const { respuestaErrorPlan } = require('../middleware/plan');
 
 const compraAnimalCtrl = {};
 
@@ -85,6 +89,13 @@ const validarAnimalesCompra = async (animales = [], compraIdIgnorada = null) => 
 
 const crearAnimalesCompra = async (compra, usuarioId) => {
     const animalesActualizados = [];
+    const cantidadNuevos = (compra.animales || []).filter((item) => !item.animal).length;
+    if (cantidadNuevos > 0) {
+        await asegurarPuedeCrearAnimal({
+            especie: compra.especie || 'Bovino',
+            cantidad: cantidadNuevos
+        });
+    }
 
     for (const item of compra.animales || []) {
         const proporcion = compra.montoCalculado ? Number(item.subtotal || 0) / compra.montoCalculado : 0;
@@ -246,11 +257,15 @@ compraAnimalCtrl.crearCompra = async (req, res) => {
         const animales = parseAnimales(req.body.animales);
         const validacion = await validarAnimalesCompra(animales);
         if (!validacion.valido) return res.status(validacion.status).json({ mensaje: validacion.mensaje });
+        await validarObjetivoProductivoFinca({
+            fincaId: req.fincaId,
+            especie: req.body.especie || 'Bovino'
+        });
 
         const compra = new CompraAnimal({
             ...req.body,
             animales,
-            comprobanteUrl: req.file ? `/uploads/compras/${req.file.filename}` : undefined,
+            comprobanteUrl: urlArchivoOrganizacion('compras', req.file),
             registradoPor: req.usuario?.id
         });
         const compraGuardada = await compra.save();
@@ -259,6 +274,7 @@ compraAnimalCtrl.crearCompra = async (req, res) => {
         const compraPoblada = await poblarCompra(CompraAnimal.findById(compraGuardada._id));
         res.status(201).json(compraPoblada);
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al crear compra', error: error.message });
     }
 };
@@ -274,18 +290,23 @@ compraAnimalCtrl.actualizarCompra = async (req, res) => {
         if (!validacion.valido) {
             return res.status(validacion.status).json({ mensaje: validacion.mensaje });
         }
+        await validarObjetivoProductivoFinca({
+            fincaId: req.fincaId,
+            especie: req.body.especie || compraAnterior.especie || 'Bovino'
+        });
 
         await revertirCompra(compraAnterior);
         const datos = {
             ...req.body,
             animales,
-            comprobanteUrl: req.file ? `/uploads/compras/${req.file.filename}` : compraAnterior.comprobanteUrl
+            comprobanteUrl: urlArchivoOrganizacion('compras', req.file) || compraAnterior.comprobanteUrl
         };
         const compra = await CompraAnimal.findByIdAndUpdate(req.params.id, datos, { new: true, runValidators: true });
         await aplicarCompraConfirmada(compra, req.usuario?.id);
         const compraPoblada = await poblarCompra(CompraAnimal.findById(compra._id));
         res.json(compraPoblada);
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar compra', error: error.message });
     }
 };

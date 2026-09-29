@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 const { normalizarMovimientoFinanciero } = require('../services/normalizacionFinanciera-service');
 
 const movimientoFinancieroSchema = new Schema(
@@ -124,6 +125,7 @@ movimientoFinancieroSchema.pre('findOneAndUpdate', function normalizarMovimiento
     next();
 });
 
+movimientoFinancieroSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 movimientoFinancieroSchema.index({ fecha: -1 });
 movimientoFinancieroSchema.index({ tipoMovimiento: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ categoria: 1, fecha: -1 });

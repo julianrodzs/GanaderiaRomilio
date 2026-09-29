@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const NATURALEZAS_APLICACION = ['Plan sanitario', 'Tratamiento', 'Aplicacion unica'];
 
@@ -55,10 +56,11 @@ aplicacionSanitariaSchema.pre('validate', function validarOrigen(next) {
     next();
 });
 
+aplicacionSanitariaSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 aplicacionSanitariaSchema.index({ fechaAplicacion: -1 });
 aplicacionSanitariaSchema.index({ animales: 1, fechaAplicacion: -1 });
 aplicacionSanitariaSchema.index({ naturaleza: 1, fechaAplicacion: -1 });
-aplicacionSanitariaSchema.index({ tratamiento: 1, numeroAplicacion: 1 }, {
+aplicacionSanitariaSchema.index({ organizacionId: 1, tratamiento: 1, numeroAplicacion: 1 }, {
     unique: true,
     partialFilterExpression: { tratamiento: { $type: 'objectId' }, numeroAplicacion: { $type: 'number' } }
 });

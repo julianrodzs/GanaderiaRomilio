@@ -3,6 +3,7 @@ const router = Router();
 const { autorizarPermiso } = require('../middleware/auth');
 const puedeVer = autorizarPermiso('potreros.ver');
 const puedeGestionar = autorizarPermiso('potreros.gestionar');
+const { requireFeature } = require('../middleware/plan');
 
 const {
     getPotreros,
@@ -14,8 +15,8 @@ const {
     deletePotrero
 } = require('../controllers/potrero-controller');
 
-router.get('/rendimiento', puedeVer, getRendimientoPotreros);
-router.get('/:id/rendimiento', puedeVer, getRendimientoPotrero);
+router.get('/rendimiento', puedeVer, requireFeature('analiticaProductiva'), getRendimientoPotreros);
+router.get('/:id/rendimiento', puedeVer, requireFeature('analiticaProductiva'), getRendimientoPotrero);
 
 router.route('/')
     .get(puedeVer, getPotreros)

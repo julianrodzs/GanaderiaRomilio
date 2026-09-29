@@ -626,9 +626,9 @@ El importador usa una plantilla versionada y el mismo contrato para cualquier fi
 Hojas admitidas:
 
 - `POTREROS`: requiere `CODIGO` y `NOMBRE`.
-- `INVENTARIO`: requiere `DIIO`, `ESPECIE`, `SEXO` y `CATEGORIA`.
+- `INVENTARIO`: requiere `DIIO`, `ESPECIE`, `SEXO` y `CATEGORIA`; acepta `OBJETIVO_PRODUCTIVO` y `ETAPA_PRODUCTIVA` para los indices productivos.
 - `FINANZAS`: requiere fecha, naturaleza, tipo, categoria, descripcion, monto y moneda.
-- `PESAJES`: opcional; requiere `DIIO`, `FECHA` y `PESO_KG`.
+- `PESAJES`: opcional; requiere `DIIO`, `FECHA` y `PESO_KG`; `ETAPA_PRODUCTIVA` permite conservar cambios de fase porcina.
 
 Flujo:
 
@@ -643,11 +643,31 @@ Reglas importantes:
 - Los campos opcionales vacios nunca borran datos existentes.
 - Un DIIO no puede repetirse dentro del libro.
 - Especie, sexo y categoria no se infieren.
+- La etapa porcina tampoco se infiere mediante rangos de peso. Sin etapa explicita, el animal se reporta sin meta productiva.
 - Las categorias y destinos financieros deben estar activos en los catalogos de Finanzas.
 - Un pesaje debe referenciar un DIIO existente o incluido en `INVENTARIO`.
 - La confirmacion usa el lote validado guardado en backend y solo puede ejecutarse una vez.
 - El mismo archivo confirmado no puede volver a importarse por accidente.
 - Rotaciones y Sanidad no forman parte del importador estandar.
+
+### Fincas y lineas productivas
+
+Cada dato operativo pertenece simultaneamente a una organizacion y una finca mediante `organizacionId` y `fincaId`. La finca principal se asigna automaticamente al contexto autenticado.
+
+Una finca puede habilitar varias lineas productivas sin quedar limitada a una sola clasificacion:
+
+- Bovino o Porcino.
+- Cria, Engorde, Reemplazo, Reproduccion u Otro.
+
+El administrador configura estas combinaciones en `Usuarios > Mi plan > Fincas y lineas productivas`. Las altas, compras, nacimientos e importaciones validan la especie y el objetivo contra la finca activa. Los historicos no se eliminan al deshabilitar una linea.
+
+La migracion idempotente asigna datos anteriores a la finca principal:
+
+```bash
+cd backend
+npm run migrate:saas:check
+npm run migrate:saas
+```
 
 ### Drone
 

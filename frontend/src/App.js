@@ -6,6 +6,7 @@ import ListaUsuario from './Components/ListaUsuario';
 import OlvideContrasena from './Components/OlvideContrasena';
 import RestablecerContrasena from './Components/RestablecerContrasena';
 import { obtenerPerfilUsuario } from './services/api';
+import { PlanProvider } from './context/PlanContext';
 
 const obtenerTokenRestablecimiento = () => {
   const partes = window.location.pathname.split('/').filter(Boolean);
@@ -51,7 +52,8 @@ function App() {
         const sesionLocal = JSON.parse(sesionGuardada);
         const sesionValidada = {
           ...sesionLocal,
-          usuario: data.usuario
+          usuario: data.usuario,
+          organizacion: data.organizacion || sesionLocal.organizacion
         };
 
         localStorage.setItem('ganaderiaSesion', JSON.stringify(sesionValidada));
@@ -108,7 +110,11 @@ function App() {
   }
 
   if (vista === 'dashboard') {
-    return <ListaUsuario usuario={sesion?.usuario} onLogout={cerrarSesion} />;
+    return (
+      <PlanProvider>
+        <ListaUsuario usuario={sesion?.usuario} onLogout={cerrarSesion} />
+      </PlanProvider>
+    );
   }
 
   return (

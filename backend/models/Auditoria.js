@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const auditoriaSchema = new Schema(
     {
@@ -29,6 +30,7 @@ const auditoriaSchema = new Schema(
     }
 );
 
+auditoriaSchema.plugin(aplicarAislamientoOrganizacion, { required: false });
 auditoriaSchema.index({ createdAt: -1 });
 auditoriaSchema.index({ usuario: 1, createdAt: -1 });
 auditoriaSchema.index({ modulo: 1, createdAt: -1 });

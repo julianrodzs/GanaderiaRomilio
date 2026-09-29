@@ -12,7 +12,17 @@
     "migrate:estado-sanitario:check": "node scripts/revisarEstadoSanitarioLegado.js",
     "migrate:estado-sanitario:activos": "node scripts/revisarEstadoSanitarioLegado.js --apply-activos",
     "migrate:tareas-sanidad:check": "node scripts/sincronizarTareasSanidad.js",
-    "migrate:tareas-sanidad": "node scripts/sincronizarTareasSanidad.js --apply"
+    "migrate:tareas-sanidad": "node scripts/sincronizarTareasSanidad.js --apply",
+    "migrate:saas:check": "node scripts/migrarSaasOrganizacion.js",
+    "migrate:saas": "node scripts/migrarSaasOrganizacion.js --apply",
+    "verify:saas": "node scripts/verificarAislamientoSaas.js",
+    "verify:saas:api": "node scripts/verificarApiSaas.js"
+    ,"migrate:plan-premium:check": "node scripts/asignarPlanPremiumClienteActual.js"
+    ,"migrate:plan-premium": "node scripts/asignarPlanPremiumClienteActual.js --apply"
+    ,"superadmin:check": "node scripts/asignarSuperAdministrador.js"
+    ,"superadmin:apply": "node scripts/asignarSuperAdministrador.js --apply"
+    ,"migrate:objetivos-bovinos:check": "node scripts/actualizarObjetivosCategoriasBovinos.js"
+    ,"migrate:objetivos-bovinos": "node scripts/actualizarObjetivosCategoriasBovinos.js --apply"
   },
   "keywords": [],
   "author": "",

@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const { auth } = require('./middleware/auth');
+const { auth, authPlataforma } = require('./middleware/auth');
 const { auditoriaPeticiones } = require('./middleware/auditoria');
 const app = express();
 
@@ -15,7 +14,6 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(auditoriaPeticiones);
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // rutas
 app.get('/', (req, res)=>{
@@ -25,8 +23,12 @@ app.get('/', (req, res)=>{
 // rutas principales
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/usuarios', require('./routes/usuario'));
+app.use('/api/admin/organizaciones', authPlataforma, require('./routes/adminOrganizacionRoutes'));
 app.use('/api/auditoria', auth, require('./routes/auditoriaRoutes'));
 app.use('/api/notificaciones', auth, require('./routes/notificacionRoutes'));
+app.use('/api/archivos', auth, require('./routes/archivoRoutes'));
+app.use('/api/plan', auth, require('./routes/plan'));
+app.use('/api/fincas', auth, require('./routes/finca'));
 app.use('/api/tareas', require('./routes/tareaRoutes'));
 app.use('/api/animales', auth, require('./routes/animal'));
 app.use('/api/camadas', auth, require('./routes/camadaRoutes'));

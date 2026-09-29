@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { obtenerFincas } from '../services/api';
+
+const OBJETIVOS_PRODUCTIVOS = ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro'];
 
 const estadoInicial = {
   identificadorFinca: '',
   diio: '',
   especie: 'Bovino',
   categoria: '',
+  objetivoProductivo: '',
+  etapaProductiva: '',
   nombre: '',
   sexo: 'Hembra',
   raza: '',
@@ -74,14 +79,45 @@ const obtenerEtiquetaAnimal = (animal) => {
 
 const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInicial, modo = 'crear', animales = [], camadas = [] }) => {
   const [formulario, setFormulario] = useState(() => normalizarAnimal(animalInicial));
+  const [lineasProductivas, setLineasProductivas] = useState(null);
   const etiquetaId = 'DIIO';
   const categoriasPorEspecie = formulario.especie === 'Porcino'
     ? ['Chancha', 'Verraco', 'Lechón', 'Engorde', 'Reemplazo', 'Otro']
     : ['Ternero', 'Novillo', 'Novilla', 'Toro', 'Vaca', 'Otro'];
+  const especiesDisponibles = useMemo(() => {
+    if (!lineasProductivas) return ['Bovino', 'Porcino'];
+    const especies = lineasProductivas.map((linea) => linea.especie);
+    if (animalInicial?.especie && !especies.includes(animalInicial.especie)) especies.push(animalInicial.especie);
+    return especies;
+  }, [animalInicial?.especie, lineasProductivas]);
+  const objetivosDisponibles = useMemo(() => {
+    if (!lineasProductivas) return OBJETIVOS_PRODUCTIVOS;
+    const objetivos = lineasProductivas.find((linea) => linea.especie === formulario.especie)?.objetivos || [];
+    if (formulario.objetivoProductivo && !objetivos.includes(formulario.objetivoProductivo)) {
+      return [...objetivos, formulario.objetivoProductivo];
+    }
+    return objetivos;
+  }, [formulario.especie, formulario.objetivoProductivo, lineasProductivas]);
+
+  useEffect(() => {
+    obtenerFincas()
+      .then((fincas) => {
+        const principal = fincas.find((finca) => finca.esPrincipal) || fincas[0];
+        setLineasProductivas(principal?.lineasProductivas || []);
+      })
+      .catch(() => setLineasProductivas(null));
+  }, []);
 
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
-    setFormulario((actual) => ({ ...actual, [name]: value }));
+    setFormulario((actual) => ({
+      ...actual,
+      [name]: value,
+      ...(name === 'especie' ? {
+        categoria: '',
+        etapaProductiva: value === 'Porcino' ? actual.etapaProductiva : ''
+      } : {})
+    }));
   };
 
   const enviarFormulario = (evento) => {
@@ -91,6 +127,8 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
     onGuardar({
       ...formulario,
       identificadorFinca: identificador,
+      objetivoProductivo: formulario.objetivoProductivo || null,
+      etapaProductiva: formulario.especie === 'Porcino' ? formulario.etapaProductiva || null : null,
       fechaNacimiento: fechaOpcional(formulario.fechaNacimiento),
       fechaDestete: fechaOpcional(formulario.fechaDestete),
       pesoNacimiento: numeroOpcional(formulario.pesoNacimiento),
@@ -137,8 +175,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
           <label>
             Especie
             <select name="especie" value={formulario.especie} onChange={actualizarCampo} required>
-              <option value="Bovino">Bovino</option>
-              <option value="Porcino">Porcino</option>
+              {especiesDisponibles.map((especie) => <option key={especie} value={especie}>{especie}</option>)}
             </select>
           </label>
 
@@ -146,6 +183,28 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
             {etiquetaId}
             <input name="diio" value={formulario.diio} onChange={actualizarCampo} required />
           </label>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            Objetivo productivo
+            <select name="objetivoProductivo" value={formulario.objetivoProductivo || ''} onChange={actualizarCampo}>
+              <option value="">Sin definir</option>
+              {objetivosDisponibles.map((objetivo) => <option key={objetivo} value={objetivo}>{objetivo}</option>)}
+            </select>
+          </label>
+
+          {formulario.especie === 'Porcino' ? (
+            <label>
+              Etapa productiva
+              <select name="etapaProductiva" value={formulario.etapaProductiva || ''} onChange={actualizarCampo}>
+                <option value="">Sin definir</option>
+                {['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde'].map((etapa) => (
+                  <option key={etapa} value={etapa}>{etapa}</option>
+                ))}
+              </select>
+            </label>
+          ) : <span />}
         </div>
 
         <div className="form-grid">

@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const detalleCompraAnimalSchema = new Schema(
     {
@@ -120,6 +121,7 @@ compraAnimalSchema.pre('findOneAndUpdate', function calcularTotalesEnActualizaci
     next();
 });
 
+compraAnimalSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 compraAnimalSchema.index({ estado: 1, fechaCompra: -1 });
 compraAnimalSchema.index({ especie: 1, estado: 1, fechaCompra: -1 });
 compraAnimalSchema.index({ proveedor: 1 });

@@ -65,6 +65,7 @@ const obtenerModulo = (ruta = '') => {
         'conteo-drone': 'Drone',
         tareas: 'Tareas',
         usuarios: 'Usuarios',
+        admin: 'Administracion SaaS',
         auth: 'Autenticacion'
     };
 
@@ -95,6 +96,7 @@ const auditoriaPeticiones = (req, res, next) => {
         const estado = obtenerEstado(res.statusCode);
 
         Auditoria.create({
+            organizacionId: req.organizacionId || req.auditoriaOrganizacionId || undefined,
             usuario: usuario.id,
             usuarioNombre: nombre || usuario.nombre || '',
             usuarioCorreo: usuario.correo,

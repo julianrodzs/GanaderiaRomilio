@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { API_URL, obtenerAnimales, obtenerPotreros, procesarConteoDrone } from '../services/api';
-
-const API_BASE = API_URL.replace('/api', '');
+import { obtenerAnimales, obtenerPotreros, procesarConteoDrone } from '../services/api';
+import useArchivoProtegido from '../hooks/useArchivoProtegido';
 
 const ConteoDrone = () => {
   const inputRef = useRef(null);
+  const claveOperacionRef = useRef('');
   const [potreros, setPotreros] = useState([]);
   const [totalFinca, setTotalFinca] = useState(0);
   const [formulario, setFormulario] = useState({
@@ -18,6 +18,7 @@ const ConteoDrone = () => {
   const [error, setError] = useState('');
   const [procesando, setProcesando] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
+  const imagenProcesadaProtegida = useArchivoProtegido(resultado?.imagenProcesadaUrl);
 
   useEffect(() => {
     const cargarDatos = async () => {
@@ -75,13 +76,18 @@ const ConteoDrone = () => {
 
     try {
       setProcesando(true);
+      if (!claveOperacionRef.current) {
+        claveOperacionRef.current = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+      }
       const data = await procesarConteoDrone({
         imagen,
         potrero: formulario.potrero,
         cantidadEsperada: formulario.cantidadEsperada,
-        observaciones: formulario.observaciones
+        observaciones: formulario.observaciones,
+        claveOperacion: claveOperacionRef.current
       });
       setResultado(data);
+      claveOperacionRef.current = '';
     } catch (err) {
       setError(err.message);
     } finally {
@@ -208,13 +214,13 @@ const ConteoDrone = () => {
             <small>Total de finca registrado: {totalFinca} cabezas.</small>
           </div>
 
-          {resultado.imagenProcesadaUrl && (
+          {imagenProcesadaProtegida && (
             <div className="conteo-procesada">
               <div className="panel-title">
                 <h2>Imagen procesada</h2>
                 <span>{resultado.detecciones?.length || 0} detecciones</span>
               </div>
-              <img src={`${API_BASE}${resultado.imagenProcesadaUrl}`} alt="Imagen procesada por IA" />
+              <img src={imagenProcesadaProtegida} alt="Imagen procesada por IA" />
             </div>
           )}
         </section>

@@ -49,7 +49,9 @@ const filtroUsoPorCatalogo = (catalogo) => {
 
 const contarUsos = async (catalogos) => {
     const conteos = await Promise.all(
-        catalogos.map((catalogo) => MovimientoFinanciero.countDocuments(filtroUsoPorCatalogo(catalogo)))
+        catalogos.map((catalogo) => MovimientoFinanciero
+            .countDocuments(filtroUsoPorCatalogo(catalogo))
+            .setOptions({ omitirAislamientoFinca: true }))
     );
 
     return catalogos.map((catalogo, index) => ({
@@ -152,12 +154,12 @@ catalogoFinancieroCtrl.actualizarCatalogo = async (req, res) => {
                             categoriaNormalizada: catalogo.nombre
                         }
                     }
-                );
+                ).setOptions({ omitirAislamientoFinca: true });
             } else {
                 await MovimientoFinanciero.updateMany(
                     { destinoUso: nombreAnterior },
                     { $set: { destinoUso: catalogo.nombre } }
-                );
+                ).setOptions({ omitirAislamientoFinca: true });
             }
         }
 
@@ -205,7 +207,9 @@ catalogoFinancieroCtrl.eliminarCatalogo = async (req, res) => {
         const catalogo = await CatalogoFinanciero.findById(req.params.id);
         if (!catalogo) return res.status(404).json({ mensaje: 'Catálogo financiero no encontrado' });
 
-        const usos = await MovimientoFinanciero.countDocuments(filtroUsoPorCatalogo(catalogo));
+        const usos = await MovimientoFinanciero
+            .countDocuments(filtroUsoPorCatalogo(catalogo))
+            .setOptions({ omitirAislamientoFinca: true });
         if (usos > 0) {
             return res.status(409).json({
                 mensaje: `No se puede eliminar porque hay ${usos} movimiento(s) usando este catálogo. Puedes desactivarlo.`

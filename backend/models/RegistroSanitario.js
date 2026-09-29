@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const registroSanitarioSchema = new Schema(
     {
@@ -16,5 +17,7 @@ const registroSanitarioSchema = new Schema(
         timestamps: true
     }
 );
+
+registroSanitarioSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 
 module.exports = model('RegistroSanitario', registroSanitarioSchema);

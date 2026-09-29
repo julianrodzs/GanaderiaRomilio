@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const ESTADOS_CAMADA = ['Activa', 'Destetada', 'Vendida', 'Cerrada', 'Cancelada'];
 const DESTINOS_CAMADA = ['Se quedan', 'Se venden', 'Engorde', 'Mixto', 'No definido'];
@@ -8,7 +9,7 @@ const camadaSchema = new Schema(
         madre: { type: Schema.Types.ObjectId, ref: 'Animal', required: true },
         registroReproductivo: { type: Schema.Types.ObjectId, ref: 'RegistroReproductivo' },
         asignadoA: { type: Schema.Types.ObjectId, ref: 'Usuario' },
-        codigoCamada: { type: String, required: true, unique: true, trim: true },
+        codigoCamada: { type: String, required: true, trim: true },
         fechaNacimiento: { type: Date, required: true },
         fechaDesteteEstimada: { type: Date },
         fechaDesteteReal: { type: Date },
@@ -39,6 +40,8 @@ const camadaSchema = new Schema(
     }
 );
 
+camadaSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+camadaSchema.index({ organizacionId: 1, fincaId: 1, codigoCamada: 1 }, { unique: true });
 camadaSchema.index({ madre: 1, fechaNacimiento: -1 });
 camadaSchema.index({ registroReproductivo: 1 });
 camadaSchema.index({ estado: 1, destino: 1 });

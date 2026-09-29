@@ -1,9 +1,10 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const animalSchema = new Schema(
     {
-        identificadorFinca: { type: String, required: true, unique: true, trim: true },
-        diio: { type: String, unique: true, sparse: true, trim: true },
+        identificadorFinca: { type: String, required: true, trim: true },
+        diio: { type: String, trim: true },
         especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino', index: true },
         categoria: {
             type: String,
@@ -20,6 +21,16 @@ const animalSchema = new Schema(
                 'Reemplazo',
                 'Otro'
             ],
+            trim: true
+        },
+        objetivoProductivo: {
+            type: String,
+            enum: ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro'],
+            trim: true
+        },
+        etapaProductiva: {
+            type: String,
+            enum: ['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde'],
             trim: true
         },
         nombre: { type: String, trim: true },
@@ -76,12 +87,19 @@ const animalSchema = new Schema(
     }
 );
 
+animalSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+animalSchema.index({ organizacionId: 1, fincaId: 1, identificadorFinca: 1 }, { unique: true });
+animalSchema.index(
+    { organizacionId: 1, diio: 1 },
+    { unique: true, partialFilterExpression: { diio: { $type: 'string' } } }
+);
 animalSchema.index({ estado: 1 });
 animalSchema.index({ estadoSanitario: 1 });
 animalSchema.index({ sexo: 1 });
 animalSchema.index({ potreroActual: 1 });
 animalSchema.index({ especie: 1, estado: 1 });
 animalSchema.index({ especie: 1, categoria: 1 });
+animalSchema.index({ especie: 1, objetivoProductivo: 1, estado: 1 });
 animalSchema.index({ camadaOrigen: 1, categoria: 1 });
 animalSchema.index({ estado: 1, potreroActual: 1 });
 

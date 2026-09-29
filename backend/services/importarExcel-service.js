@@ -11,6 +11,9 @@ const {
     NATURALEZAS_FINANCIERAS,
     TIPOS_MOVIMIENTO_FINANCIERO
 } = require('../config/catalogosFinancieros');
+const { asegurarPuedeCrearAnimal, puedeUsarEspecie } = require('./plan-service');
+const { obtenerFincaActual } = require('../context/organizacion-context');
+const { validarObjetivoProductivoFinca } = require('./finca-service');
 
 const VERSION_PLANTILLA = '1';
 const HOJAS_DATOS = ['POTREROS', 'INVENTARIO', 'FINANZAS', 'PESAJES'];
@@ -25,7 +28,8 @@ const COLUMNAS = {
         requeridas: ['DIIO', 'ESPECIE', 'SEXO', 'CATEGORIA'],
         opcionales: [
             'NOMBRE', 'RAZA', 'FECHA_NACIMIENTO', 'MADRE_DIIO', 'PADRE_DIIO',
-            'PESO_ACTUAL_KG', 'ESTADO', 'ESTADO_SANITARIO', 'POTRERO_CODIGO', 'OBSERVACIONES'
+            'PESO_ACTUAL_KG', 'OBJETIVO_PRODUCTIVO', 'ETAPA_PRODUCTIVA', 'ESTADO',
+            'ESTADO_SANITARIO', 'POTRERO_CODIGO', 'OBSERVACIONES'
         ]
     },
     FINANZAS: {
@@ -37,7 +41,7 @@ const COLUMNAS = {
     },
     PESAJES: {
         requeridas: ['DIIO', 'FECHA', 'PESO_KG'],
-        opcionales: ['OBSERVACIONES']
+        opcionales: ['ETAPA_PRODUCTIVA', 'OBSERVACIONES']
     }
 };
 
@@ -237,6 +241,10 @@ const mapearInventario = (hoja, errores) => {
         const estado = valorCanonico(estadoTexto, ['Activo', 'Vendido', 'Muerto']);
         const sanitarioTexto = limpiarTexto(leer('ESTADO_SANITARIO')) || 'Sano';
         const estadoSanitario = valorCanonico(sanitarioTexto, ['Sano', 'En observación', 'Enfermo', 'Recuperación']);
+        const objetivoTexto = limpiarTexto(leer('OBJETIVO_PRODUCTIVO'));
+        const objetivoProductivo = objetivoTexto ? valorCanonico(objetivoTexto, ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro']) : undefined;
+        const etapaTexto = limpiarTexto(leer('ETAPA_PRODUCTIVA'));
+        const etapaProductiva = etapaTexto ? valorCanonico(etapaTexto, ['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde']) : undefined;
 
         if (!diio) agregarError(errores, 'INVENTARIO', numeroFila, 'DIIO', '', 'El DIIO es obligatorio.', 'CAMPO_REQUERIDO');
         if (!especie) agregarError(errores, 'INVENTARIO', numeroFila, 'ESPECIE', leer('ESPECIE'), 'Usa Bovino o Porcino.');
@@ -247,6 +255,9 @@ const mapearInventario = (hoja, errores) => {
         if (limpiarTexto(leer('PESO_ACTUAL_KG')) && (pesoActual === undefined || pesoActual < 0)) agregarError(errores, 'INVENTARIO', numeroFila, 'PESO_ACTUAL_KG', leer('PESO_ACTUAL_KG'), 'Debe ser un número mayor o igual a cero.');
         if (!estado) agregarError(errores, 'INVENTARIO', numeroFila, 'ESTADO', estadoTexto, 'Estado general no permitido.');
         if (!estadoSanitario) agregarError(errores, 'INVENTARIO', numeroFila, 'ESTADO_SANITARIO', sanitarioTexto, 'Estado sanitario no permitido.');
+        if (objetivoTexto && !objetivoProductivo) agregarError(errores, 'INVENTARIO', numeroFila, 'OBJETIVO_PRODUCTIVO', objetivoTexto, 'Objetivo productivo no permitido.');
+        if (etapaTexto && !etapaProductiva) agregarError(errores, 'INVENTARIO', numeroFila, 'ETAPA_PRODUCTIVA', etapaTexto, 'Etapa productiva no permitida.');
+        if (etapaProductiva && especie !== 'Porcino') agregarError(errores, 'INVENTARIO', numeroFila, 'ETAPA_PRODUCTIVA', etapaTexto, 'La etapa productiva por fases aplica únicamente a porcinos.');
 
         if (diio) diios.add(normalizarTexto(diio));
         if (errores.length !== inicioErrores) return;
@@ -258,6 +269,8 @@ const mapearInventario = (hoja, errores) => {
             especie,
             sexo,
             categoria,
+            objetivoProductivo,
+            etapaProductiva,
             nombre: limpiarTexto(leer('NOMBRE')) || undefined,
             raza: limpiarTexto(leer('RAZA')) || undefined,
             fechaNacimiento: nacimiento,
@@ -351,6 +364,8 @@ const mapearPesajes = (hoja, errores, diiosDisponibles) => {
         const diio = limpiarTexto(leer('DIIO'));
         const fechaPesaje = fecha(leer('FECHA'));
         const peso = numero(leer('PESO_KG'));
+        const etapaTexto = limpiarTexto(leer('ETAPA_PRODUCTIVA'));
+        const etapaProductiva = etapaTexto ? valorCanonico(etapaTexto, ['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde']) : undefined;
         const clave = diio && fechaPesaje ? `${normalizarTexto(diio)}|${claveFecha(fechaPesaje)}` : '';
 
         if (!diio) agregarError(errores, 'PESAJES', numeroFila, 'DIIO', '', 'El DIIO es obligatorio.', 'CAMPO_REQUERIDO');
@@ -358,11 +373,12 @@ const mapearPesajes = (hoja, errores, diiosDisponibles) => {
         if (!fechaPesaje) agregarError(errores, 'PESAJES', numeroFila, 'FECHA', leer('FECHA'), 'Usa una fecha válida en formato DD/MM/AAAA.');
         if (peso === undefined || peso <= 0) agregarError(errores, 'PESAJES', numeroFila, 'PESO_KG', leer('PESO_KG'), 'Debe ser un número mayor que cero.');
         if (clave && claves.has(clave)) agregarError(errores, 'PESAJES', numeroFila, 'FECHA', leer('FECHA'), 'Ya existe otro pesaje para el mismo DIIO y fecha dentro del archivo.', 'DUPLICADO_ARCHIVO');
+        if (etapaTexto && !etapaProductiva) agregarError(errores, 'PESAJES', numeroFila, 'ETAPA_PRODUCTIVA', etapaTexto, 'Etapa productiva no permitida.');
 
         if (clave) claves.add(clave);
         if (errores.length !== inicioErrores) return;
 
-        registros.push({ filaOrigen: numeroFila, diio, fecha: fechaPesaje, peso, observaciones: limpiarTexto(leer('OBSERVACIONES')) || undefined });
+        registros.push({ filaOrigen: numeroFila, diio, fecha: fechaPesaje, peso, etapaProductiva, observaciones: limpiarTexto(leer('OBSERVACIONES')) || undefined });
     });
 
     return registros;
@@ -485,11 +501,36 @@ const importarAnimales = async (registros, modo, resultado) => {
                     resultado.duplicados += 1;
                     continue;
                 }
+                const estadoFinal = datos.estado || existente.estado;
+                const especieFinal = datos.especie || existente.especie || 'Bovino';
+                const objetivoFinal = datos.objetivoProductivo || existente.objetivoProductivo;
+                if (especieFinal !== existente.especie || String(objetivoFinal || '') !== String(existente.objetivoProductivo || '')) {
+                    await validarObjetivoProductivoFinca({
+                        fincaId: obtenerFincaActual(),
+                        especie: especieFinal,
+                        objetivoProductivo: objetivoFinal
+                    });
+                }
+                if (estadoFinal === 'Activo') {
+                    const permisoEspecie = await puedeUsarEspecie(datos.especie || existente.especie || 'Bovino');
+                    if (!permisoEspecie.permitido) throw new Error(permisoEspecie.message);
+                    if (existente.estado !== 'Activo') {
+                        await asegurarPuedeCrearAnimal({ especie: datos.especie || existente.especie || 'Bovino' });
+                    }
+                }
                 Object.assign(existente, datos);
                 await existente.save();
                 resultado.actualizados += 1;
                 continue;
             }
+            if ((datos.estado || 'Activo') === 'Activo') {
+                await asegurarPuedeCrearAnimal({ especie: datos.especie || 'Bovino' });
+            }
+            await validarObjetivoProductivoFinca({
+                fincaId: obtenerFincaActual(),
+                especie: datos.especie || 'Bovino',
+                objetivoProductivo: datos.objetivoProductivo
+            });
             await Animal.create(datos);
             resultado.creados += 1;
         } catch (error) {
@@ -535,7 +576,7 @@ const importarPesajes = async (registros, modo, resultado, usuarioId) => {
     const animalesAfectados = new Set();
     for (const registro of registros) {
         try {
-            const animal = await Animal.findOne({ $or: [{ diio: registro.diio }, { identificadorFinca: registro.diio }] }).select('_id');
+            const animal = await Animal.findOne({ $or: [{ diio: registro.diio }, { identificadorFinca: registro.diio }] }).select('_id etapaProductiva');
             if (!animal) throw new Error(`No existe el animal ${registro.diio}.`);
             const inicio = new Date(registro.fecha);
             inicio.setHours(0, 0, 0, 0);
@@ -549,6 +590,7 @@ const importarPesajes = async (registros, modo, resultado, usuarioId) => {
                     continue;
                 }
                 existente.peso = registro.peso;
+                if (registro.etapaProductiva) existente.etapaProductiva = registro.etapaProductiva;
                 if (registro.observaciones) existente.observaciones = registro.observaciones;
                 await existente.save();
                 resultado.actualizados += 1;
@@ -557,6 +599,7 @@ const importarPesajes = async (registros, modo, resultado, usuarioId) => {
                     animal: animal._id,
                     fecha: registro.fecha,
                     peso: registro.peso,
+                    etapaProductiva: registro.etapaProductiva || animal.etapaProductiva,
                     observaciones: registro.observaciones,
                     registradoPor: usuarioId
                 });

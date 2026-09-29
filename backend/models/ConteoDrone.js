@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const deteccionSchema = new Schema(
     {
@@ -29,6 +30,7 @@ const conteoDroneSchema = new Schema(
             enum: ['Correcto', 'Revisar', 'Pendiente'],
             default: 'Pendiente'
         },
+        claveOperacion: { type: String, trim: true },
         observaciones: { type: String, trim: true }
     },
     {
@@ -36,6 +38,11 @@ const conteoDroneSchema = new Schema(
     }
 );
 
+conteoDroneSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 conteoDroneSchema.index({ potrero: 1, fechaVuelo: -1 });
+conteoDroneSchema.index(
+    { organizacionId: 1, claveOperacion: 1 },
+    { unique: true, partialFilterExpression: { claveOperacion: { $type: 'string' } } }
+);
 
 module.exports = model('ConteoDrone', conteoDroneSchema);

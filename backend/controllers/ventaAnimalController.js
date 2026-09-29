@@ -2,9 +2,11 @@ const Animal = require('../models/Animal');
 const Camada = require('../models/Camada');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const VentaAnimal = require('../models/VentaAnimal');
+const { urlArchivoOrganizacion } = require('../middleware/uploadOrganizacion');
 const { eliminarEventosPorReferencia, upsertEventoAnimal } = require('../services/eventoAnimal-service');
 const { eliminarEventosCamadaPorReferencia, upsertEventoCamada } = require('../services/eventoCamada-service');
 const { DESTINO_USO_MOVIMIENTOS_ANIMALES } = require('../config/catalogosFinancieros');
+const { tieneFeature } = require('../services/plan-service');
 
 const ventaAnimalCtrl = {};
 
@@ -375,7 +377,7 @@ ventaAnimalCtrl.crearVenta = async (req, res) => {
             especie: req.body.especie || validacion.especie || 'Bovino',
             animales: animales || [],
             camadas: camadas || [],
-            comprobanteUrl: req.file ? `/uploads/ventas/${req.file.filename}` : undefined,
+            comprobanteUrl: urlArchivoOrganizacion('ventas', req.file),
             registradoPor: req.usuario?.id
         });
         const ventaGuardada = await venta.save();
@@ -431,7 +433,7 @@ ventaAnimalCtrl.actualizarVenta = async (req, res) => {
             especie: req.body.especie || validacion.especie || ventaAnterior.especie,
             animales: animales || [],
             camadas: camadas || [],
-            comprobanteUrl: req.file ? `/uploads/ventas/${req.file.filename}` : ventaAnterior.comprobanteUrl
+            comprobanteUrl: urlArchivoOrganizacion('ventas', req.file) || ventaAnterior.comprobanteUrl
         };
         const venta = await VentaAnimal.findByIdAndUpdate(req.params.id, datos, { new: true, runValidators: true });
         await aplicarVentaConfirmada(venta, req.usuario?.id);
@@ -488,6 +490,7 @@ ventaAnimalCtrl.deleteVenta = async (req, res) => {
 
 ventaAnimalCtrl.getResumenVentas = async (req, res) => {
     try {
+        const incluyeAnaliticaEconomica = await tieneFeature('analiticaEconomica', req.organizacionId);
         const { fechaInicio, fechaFin, especie } = req.query;
         const filtro = { estado: 'Confirmada', ...(await crearFiltroEspecieAnimal(especie)) };
         if (fechaInicio || fechaFin) {
@@ -618,21 +621,21 @@ ventaAnimalCtrl.getResumenVentas = async (req, res) => {
             })).sort((a, b) => a.mes.localeCompare(b.mes)),
             compradoresFrecuentes: Object.entries(compradores).map(([comprador, cantidad]) => ({ comprador, cantidad })),
             animalesVendidosPorCategoria: Object.entries(porCategoriaConCamadas).map(([categoria, cantidad]) => ({ categoria, cantidad })),
-            ventasPorOrigen: Object.values(ventasPorOrigen).map((item) => ({
+            ventasPorOrigen: incluyeAnaliticaEconomica ? Object.values(ventasPorOrigen).map((item) => ({
                 origen: item.origen,
                 animales: item.animales,
                 pesoTotalKg: redondear(item.pesoTotalKg),
                 montoTotal: redondear(item.montoTotal),
                 precioPromedioKg: item.pesoTotalKg ? redondear(item.montoTotal / item.pesoTotalKg) : 0,
                 mesesPromedioEnFinca: item.animalesConMeses ? redondear(item.mesesTotal / item.animalesConMeses) : 0
-            })),
-            rotacionInventarioVendido: {
+            })) : { bloqueado: true, feature: 'analiticaEconomica' },
+            rotacionInventarioVendido: incluyeAnaliticaEconomica ? {
                 duracionPromedioMeses: redondear(duracionPromedioMeses),
                 animalesConDuracion: rotacionAnimales.length,
                 menorDuracion: rotacionAnimales.length ? Math.min(...rotacionAnimales.map((item) => item.mesesEnFinca)) : 0,
                 mayorDuracion: rotacionAnimales.length ? Math.max(...rotacionAnimales.map((item) => item.mesesEnFinca)) : 0,
                 detalle: rotacionAnimales.sort((a, b) => b.mesesEnFinca - a.mesesEnFinca)
-            }
+            } : { bloqueado: true, feature: 'analiticaEconomica' }
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener resumen de ventas', error: error.message });

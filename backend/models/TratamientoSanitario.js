@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const ESTADOS_TRATAMIENTO = ['Activo', 'Completado', 'Cancelado'];
 
@@ -52,6 +53,7 @@ tratamientoSanitarioSchema.pre('validate', function validarTratamiento(next) {
     next();
 });
 
+tratamientoSanitarioSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 tratamientoSanitarioSchema.index({ especie: 1, estado: 1, proximaAplicacion: 1 });
 tratamientoSanitarioSchema.index({ animales: 1, fechaInicio: -1 });
 tratamientoSanitarioSchema.index({ producto: 1, fechaInicio: -1 });

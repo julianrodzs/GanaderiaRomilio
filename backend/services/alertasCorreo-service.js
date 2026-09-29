@@ -1,7 +1,10 @@
 const AlertaCorreo = require('../models/AlertaCorreo');
+const { ejecutarConOrganizacion } = require('../context/organizacion-context');
+const Organizacion = require('../models/Organizacion');
 const { Tarea } = require('../models/Tarea');
 const { crearNotificacion } = require('./notificacion-service');
 const { enviarCorreoAdministradores } = require('./correoElectronico-service');
+const { incrementarEmailsOperativos, tieneFeature } = require('./plan-service');
 
 const MS_DIA = 1000 * 60 * 60 * 24;
 const DIAS_ANTICIPACION = 7;
@@ -154,9 +157,9 @@ const crearTexto = (titulo, alertas) => `${titulo}\n\n${alertas.map((alerta) => 
     `- ${alerta.tarea.titulo}. Fecha: ${formatearFecha(alerta.fecha)}. ${alerta.dias < 0 ? `Días vencida: ${Math.abs(alerta.dias)}` : `Días restantes: ${alerta.dias}`}.`
 )).join('\n')}`;
 
-const crearHtml = (titulo, alertas) => `
+const crearHtml = (titulo, alertas, nombreOrganizacion) => `
     <h2>${titulo}</h2>
-    <p>Estas tareas requieren seguimiento en Ganadería Romilio.</p>
+    <p>Estas tareas requieren seguimiento en ${nombreOrganizacion}.</p>
     <ul>${alertas.map((alerta) => `
         <li><strong>${alerta.tarea.titulo}</strong><br>
         Fecha objetivo: ${formatearFecha(alerta.fecha)}<br>
@@ -164,15 +167,15 @@ const crearHtml = (titulo, alertas) => `
     `).join('')}</ul>
 `;
 
-const enviarCorreosTareas = async (alertas) => {
+const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca') => {
     if (process.env.EMAIL_ALERTS_ENABLED === 'false') return { enviadas: 0, grupos: 0, desactivado: true };
 
     const grupos = agruparPorAsunto(alertas);
     let enviadas = 0;
     for (const [asunto, grupo] of Object.entries(grupos)) {
         const resultado = await enviarCorreoAdministradores({
-            subject: `${asunto} - Ganadería Romilio`,
-            html: crearHtml(asunto, grupo),
+            subject: `${asunto} - ${nombreOrganizacion}`,
+            html: crearHtml(asunto, grupo, nombreOrganizacion),
             text: crearTexto(asunto, grupo)
         });
         if (!resultado.enviado) continue;
@@ -184,22 +187,50 @@ const enviarCorreosTareas = async (alertas) => {
     return { enviadas, grupos: Object.keys(grupos).length };
 };
 
-const procesarAlertasTareas = async () => {
+const procesarAlertasTareas = async ({ nombreOrganizacion } = {}) => {
     const tareas = await obtenerTareasParaRecordatorio();
     const notificacionesCreadas = await crearNotificacionesOperativas(tareas);
+    if (!await tieneFeature('emailsOperativos')) {
+        return {
+            notificacionesCreadas,
+            correos: { enviadas: 0, grupos: 0, desactivadoPorPlan: true }
+        };
+    }
     const alertasCorreo = await obtenerAlertasTareas(tareas);
-    const correos = await enviarCorreosTareas(alertasCorreo);
+    const correos = await enviarCorreosTareas(alertasCorreo, nombreOrganizacion);
+    if (correos.enviadas > 0) {
+        await incrementarEmailsOperativos({ cantidad: correos.enviadas });
+    }
     return { notificacionesCreadas, correos };
 };
 
-const enviarAlertasCorreo = procesarAlertasTareas;
+const procesarAlertasTodasOrganizaciones = async () => {
+    const organizaciones = await Organizacion.find({ estado: 'Activa' }).select('_id nombre');
+    const resultados = [];
+
+    for (const organizacion of organizaciones) {
+        const resultado = await ejecutarConOrganizacion(
+            organizacion._id,
+            () => procesarAlertasTareas({ nombreOrganizacion: organizacion.nombre })
+        );
+        resultados.push({
+            organizacionId: organizacion._id,
+            organizacion: organizacion.nombre,
+            ...resultado
+        });
+    }
+
+    return resultados;
+};
+
+const enviarAlertasCorreo = procesarAlertasTodasOrganizaciones;
 let intervaloAlertas = null;
 
 const iniciarProgramadorAlertasCorreo = () => {
     const intervaloMs = Number(process.env.EMAIL_ALERTS_INTERVAL_MS) || MS_DIA;
     const ejecutar = async () => {
         try {
-            console.log('Revisión central de tareas completada:', await procesarAlertasTareas());
+            console.log('Revisión central de tareas completada:', await procesarAlertasTodasOrganizaciones());
         } catch (error) {
             console.error('Error revisando tareas y notificaciones:', error.message);
         }
@@ -213,5 +244,6 @@ module.exports = {
     enviarAlertasCorreo,
     iniciarProgramadorAlertasCorreo,
     obtenerAlertasTareas,
+    procesarAlertasTodasOrganizaciones,
     procesarAlertasTareas
 };

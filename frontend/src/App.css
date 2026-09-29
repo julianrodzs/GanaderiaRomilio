@@ -5,6 +5,90 @@
   padding: 32px;
 }
 
+.plan-upgrade-message {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid #d4ddd4;
+  border-left: 4px solid #0b4a2b;
+  background: #f7f9f6;
+  color: #163c29;
+}
+
+.plan-upgrade-message span { color: #52645a; }
+
+.mi-plan-page { display: grid; gap: 22px; }
+.mi-plan-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.mi-plan-header h1 { margin: 0 0 4px; }
+.mi-plan-header p { margin: 0; color: #5b675f; }
+.mi-plan-especie { padding: 18px 0; border-top: 1px solid #dce2dc; border-bottom: 1px solid #dce2dc; }
+.mi-plan-especie h2 { margin-top: 0; }
+.plan-limits-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.plan-limit { padding: 16px; border: 1px solid #d8dfd9; background: #fbfcfa; }
+.plan-limit > div:first-child { display: flex; justify-content: space-between; gap: 16px; }
+.plan-limit-track { height: 8px; margin-top: 14px; overflow: hidden; background: #e3e8e3; }
+.plan-limit-track span { display: block; height: 100%; background: #0b4a2b; }
+.plan-limit-over .plan-limit-track span { background: #a52222; }
+.panel-actions { display: flex; align-items: center; gap: 10px; }
+.mi-plan-funciones { border-top: 1px solid #dce2dc; padding-top: 16px; }
+.mi-plan-funciones h2 { margin-top: 0; }
+.mi-plan-funciones > div { display: flex; justify-content: space-between; gap: 20px; padding: 12px 0; border-bottom: 1px solid #e4e8e4; }
+.mi-plan-funciones > div strong { color: #0b4a2b; text-align: right; }
+.mi-plan-fincas { border-top: 1px solid #dce2dc; padding-top: 18px; }
+.fincas-config-grid { display: grid; gap: 16px; }
+.finca-config { border: 1px solid #d7ded7; background: #fbfcfa; padding: 18px; }
+.finca-config > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.finca-config h3 { margin: 0 0 4px; }
+.finca-config header span:not(.estado-badge) { color: #637068; font-size: 13px; font-weight: 700; }
+.lineas-productivas-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.linea-productiva { min-width: 0; margin: 0; border: 1px solid #dce2dc; padding: 14px; }
+.linea-productiva-especie { display: flex; align-items: center; gap: 9px; color: #0b3b21; font-weight: 900; }
+.linea-productiva-objetivos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+.linea-productiva-objetivos label { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; }
+.linea-productiva input { width: 16px; height: 16px; margin: 0; accent-color: #0b4a2b; }
+
+.reportes-periodos { display: flex; flex-wrap: wrap; gap: 8px; margin: -8px 0 18px; }
+.reportes-periodos button { padding: 9px 13px; border: 1px solid #ccd6cd; background: #f8faf7; color: #123d28; font-weight: 700; cursor: pointer; }
+.reportes-periodos button:hover { border-color: #0b4a2b; background: #edf4ef; }
+.indices-productivos { display: grid; gap: 18px; }
+.indice-principal { display: grid; gap: 18px; }
+.indice-encabezado, .indice-especie-titulo { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.indice-encabezado h2, .indice-especie-titulo h3 { margin: 0; }
+.indice-encabezado > div:last-child, .indice-especie-titulo > div:last-child { display: grid; justify-items: end; gap: 3px; min-width: 150px; }
+.indice-encabezado > div:last-child strong { color: #0b4a2b; font-size: 38px; line-height: 1; }
+.indice-especie-titulo > div:last-child strong { color: #0b4a2b; font-size: 26px; }
+.indice-encabezado small, .indice-especie-titulo span { color: #5c685f; font-weight: 700; }
+.indice-componentes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #dce2dc; }
+.indice-componentes > div { display: grid; gap: 6px; padding: 16px; border-right: 1px solid #dce2dc; }
+.indice-componentes > div:last-child { border-right: 0; }
+.indice-componentes span, .indice-detalles-grid span { color: #607067; font-size: 13px; }
+.indice-componentes strong { font-size: 23px; color: #123d28; }
+.indices-especies-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.indice-especie { display: grid; gap: 15px; padding: 18px; border: 1px solid #dce2dc; background: #fbfcfa; }
+.indice-detalles-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+.indice-detalles-grid > div { display: grid; gap: 3px; padding-bottom: 9px; border-bottom: 1px solid #e4e8e4; }
+.indice-proyeccion { margin: 0; padding: 12px; border-left: 3px solid #0b4a2b; background: #edf4ef; }
+.indice-advertencia { margin: 0; color: #8b5510; }
+.indice-nota { margin: 0; color: #647068; font-size: 13px; }
+.metas-productivas-form { padding: 18px; border: 1px solid #cfd8d0; background: #f8faf7; }
+.metas-productivas-form h3 { margin-top: 0; }
+.metas-productivas-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 16px 0; }
+.metas-productivas-grid label { display: grid; gap: 6px; font-weight: 700; }
+.metas-productivas-grid input { width: 100%; }
+
+@media (max-width: 720px) {
+  .plan-limits-grid { grid-template-columns: 1fr; }
+  .mi-plan-header { flex-direction: column; }
+  .lineas-productivas-grid, .linea-productiva-objetivos { grid-template-columns: 1fr; }
+  .indices-especies-grid, .metas-productivas-grid { grid-template-columns: 1fr; }
+  .indice-componentes { grid-template-columns: 1fr; }
+  .indice-componentes > div { border-right: 0; border-bottom: 1px solid #dce2dc; }
+  .indice-componentes > div:last-child { border-bottom: 0; }
+  .indice-encabezado, .indice-especie-titulo { flex-direction: column; }
+  .indice-encabezado > div:last-child, .indice-especie-titulo > div:last-child { justify-items: start; }
+}
+
 .auth-panel,
 .dashboard-shell {
   width: min(100%, 1380px);
@@ -2435,6 +2519,285 @@
   gap: 12px;
 }
 
+.reporte-compras-animales {
+  display: grid;
+  gap: 18px;
+  border-top: 1px solid #dfe3dc;
+  padding-top: 22px;
+}
+
+.reporte-descripcion,
+.reporte-nota {
+  margin: 4px 0 0;
+  color: #68736b;
+}
+
+.compras-reporte-filtros {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  border: 1px solid #dfe3dc;
+  background: #fffdf7;
+  padding: 16px;
+}
+
+.compras-reporte-filtros label {
+  display: grid;
+  gap: 8px;
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.compras-reporte-filtros input,
+.compras-reporte-filtros select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #d9ddd5;
+  border-radius: 2px;
+  background: #f8f9f5;
+  padding: 0 12px;
+  color: #09160e;
+}
+
+.compras-reporte-filtros-acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.compras-reporte-metricas {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.compras-analisis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.compras-barras-mensuales,
+.compras-barra-mes {
+  display: grid;
+  gap: 8px;
+}
+
+.compras-barra-mes {
+  border-bottom: 1px solid #e2e5df;
+  padding-bottom: 12px;
+}
+
+.compras-barra-mes:last-child {
+  border-bottom: 0;
+}
+
+.compras-barra-mes > div:first-child,
+.compras-grafico-resumen,
+.compras-dispersion-ejes,
+.compras-dispersion-leyenda,
+.compras-sexo-titulo {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compras-barra-mes small,
+.compras-grafico-resumen,
+.compras-dispersion-ejes,
+.compras-dispersion-leyenda,
+.compras-sexo-titulo span,
+.reporte-nota {
+  color: #68736b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.compras-linea-precio,
+.compras-dispersion {
+  display: grid;
+  gap: 10px;
+}
+
+.compras-linea-precio svg,
+.compras-dispersion svg {
+  width: 100%;
+  height: 240px;
+  border: 1px solid #dfe3dc;
+  background:
+    linear-gradient(to top, #e3e7e1 1px, transparent 1px) 0 0 / 100% 25%,
+    #fffdf7;
+}
+
+.compras-linea-precio svg {
+  color: #0b3b21;
+}
+
+.compras-linea-precio circle {
+  fill: #0b3b21;
+  stroke: #fffdf7;
+  stroke-width: 1.2;
+}
+
+.compras-grafico-etiquetas {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-x: auto;
+  color: #68736b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.compras-grafico-etiquetas span {
+  min-width: 54px;
+  text-align: center;
+}
+
+.compras-dispersion line {
+  stroke: #7a847d;
+  stroke-width: 0.6;
+}
+
+.compras-dispersion circle.punto-macho,
+.compras-dispersion-leyenda .punto-macho {
+  fill: #176b87;
+  background: #176b87;
+}
+
+.compras-dispersion circle.punto-hembra,
+.compras-dispersion-leyenda .punto-hembra {
+  fill: #a24a43;
+  background: #a24a43;
+}
+
+.compras-dispersion circle {
+  stroke: #fffdf7;
+  stroke-width: 0.8;
+}
+
+.compras-dispersion-leyenda {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.compras-dispersion-leyenda span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compras-dispersion-leyenda i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.compras-sexo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.compras-especie-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.compras-especie-grid > section {
+  display: grid;
+  gap: 7px;
+  border-top: 3px solid #0b3b21;
+  background: #f8f9f5;
+  padding: 14px;
+}
+
+.compras-especie-grid h3 {
+  margin: 0;
+}
+
+.compras-especie-grid strong {
+  color: #0b3b21;
+  font-size: 24px;
+}
+
+.compras-especie-grid span {
+  color: #68736b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.compras-sexo-grid > section {
+  border-left: 4px solid #0b3b21;
+  background: #f8f9f5;
+  padding: 14px;
+}
+
+.compras-sexo-titulo {
+  align-items: baseline;
+}
+
+.compras-sexo-titulo h3 {
+  margin: 0;
+}
+
+.compras-sexo-grid dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 12px 0 0;
+}
+
+.compras-sexo-grid dl > div {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid #dfe3dc;
+  padding: 10px 8px 10px 0;
+}
+
+.compras-sexo-grid dt {
+  color: #68736b;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.compras-sexo-grid dd {
+  margin: 0;
+  color: #0b3b21;
+  font-weight: 900;
+}
+
+.compras-resultado-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.compras-resultado-grid > div {
+  display: grid;
+  gap: 5px;
+  border-left: 3px solid #7b8c7e;
+  padding: 8px 12px;
+}
+
+.compras-resultado-grid strong {
+  color: #0b3b21;
+  font-size: 22px;
+}
+
+.compras-resultado-grid span {
+  color: #68736b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.compras-proveedores-tabla,
+.compras-lotes-tabla {
+  max-height: 470px;
+}
+
 .productos-reportes-panel {
   gap: 18px;
 }
@@ -3732,6 +4095,9 @@
   .finanzas-resumen,
   .finanzas-subresumen,
   .finanzas-rango-fechas,
+  .compras-reporte-filtros,
+  .compras-reporte-metricas,
+  .compras-analisis-grid,
   .reportes-grid,
   .cria-productividad-grid,
   .crecimiento-grid,
@@ -3740,6 +4106,15 @@
   .conteo-drone-grid,
   .conteo-resultado {
     grid-template-columns: 1fr;
+  }
+
+  .compras-reporte-filtros-acciones,
+  .compras-reporte-filtros-acciones button {
+    width: 100%;
+  }
+
+  .compras-reporte-filtros-acciones {
+    flex-direction: column-reverse;
   }
 
   .mapa-potreros-panel {
@@ -4336,6 +4711,208 @@
   min-width: 620px;
 }
 
+.saas-admin {
+  display: grid;
+  gap: 24px;
+}
+
+.saas-admin-header {
+  align-items: flex-start;
+}
+
+.saas-admin-subtitulo,
+.saas-formulario header span {
+  color: #5e6b62;
+  margin: 6px 0 0;
+}
+
+.saas-resumen {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #d9ded7;
+  background: #f7f8f4;
+}
+
+.saas-resumen article {
+  display: grid;
+  gap: 5px;
+  min-height: 90px;
+  padding: 16px 18px;
+  border-right: 1px solid #d9ded7;
+}
+
+.saas-resumen article:last-child {
+  border-right: 0;
+}
+
+.saas-resumen span {
+  color: #556259;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.saas-resumen strong {
+  color: #073e23;
+  font-size: 28px;
+}
+
+.saas-resultado {
+  display: grid;
+  gap: 5px;
+  border-left: 4px solid #1d6b3d;
+  padding: 13px 16px;
+  background: #edf5ed;
+}
+
+.saas-resultado a {
+  color: #064b29;
+  font-weight: 900;
+  width: fit-content;
+}
+
+.saas-formulario {
+  display: grid;
+  gap: 18px;
+  border: 1px solid #d4dbd3;
+  padding: 20px;
+  background: #fbfcf8;
+}
+
+.saas-formulario header h3,
+.saas-listado-encabezado h3 {
+  margin: 3px 0 0;
+}
+
+.saas-formulario fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #dfe3dc;
+  padding: 16px;
+}
+
+.saas-formulario legend {
+  padding: 0 8px;
+  color: #123d26;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.saas-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.saas-form-grid label {
+  display: grid;
+  gap: 6px;
+  color: #20362a;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.saas-form-grid input,
+.saas-form-grid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #cfd8cf;
+  border-radius: 2px;
+  padding: 9px 11px;
+  background: #fffefa;
+  color: #10251a;
+  font: inherit;
+  text-transform: none;
+}
+
+.saas-campo-amplio {
+  grid-column: 1 / -1;
+}
+
+.saas-lineas-productivas {
+  display: grid;
+  gap: 9px;
+}
+
+.saas-lineas-productivas > section {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #e2e5df;
+  padding-top: 11px;
+}
+
+.saas-lineas-productivas > section > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+}
+
+.saas-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #2f4538;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.saas-check input {
+  width: 17px;
+  height: 17px;
+}
+
+.saas-listado-encabezado {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.saas-tabla {
+  min-width: 850px;
+}
+
+.saas-tabla td strong,
+.saas-tabla td small {
+  display: block;
+}
+
+.saas-tabla td small {
+  margin-top: 3px;
+  color: #67736b;
+}
+
+.saas-estado {
+  display: inline-block;
+  min-width: 88px;
+  padding: 6px 9px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.saas-estado-activa {
+  background: #e3f0e8;
+  color: #0a4b2a;
+}
+
+.saas-estado-suspendida {
+  background: #fff0cf;
+  color: #704500;
+}
+
+.saas-estado-inactiva {
+  background: #ecefed;
+  color: #4e5952;
+}
+
 @media (max-width: 1050px) {
   .sanidad-filtros {
     grid-template-columns: repeat(3, minmax(150px, 1fr));
@@ -4363,6 +4940,24 @@
   .detalle-sanidad-grid,
   .registro-inmediato-panel,
   .selector-animales-encabezado {
+    grid-template-columns: 1fr;
+  }
+
+  .saas-resumen,
+  .saas-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .saas-resumen article {
+    border-right: 0;
+    border-bottom: 1px solid #d9ded7;
+  }
+
+  .saas-resumen article:last-child {
+    border-bottom: 0;
+  }
+
+  .saas-lineas-productivas > section {
     grid-template-columns: 1fr;
   }
 }

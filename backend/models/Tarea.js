@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const TIPOS_TAREA = [
     'Chapia',
@@ -58,6 +59,7 @@ const tareaSchema = new Schema(
     }
 );
 
+tareaSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 tareaSchema.index({ asignadoA: 1, estado: 1, fechaProgramada: 1 });
 tareaSchema.index({ fechaProgramada: 1 });
 tareaSchema.index({ prioridad: 1 });

@@ -10,12 +10,116 @@ const Camada = require('../models/Camada');
 const { Tarea } = require('../models/Tarea');
 const { AplicacionSanitaria } = require('../models/AplicacionSanitaria');
 const { TratamientoSanitario } = require('../models/TratamientoSanitario');
+const CompraAnimal = require('../models/CompraAnimal');
+const { construirReporteCompras } = require('../services/reporteComprasAnimales-service');
+const { tieneFeature } = require('../services/plan-service');
+const {
+    calcularGmd,
+    calcularIcpPorcino,
+    calcularIeeGeneral
+} = require('../services/indicesProductivos-service');
+const {
+    actualizarConfiguracionProductiva,
+    obtenerConfiguracionProductiva
+} = require('../services/configuracionProductiva-service');
 
 const reporteCtrl = {};
+
+const obtenerPeriodoIndices = (query = {}) => {
+    const hoy = new Date();
+    const inicioPredeterminado = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1));
+    const fechaInicio = query.fechaInicio ? new Date(query.fechaInicio) : inicioPredeterminado;
+    const fechaFin = query.fechaFin ? new Date(query.fechaFin) : hoy;
+    fechaInicio.setUTCHours(0, 0, 0, 0);
+    fechaFin.setUTCHours(23, 59, 59, 999);
+    if (Number.isNaN(fechaInicio.getTime()) || Number.isNaN(fechaFin.getTime()) || fechaInicio > fechaFin) {
+        const error = new Error('El período indicado no es válido.');
+        error.status = 400;
+        throw error;
+    }
+    return { fechaInicio, fechaFin };
+};
+
+reporteCtrl.getConfiguracionProductiva = async (req, res) => {
+    try {
+        res.json(await obtenerConfiguracionProductiva());
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener la configuración productiva', error: error.message });
+    }
+};
+
+reporteCtrl.updateConfiguracionProductiva = async (req, res) => {
+    try {
+        const configuracion = await actualizarConfiguracionProductiva(req.body, req.usuario?.id);
+        res.json({ mensaje: 'Metas productivas actualizadas', configuracion });
+    } catch (error) {
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar las metas productivas' });
+    }
+};
+
+reporteCtrl.getCrecimientoPorcino = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin } = obtenerPeriodoIndices(req.query);
+        const animales = await Animal.find({ especie: 'Porcino', estado: 'Activo' }).lean();
+        const ids = animales.map((animal) => animal._id);
+        const [pesajes, configuracion] = await Promise.all([
+            Pesaje.find({ animal: { $in: ids }, fecha: { $gte: fechaInicio, $lte: fechaFin } }).sort({ fecha: 1 }).lean(),
+            obtenerConfiguracionProductiva()
+        ]);
+        res.json({
+            filtros: { fechaInicio, fechaFin },
+            ...calcularIcpPorcino({ animales, pesajes, configuracion: configuracion.toObject() })
+        });
+    } catch (error) {
+        res.status(error.status || 500).json({ mensaje: error.message || 'Error al calcular el crecimiento porcino' });
+    }
+};
+
+reporteCtrl.getEficienciaEngorde = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin } = obtenerPeriodoIndices(req.query);
+        const especie = ['Bovino', 'Porcino'].includes(req.query.especie) ? req.query.especie : 'Todos';
+        const filtroEspecie = especie === 'Todos' ? {} : crearFiltroEspecieAnimal(especie);
+        const filtroEngorde = {
+            $or: [
+                { objetivoProductivo: 'Engorde' },
+                { objetivoProductivo: { $exists: false }, categoria: 'Engorde' },
+                { objetivoProductivo: null, categoria: 'Engorde' }
+            ]
+        };
+        const animales = await Animal.find(
+            Object.keys(filtroEspecie).length ? { $and: [filtroEspecie, filtroEngorde] } : filtroEngorde
+        ).lean();
+        const ids = animales.map((animal) => animal._id);
+        const [pesajes, configuracion] = await Promise.all([
+            Pesaje.find({ animal: { $in: ids }, fecha: { $lte: fechaFin } }).sort({ fecha: 1 }).lean(),
+            obtenerConfiguracionProductiva()
+        ]);
+        res.json({
+            filtros: { fechaInicio, fechaFin, especie },
+            ...calcularIeeGeneral({
+                animales,
+                pesajes,
+                configuracion: configuracion.toObject(),
+                fechaInicio,
+                fechaFin,
+                especie
+            })
+        });
+    } catch (error) {
+        res.status(error.status || 500).json({ mensaje: error.message || 'Error al calcular la eficiencia de engorde' });
+    }
+};
 
 const crearFiltroEspecieAnimal = (especie) => {
     if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
     if (especie === 'Porcino') return { especie };
+    return {};
+};
+
+const crearFiltroEspecieCompra = (especie) => {
+    if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
+    if (especie === 'Porcino') return { especie: 'Porcino' };
     return {};
 };
 
@@ -786,9 +890,10 @@ const crearAnalisisPesajesAnimal = (animal, pesajes) => {
     const ordenados = [...pesajes].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
     const inicial = ordenados[0];
     const actual = ordenados[ordenados.length - 1];
-    const dias = inicial && actual ? calcularDiasEntre(inicial.fecha, actual.fecha) : 0;
-    const gananciaTotal = actual && inicial ? actual.peso - inicial.peso : 0;
-    const gananciaDiariaPromedio = dias > 0 ? gananciaTotal / dias : 0;
+    const crecimiento = calcularGmd(ordenados);
+    const dias = crecimiento?.dias || 0;
+    const gananciaTotal = crecimiento?.gananciaKg || 0;
+    const gananciaDiariaPromedio = crecimiento?.gmdReal || 0;
     const gananciaMensualPromedio = gananciaDiariaPromedio * 30.44;
 
     return {
@@ -834,7 +939,7 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
             .filter((animal) => !animalId || animal._id.toString() === animalId)
             .map((animal) => crearAnalisisPesajesAnimal(animal, pesajesPorAnimal.get(animal._id.toString()) || []))
             .filter((item) => item.cantidadPesajes > 0);
-        const conCrecimiento = analisis.filter((item) => item.cantidadPesajes >= 2);
+        const conCrecimiento = analisis.filter((item) => item.cantidadPesajes >= 2 && item.diasTranscurridos > 0);
         const fechaLimiteReciente = new Date();
         fechaLimiteReciente.setDate(fechaLimiteReciente.getDate() - Number(diasSinPesaje || 60));
         const animalesSinPesajesRecientes = animales.filter((animal) => {
@@ -1935,6 +2040,53 @@ reporteCtrl.getReporteSanidad = async (req, res) => {
     }
 };
 
+reporteCtrl.getReporteComprasAnimales = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin, especie, sexo, proveedor, raza } = req.query;
+        const filtroCompras = {
+            estado: 'Confirmada',
+            ...crearFiltroFechas('fechaCompra', fechaInicio, fechaFin),
+            ...crearFiltroEspecieCompra(especie)
+        };
+        const compras = await CompraAnimal.find(filtroCompras)
+            .sort({ fechaCompra: 1, createdAt: 1 })
+            .lean();
+        const idsAnimales = [...new Set(compras.flatMap((compra) => (
+            (compra.animales || []).map((item) => String(item.animal || '')).filter(Boolean)
+        )))];
+
+        const filtroIds = { $in: idsAnimales };
+        const fechaCompraMasAntigua = compras.reduce((fechaMinima, compra) => {
+            const fecha = new Date(compra.fechaCompra);
+            return !fechaMinima || fecha < fechaMinima ? fecha : fechaMinima;
+        }, null);
+        const filtroFechaSeguimiento = fechaCompraMasAntigua ? { $gte: fechaCompraMasAntigua } : undefined;
+        const [animales, pesajes, tratamientos] = idsAnimales.length
+            ? await Promise.all([
+                Animal.find({ _id: filtroIds }).lean(),
+                Pesaje.find({
+                    animal: filtroIds,
+                    ...(filtroFechaSeguimiento ? { fecha: filtroFechaSeguimiento } : {})
+                }).sort({ fecha: 1 }).lean(),
+                TratamientoSanitario.find({
+                    animales: filtroIds,
+                    ...(filtroFechaSeguimiento ? { fechaInicio: filtroFechaSeguimiento } : {})
+                }).select('animales fechaInicio estado').lean()
+            ])
+            : [[], [], []];
+
+        res.json(construirReporteCompras({
+            compras,
+            animales,
+            pesajes,
+            tratamientos,
+            filtros: { especie, sexo, proveedor, raza }
+        }));
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener el reporte de compras de animales', error: error.message });
+    }
+};
+
 reporteCtrl.getResumenReportes = async (req, res) => {
     try {
         const { fechaInicio, fechaFin, partosFechaInicio, partosFechaFin, diio, especie } = req.query;
@@ -1945,6 +2097,7 @@ reporteCtrl.getResumenReportes = async (req, res) => {
         const idsEspecie = await obtenerIdsAnimalesPorEspecie(especie);
         const filtroReproduccion = idsEspecie ? { animal: { $in: idsEspecie } } : {};
         const filtroSanidad = crearFiltroEspecieAnimal(especie);
+        const incluyeAnaliticaProductiva = await tieneFeature('analiticaProductiva', req.organizacionId);
 
         const [
             totalAnimales,
@@ -2052,12 +2205,20 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             ]),
             ConteoDrone.countDocuments(filtroDrone),
             agruparPorCampo(ConteoDrone, 'estado', filtroDrone),
-            crearReportePartos({
-                fechaInicio: partosFechaInicio || fechaInicio,
-                fechaFin: partosFechaFin || fechaFin,
-                diio,
-                filtroExtra: filtroReproduccion
-            })
+            incluyeAnaliticaProductiva
+                ? crearReportePartos({
+                    fechaInicio: partosFechaInicio || fechaInicio,
+                    fechaFin: partosFechaFin || fechaFin,
+                    diio,
+                    filtroExtra: filtroReproduccion
+                })
+                : Promise.resolve({
+                    bloqueado: true,
+                    feature: 'analiticaProductiva',
+                    resumen: {},
+                    anios: [],
+                    porVaca: []
+                })
         ]);
 
         res.json({

@@ -20,6 +20,10 @@ import {
   obtenerVacasImproductivas
 } from '../services/api';
 import SelectorEspecie from './SelectorEspecie';
+import ReporteComprasAnimales from './ReporteComprasAnimales';
+import FeatureGate from './FeatureGate';
+import { usePlan } from '../context/PlanContext';
+import ReporteIndicesProductivos from './ReporteIndicesProductivos';
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR').format(Math.round(valor || 0));
 
@@ -160,7 +164,8 @@ const LineaPeso = ({ puntos = [] }) => {
   );
 };
 
-const Reportes = () => {
+const Reportes = ({ usuario }) => {
+  const { tieneFeature } = usePlan();
   const [filtros, setFiltros] = useState({
     fechaInicio: `${obtenerAnioActual()}-01-01`,
     fechaFin: `${obtenerAnioActual()}-12-31`,
@@ -245,14 +250,14 @@ const Reportes = () => {
           ...filtrosGenerales,
           ...filtrosPartosResumen
         }),
-        obtenerProductividadCria(filtrosGenerales),
-        obtenerFinanzasCria(filtrosGenerales),
-        obtenerSustentabilidadCria(filtrosGenerales),
-        obtenerVacasImproductivas(filtrosImproductivas),
-        obtenerReporteCrecimientoPesajes({
+        tieneFeature('analiticaProductiva') ? obtenerProductividadCria(filtrosGenerales) : Promise.resolve(null),
+        tieneFeature('analiticaEconomica') ? obtenerFinanzasCria(filtrosGenerales) : Promise.resolve(null),
+        tieneFeature('analiticaEconomica') ? obtenerSustentabilidadCria(filtrosGenerales) : Promise.resolve(null),
+        tieneFeature('analiticaProductiva') ? obtenerVacasImproductivas(filtrosImproductivas) : Promise.resolve(null),
+        tieneFeature('analiticaProductiva') ? obtenerReporteCrecimientoPesajes({
           ...filtrosGenerales,
           diasSinPesaje: filtros.diasSinPesaje
-        }),
+        }) : Promise.resolve(null),
         obtenerResumenVentas(filtrosGenerales),
         obtenerReporteProductosResumen(filtrosProductos),
         obtenerReporteProductosPorProducto(filtrosProductos),
@@ -264,9 +269,9 @@ const Reportes = () => {
           fechaFin: filtros.fechaFin
         }),
         obtenerReporteCamadas(filtrosGenerales),
-        obtenerReporteReproductivoPorcino(filtrosGenerales),
+        tieneFeature('analiticaProductiva') ? obtenerReporteReproductivoPorcino(filtrosGenerales) : Promise.resolve(null),
         obtenerReporteTareasCamadas(filtrosGenerales),
-        obtenerReporteEconomicoCamadas(filtrosGenerales),
+        tieneFeature('analiticaEconomica') ? obtenerReporteEconomicoCamadas(filtrosGenerales) : Promise.resolve(null),
         obtenerReporteSanidad(filtrosGenerales)
       ]);
       setReporte(data);
@@ -276,6 +281,10 @@ const Reportes = () => {
       setVacasImproductivas(vacasImproductivasData);
       setCrecimientoPesajes(crecimientoData);
       setVentasReporte(ventasData);
+      if (!tieneFeature('analiticaEconomica') && ventasData) {
+        ventasData.ventasPorOrigen = [];
+        ventasData.rotacionInventarioVendido = { detalle: [] };
+      }
       setProductosReporte({
         resumen: productosResumenData,
         porProducto: productosPorProductoData,
@@ -296,7 +305,7 @@ const Reportes = () => {
     } finally {
       setCargando(false);
     }
-  }, [filtros, especie]);
+  }, [filtros, especie, tieneFeature]);
 
   useEffect(() => {
     cargarReportes();
@@ -322,6 +331,15 @@ const Reportes = () => {
       .sort((a, b) => b.total - a.total);
   }, [destinosFinancieros]);
   const maxDestino = obtenerMaximo(destinosOrdenados, 'total');
+  const aplicarPeriodoRapido = (tipo) => {
+    const hoy = new Date();
+    let inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    if (tipo === '3m') inicio = new Date(hoy.getFullYear(), hoy.getMonth() - 2, 1);
+    if (tipo === '6m') inicio = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
+    if (tipo === 'anio') inicio = new Date(hoy.getFullYear(), 0, 1);
+    const formato = (fecha) => `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+    setFiltros((actual) => ({ ...actual, fechaInicio: formato(inicio), fechaFin: formato(hoy) }));
+  };
 
   return (
     <section className="reportes-page">
@@ -355,6 +373,12 @@ const Reportes = () => {
           />
         </label>
       </section>
+      <div className="reportes-periodos" aria-label="Períodos rápidos">
+        <button type="button" onClick={() => aplicarPeriodoRapido('mes')}>Este mes</button>
+        <button type="button" onClick={() => aplicarPeriodoRapido('3m')}>Últimos 3 meses</button>
+        <button type="button" onClick={() => aplicarPeriodoRapido('6m')}>Últimos 6 meses</button>
+        <button type="button" onClick={() => aplicarPeriodoRapido('anio')}>Este año</button>
+      </div>
 
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando reportes...</div>}
@@ -393,6 +417,15 @@ const Reportes = () => {
               <small>{formatearNumero(reporte.reproduccion?.partos?.resumen?.vacasCumplen)} vacas cumplen</small>
             </article>
           </section>
+
+          <FeatureGate feature="analiticaProductiva">
+            <ReporteIndicesProductivos
+              fechaInicio={filtros.fechaInicio}
+              fechaFin={filtros.fechaFin}
+              especie={especie}
+              puedeConfigurar={usuario?.rol === 'Administrador'}
+            />
+          </FeatureGate>
 
           {productividad && (
             <section className="reporte-panel reporte-panel-amplio cria-panel">
@@ -737,6 +770,14 @@ const Reportes = () => {
               )}
             </section>
           )}
+
+          <FeatureGate feature="analiticaEconomica">
+            <ReporteComprasAnimales
+              fechaInicio={filtros.fechaInicio}
+              fechaFin={filtros.fechaFin}
+              especie={especie}
+            />
+          </FeatureGate>
 
           {productosReporte && (
             <section className="reporte-panel reporte-panel-amplio productos-reportes-panel">

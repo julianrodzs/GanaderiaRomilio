@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { Membresia } = require('../models/Membresia');
 const Usuario = require('../models/Usuario');
 const {
     crearTokenRecuperacion,
@@ -8,6 +9,8 @@ const {
 const { generarToken } = require('../middleware/auth');
 const { rolTienePermiso } = require('../config/permisosRoles');
 const { listarUsuariosAsignables } = require('../services/usuarioAsignable-service');
+const { asegurarPuedeCrearUsuario, puedeUsarRol } = require('../services/plan-service');
+const { respuestaErrorPlan } = require('../middleware/plan');
 
 const usuarioCtrl = {};
 const MENSAJE_RECUPERACION = 'Si el correo existe, se enviarán instrucciones para recuperar la contraseña.';
@@ -41,10 +44,31 @@ const validarCorreoDuplicado = async (correo, usuarioId = null) => {
     return Boolean(usuarioExistente);
 };
 
+const presentarMembresia = (membresia) => {
+    const usuario = membresia.usuario?.toObject
+        ? membresia.usuario.toObject()
+        : { ...(membresia.usuario || {}) };
+
+    return limpiarUsuario({
+        ...usuario,
+        rol: membresia.rol,
+        estado: membresia.estado,
+        membresiaId: membresia._id,
+        organizacionId: membresia.organizacionId?._id || membresia.organizacionId
+    });
+};
+
+const obtenerMembresiaUsuario = (organizacionId, usuarioId) => Membresia.findOne({
+    organizacionId,
+    usuario: usuarioId
+}).populate('usuario');
+
 usuarioCtrl.getUsuarios = async (req, res) => {
     try {
-        const usuarios = await Usuario.find().select(CAMPOS_PRIVADOS).sort({ createdAt: -1 });
-        res.json(usuarios);
+        const membresias = await Membresia.find({ organizacionId: req.organizacionId })
+            .populate({ path: 'usuario', select: CAMPOS_PRIVADOS })
+            .sort({ createdAt: -1 });
+        res.json(membresias.filter((item) => item.usuario).map(presentarMembresia));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener usuarios', error: error.message });
     }
@@ -65,7 +89,7 @@ usuarioCtrl.getUsuariosAsignables = async (req, res) => {
             return res.status(403).json({ mensaje: 'No tienes permisos para consultar responsables de este módulo' });
         }
 
-        res.json(await listarUsuariosAsignables(modulo));
+        res.json(await listarUsuariosAsignables(modulo, req.organizacionId));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener usuarios asignables', error: error.message });
     }
@@ -73,13 +97,13 @@ usuarioCtrl.getUsuariosAsignables = async (req, res) => {
 
 usuarioCtrl.getUsuarioById = async (req, res) => {
     try {
-        const usuario = await Usuario.findById(req.params.id).select(CAMPOS_PRIVADOS);
+        const membresia = await obtenerMembresiaUsuario(req.organizacionId, req.params.id);
 
-        if (!usuario) {
+        if (!membresia?.usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
         }
 
-        res.json(usuario);
+        res.json(presentarMembresia(membresia));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener usuario', error: error.message });
     }
@@ -96,6 +120,11 @@ usuarioCtrl.crearUsuario = async (req, res) => {
         if (await validarCorreoDuplicado(correo)) {
             return res.status(400).json({ mensaje: 'Ya existe un usuario con ese correo' });
         }
+        await asegurarPuedeCrearUsuario({
+            organizacionId: req.organizacionId,
+            rol: rol || 'Encargado',
+            estado: estado || 'Activo'
+        });
 
         const nuevoUsuario = new Usuario({
             nombre,
@@ -108,19 +137,36 @@ usuarioCtrl.crearUsuario = async (req, res) => {
         });
 
         const usuarioGuardado = await nuevoUsuario.save();
+        let membresia;
+        try {
+            membresia = await Membresia.create({
+                organizacionId: req.organizacionId,
+                usuario: usuarioGuardado._id,
+                rol: rol || 'Encargado',
+                estado: estado || 'Activo'
+            });
+        } catch (error) {
+            await Usuario.deleteOne({ _id: usuarioGuardado._id });
+            throw error;
+        }
 
         res.status(201).json({
             mensaje: 'Usuario creado',
-            usuario: limpiarUsuario(usuarioGuardado)
+            usuario: presentarMembresia({
+                ...membresia.toObject(),
+                usuario: usuarioGuardado
+            })
         });
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(400).json({ mensaje: 'Error al crear usuario', error: error.message });
     }
 };
 
 usuarioCtrl.actualizarUsuario = async (req, res) => {
     try {
-        const usuario = await Usuario.findById(req.params.id);
+        const membresia = await obtenerMembresiaUsuario(req.organizacionId, req.params.id);
+        const usuario = membresia?.usuario;
 
         if (!usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
@@ -131,22 +177,46 @@ usuarioCtrl.actualizarUsuario = async (req, res) => {
         if (correo && await validarCorreoDuplicado(correo, req.params.id)) {
             return res.status(400).json({ mensaje: 'Ya existe un usuario con ese correo' });
         }
+        if (rol !== undefined && rol !== membresia.rol) {
+            const resultadoRol = await puedeUsarRol(rol, req.organizacionId);
+            if (!resultadoRol.permitido) {
+                const error = new Error(resultadoRol.message);
+                error.name = 'PlanError';
+                error.code = resultadoRol.code;
+                error.status = 403;
+                error.rolesPermitidos = resultadoRol.rolesPermitidos;
+                throw error;
+            }
+        }
+        if (estado === 'Activo' && membresia.estado !== 'Activo') {
+            await asegurarPuedeCrearUsuario({
+                organizacionId: req.organizacionId,
+                rol: rol || membresia.rol,
+                estado
+            });
+        }
 
         if (nombre !== undefined) usuario.nombre = nombre;
         if (apellido !== undefined) usuario.apellido = apellido;
         if (correo !== undefined) usuario.correo = normalizarCorreo(correo);
         if (telefono !== undefined) usuario.telefono = telefono;
-        if (rol !== undefined) usuario.rol = rol;
-        if (estado !== undefined) usuario.estado = estado;
         if (contrasena) usuario.contrasena = await hashContrasena(contrasena);
 
+        if (rol !== undefined) membresia.rol = rol;
+        if (estado !== undefined) membresia.estado = estado;
+
         const usuarioActualizado = await usuario.save();
+        await membresia.save();
 
         res.json({
             mensaje: 'Usuario actualizado',
-            usuario: limpiarUsuario(usuarioActualizado)
+            usuario: presentarMembresia({
+                ...membresia.toObject(),
+                usuario: usuarioActualizado
+            })
         });
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(400).json({ mensaje: 'Error al actualizar usuario', error: error.message });
     }
 };
@@ -159,34 +229,44 @@ usuarioCtrl.cambiarEstadoUsuario = async (req, res) => {
             return res.status(400).json({ mensaje: 'Estado invalido' });
         }
 
-        const usuario = await Usuario.findByIdAndUpdate(
-            req.params.id,
-            { estado },
-            { new: true, runValidators: true }
-        ).select(CAMPOS_PRIVADOS);
+        const membresia = await obtenerMembresiaUsuario(req.organizacionId, req.params.id);
 
-        if (!usuario) {
+        if (!membresia?.usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
         }
+        if (estado === 'Activo' && membresia.estado !== 'Activo') {
+            await asegurarPuedeCrearUsuario({
+                organizacionId: req.organizacionId,
+                rol: membresia.rol,
+                estado
+            });
+        }
+
+        membresia.estado = estado;
+        await membresia.save();
 
         res.json({
             mensaje: 'Estado de usuario actualizado',
-            usuario
+            usuario: presentarMembresia(membresia)
         });
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(400).json({ mensaje: 'Error al cambiar estado del usuario', error: error.message });
     }
 };
 
 usuarioCtrl.eliminarUsuario = async (req, res) => {
     try {
-        const usuario = await Usuario.findByIdAndDelete(req.params.id).select(CAMPOS_PRIVADOS);
+        const membresia = await obtenerMembresiaUsuario(req.organizacionId, req.params.id);
 
-        if (!usuario) {
+        if (!membresia?.usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
         }
 
-        res.json({ mensaje: 'Usuario eliminado', usuario });
+        const usuario = presentarMembresia(membresia);
+        await Membresia.deleteOne({ _id: membresia._id, organizacionId: req.organizacionId });
+
+        res.json({ mensaje: 'Acceso del usuario eliminado de la organización', usuario });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al eliminar usuario', error: error.message });
     }
@@ -222,6 +302,23 @@ usuarioCtrl.loginUsuario = async (req, res) => {
             usuario.contrasena = await hashContrasena(contrasena);
         }
 
+        const membresias = await Membresia.find({
+            usuario: usuario._id,
+            estado: 'Activo'
+        }).populate('organizacionId', 'nombre slug estado zonaHoraria');
+
+        const membresiasActivas = membresias.filter((item) => item.organizacionId?.estado === 'Activa');
+        const organizacionSolicitada = req.body.organizacionId;
+        const membresia = organizacionSolicitada
+            ? membresiasActivas.find((item) => item.organizacionId._id.toString() === organizacionSolicitada)
+            : membresiasActivas.find((item) => item.esPrincipal) || membresiasActivas[0];
+
+        if (!membresia) {
+            return res.status(403).json({ mensaje: 'El usuario no tiene acceso activo a una organización.' });
+        }
+
+        req.auditoriaOrganizacionId = membresia.organizacionId._id.toString();
+
         usuario.ultimoAcceso = new Date();
         await usuario.save();
 
@@ -229,12 +326,26 @@ usuarioCtrl.loginUsuario = async (req, res) => {
             id: usuario._id.toString(),
             correo: usuario.correo,
             nombre: usuario.nombre,
-            rol: usuario.rol || 'Encargado'
+            rol: membresia.rol,
+            organizacionId: membresia.organizacionId._id.toString()
         });
 
         res.json({
             token,
-            usuario: limpiarUsuario(usuario)
+            usuario: {
+                ...limpiarUsuario(usuario),
+                rol: membresia.rol,
+                estado: membresia.estado,
+                organizacionId: membresia.organizacionId._id
+            },
+            organizacion: membresia.organizacionId,
+            organizaciones: membresiasActivas.map((item) => ({
+                id: item.organizacionId._id,
+                nombre: item.organizacionId.nombre,
+                slug: item.organizacionId.slug,
+                rol: item.rol,
+                esPrincipal: item.esPrincipal
+            }))
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al iniciar sesion', error: error.message });
@@ -243,17 +354,21 @@ usuarioCtrl.loginUsuario = async (req, res) => {
 
 usuarioCtrl.getPerfil = async (req, res) => {
     try {
-        const usuario = await Usuario.findById(req.usuario.id).select(CAMPOS_PRIVADOS);
+        const membresia = await obtenerMembresiaUsuario(req.organizacionId, req.usuario.id);
+        const usuario = membresia?.usuario;
 
         if (!usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
         }
 
-        if (usuario.estado === 'Inactivo') {
+        if (membresia.estado === 'Inactivo' || usuario.estado === 'Inactivo') {
             return res.status(403).json({ mensaje: 'Usuario inactivo' });
         }
 
-        res.json({ usuario: limpiarUsuario(usuario) });
+        res.json({
+            usuario: presentarMembresia(membresia),
+            organizacion: req.organizacion
+        });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener perfil', error: error.message });
     }

@@ -15,6 +15,7 @@ import FormularioRotacion from './FormularioRotacion';
 import RendimientoPotreros, { DetallePotrero } from './RendimientoPotreros';
 import TablaDinamica from './TablaDinamica';
 import { fechaEnRango, obtenerRangoMesActual } from '../utils/fechas';
+import FeatureGate from './FeatureGate';
 
 const formatearFecha = (fecha) => {
   if (!fecha) return '--';
@@ -269,7 +270,9 @@ const Potreros = ({ soloLectura = false }) => {
         mostrarAcciones
       />
 
-      <RendimientoPotreros />
+      <FeatureGate feature="analiticaProductiva">
+        <RendimientoPotreros />
+      </FeatureGate>
 
       <section className="finanzas-panel">
         <div className="finanzas-rango-fechas">

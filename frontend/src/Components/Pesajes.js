@@ -59,6 +59,7 @@ const valorInicial = {
   animal: '',
   fecha: fechaHoy(),
   peso: '',
+  etapaProductiva: '',
   observaciones: ''
 };
 
@@ -178,6 +179,7 @@ const Pesajes = ({ soloLectura = false }) => {
       animal: obtenerId(pesaje.animal),
       fecha: pesaje.fecha ? new Date(pesaje.fecha).toISOString().slice(0, 10) : fechaHoy(),
       peso: pesaje.peso || '',
+      etapaProductiva: pesaje.etapaProductiva || pesaje.animal?.etapaProductiva || '',
       observaciones: pesaje.observaciones || ''
     });
     setErrorFormulario('');
@@ -258,7 +260,11 @@ const Pesajes = ({ soloLectura = false }) => {
             Animal
             <select
               value={formulario.animal}
-              onChange={(evento) => setFormulario((actual) => ({ ...actual, animal: evento.target.value }))}
+              onChange={(evento) => setFormulario((actual) => ({
+                ...actual,
+                animal: evento.target.value,
+                etapaProductiva: ''
+              }))}
               required
             >
               <option value="">Seleccione un animal</option>
@@ -287,6 +293,20 @@ const Pesajes = ({ soloLectura = false }) => {
               required
             />
           </label>
+          {animales.find((animal) => animal._id === formulario.animal)?.especie === 'Porcino' && (
+            <label>
+              Etapa productiva
+              <select
+                value={formulario.etapaProductiva}
+                onChange={(evento) => setFormulario((actual) => ({ ...actual, etapaProductiva: evento.target.value }))}
+              >
+                <option value="">Usar etapa del animal</option>
+                {['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde'].map((etapa) => (
+                  <option key={etapa} value={etapa}>{etapa}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="campo-completo">
             Observaciones
             <textarea

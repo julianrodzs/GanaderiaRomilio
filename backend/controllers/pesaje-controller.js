@@ -75,6 +75,9 @@ pesajeCtrl.createPesaje = async (req, res) => {
         const nuevoPesaje = new Pesaje({
             ...req.body,
             peso: Number(req.body.peso),
+            etapaProductiva: validacion.animal.especie === 'Porcino'
+                ? req.body.etapaProductiva || validacion.animal.etapaProductiva || undefined
+                : undefined,
             registradoPor: req.usuario?.id
         });
         const pesajeGuardado = await nuevoPesaje.save();
@@ -132,24 +135,27 @@ pesajeCtrl.updatePesaje = async (req, res) => {
             return res.status(404).json({ mensaje: 'Pesaje no encontrado' });
         }
 
-        if (req.body.animal || req.body.peso) {
-            const validacion = await validarPesaje({
-                animal: req.body.animal || pesajeAnterior.animal,
-                peso: req.body.peso ?? pesajeAnterior.peso
-            });
-            if (!validacion.valido) {
-                return res.status(validacion.status).json({ mensaje: validacion.mensaje });
-            }
+        const validacion = await validarPesaje({
+            animal: req.body.animal || pesajeAnterior.animal,
+            peso: req.body.peso ?? pesajeAnterior.peso
+        });
+        if (!validacion.valido) {
+            return res.status(validacion.status).json({ mensaje: validacion.mensaje });
         }
 
-        const pesaje = await Pesaje.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true
+        const animalAnterior = pesajeAnterior.animal;
+        pesajeAnterior.set({
+            ...req.body,
+            ...(req.body.peso !== undefined ? { peso: Number(req.body.peso) } : {}),
+            etapaProductiva: validacion.animal.especie === 'Porcino'
+                ? req.body.etapaProductiva || validacion.animal.etapaProductiva || undefined
+                : undefined
         });
+        const pesaje = await pesajeAnterior.save();
 
-        if (String(pesajeAnterior.animal) !== String(pesaje.animal)) {
+        if (String(animalAnterior) !== String(pesaje.animal)) {
             await eliminarEventosPorReferencia({ moduloOrigen: 'Pesajes', referenciaId: pesaje._id });
-            await actualizarPesoActualAnimal(pesajeAnterior.animal);
+            await actualizarPesoActualAnimal(animalAnterior);
         }
 
         await registrarEventoPesaje(pesaje, req.usuario?.id);

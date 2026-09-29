@@ -1,5 +1,9 @@
 # Documentacion tecnica actual - Backend GanaderiaRomilio
 
+La arquitectura comercial de planes, limites y capacidades se documenta en `planes-saas.md`.
+
+Los indices ICP e IEE y la configuracion de metas productivas se documentan en `indices-productivos.md`.
+
 Este documento describe el estado actual del backend Node/Express de GanaderiaRomilio.
 
 Aunque el archivo conserva el nombre `backend-inicial.md`, el contenido corresponde al backend actual.
@@ -1495,6 +1499,8 @@ Hojas de datos exactas:
 - `FINANZAS`
 - `PESAJES` opcional
 
+`INVENTARIO` admite `OBJETIVO_PRODUCTIVO` y `ETAPA_PRODUCTIVA`. `PESAJES` admite `ETAPA_PRODUCTIVA` como fotografia de la fase porcina en la fecha del pesaje. El importador no deduce etapas por rangos de peso.
+
 El importador no contiene detectores de hojas antiguas ni mapeos especificos por cliente. `ROTACIONES` y Sanidad se administran en sus modulos.
 
 La vista previa valida el libro completo y persiste en `ImportacionExcel`:
@@ -1708,7 +1714,7 @@ Cada documento pertenece a un unico usuario para mantener lectura independiente:
 - `dedupKey`: evita duplicados de procesos periodicos.
 - `metadata`: contexto extensible.
 
-No contiene `fincaId` ni `tenantId`; la aplicacion aun no es multi-finca.
+La notificacion incluye `organizacionId` mediante el plugin multiempresa. El destinatario debe tener una membresia activa en esa misma organizacion.
 
 ### Endpoints
 
@@ -1756,6 +1762,95 @@ npm run migrate:tareas-sanidad
 ```
 
 La simulacion cuenta planes y tratamientos candidatos. La aplicacion sincroniza tareas futuras sin borrar historial sanitario.
+
+## Base SaaS por organizacion
+
+La aplicacion usa tres conceptos separados:
+
+- `Organizacion`: cliente propietario de los datos y futuro titular de la suscripcion.
+- `Finca`: unidad productiva perteneciente a una organizacion.
+- `Membresia`: relacion entre un `Usuario` global y una organizacion, con rol y estado propios.
+
+El rol efectivo se obtiene siempre de `Membresia`. Los campos `rol` y `estado` de `Usuario` se conservan temporalmente por compatibilidad; `Usuario.estado` tambien permite bloquear una identidad en toda la plataforma.
+
+### Aislamiento de datos
+
+Todos los modelos operativos contienen `organizacionId`. El plugin `models/plugins/organizacion-plugin.js` aplica el filtro automaticamente en consultas, conteos, actualizaciones, eliminaciones, agregaciones y nuevas escrituras.
+
+El contexto se establece en `auth` despues de validar simultaneamente:
+
+1. usuario global activo;
+2. membresia activa;
+3. organizacion activa.
+
+Las consultas a modelos operativos sin contexto fallan de forma cerrada y devuelven cero documentos. Los procesos internos que recorren varias organizaciones deben ejecutar cada una con `ejecutarConOrganizacion`.
+
+Los identificadores de negocio ahora son unicos dentro de la organizacion, no en toda la plataforma. Esto aplica a DIIO, identificador de finca, codigo de potrero, codigo de camada, catalogos y claves automaticas.
+
+### Organizacion inicial
+
+La migracion crea la organizacion `Ganaderia Romilio`, una finca con codigo `PRINCIPAL`, una membresia principal para cada usuario existente y `organizacionId` en todos los documentos historicos.
+
+Los documentos operativos tambien reciben `fincaId`. Esto incluye inventario, potreros, pesajes, sanidad, reproduccion, camadas, tareas, compras, ventas, finanzas, rotaciones, drone, importaciones y bitacoras. Auditorias, membresias, notificaciones, catalogos y configuraciones permanecen a nivel de organizacion.
+
+La finca contiene `lineasProductivas`, una lista sin especies repetidas:
+
+```js
+[
+  { especie: 'Bovino', objetivos: ['Cria', 'Engorde'], activa: true },
+  { especie: 'Porcino', objetivos: ['Reproduccion', 'Engorde'], activa: true }
+]
+```
+
+Los valores persistidos usan las variantes acentuadas `Cría` y `Reproducción`. La migracion inicial habilita todos los objetivos para cada especie encontrada, evitando bloquear datos existentes; el administrador puede afinarlos despues.
+
+### Objetivos y categorias bovinas iniciales
+
+`objetivoProductivo` expresa para qué se conserva el animal en la finca; `categoria` describe su grupo por sexo y edad. Para la finca inicial se aplicó la siguiente normalización:
+
+- Todas las hembras bovinas: objetivo `Cría`.
+- Machos activos con categoría calculada `Toro`: objetivo `Reproducción`.
+- Machos vendidos o muertos: no se modifican.
+- Menores de 12 meses: `Ternero`.
+- De 12 a 23 meses: `Novilla` o `Novillo` según sexo.
+- Desde 24 meses: `Vaca` o `Toro` según sexo.
+
+La categoría bovina es un dato derivable de `fechaNacimiento` y `sexo`, por lo que técnicamente está desnormalizada al persistirse. Se conserva por compatibilidad con filtros, índices y reportes actuales. `objetivoProductivo` no es redundante: dos toros de la misma edad pueden tener objetivos distintos, por ejemplo `Reproducción` y `Engorde`.
+
+La migración es idempotente y puede revisarse antes de aplicarse:
+
+```bash
+npm run migrate:objetivos-bovinos:check
+npm run migrate:objetivos-bovinos
+```
+
+El contexto autenticado incluye la finca principal. Los modelos operativos asignan ese `fincaId` al crear documentos y filtran lecturas, actualizaciones, eliminaciones y agregaciones por organizacion y finca. Procesos internos sin contexto de finca pueden recorrer toda la organizacion de forma controlada.
+
+Endpoints de configuracion:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/api/fincas` | Lista las fincas de la organizacion e identifica la principal |
+| PATCH | `/api/fincas/:id/lineas-productivas` | Actualiza especies y objetivos; requiere administrador |
+
+Comandos idempotentes:
+
+```bash
+npm run migrate:saas:check
+npm run migrate:saas
+npm run verify:saas
+npm run verify:saas:api
+```
+
+`migrate:saas:check` no modifica datos. `migrate:saas` conserva los documentos, completa solo `organizacionId` y `fincaId` ausentes y puede ejecutarse nuevamente sin duplicar organizacion, finca ni membresias.
+
+### Archivos
+
+Los adjuntos nuevos se guardan bajo `uploads/<organizacionId>/<categoria>` y se descargan mediante `/api/archivos/:categoria/:archivo`, que exige autenticacion. Ya no se publica todo `uploads` como directorio estatico.
+
+La organizacion inicial mantiene una lectura protegida de rutas legadas. La migracion solo reescribe una URL antigua cuando encuentra fisicamente el archivo, evitando referencias rotas.
+
+Este almacenamiento por disco es una fase de compatibilidad. Antes de escalar horizontalmente debe sustituirse por almacenamiento de objetos privado.
 
 ## Compatibilidades mantenidas
 

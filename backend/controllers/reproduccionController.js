@@ -14,6 +14,9 @@ const {
 } = require('../services/reproduccion-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
+const { asegurarPuedeCrearAnimal } = require('../services/plan-service');
+const { validarObjetivoProductivoFinca } = require('../services/finca-service');
+const { respuestaErrorPlan } = require('../middleware/plan');
 
 const reproduccionCtrl = {};
 
@@ -261,6 +264,15 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
         });
 
         await validarRelacionGenealogica(null, datosTernero.padre, datosTernero.madre);
+        await asegurarPuedeCrearAnimal({
+            organizacionId: req.organizacionId,
+            especie: datosTernero.especie
+        });
+        await validarObjetivoProductivoFinca({
+            fincaId: req.fincaId,
+            especie: datosTernero.especie,
+            objetivoProductivo: datosTernero.objetivoProductivo
+        });
         const nuevoTernero = new Animal(datosTernero);
         const terneroGuardado = await nuevoTernero.save();
 
@@ -299,6 +311,7 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
 
         res.status(201).json(terneroGuardado);
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(400).json({ mensaje: 'Error al registrar ternero desde parto', error: error.message });
     }
 };

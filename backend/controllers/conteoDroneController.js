@@ -1,6 +1,14 @@
 const ConteoDrone = require('../models/ConteoDrone');
+const { urlArchivoOrganizacion } = require('../middleware/uploadOrganizacion');
 const Potrero = require('../models/Potrero');
 const { procesarImagenConteo } = require('../services/iaConteoService');
+const { randomUUID } = require('crypto');
+const {
+    incrementarUsoDrone,
+    liberarReservaDrone,
+    reservarUsoDrone
+} = require('../services/plan-service');
+const { respuestaErrorPlan } = require('../middleware/plan');
 
 const conteoDroneCtrl = {};
 
@@ -17,6 +25,7 @@ conteoDroneCtrl.getConteos = async (req, res) => {
 };
 
 conteoDroneCtrl.procesarConteo = async (req, res) => {
+    let reservaActiva = false;
     try {
         const { potrero, cantidadEsperada, observaciones } = req.body;
 
@@ -40,7 +49,19 @@ conteoDroneCtrl.procesarConteo = async (req, res) => {
             return res.status(400).json({ mensaje: 'cantidadEsperada debe ser un numero valido' });
         }
 
-        const imagenOriginalUrl = `/uploads/conteo-drone/${req.file.filename}`;
+        const claveOperacion = String(
+            req.get('Idempotency-Key') || req.body.claveOperacion || randomUUID()
+        ).trim();
+        const conteoExistente = await ConteoDrone.findOne({ claveOperacion }).populate('potrero');
+        if (conteoExistente) {
+            await incrementarUsoDrone({ conteoId: conteoExistente._id });
+            return res.status(200).json(conteoExistente);
+        }
+
+        await reservarUsoDrone({ organizacionId: req.organizacionId });
+        reservaActiva = true;
+
+        const imagenOriginalUrl = urlArchivoOrganizacion('conteo-drone', req.file);
         const resultadoIA = await procesarImagenConteo({
             imagenPath: req.file.path,
             imagenUrl: imagenOriginalUrl
@@ -56,16 +77,28 @@ conteoDroneCtrl.procesarConteo = async (req, res) => {
             diferencia,
             confianzaPromedio: resultadoIA.confianzaPromedio,
             detecciones: resultadoIA.detecciones,
+            claveOperacion,
             estado: diferencia === 0 ? 'Correcto' : 'Revisar',
             observaciones
         });
 
         const conteoGuardado = await nuevoConteo.save();
+        await incrementarUsoDrone({ conteoId: conteoGuardado._id, liberarReserva: true });
+        reservaActiva = false;
         const conteoConPotrero = await ConteoDrone.findById(conteoGuardado._id).populate('potrero');
 
         res.status(201).json(conteoConPotrero);
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al procesar conteo por drone', error: error.message });
+        if (reservaActiva) await liberarReservaDrone().catch(() => null);
+        if (error?.code === 11000) {
+            const claveOperacion = String(req.get('Idempotency-Key') || req.body.claveOperacion || '').trim();
+            const existente = claveOperacion
+                ? await ConteoDrone.findOne({ claveOperacion }).populate('potrero')
+                : null;
+            if (existente) return res.status(200).json(existente);
+        }
+        if (respuestaErrorPlan(error, res)) return;
+        res.status(400).json({ mensaje: error.message || 'Error al procesar conteo por drone', error: error.message });
     }
 };
 

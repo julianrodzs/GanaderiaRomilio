@@ -8,6 +8,8 @@ import {
   obtenerUsuarios
 } from '../services/api';
 import { ROLES } from '../constants/permisosRoles';
+import { usePlan } from '../context/PlanContext';
+import UpgradeMessage from '../Components/UpgradeMessage';
 const estados = ['Activo', 'Inactivo'];
 const estadosAuditoria = ['Exitoso', 'Fallido', 'Denegado'];
 const accionesAuditoria = ['POST', 'PUT', 'PATCH', 'DELETE'];
@@ -56,7 +58,8 @@ const normalizarUsuario = (usuario) => ({
   confirmarContrasena: ''
 });
 
-const Usuarios = ({ usuarioActual }) => {
+const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => {
+  const { plan, tieneFeature } = usePlan();
   const [usuarios, setUsuarios] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
@@ -108,7 +111,7 @@ const Usuarios = ({ usuarioActual }) => {
   };
 
   useEffect(() => {
-    if (vista === 'auditoria') {
+    if (vista === 'auditoria' && tieneFeature('auditoriaAvanzada')) {
       cargarAuditorias();
     }
   }, [
@@ -257,7 +260,15 @@ const Usuarios = ({ usuarioActual }) => {
           <p className="eyebrow">Seguridad</p>
           <h2>Administracion de Usuarios</h2>
         </div>
-        {vista === 'usuarios' && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nuevo Usuario</button>}
+        <div className="panel-actions">
+          {usuarioActual?.esSuperAdministrador && (
+            <button className="boton-secundario compacto" type="button" onClick={onAbrirAdministracionSaas}>
+              Clientes SaaS
+            </button>
+          )}
+          <button className="boton-secundario compacto" type="button" onClick={onAbrirPlan}>Mi plan</button>
+          {vista === 'usuarios' && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nuevo Usuario</button>}
+        </div>
       </div>
 
       <div className="inventario-tabs">
@@ -322,7 +333,8 @@ const Usuarios = ({ usuarioActual }) => {
         </div>
       )}
 
-      {vista === 'auditoria' && (
+      {vista === 'auditoria' && !tieneFeature('auditoriaAvanzada') && <UpgradeMessage feature="auditoriaAvanzada" />}
+      {vista === 'auditoria' && tieneFeature('auditoriaAvanzada') && (
         <>
           <div className="tabla-toolbar">
             <input type="date" name="fechaInicio" value={filtrosAuditoria.fechaInicio} onChange={actualizarFiltroAuditoria} />
@@ -429,7 +441,9 @@ const Usuarios = ({ usuarioActual }) => {
               <label>
                 Rol
                 <select name="rol" value={formulario.rol} onChange={actualizarCampo}>
-                  {ROLES.map((rol) => <option key={rol} value={rol}>{rol}</option>)}
+                  {ROLES.filter((rol) => (
+                    plan?.rolesPermitidos?.includes(rol) || rol === formulario.rol
+                  )).map((rol) => <option key={rol} value={rol}>{rol}</option>)}
                 </select>
               </label>
 

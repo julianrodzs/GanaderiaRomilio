@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const normalizarTexto = (valor = '') => String(valor)
     .normalize('NFD')
@@ -47,7 +48,8 @@ catalogoFinancieroSchema.pre('validate', function normalizarCatalogo(next) {
     next();
 });
 
-catalogoFinancieroSchema.index({ tipo: 1, nombreNormalizado: 1 }, { unique: true });
+catalogoFinancieroSchema.plugin(aplicarAislamientoOrganizacion);
+catalogoFinancieroSchema.index({ organizacionId: 1, tipo: 1, nombreNormalizado: 1 }, { unique: true });
 catalogoFinancieroSchema.index({ tipo: 1, activo: 1, nombre: 1 });
 
 module.exports = model('CatalogoFinanciero', catalogoFinancieroSchema);

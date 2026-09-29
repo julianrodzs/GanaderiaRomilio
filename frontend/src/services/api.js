@@ -53,6 +53,54 @@ const request = async (ruta, opciones = {}) => {
   return data;
 };
 
+export const obtenerArchivoProtegido = async (ruta) => {
+  if (!ruta) throw new Error('Ruta de archivo requerida');
+  const token = obtenerTokenSesion();
+  const rutaProtegida = ruta.startsWith('/uploads/')
+    ? ruta.replace('/uploads/', '/archivos/')
+    : ruta;
+  const rutaApi = rutaProtegida.startsWith('/api/') ? rutaProtegida.slice(4) : rutaProtegida;
+  const respuesta = await fetch(`${API_URL}${rutaApi}`, {
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+
+  if (!respuesta.ok) {
+    const data = await respuesta.json().catch(() => ({}));
+    throw new Error(data.mensaje || 'No se pudo abrir el archivo');
+  }
+
+  return respuesta.blob();
+};
+
+export const abrirArchivoProtegido = async (ruta) => {
+  const ventana = window.open('about:blank', '_blank');
+  if (ventana) ventana.opener = null;
+  try {
+    const blob = await obtenerArchivoProtegido(ruta);
+    const url = URL.createObjectURL(blob);
+    if (ventana) ventana.location.href = url;
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) {
+    if (ventana) ventana.close();
+    throw error;
+  }
+};
+
+export const obtenerPlanActual = () => request('/plan/actual');
+
+export const seleccionarEspeciePlan = (especiePlan) => request('/plan/especie', {
+  method: 'PATCH',
+  body: JSON.stringify({ especiePlan })
+});
+
+export const obtenerFincas = () => request('/fincas');
+
+export const actualizarLineasProductivasFinca = (fincaId, lineasProductivas) => request(`/fincas/${fincaId}/lineas-productivas`, {
+  method: 'PATCH',
+  body: JSON.stringify({ lineasProductivas })
+});
+
 export const loginUsuario = ({ correo, contrasena }) => {
   return request('/usuarios/login', {
     method: 'POST',
@@ -119,6 +167,18 @@ export const obtenerAuditorias = (filtros = {}) => {
 };
 
 export const obtenerAuditoria = (id) => request(`/auditoria/${id}`);
+
+export const obtenerOrganizacionesSaas = () => request('/admin/organizaciones');
+
+export const crearOrganizacionSaas = (datos) => request('/admin/organizaciones', {
+  method: 'POST',
+  body: JSON.stringify(datos)
+});
+
+export const cambiarEstadoOrganizacionSaas = (id, estado) => request(`/admin/organizaciones/${id}/estado`, {
+  method: 'PATCH',
+  body: JSON.stringify({ estado })
+});
 
 export const obtenerTareas = (filtros = {}) => {
   const params = new URLSearchParams();
@@ -569,7 +629,7 @@ export const registrarTerneroDesdeParto = (registroId, ternero) => {
   });
 };
 
-export const procesarConteoDrone = ({ imagen, potrero, cantidadEsperada, observaciones }) => {
+export const procesarConteoDrone = ({ imagen, potrero, cantidadEsperada, observaciones, claveOperacion }) => {
   const formData = new FormData();
   formData.append('imagen', imagen);
   formData.append('potrero', potrero);
@@ -578,7 +638,8 @@ export const procesarConteoDrone = ({ imagen, potrero, cantidadEsperada, observa
 
   return request('/conteo-drone/procesar', {
     method: 'POST',
-    body: formData
+    body: formData,
+    headers: claveOperacion ? { 'Idempotency-Key': claveOperacion } : {}
   });
 };
 
@@ -893,6 +954,30 @@ export const obtenerReporteCrecimientoPesajes = ({ fechaInicio, fechaFin, animal
   return request(`/reportes/crecimiento-pesajes${query ? `?${query}` : ''}`);
 };
 
+export const obtenerCrecimientoPorcino = ({ fechaInicio, fechaFin } = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  const query = params.toString();
+  return request(`/reportes/porcinos/crecimiento${query ? `?${query}` : ''}`);
+};
+
+export const obtenerEficienciaEngorde = ({ fechaInicio, fechaFin, especie } = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  if (especie && especie !== 'Todos') params.append('especie', especie);
+  const query = params.toString();
+  return request(`/reportes/engorde${query ? `?${query}` : ''}`);
+};
+
+export const obtenerConfiguracionProductiva = () => request('/reportes/configuracion-productiva');
+
+export const actualizarConfiguracionProductiva = (configuracion) => request('/reportes/configuracion-productiva', {
+  method: 'PUT',
+  body: JSON.stringify(configuracion)
+});
+
 const construirQueryProductos = (filtros = {}) => {
   const params = new URLSearchParams();
   Object.entries(filtros).forEach(([clave, valor]) => {
@@ -952,6 +1037,10 @@ export const obtenerReporteEconomicoCamadas = (filtros = {}) => {
 
 export const obtenerReporteSanidad = (filtros = {}) => {
   return request(`/reportes/sanidad${construirQueryProductos(filtros)}`);
+};
+
+export const obtenerReporteComprasAnimales = (filtros = {}) => {
+  return request(`/reportes/compras-animales${construirQueryProductos(filtros)}`);
 };
 
 export { API_URL };

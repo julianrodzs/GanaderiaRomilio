@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const FRECUENCIAS = ['dias', 'semanas', 'meses', 'años'];
 const ESTADOS = ['Vigente', 'Próximo', 'Vencido', 'Aplicado'];
@@ -116,6 +117,7 @@ planSanitarioSchema.pre('findOneAndUpdate', function calcularProximaEnUpdate(nex
     next();
 });
 
+planSanitarioSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 planSanitarioSchema.index({ estado: 1, proximaAplicacion: 1 });
 planSanitarioSchema.index({ grupoGanado: 1 });
 planSanitarioSchema.index({ especie: 1, estado: 1 });

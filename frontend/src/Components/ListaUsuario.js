@@ -14,6 +14,8 @@ import Reportes from './Reportes';
 import Usuarios from '../pages/Usuarios';
 import Tareas from '../pages/Tareas';
 import CentroNotificaciones from '../pages/CentroNotificaciones';
+import MiPlan from '../pages/MiPlan';
+import AdministracionSaas from '../pages/AdministracionSaas';
 import Ventas from './Ventas';
 import { puedeAccederModulo, puedeGestionarModulo } from '../constants/permisosRoles';
 import {
@@ -25,6 +27,7 @@ import {
   obtenerSustentabilidadCria
 } from '../services/api';
 import { obtenerCambiosPendientes } from '../services/offlineStorage';
+import { usePlan } from '../context/PlanContext';
 
 const obtenerRangoAnioActual = () => {
   const anio = new Date().getFullYear();
@@ -72,6 +75,7 @@ const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
 }).format(valor || 0);
 
 const ListaUsuario = ({ usuario, onLogout }) => {
+  const { tieneFeature } = usePlan();
   const rol = usuario?.rol || 'Consulta';
   const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
   const obtenerVistaInicial = () => modulosOrden.find((modulo) => puedeAccederModulo(rol, modulo)) || 'Mis tareas';
@@ -114,8 +118,8 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           obtenerPotreros(),
           obtenerPlanesSanitarios(),
           obtenerRegistrosReproductivos(),
-          obtenerProductividadCria(obtenerRangoAnioActual()),
-          obtenerSustentabilidadCria(obtenerRangoMesActual())
+          tieneFeature('analiticaProductiva') ? obtenerProductividadCria(obtenerRangoAnioActual()) : Promise.resolve(null),
+          tieneFeature('analiticaEconomica') ? obtenerSustentabilidadCria(obtenerRangoMesActual()) : Promise.resolve(null)
         ]);
         const animalesActivos = animales.filter((animal) => !['Muerto', 'Vendido'].includes(animal.estado));
         const ciclosActivos = reproduccion.filter((registro) => (registro.estadoCiclo || 'Activo') === 'Activo' && registro.activoParaAlertas !== false);
@@ -223,6 +227,16 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     </main>
   );
 
+  if (vistaActiva === 'Administracion SaaS') {
+    if (!usuario?.esSuperAdministrador) return sinAcceso;
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <AdministracionSaas onCerrar={() => setVistaActiva('Usuarios')} />
+      </main>
+    );
+  }
+
   if (!puedeAccederModulo(rol, vistaActiva)) return sinAcceso;
 
   if (vistaActiva === 'Notificaciones') {
@@ -322,7 +336,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Reportes />
+        <Reportes usuario={usuario} />
       </main>
     );
   }
@@ -340,7 +354,20 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Usuarios usuarioActual={usuario} />
+        <Usuarios
+          usuarioActual={usuario}
+          onAbrirPlan={() => setVistaActiva('Mi plan')}
+          onAbrirAdministracionSaas={() => setVistaActiva('Administracion SaaS')}
+        />
+      </main>
+    );
+  }
+
+  if (vistaActiva === 'Mi plan') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <MiPlan />
       </main>
     );
   }

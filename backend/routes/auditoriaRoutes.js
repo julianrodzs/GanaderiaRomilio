@@ -7,8 +7,10 @@ const {
 
 const router = Router();
 const soloAdministrador = autorizarPermiso('usuarios.gestionar');
+const { requireFeature } = require('../middleware/plan');
 
 router.use(soloAdministrador);
+router.use(requireFeature('auditoriaAvanzada'));
 
 router.get('/', getAuditorias);
 router.get('/:id', getAuditoriaById);

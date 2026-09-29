@@ -1,5 +1,6 @@
 const Notificacion = require('../models/Notificacion');
-const Usuario = require('../models/Usuario');
+const { obtenerOrganizacionActual } = require('../context/organizacion-context');
+const { Membresia } = require('../models/Membresia');
 
 let emisorTiempoReal = null;
 
@@ -58,10 +59,21 @@ const crearNotificacionesParaUsuarios = async (usuarios, datos) => {
 };
 
 const notificarPorRoles = async (roles, datos, opciones = {}) => {
-    const filtro = { rol: { $in: [...new Set(roles || [])] }, estado: 'Activo' };
-    if (opciones.excluirUsuario) filtro._id = { $ne: opciones.excluirUsuario };
-    const usuarios = await Usuario.find(filtro).select('_id');
-    return crearNotificacionesParaUsuarios(usuarios, datos);
+    const filtro = {
+        organizacionId: obtenerOrganizacionActual(),
+        rol: { $in: [...new Set(roles || [])] },
+        estado: 'Activo'
+    };
+    if (opciones.excluirUsuario) filtro.usuario = { $ne: opciones.excluirUsuario };
+    const membresias = await Membresia.find(filtro).populate({
+        path: 'usuario',
+        match: { estado: 'Activo' },
+        select: '_id'
+    });
+    return crearNotificacionesParaUsuarios(
+        membresias.map((item) => item.usuario?._id).filter(Boolean),
+        datos
+    );
 };
 
 const rolesDestinoPorActor = (rolActor) => {
@@ -75,11 +87,19 @@ const notificarAccion = async ({ actor, rolesDestino, ...datos }) => {
     const actorCompleto = actor?.rol
         ? actor
         : actorId
-            ? await Usuario.findById(actorId).select('nombre apellido correo rol estado')
+            ? await Membresia.findOne({
+                organizacionId: obtenerOrganizacionActual(),
+                usuario: actorId,
+                estado: 'Activo'
+            }).populate('usuario', 'nombre apellido correo estado')
             : null;
 
-    if (actorCompleto?.rol === 'Consulta') return [];
-    const roles = rolesDestino || rolesDestinoPorActor(actorCompleto?.rol);
+    const actorConRol = actorCompleto?.usuario
+        ? { ...actorCompleto.usuario.toObject(), rol: actorCompleto.rol, estado: actorCompleto.estado }
+        : actorCompleto;
+
+    if (actorConRol?.rol === 'Consulta') return [];
+    const roles = rolesDestino || rolesDestinoPorActor(actorConRol?.rol);
     if (!roles.length) return [];
 
     return notificarPorRoles(

@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 const reproduccionPorcinaConfig = require('../config/reproduccionPorcinaConfig');
 
 const ESTADOS_REPRODUCTIVOS = [
@@ -285,6 +286,7 @@ registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesD
     next();
 });
 
+registroReproductivoSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 registroReproductivoSchema.index({ animal: 1, fechaMonta: -1 });
 registroReproductivoSchema.index({ especie: 1, estado: 1 });
 registroReproductivoSchema.index({ estado: 1 });

@@ -1,8 +1,9 @@
 const { Schema, model } = require('mongoose');
+const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 
 const potreroSchema = new Schema(
     {
-        codigo: { type: String, required: true, unique: true, trim: true },
+        codigo: { type: String, required: true, trim: true },
         nombre: { type: String, required: true, trim: true },
         area: { type: Number, min: 0 },
         capacidadMaxima: { type: Number, min: 0 },
@@ -22,6 +23,8 @@ const potreroSchema = new Schema(
     }
 );
 
+potreroSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+potreroSchema.index({ organizacionId: 1, fincaId: 1, codigo: 1 }, { unique: true });
 potreroSchema.index({ estado: 1 });
 
 module.exports = model('Potrero', potreroSchema);

@@ -11,9 +11,9 @@ import {
   obtenerTarea,
   obtenerPotreros,
   obtenerTareas,
-  obtenerUsuariosAsignables,
-  API_URL
+  obtenerUsuariosAsignables
 } from '../services/api';
+import useArchivoProtegido from '../hooks/useArchivoProtegido';
 import {
   guardarCambiosPendientes,
   guardarTareasOffline,
@@ -436,10 +436,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
     }
   };
 
-  const evidenciaCompletaUrl = (url) => {
-    if (!url) return '';
-    return `${API_URL.replace('/api', '')}${url}`;
-  };
+  const evidenciaProtegidaUrl = useArchivoProtegido(detalle?.evidenciaUrl);
 
   return (
     <section className="tareas-page">
@@ -631,7 +628,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
             </div>
             {detalle.descripcion && <div className="detalle-observaciones"><span>Descripcion</span><p>{detalle.descripcion}</p></div>}
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
-            {detalle.evidenciaUrl && <img className="tarea-evidencia" src={evidenciaCompletaUrl(detalle.evidenciaUrl)} alt="Evidencia de tarea" />}
+            {evidenciaProtegidaUrl && <img className="tarea-evidencia" src={evidenciaProtegidaUrl} alt="Evidencia de tarea" />}
 
             {!soloLectura && detalle.estado !== 'Completada' && (
               <div className="form-card tarea-completar-card">

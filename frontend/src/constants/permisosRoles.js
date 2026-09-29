@@ -16,6 +16,7 @@ export const permisosPorModulo = {
   Reportes: ['Administrador', 'Contador', 'Consulta'],
   Drone: ['Administrador', 'Encargado'],
   Usuarios: ['Administrador'],
+  'Mi plan': ['Administrador'],
   Notificaciones: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta']
 };
 
