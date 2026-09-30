@@ -224,25 +224,10 @@ const procesarAlertasTodasOrganizaciones = async () => {
 };
 
 const enviarAlertasCorreo = procesarAlertasTodasOrganizaciones;
-let intervaloAlertas = null;
-
-const iniciarProgramadorAlertasCorreo = () => {
-    const intervaloMs = Number(process.env.EMAIL_ALERTS_INTERVAL_MS) || MS_DIA;
-    const ejecutar = async () => {
-        try {
-            console.log('Revisión central de tareas completada:', await procesarAlertasTodasOrganizaciones());
-        } catch (error) {
-            console.error('Error revisando tareas y notificaciones:', error.message);
-        }
-    };
-    ejecutar();
-    intervaloAlertas = setInterval(ejecutar, intervaloMs);
-};
 
 module.exports = {
     crearNotificacionesOperativas,
     enviarAlertasCorreo,
-    iniciarProgramadorAlertasCorreo,
     obtenerAlertasTareas,
     procesarAlertasTodasOrganizaciones,
     procesarAlertasTareas

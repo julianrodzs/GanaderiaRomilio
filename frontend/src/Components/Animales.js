@@ -26,6 +26,7 @@ import FormularioCamada from './FormularioCamada';
 import FormularioEstadoSanitario from './FormularioEstadoSanitario';
 import SelectorEspecie from './SelectorEspecie';
 import TablaDinamica from './TablaDinamica';
+import { ContenidoPaginado } from './PaginacionTabla';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -303,12 +304,10 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
       setError('');
       const data = await obtenerAnimales({ especie });
       setAnimales(data);
-      if (soloLectura) {
-        await guardarInventarioOffline(data);
-      }
+      await guardarInventarioOffline(data, { especie }).catch(() => {});
     } catch (err) {
       if (soloLectura) {
-        const datosOffline = await obtenerInventarioOffline().catch(() => []);
+        const datosOffline = await obtenerInventarioOffline({ especie }).catch(() => []);
         setAnimales(datosOffline);
         setError(datosOffline.length ? 'Sin conexion. Mostrando inventario guardado en este dispositivo.' : err.message);
       } else {
@@ -854,6 +853,22 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
                 <span>Edad reproductiva</span>
                 <strong>{estaListaMontaPorEdad(animalDetalle) ? 'Sí' : 'No'}</strong>
               </article>
+              {animalDetalle.especie !== 'Porcino' && (
+                <>
+                  <article>
+                    <span>Raza en la finca</span>
+                    <strong>{animalDetalle.descripcionRacial || animalDetalle.raza || '--'}</strong>
+                  </article>
+                  <article>
+                    <span>Clasificación racial</span>
+                    <strong>{animalDetalle.razaPrincipal || '--'}{animalDetalle.razaSecundaria ? ` × ${animalDetalle.razaSecundaria}` : ''}</strong>
+                  </article>
+                  <article>
+                    <span>Grupo racial</span>
+                    <strong>{animalDetalle.grupoRacial || 'Pendiente de normalizar'}</strong>
+                  </article>
+                </>
+              )}
               {animalDetalle.especie === 'Porcino' && (
                 <article>
                   <span>Camada origen</span>
@@ -1005,17 +1020,67 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
                   </div>
 
                   <div className="genealogia-descendencia">
-                    <h3>Descendencia</h3>
+                    <h3>Crías registradas</h3>
                     <div className="detalle-animal-grid">
-                      <article><span>Hijos</span><strong>{descendenciaAnimal?.hijos?.length || 0}</strong></article>
-                      <article><span>Nietos</span><strong>{descendenciaAnimal?.nietos?.length || 0}</strong></article>
-                      <article><span>Total descendientes</span><strong>{descendenciaAnimal?.totalDescendientes || 0}</strong></article>
+                      <article><span>Total</span><strong>{descendenciaAnimal?.resumen?.totalCrias || 0}</strong></article>
+                      <article><span>Machos</span><strong>{descendenciaAnimal?.resumen?.machos || 0}</strong></article>
+                      <article><span>Hembras</span><strong>{descendenciaAnimal?.resumen?.hembras || 0}</strong></article>
+                      <article><span>Activos</span><strong>{descendenciaAnimal?.resumen?.activos || 0}</strong></article>
+                      <article><span>Vendidos</span><strong>{descendenciaAnimal?.resumen?.vendidos || 0}</strong></article>
+                      <article><span>Muertos</span><strong>{descendenciaAnimal?.resumen?.muertos || 0}</strong></article>
+                      {animalDetalle.sexo === 'Macho' && (
+                        <article><span>Madres diferentes</span><strong>{descendenciaAnimal?.resumen?.madresDiferentes || 0}</strong></article>
+                      )}
+                      <article><span>Primera cría</span><strong>{formatearFecha(descendenciaAnimal?.resumen?.primeraCria)}</strong></article>
+                      <article><span>Última cría</span><strong>{formatearFecha(descendenciaAnimal?.resumen?.ultimaCria)}</strong></article>
                     </div>
-                    {(descendenciaAnimal?.hijos || []).length > 0 && (
-                      <div className="chips-lista">
-                        {descendenciaAnimal.hijos.map((hijo) => (
-                          <span key={hijo._id}>{etiquetaAnimal(hijo)}</span>
-                        ))}
+                    {(descendenciaAnimal?.crias || []).length > 0 && (
+                      <ContenidoPaginado datos={descendenciaAnimal.crias}>
+                        {(criasPagina) => (
+                        <div className="tabla-scroll tabla-dinamica descendencia-tabla">
+                          <table>
+                          <thead>
+                            <tr>
+                              <th>DIIO</th>
+                              <th>Nombre</th>
+                              <th>Sexo</th>
+                              <th>Nacimiento</th>
+                              <th>Estado</th>
+                              <th>Raza / grupo</th>
+                              <th>Peso</th>
+                              <th>Padre</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {criasPagina.map((cria) => (
+                              <tr key={cria._id}>
+                                <td><button className="tabla-link" type="button" onClick={() => abrirDetalleAnimal(cria)}>{cria.diio || cria.identificadorFinca || '--'}</button></td>
+                                <td>{cria.nombre || '--'}</td>
+                                <td>{cria.sexo || '--'}</td>
+                                <td>{formatearFecha(cria.fechaNacimiento)}</td>
+                                <td>{cria.estado || '--'}</td>
+                                <td>{cria.grupoRacial || cria.descripcionRacial || cria.raza || '--'}</td>
+                                <td>{formatearPeso(cria.pesoActual)}</td>
+                                <td>{etiquetaAnimal(cria.padre) || cria.padreDiio || '--'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          </table>
+                        </div>
+                        )}
+                      </ContenidoPaginado>
+                    )}
+                    {(descendenciaAnimal?.crias || []).length === 0 && <span className="reporte-vacio">Sin crías relacionadas en el inventario.</span>}
+                    {animalDetalle.sexo === 'Macho' && (descendenciaAnimal?.madres || []).length > 0 && (
+                      <div className="madres-asociadas">
+                        <h3>Madres asociadas</h3>
+                        <div className="chips-lista">
+                          {descendenciaAnimal.madres.map((madre, indice) => madre._id ? (
+                            <button key={madre._id} type="button" onClick={() => abrirDetalleAnimal(madre)}>{etiquetaAnimal(madre)}</button>
+                          ) : (
+                            <span key={`${madre.diio || madre.nombre}-${indice}`}>{etiquetaAnimal(madre)}</span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1042,8 +1107,10 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
               )}
 
               {pesajesConDiferencia.length > 0 && (
-                <div className="tabla-scroll tabla-dinamica historial-pesajes-tabla">
-                  <table>
+                <ContenidoPaginado datos={pesajesConDiferencia}>
+                  {(pesajesPagina) => (
+                  <div className="tabla-scroll tabla-dinamica historial-pesajes-tabla">
+                    <table>
                     <thead>
                       <tr>
                         <th>Fecha</th>
@@ -1053,7 +1120,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {pesajesConDiferencia.map((pesaje) => (
+                      {pesajesPagina.map((pesaje) => (
                         <tr key={pesaje._id}>
                           <td>{formatearFecha(pesaje.fecha)}</td>
                           <td>{formatearPeso(pesaje.peso)}</td>
@@ -1066,8 +1133,10 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                </div>
+                    </table>
+                  </div>
+                  )}
+                </ContenidoPaginado>
               )}
             </section>
 

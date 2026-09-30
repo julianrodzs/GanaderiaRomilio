@@ -13,7 +13,6 @@ import {
   obtenerUsuariosAsignables,
   registrarTerneroDesdeParto
 } from '../services/api';
-import { guardarGestacionOffline, obtenerGestacionOffline } from '../services/offlineStorage';
 import { fechaEnRango, obtenerRangoReproduccion } from '../utils/fechas';
 import FormularioCamada from './FormularioCamada';
 import FormularioReproduccion from './FormularioReproduccion';
@@ -175,17 +174,8 @@ const Reproduccion = ({ soloLectura = false }) => {
       setRegistros(registrosData);
       setAnimales(animalesData);
       setUsuariosAsignables(usuariosData || []);
-      if (soloLectura) {
-        await guardarGestacionOffline(registrosData);
-      }
     } catch (err) {
-      if (soloLectura) {
-        const gestacionOffline = await obtenerGestacionOffline().catch(() => []);
-        setRegistros(gestacionOffline);
-        setError(gestacionOffline.length ? 'Sin conexion. Mostrando gestacion guardada en este dispositivo.' : err.message);
-      } else {
-        setError(err.message);
-      }
+      setError(err.message);
     } finally {
       setCargando(false);
     }

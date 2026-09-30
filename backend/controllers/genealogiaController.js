@@ -2,6 +2,7 @@ const Animal = require('../models/Animal');
 const {
     obtenerArbolGenealogico,
     obtenerDescendencia,
+    obtenerResumenDescendencia,
     validarRelacionGenealogica,
     detectarParentesco,
     calcularRiesgoCruce,
@@ -39,6 +40,14 @@ const getDescendencia = async (req, res) => {
         res.json(descendencia);
     } catch (error) {
         responderError(res, error, 'Error al obtener descendencia');
+    }
+};
+
+const getDescendenciaDirecta = async (req, res) => {
+    try {
+        res.json(await obtenerResumenDescendencia(req.params.id));
+    } catch (error) {
+        responderError(res, error, 'Error al obtener crías registradas');
     }
 };
 
@@ -99,6 +108,7 @@ const updateGenealogiaAnimal = async (req, res) => {
 module.exports = {
     getArbolGenealogico,
     getDescendencia,
+    getDescendenciaDirecta,
     getParentesco,
     getRiesgoCruce,
     updateGenealogiaAnimal

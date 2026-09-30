@@ -28,3 +28,12 @@ test('el plan esencial reserva una sola especie y limites separados', () => {
     assert.equal(planesConfig.ESENCIAL.limites.porcinosSiSeleccionados, 500);
     assert.equal(planesConfig.ESENCIAL.limites.conteosDroneMensualesBovino, 15);
 });
+
+test('todos los planes permiten usar el catalogo completo de roles', () => {
+    const rolesEsperados = ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta'];
+
+    Object.values(planesConfig).forEach((plan) => {
+        assert.deepEqual(plan.rolesPermitidos, rolesEsperados);
+        assert.equal(plan.funcionalidades.bancosForrajeros, true);
+    });
+});

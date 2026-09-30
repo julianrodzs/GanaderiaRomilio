@@ -12,6 +12,7 @@ import {
 } from '../services/api';
 import { obtenerRangoMesActual } from '../utils/fechas';
 import SelectorEspecie from './SelectorEspecie';
+import { ContenidoPaginado } from './PaginacionTabla';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -606,8 +607,10 @@ const Ventas = ({ soloLectura = false }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando ventas...</div>}
 
-      <div className="tabla-scroll tabla-dinamica">
-        <table>
+      <ContenidoPaginado datos={ventas}>
+        {(ventasPagina) => (
+          <div className="tabla-scroll tabla-dinamica">
+            <table>
           <thead>
             <tr>
               <th>Fecha</th>
@@ -620,7 +623,7 @@ const Ventas = ({ soloLectura = false }) => {
             </tr>
           </thead>
           <tbody>
-            {ventas.map((venta) => (
+            {ventasPagina.map((venta) => (
               <tr key={venta._id}>
                 <td>{formatearFecha(venta.fechaVenta)}</td>
                 <td>{venta.comprador}</td>
@@ -639,8 +642,10 @@ const Ventas = ({ soloLectura = false }) => {
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>
+            </table>
+          </div>
+        )}
+      </ContenidoPaginado>
 
       {detalle && (
         <div className="modal-backdrop">
@@ -669,44 +674,52 @@ const Ventas = ({ soloLectura = false }) => {
                 Ver comprobante
               </button>
             )}
-            <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
-              <table>
-                <thead>
-                  <tr><th>{etiquetaId}</th><th>Animal</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
-                </thead>
-                <tbody>
-                  {detalle.animales?.map((item) => (
-                    <tr key={item.animal?._id || item.animal}>
-                      <td>{item.animal?.diio || item.animal?.identificadorFinca || '--'}</td>
-                      <td>{item.animal?.nombre || '--'}</td>
-                      <td>{formatearNumero(item.pesoVentaKg)} kg</td>
-                      <td>{formatearMoneda(item.precioKg)}</td>
-                      <td>{formatearMoneda(item.subtotal)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ContenidoPaginado datos={detalle.animales || []}>
+              {(animalesPagina) => (
+                <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
+                  <table>
+                    <thead>
+                      <tr><th>{etiquetaId}</th><th>Animal</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
+                    </thead>
+                    <tbody>
+                      {animalesPagina.map((item) => (
+                        <tr key={item.animal?._id || item.animal}>
+                          <td>{item.animal?.diio || item.animal?.identificadorFinca || '--'}</td>
+                          <td>{item.animal?.nombre || '--'}</td>
+                          <td>{formatearNumero(item.pesoVentaKg)} kg</td>
+                          <td>{formatearMoneda(item.precioKg)}</td>
+                          <td>{formatearMoneda(item.subtotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </ContenidoPaginado>
             {(detalle.camadas || []).length > 0 && (
-              <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
-                <table>
-                  <thead>
-                    <tr><th>Camada</th><th>Madre</th><th>Cantidad</th><th>Peso total</th><th>Precio/kg</th><th>Subtotal</th></tr>
-                  </thead>
-                  <tbody>
-                    {detalle.camadas.map((item) => (
-                      <tr key={item.camada?._id || item.camada}>
-                        <td>{item.camada?.codigoCamada || '--'}</td>
-                        <td>{item.camada?.madre?.diio || item.camada?.madre?.nombre || '--'}</td>
-                        <td>{formatearNumero(item.cantidad)}</td>
-                        <td>{formatearNumero(item.pesoTotalKg)} kg</td>
-                        <td>{formatearMoneda(item.precioKg)}</td>
-                        <td>{formatearMoneda(item.subtotal)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ContenidoPaginado datos={detalle.camadas}>
+                {(camadasPagina) => (
+                  <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
+                    <table>
+                      <thead>
+                        <tr><th>Camada</th><th>Madre</th><th>Cantidad</th><th>Peso total</th><th>Precio/kg</th><th>Subtotal</th></tr>
+                      </thead>
+                      <tbody>
+                        {camadasPagina.map((item) => (
+                          <tr key={item.camada?._id || item.camada}>
+                            <td>{item.camada?.codigoCamada || '--'}</td>
+                            <td>{item.camada?.madre?.diio || item.camada?.madre?.nombre || '--'}</td>
+                            <td>{formatearNumero(item.cantidad)}</td>
+                            <td>{formatearNumero(item.pesoTotalKg)} kg</td>
+                            <td>{formatearMoneda(item.precioKg)}</td>
+                            <td>{formatearMoneda(item.subtotal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </ContenidoPaginado>
             )}
           </section>
         </div>

@@ -380,6 +380,8 @@ movimientoFinancieroCtrl.getResumenConsumo = async (req, res) => {
     try {
         const { fechaInicio, fechaFin, categoria, producto, unidad } = req.query;
         const filtro = {
+            naturaleza: 'Egreso',
+            tipoMovimiento: 'Compra',
             cantidad: { $gt: 0 },
             producto: { $exists: true, $nin: [null, ''] }
         };

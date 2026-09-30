@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { obtenerReporteComprasAnimales } from '../services/api';
+import { ContenidoPaginado } from './PaginacionTabla';
 
 const formatearNumero = (valor, decimales = 0) => new Intl.NumberFormat('es-CR', {
   maximumFractionDigits: decimales
@@ -292,11 +293,13 @@ const ReporteComprasAnimales = ({ fechaInicio, fechaFin, especie }) => {
             <article className="reporte-panel reporte-panel-amplio">
               <p className="eyebrow">Proveedores</p>
               <h2>Costo de entrada y resultado posterior</h2>
-              <div className="tabla-scroll tabla-dinamica compras-proveedores-tabla">
-                <table>
+              <ContenidoPaginado datos={reporte.proveedores || []}>
+                {(proveedoresPagina) => (
+                  <div className="tabla-scroll tabla-dinamica compras-proveedores-tabla">
+                    <table>
                   <thead><tr><th>Proveedor</th><th>Compras</th><th>Animales</th><th>H / M</th><th>Peso prom.</th><th>Precio/kg</th><th>Inversión</th><th>Trat. 60 días</th><th>Mortalidad</th><th>Ganancia/día</th></tr></thead>
                   <tbody>
-                    {(reporte.proveedores || []).map((item) => (
+                    {proveedoresPagina.map((item) => (
                       <tr key={item.proveedor}>
                         <td>{item.proveedor}</td><td>{item.compras}</td><td>{item.animales}</td><td>{item.hembras} / {item.machos}</td>
                         <td>{formatearNumero(item.pesoPromedio, 2)} kg</td><td>{formatearMoneda(item.precioEfectivoKg)}</td><td>{formatearMoneda(item.montoTotal)}</td>
@@ -304,8 +307,10 @@ const ReporteComprasAnimales = ({ fechaInicio, fechaFin, especie }) => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                    </table>
+                  </div>
+                )}
+              </ContenidoPaginado>
               {!reporte.proveedores?.length && <span className="reporte-vacio">Sin proveedores para comparar.</span>}
             </article>
 
@@ -346,11 +351,13 @@ const ReporteComprasAnimales = ({ fechaInicio, fechaFin, especie }) => {
             <article className="reporte-panel reporte-panel-amplio">
               <p className="eyebrow">Compras o lotes</p>
               <h2>Seguimiento por compra</h2>
-              <div className="tabla-scroll tabla-dinamica compras-lotes-tabla">
-                <table>
+              <ContenidoPaginado datos={reporte.compras || []}>
+                {(comprasPagina) => (
+                  <div className="tabla-scroll tabla-dinamica compras-lotes-tabla">
+                    <table>
                   <thead><tr><th>Fecha</th><th>Especie</th><th>Proveedor</th><th>Animales</th><th>H / M</th><th>Peso</th><th>Precio/kg</th><th>Total</th><th>Ajuste</th><th>A / V / M</th><th>Trat. 60 días</th><th>Margen bruto</th></tr></thead>
                   <tbody>
-                    {(reporte.compras || []).map((item) => (
+                    {comprasPagina.map((item) => (
                       <tr key={item.compraId}>
                         <td>{formatearFecha(item.fechaCompra)}</td><td>{item.especie}</td><td>{item.proveedor}</td><td>{item.animales}</td><td>{item.hembras} / {item.machos}</td>
                         <td>{formatearNumero(item.pesoTotalKg, 2)} kg</td><td>{formatearMoneda(item.precioEfectivoKg)}</td><td>{formatearMoneda(item.montoTotal)}</td><td>{formatearMoneda(item.ajusteMonto)}</td>
@@ -358,8 +365,10 @@ const ReporteComprasAnimales = ({ fechaInicio, fechaFin, especie }) => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                    </table>
+                  </div>
+                )}
+              </ContenidoPaginado>
               {!reporte.compras?.length && <span className="reporte-vacio">No hay compras confirmadas con estos filtros.</span>}
             </article>
           </section>

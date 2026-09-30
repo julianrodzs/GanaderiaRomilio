@@ -22,8 +22,21 @@ const {
     actualizarConfiguracionProductiva,
     obtenerConfiguracionProductiva
 } = require('../services/configuracionProductiva-service');
+const {
+    obtenerReporteDescendencia,
+    obtenerReporteRacial
+} = require('../services/reportesRazaGenealogia-service');
 
 const reporteCtrl = {};
+const { obtenerRendimientoForrajes } = require('../services/forrajeRendimiento-service');
+
+reporteCtrl.getRendimientoForrajes = async (req, res) => {
+    try {
+        res.json(await obtenerRendimientoForrajes(req.query));
+    } catch (error) {
+        res.status(400).json({ mensaje: 'Error al calcular el rendimiento forrajero', error: error.message });
+    }
+};
 
 const obtenerPeriodoIndices = (query = {}) => {
     const hoy = new Date();
@@ -45,6 +58,26 @@ reporteCtrl.getConfiguracionProductiva = async (req, res) => {
         res.json(await obtenerConfiguracionProductiva());
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener la configuración productiva', error: error.message });
+    }
+};
+
+reporteCtrl.getRazasBovinas = async (req, res) => {
+    try {
+        res.json(await obtenerReporteRacial());
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener el reporte racial', error: error.message });
+    }
+};
+
+reporteCtrl.getDescendenciaBovina = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin } = obtenerPeriodoIndices(req.query);
+        res.json({
+            filtros: { fechaInicio, fechaFin },
+            ...await obtenerReporteDescendencia({ fechaInicio, fechaFin })
+        });
+    } catch (error) {
+        res.status(error.status || 500).json({ mensaje: error.message || 'Error al obtener el reporte de descendencia' });
     }
 };
 
@@ -161,6 +194,8 @@ const crearFiltroMesActual = (campo) => {
 
 const crearFiltroProductos = ({ fechaInicio, fechaFin, producto, categoria, proveedor } = {}) => {
     const filtro = {
+        naturaleza: 'Egreso',
+        tipoMovimiento: 'Compra',
         producto: { $exists: true, $nin: [null, ''] }
     };
     const filtroFechas = fechaInicio || fechaFin
@@ -208,7 +243,7 @@ const agregarCantidadProductoPipeline = [
             unidadPartes: {
                 $regexFind: {
                     input: '$unidadNormalizada',
-                    regex: /^([0-9]+(?:[,.][0-9]+)?)\s*(.+)$/
+                    regex: /^([0-9]+(?:[,.][0-9]+)?)\s*(?:x\s*)?(.+)$/i
                 }
             }
         }
@@ -239,15 +274,9 @@ const agregarCantidadProductoPipeline = [
             },
             unidadBase: {
                 $cond: [
-                    { $not: [{ $in: ['$unidadNormalizada', [null, '']] }] },
-                    '$unidadNormalizada',
-                    {
-                        $cond: [
-                            { $ne: ['$unidadPartes', null] },
-                            { $arrayElemAt: ['$unidadPartes.captures', 1] },
-                            '$unidadNormalizada'
-                        ]
-                    }
+                    { $ne: ['$unidadPartes', null] },
+                    { $arrayElemAt: ['$unidadPartes.captures', 1] },
+                    '$unidadNormalizada'
                 ]
             }
         }
@@ -1232,7 +1261,10 @@ reporteCtrl.getProductosResumen = async (req, res) => {
 reporteCtrl.getProductosPorProducto = async (req, res) => {
     try {
         const filtro = crearFiltroProductos(req.query);
-        const productos = await MovimientoFinanciero.aggregate([
+        const pagina = Math.max(Number.parseInt(req.query.pagina, 10) || 1, 1);
+        const limiteSolicitado = Number.parseInt(req.query.limite, 10) || 10;
+        const limite = [10, 25, 50].includes(limiteSolicitado) ? limiteSolicitado : 10;
+        const resultado = await MovimientoFinanciero.aggregate([
             { $match: filtro },
             ...agregarCantidadProductoPipeline,
             {
@@ -1269,10 +1301,28 @@ reporteCtrl.getProductosPorProducto = async (req, res) => {
                     cantidadRegistros: 1
                 }
             },
-            { $sort: { montoTotal: -1, cantidadFisicaTotal: -1 } }
+            { $sort: { montoTotal: -1, cantidadFisicaTotal: -1 } },
+            {
+                $facet: {
+                    datos: [
+                        { $skip: (pagina - 1) * limite },
+                        { $limit: limite }
+                    ],
+                    conteo: [{ $count: 'total' }]
+                }
+            }
         ]);
 
-        res.json(productos);
+        const total = resultado[0]?.conteo?.[0]?.total || 0;
+        res.json({
+            datos: resultado[0]?.datos || [],
+            paginacion: {
+                pagina,
+                limite,
+                total,
+                totalPaginas: Math.max(Math.ceil(total / limite), 1)
+            }
+        });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener productos agrupados', error: error.message });
     }
@@ -2164,7 +2214,7 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                 { $sort: { total: -1 } }
             ]),
             MovimientoFinanciero.aggregate([
-                { $match: filtroFinanzas },
+                { $match: { ...filtroFinanzas, naturaleza: 'Egreso' } },
                 {
                     $group: {
                         _id: '$categoria',

@@ -4,6 +4,7 @@ import {
   crearOrganizacionSaas,
   obtenerOrganizacionesSaas
 } from '../services/api';
+import { ContenidoPaginado } from '../Components/PaginacionTabla';
 
 const PLANES = ['ESENCIAL', 'GESTION', 'PRO', 'PREMIUM'];
 const OBJETIVOS = ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro'];
@@ -293,24 +294,28 @@ const AdministracionSaas = ({ onCerrar }) => {
       </div>
 
       {cargando ? <div className="estado-importacion">Cargando clientes...</div> : (
-        <div className="tabla-scroll tabla-dinamica">
-          <table className="saas-tabla">
-            <thead><tr><th>Organización</th><th>Plan</th><th>Finca principal</th><th>Usuarios</th><th>Estado</th><th>Acciones</th></tr></thead>
-            <tbody>
-              {organizaciones.map((item) => (
-                <tr key={item._id}>
-                  <td><strong>{item.nombre}</strong><small>{item.slug}</small></td>
-                  <td>{etiquetaPlan(item.plan?.codigo)}<small>{item.plan?.estado || '--'}</small></td>
-                  <td>{item.fincaPrincipal?.nombre || '--'}<small>{item.fincasActivas || 0} finca(s)</small></td>
-                  <td>{item.usuariosActivos || 0}</td>
-                  <td><span className={`saas-estado saas-estado-${item.estado?.toLowerCase()}`}>{item.estado}</span></td>
-                  <td><div className="acciones-tabla"><button type="button" title={item.estado === 'Activa' ? 'Suspender organización' : 'Reactivar organización'} onClick={() => alternarEstado(item)}>{item.estado === 'Activa' ? '⏸' : '▶'}</button></div></td>
-                </tr>
-              ))}
-              {organizaciones.length === 0 && <tr><td colSpan="6">Todavía no hay organizaciones.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <ContenidoPaginado datos={organizaciones}>
+          {(organizacionesPagina) => (
+            <div className="tabla-scroll tabla-dinamica">
+              <table className="saas-tabla">
+                <thead><tr><th>Organización</th><th>Plan</th><th>Finca principal</th><th>Usuarios</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody>
+                  {organizacionesPagina.map((item) => (
+                    <tr key={item._id}>
+                      <td><strong>{item.nombre}</strong><small>{item.slug}</small></td>
+                      <td>{etiquetaPlan(item.plan?.codigo)}<small>{item.plan?.estado || '--'}</small></td>
+                      <td>{item.fincaPrincipal?.nombre || '--'}<small>{item.fincasActivas || 0} finca(s)</small></td>
+                      <td>{item.usuariosActivos || 0}</td>
+                      <td><span className={`saas-estado saas-estado-${item.estado?.toLowerCase()}`}>{item.estado}</span></td>
+                      <td><div className="acciones-tabla"><button type="button" title={item.estado === 'Activa' ? 'Suspender organización' : 'Reactivar organización'} onClick={() => alternarEstado(item)}>{item.estado === 'Activa' ? '⏸' : '▶'}</button></div></td>
+                    </tr>
+                  ))}
+                  {organizaciones.length === 0 && <tr><td colSpan="6">Todavía no hay organizaciones.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </ContenidoPaginado>
       )}
     </section>
   );

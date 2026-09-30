@@ -10,6 +10,7 @@ import {
 import { ROLES } from '../constants/permisosRoles';
 import { usePlan } from '../context/PlanContext';
 import UpgradeMessage from '../Components/UpgradeMessage';
+import { ContenidoPaginado } from '../Components/PaginacionTabla';
 const estados = ['Activo', 'Inactivo'];
 const estadosAuditoria = ['Exitoso', 'Fallido', 'Denegado'];
 const accionesAuditoria = ['POST', 'PUT', 'PATCH', 'DELETE'];
@@ -291,8 +292,10 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
       {vista === 'usuarios' && cargando && <div className="estado-importacion">Cargando usuarios...</div>}
 
       {vista === 'usuarios' && (
-        <div className="tabla-scroll tabla-dinamica">
-          <table>
+        <ContenidoPaginado datos={usuariosFiltrados}>
+          {(usuariosPagina) => (
+            <div className="tabla-scroll tabla-dinamica">
+              <table>
             <thead>
               <tr>
                 <th>Nombre</th>
@@ -305,7 +308,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
               </tr>
             </thead>
             <tbody>
-              {usuariosFiltrados.map((usuario) => (
+              {usuariosPagina.map((usuario) => (
                 <tr key={usuario._id}>
                   <td>{[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || '--'}</td>
                   <td>{usuario.correo}</td>
@@ -329,11 +332,13 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+              </table>
+            </div>
+          )}
+        </ContenidoPaginado>
       )}
 
-      {vista === 'auditoria' && !tieneFeature('auditoriaAvanzada') && <UpgradeMessage feature="auditoriaAvanzada" />}
+      {vista === 'auditoria' && !tieneFeature('auditoriaAvanzada') && <UpgradeMessage feature="auditoriaAvanzada" titulo="Auditoría avanzada" pregunta="¿Quién realizó cada cambio importante dentro de la organización?" etiqueta="Seguridad y trazabilidad" />}
       {vista === 'auditoria' && tieneFeature('auditoriaAvanzada') && (
         <>
           <div className="tabla-toolbar">
@@ -367,8 +372,10 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
 
           {cargandoAuditoria && <div className="estado-importacion">Cargando auditoría...</div>}
 
-          <div className="tabla-scroll tabla-dinamica">
-            <table>
+          <ContenidoPaginado datos={auditorias}>
+            {(auditoriasPagina) => (
+              <div className="tabla-scroll tabla-dinamica">
+                <table>
               <thead>
                 <tr>
                   <th>Fecha</th>
@@ -382,7 +389,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
                 </tr>
               </thead>
               <tbody>
-                {auditorias.map((item) => (
+                {auditoriasPagina.map((item) => (
                   <tr key={item._id}>
                     <td>{formatearFecha(item.createdAt)}</td>
                     <td>{item.usuarioNombre || item.usuarioCorreo || '--'}</td>
@@ -399,8 +406,10 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+                </table>
+              </div>
+            )}
+          </ContenidoPaginado>
         </>
       )}
 

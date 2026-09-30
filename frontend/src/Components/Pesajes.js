@@ -8,6 +8,7 @@ import {
   obtenerPotreros
 } from '../services/api';
 import SelectorEspecie from './SelectorEspecie';
+import { ContenidoPaginado } from './PaginacionTabla';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -391,8 +392,10 @@ const Pesajes = ({ soloLectura = false }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando pesajes...</div>}
 
-      <div className="tabla-scroll tabla-dinamica">
-        <table>
+      <ContenidoPaginado datos={pesajesFiltrados}>
+        {(pesajesPagina) => (
+          <div className="tabla-scroll tabla-dinamica">
+            <table>
           <thead>
             <tr>
               <th><button type="button" onClick={() => cambiarOrden('animal')}>Animal{etiquetaOrden('animal')}</button></th>
@@ -404,7 +407,7 @@ const Pesajes = ({ soloLectura = false }) => {
             </tr>
           </thead>
           <tbody>
-            {pesajesFiltrados.map((pesaje) => (
+            {pesajesPagina.map((pesaje) => (
               <tr key={pesaje._id}>
                 <td>{pesaje.animal?.nombre || '--'}</td>
                 <td>{pesaje.animal?.diio || '--'}</td>
@@ -420,8 +423,10 @@ const Pesajes = ({ soloLectura = false }) => {
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>
+            </table>
+          </div>
+        )}
+      </ContenidoPaginado>
     </section>
   );
 };

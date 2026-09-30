@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  actualizarCoberturaPotrero,
   actualizarPotrero,
   actualizarRotacion,
+  crearCoberturaPotrero,
   crearPotrero,
   crearRotacion,
   eliminarPotrero,
@@ -16,6 +18,7 @@ import RendimientoPotreros, { DetallePotrero } from './RendimientoPotreros';
 import TablaDinamica from './TablaDinamica';
 import { fechaEnRango, obtenerRangoMesActual } from '../utils/fechas';
 import FeatureGate from './FeatureGate';
+import BancosForrajeros from './BancosForrajeros';
 
 const formatearFecha = (fecha) => {
   if (!fecha) return '--';
@@ -29,6 +32,7 @@ const formatearFecha = (fecha) => {
 const columnas = [
   { id: 'codigo', label: 'Codigo', accessor: (potrero) => potrero.codigo },
   { id: 'nombre', label: 'Nombre', accessor: (potrero) => potrero.nombre },
+  { id: 'pastoPrincipal', label: 'Pasto principal', accessor: (potrero) => potrero.pastoPrincipal?.nombre || potrero.descripcionCobertura || '--' },
   { id: 'area', label: 'Area', accessor: (potrero) => potrero.area },
   { id: 'ultimaAplicacionHerbicida', label: 'Ult. herbicida', accessor: (potrero) => formatearFecha(potrero.ultimaAplicacionHerbicida) },
   { id: 'ultimaChapia', label: 'Ult. chapia', accessor: (potrero) => formatearFecha(potrero.ultimaChapia) },
@@ -74,6 +78,7 @@ const Potreros = ({ soloLectura = false }) => {
   const [rotacionSeleccionada, setRotacionSeleccionada] = useState(null);
   const [potreroDetalle, setPotreroDetalle] = useState(null);
   const [filtroRotacionesFecha, setFiltroRotacionesFecha] = useState(obtenerRangoMesActual);
+  const [vistaArea, setVistaArea] = useState('PASTOREO');
 
   const cargarDatos = async () => {
     try {
@@ -84,9 +89,7 @@ const Potreros = ({ soloLectura = false }) => {
       ]);
       setPotreros(potrerosData);
       setRotaciones(rotacionesData);
-      if (soloLectura) {
-        await guardarPotrerosOffline(potrerosData);
-      }
+      await guardarPotrerosOffline(potrerosData).catch(() => {});
     } catch (err) {
       if (soloLectura) {
         const potrerosOffline = await obtenerPotrerosOffline().catch(() => []);
@@ -108,15 +111,22 @@ const Potreros = ({ soloLectura = false }) => {
   const rotacionesFiltradas = useMemo(() => {
     return rotaciones.filter((rotacion) => fechaEnRango(rotacion.fechaEntrada, filtroRotacionesFecha));
   }, [filtroRotacionesFecha, rotaciones]);
+  const potrerosPastoreo = useMemo(() => potreros.filter((item) => (item.tipoArea || 'PASTOREO') === 'PASTOREO'), [potreros]);
+  const bancosForrajeros = useMemo(() => potreros.filter((item) => item.tipoArea === 'BANCO_FORRAJERO'), [potreros]);
 
-  const guardarPotrero = async (potrero) => {
+  const guardarPotrero = async ({ potrero, cobertura, coberturaCambiada, tieneCoberturaVigente }) => {
     try {
       setGuardando(true);
       setErrorFormulario('');
       if (potreroSeleccionado?._id) {
         await actualizarPotrero(potreroSeleccionado._id, potrero);
+        if (coberturaCambiada) {
+          if (tieneCoberturaVigente) await actualizarCoberturaPotrero(potreroSeleccionado._id, cobertura);
+          else await crearCoberturaPotrero(potreroSeleccionado._id, cobertura);
+        }
       } else {
-        await crearPotrero(potrero);
+        const creado = await crearPotrero(potrero);
+        if (coberturaCambiada) await crearCoberturaPotrero(creado._id, cobertura);
       }
       setPotreroSeleccionado(null);
       setModoFormulario(false);
@@ -145,6 +155,14 @@ const Potreros = ({ soloLectura = false }) => {
 
   const abrirNuevoPotrero = () => {
     setPotreroSeleccionado(null);
+    setRotacionSeleccionada(null);
+    setErrorFormulario('');
+    setTipoFormulario('potrero');
+    setModoFormulario(true);
+  };
+
+  const abrirNuevoBanco = () => {
+    setPotreroSeleccionado({ tipoArea: 'BANCO_FORRAJERO' });
     setRotacionSeleccionada(null);
     setErrorFormulario('');
     setTipoFormulario('potrero');
@@ -233,7 +251,7 @@ const Potreros = ({ soloLectura = false }) => {
     return (
       <FormularioPotrero
         potreroInicial={potreroSeleccionado}
-        modo={potreroSeleccionado ? 'editar' : 'crear'}
+        modo={potreroSeleccionado?._id ? 'editar' : 'crear'}
         onCancelar={cancelarFormulario}
         onGuardar={guardarPotrero}
         guardando={guardando}
@@ -244,6 +262,8 @@ const Potreros = ({ soloLectura = false }) => {
 
   return (
     <section className="potreros-page">
+      <div className="potrero-tabs areas-tabs" role="tablist" aria-label="Tipo de área"><button type="button" className={vistaArea === 'PASTOREO' ? 'activo' : ''} onClick={() => setVistaArea('PASTOREO')}>Pastoreo</button><button type="button" className={vistaArea === 'BANCO_FORRAJERO' ? 'activo' : ''} onClick={() => setVistaArea('BANCO_FORRAJERO')}>Bancos forrajeros</button></div>
+      {vistaArea === 'BANCO_FORRAJERO' ? <BancosForrajeros bancos={bancosForrajeros} cargando={cargando} error={error} soloLectura={soloLectura} onNuevo={abrirNuevoBanco} onEditar={abrirEdicionPotrero} onEliminar={borrarPotrero} onRecargar={cargarDatos} /> : <>
       <article className="mapa-potreros-panel">
         <div>
           <p className="eyebrow">Mapa de referencia</p>
@@ -256,7 +276,7 @@ const Potreros = ({ soloLectura = false }) => {
         titulo="Potreros"
         subtitulo="Rotacion"
         columnas={columnas}
-        datos={potreros}
+        datos={potrerosPastoreo}
         cargando={cargando}
         error={error}
         filtros={filtros}
@@ -270,7 +290,7 @@ const Potreros = ({ soloLectura = false }) => {
         mostrarAcciones
       />
 
-      <FeatureGate feature="analiticaProductiva">
+      <FeatureGate feature="analiticaProductiva" titulo="Rendimiento de potreros" pregunta="¿Cómo se comparan la ocupación, los descansos y los animal-días entre potreros?" etiqueta="Analítica de potreros">
         <RendimientoPotreros />
       </FeatureGate>
 
@@ -319,6 +339,7 @@ const Potreros = ({ soloLectura = false }) => {
           onCerrar={() => setPotreroDetalle(null)}
         />
       )}
+      </>}
     </section>
   );
 };

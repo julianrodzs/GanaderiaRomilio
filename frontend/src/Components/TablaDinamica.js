@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import PaginacionTabla, { usePaginacionTabla } from './PaginacionTabla';
 
 const obtenerValor = (fila, columna) => {
   const valor = columna.accessor(fila);
@@ -90,8 +91,10 @@ const TablaDinamica = ({
       ['Todos', ...(filtro.opciones || Array.from(new Set(datos.map((fila) => filtro.accessor(fila)).filter(Boolean))).sort())]
     ]));
   }, [datos, filtros]);
+  const paginacion = usePaginacionTabla(datosFiltrados);
 
   const cambiarOrden = (campo) => {
+    paginacion.setPagina(1);
     setOrden((actual) => ({
       campo,
       direccion: actual.campo === campo && actual.direccion === 'asc' ? 'desc' : 'asc'
@@ -114,14 +117,20 @@ const TablaDinamica = ({
       <div className="tabla-toolbar">
         <input
           value={busqueda}
-          onChange={(evento) => setBusqueda(evento.target.value)}
+          onChange={(evento) => {
+            setBusqueda(evento.target.value);
+            paginacion.setPagina(1);
+          }}
           placeholder="Buscar..."
         />
         {filtros.map((filtro) => (
           <select
             key={filtro.id}
             value={filtrosActivos[filtro.id] || 'Todos'}
-            onChange={(evento) => setFiltrosActivos((actual) => ({ ...actual, [filtro.id]: evento.target.value }))}
+            onChange={(evento) => {
+              setFiltrosActivos((actual) => ({ ...actual, [filtro.id]: evento.target.value }));
+              paginacion.setPagina(1);
+            }}
           >
             {opcionesFiltros[filtro.id]?.map((opcion) => (
               <option key={opcion} value={opcion}>{opcion}</option>
@@ -150,7 +159,7 @@ const TablaDinamica = ({
             </tr>
           </thead>
           <tbody>
-            {datosFiltrados.map((fila) => (
+            {paginacion.datosPagina.map((fila) => (
               <tr key={fila._id || fila.id}>
                 {columnas.map((columna) => (
                   <td key={columna.id} className={columna.className || undefined}>{renderizarValor(fila, columna)}</td>
@@ -169,6 +178,17 @@ const TablaDinamica = ({
           </tbody>
         </table>
       </div>
+      <PaginacionTabla
+        pagina={paginacion.pagina}
+        tamanoPagina={paginacion.tamanoPagina}
+        total={paginacion.total}
+        totalPaginas={paginacion.totalPaginas}
+        onPagina={paginacion.setPagina}
+        onTamanoPagina={(tamano) => {
+          paginacion.setTamanoPagina(tamano);
+          paginacion.setPagina(1);
+        }}
+      />
     </section>
   );
 };

@@ -22,6 +22,7 @@ app.get('/', (req, res)=>{
 
 // rutas principales
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/cron', require('./routes/cronRoutes'));
 app.use('/api/usuarios', require('./routes/usuario'));
 app.use('/api/admin/organizaciones', authPlataforma, require('./routes/adminOrganizacionRoutes'));
 app.use('/api/auditoria', auth, require('./routes/auditoriaRoutes'));
@@ -36,6 +37,7 @@ app.use('/api/genealogia', auth, require('./routes/genealogiaRoutes'));
 app.use('/api/eventos-animal', auth, require('./routes/eventoAnimalRoutes'));
 app.use('/api/eventos-camada', auth, require('./routes/eventoCamadaRoutes'));
 app.use('/api/potreros', auth, require('./routes/potrero'));
+app.use('/api/pastos', auth, require('./routes/pasto'));
 app.use('/api/pesajes', auth, require('./routes/pesaje'));
 app.use('/api/sanidad', auth, require('./routes/sanidad'));
 app.use('/api/plan-sanitario', auth, require('./routes/planSanitario'));

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Animal = require('../models/Animal');
 
-const CAMPOS_ANIMAL = 'diio identificadorFinca nombre sexo raza padre madre padreExternoNombre madreExternaNombre registroGenealogico observacionesGenealogicas origenGenealogico fechaNacimiento estado';
+const CAMPOS_ANIMAL = 'diio identificadorFinca nombre sexo especie categoria objetivoProductivo raza razaPrincipal razaSecundaria grupoRacial gradoRacial descripcionRacial padre madre padreDiio madreDiio padreExternoNombre madreExternaNombre registroGenealogico observacionesGenealogicas origenGenealogico fechaNacimiento estado pesoActual';
 const MAX_GENERACIONES_VALIDACION = 12;
 
 const normalizarId = (valor) => {
@@ -170,6 +170,103 @@ const obtenerDescendencia = async (animalId) => {
     };
 };
 
+const crearFiltroLegado = (campoRelacion, campoDiio, animalId, identificadores) => {
+    const alternativas = [{ [campoRelacion]: animalId }];
+    if (identificadores.length) {
+        alternativas.push({
+            $and: [
+                { $or: [{ [campoRelacion]: null }, { [campoRelacion]: { $exists: false } }] },
+                { [campoDiio]: { $in: identificadores } }
+            ]
+        });
+    }
+    return alternativas;
+};
+
+const obtenerCriasDirectas = async (animalId) => {
+    const animal = await obtenerAnimalBasico(animalId);
+    if (!animal) throw crearError('Animal no encontrado.', 404);
+
+    const identificadores = [...new Set([animal.diio, animal.identificadorFinca].filter(Boolean))];
+    const alternativas = animal.sexo === 'Hembra'
+        ? crearFiltroLegado('madre', 'madreDiio', animal._id, identificadores)
+        : animal.sexo === 'Macho'
+            ? crearFiltroLegado('padre', 'padreDiio', animal._id, identificadores)
+            : [
+                ...crearFiltroLegado('madre', 'madreDiio', animal._id, identificadores),
+                ...crearFiltroLegado('padre', 'padreDiio', animal._id, identificadores)
+            ];
+
+    const crias = await Animal.find({ $or: alternativas })
+        .select(CAMPOS_ANIMAL)
+        .populate('padre', CAMPOS_ANIMAL)
+        .populate('madre', CAMPOS_ANIMAL)
+        .sort({ fechaNacimiento: -1, createdAt: -1 })
+        .lean();
+
+    return { animal, crias };
+};
+
+const contarCriasPorSexo = (crias) => ({
+    machos: crias.filter((cria) => cria.sexo === 'Macho').length,
+    hembras: crias.filter((cria) => cria.sexo === 'Hembra').length
+});
+
+const contarCriasPorEstado = (crias) => ({
+    activos: crias.filter((cria) => cria.estado === 'Activo').length,
+    vendidos: crias.filter((cria) => cria.estado === 'Vendido').length,
+    muertos: crias.filter((cria) => cria.estado === 'Muerto').length
+});
+
+const obtenerFechaExtrema = (crias, ultima = false) => {
+    const fechas = crias.map((cria) => cria.fechaNacimiento).filter(Boolean).map((valor) => new Date(valor));
+    if (!fechas.length) return null;
+    return new Date((ultima ? Math.max : Math.min)(...fechas.map((valor) => valor.getTime())));
+};
+
+const obtenerMadresAsociadasToro = (crias) => {
+    const madres = new Map();
+    crias.forEach((cria) => {
+        const madre = cria.madre;
+        const clave = madre?._id
+            ? String(madre.diio || madre.identificadorFinca || madre._id).toUpperCase()
+            : String(normalizarId(cria.madreDiio || cria.madreExternaNombre) || '').toUpperCase();
+        if (!clave) return;
+        if (!madres.has(clave)) {
+            madres.set(clave, madre || {
+                diio: cria.madreDiio,
+                nombre: cria.madreExternaNombre,
+                externo: true
+            });
+        }
+    });
+    return [...madres.values()];
+};
+
+const obtenerResumenDescendencia = async (animalId) => {
+    const { animal, crias } = await obtenerCriasDirectas(animalId);
+    const madres = animal.sexo === 'Macho' ? obtenerMadresAsociadasToro(crias) : [];
+    return {
+        animal: {
+            id: animal._id,
+            diio: animal.diio,
+            identificadorFinca: animal.identificadorFinca,
+            nombre: animal.nombre,
+            sexo: animal.sexo
+        },
+        resumen: {
+            totalCrias: crias.length,
+            ...contarCriasPorSexo(crias),
+            ...contarCriasPorEstado(crias),
+            madresDiferentes: animal.sexo === 'Macho' ? madres.length : null,
+            primeraCria: obtenerFechaExtrema(crias),
+            ultimaCria: obtenerFechaExtrema(crias, true)
+        },
+        madres,
+        crias
+    };
+};
+
 const intersectarAncestros = async (animalA, animalB, generaciones = 3) => {
     const ancestrosA = await obtenerAncestros(animalA, generaciones);
     const ancestrosB = await obtenerAncestros(animalB, generaciones);
@@ -316,6 +413,11 @@ const prepararDatosGenealogia = (datos) => {
 module.exports = {
     obtenerArbolGenealogico,
     obtenerDescendencia,
+    obtenerCriasDirectas,
+    obtenerResumenDescendencia,
+    contarCriasPorSexo,
+    contarCriasPorEstado,
+    obtenerMadresAsociadasToro,
     validarRelacionGenealogica,
     detectarParentesco,
     calcularRiesgoCruce,

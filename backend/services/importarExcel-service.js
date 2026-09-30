@@ -14,6 +14,10 @@ const {
 const { asegurarPuedeCrearAnimal, puedeUsarEspecie } = require('./plan-service');
 const { obtenerFincaActual } = require('../context/organizacion-context');
 const { validarObjetivoProductivoFinca } = require('./finca-service');
+const { obtenerCatalogoRacial, prepararDatosRaciales } = require('./raza-service');
+const HistorialCoberturaPotrero = require('../models/HistorialCoberturaPotrero');
+const { CATALOGO_PASTOS_BASE } = require('../config/catalogoPastos');
+const { guardarCobertura, resolverPastoPorTexto } = require('./potreroCobertura-service');
 
 const VERSION_PLANTILLA = '1';
 const HOJAS_DATOS = ['POTREROS', 'INVENTARIO', 'FINANZAS', 'PESAJES'];
@@ -22,12 +26,19 @@ const HOJAS_AUXILIARES = ['INSTRUCCIONES', 'CATALOGOS'];
 const COLUMNAS = {
     POTREROS: {
         requeridas: ['CODIGO', 'NOMBRE'],
-        opcionales: ['AREA_HECTAREAS', 'CAPACIDAD_MAXIMA', 'UBICACION', 'ESTADO', 'OBSERVACIONES']
+        opcionales: [
+            'AREA_HECTAREAS', 'CAPACIDAD_MAXIMA', 'UBICACION', 'ESTADO',
+            'TIPO_AREA',
+            'PASTO', 'PASTO_PRINCIPAL', 'TIPO_PASTO', 'FECHA_ESTABLECIMIENTO_PASTO',
+            'DIAS_DESCANSO_OBJETIVO', 'INTERVALO_CORTE_OBJETIVO_DIAS', 'OBSERVACION_COBERTURA', 'OBSERVACIONES'
+        ]
     },
     INVENTARIO: {
         requeridas: ['DIIO', 'ESPECIE', 'SEXO', 'CATEGORIA'],
         opcionales: [
-            'NOMBRE', 'RAZA', 'FECHA_NACIMIENTO', 'MADRE_DIIO', 'PADRE_DIIO',
+            'NOMBRE', 'RAZA', 'RAZA_PRINCIPAL', 'RAZA_SECUNDARIA', 'DESCRIPCION_RACIAL',
+            'GRADO_RACIAL', 'VARIEDAD_RACIAL', 'COMPOSICION_RACIAL',
+            'FECHA_NACIMIENTO', 'MADRE_DIIO', 'PADRE_DIIO',
             'PESO_ACTUAL_KG', 'OBJETIVO_PRODUCTIVO', 'ETAPA_PRODUCTIVA', 'ESTADO',
             'ESTADO_SANITARIO', 'POTRERO_CODIGO', 'OBSERVACIONES'
         ]
@@ -193,6 +204,15 @@ const mapearPotreros = (hoja, errores) => {
         const nombre = limpiarTexto(leer('NOMBRE'));
         const area = numero(leer('AREA_HECTAREAS'));
         const capacidadMaxima = numero(leer('CAPACIDAD_MAXIMA'));
+        const tipoAreaTexto = limpiarTexto(leer('TIPO_AREA')) || 'PASTOREO';
+        const tipoArea = valorCanonico(tipoAreaTexto, ['PASTOREO', 'BANCO_FORRAJERO']);
+        const pastoTexto = limpiarTexto(leer('PASTO_PRINCIPAL') || leer('PASTO') || leer('TIPO_PASTO'));
+        const fechaEstablecimientoPastoTexto = limpiarTexto(leer('FECHA_ESTABLECIMIENTO_PASTO'));
+        const fechaEstablecimientoPasto = fechaEstablecimientoPastoTexto ? fecha(leer('FECHA_ESTABLECIMIENTO_PASTO')) : undefined;
+        const diasDescansoObjetivoTexto = limpiarTexto(leer('DIAS_DESCANSO_OBJETIVO'));
+        const diasDescansoObjetivo = numero(leer('DIAS_DESCANSO_OBJETIVO'));
+        const intervaloCorteTexto = limpiarTexto(leer('INTERVALO_CORTE_OBJETIVO_DIAS'));
+        const intervaloCorteObjetivoDias = numero(leer('INTERVALO_CORTE_OBJETIVO_DIAS'));
         const estadoTexto = limpiarTexto(leer('ESTADO')) || 'Disponible';
         const estado = valorCanonico(estadoTexto, ['Disponible', 'Ocupado', 'Descanso', 'Mantenimiento']);
 
@@ -201,7 +221,11 @@ const mapearPotreros = (hoja, errores) => {
         if (codigo && codigos.has(normalizarTexto(codigo))) agregarError(errores, 'POTREROS', numeroFila, 'CODIGO', codigo, 'El código está repetido dentro del archivo.', 'DUPLICADO_ARCHIVO');
         if (limpiarTexto(leer('AREA_HECTAREAS')) && (area === undefined || area < 0)) agregarError(errores, 'POTREROS', numeroFila, 'AREA_HECTAREAS', leer('AREA_HECTAREAS'), 'Debe ser un número mayor o igual a cero.');
         if (limpiarTexto(leer('CAPACIDAD_MAXIMA')) && (capacidadMaxima === undefined || capacidadMaxima < 0)) agregarError(errores, 'POTREROS', numeroFila, 'CAPACIDAD_MAXIMA', leer('CAPACIDAD_MAXIMA'), 'Debe ser un número mayor o igual a cero.');
+        if (fechaEstablecimientoPastoTexto && !fechaEstablecimientoPasto) agregarError(errores, 'POTREROS', numeroFila, 'FECHA_ESTABLECIMIENTO_PASTO', leer('FECHA_ESTABLECIMIENTO_PASTO'), 'Fecha inválida. Use DD/MM/AAAA.');
+        if (diasDescansoObjetivoTexto && (diasDescansoObjetivo === undefined || diasDescansoObjetivo < 0)) agregarError(errores, 'POTREROS', numeroFila, 'DIAS_DESCANSO_OBJETIVO', leer('DIAS_DESCANSO_OBJETIVO'), 'Debe ser un número mayor o igual a cero.');
         if (!estado) agregarError(errores, 'POTREROS', numeroFila, 'ESTADO', estadoTexto, 'Estado de potrero no permitido.');
+        if (!tipoArea) agregarError(errores, 'POTREROS', numeroFila, 'TIPO_AREA', tipoAreaTexto, 'Use PASTOREO o BANCO_FORRAJERO.');
+        if (intervaloCorteTexto && (intervaloCorteObjetivoDias === undefined || intervaloCorteObjetivoDias < 1)) agregarError(errores, 'POTREROS', numeroFila, 'INTERVALO_CORTE_OBJETIVO_DIAS', leer('INTERVALO_CORTE_OBJETIVO_DIAS'), 'Debe ser un número mayor o igual a uno.');
 
         if (codigo) codigos.add(normalizarTexto(codigo));
         if (errores.length !== inicioErrores) return;
@@ -210,10 +234,16 @@ const mapearPotreros = (hoja, errores) => {
             filaOrigen: numeroFila,
             codigo,
             nombre,
+            tipoArea,
             area,
             capacidadMaxima,
             ubicacion: limpiarTexto(leer('UBICACION')) || undefined,
             estado,
+            pastoTexto: pastoTexto || undefined,
+            fechaEstablecimientoPasto,
+            diasDescansoObjetivo,
+            intervaloCorteObjetivoDias,
+            observacionCobertura: limpiarTexto(leer('OBSERVACION_COBERTURA')) || undefined,
             observaciones: limpiarTexto(leer('OBSERVACIONES')) || undefined
         });
     });
@@ -273,6 +303,12 @@ const mapearInventario = (hoja, errores) => {
             etapaProductiva,
             nombre: limpiarTexto(leer('NOMBRE')) || undefined,
             raza: limpiarTexto(leer('RAZA')) || undefined,
+            razaPrincipal: limpiarTexto(leer('RAZA_PRINCIPAL')) || undefined,
+            razaSecundaria: limpiarTexto(leer('RAZA_SECUNDARIA')) || undefined,
+            descripcionRacial: limpiarTexto(leer('DESCRIPCION_RACIAL')) || undefined,
+            gradoRacial: limpiarTexto(leer('GRADO_RACIAL')) || undefined,
+            variedadRacial: limpiarTexto(leer('VARIEDAD_RACIAL')) || undefined,
+            composicionRacial: limpiarTexto(leer('COMPOSICION_RACIAL')) || undefined,
             fechaNacimiento: nacimiento,
             madreDiio: limpiarTexto(leer('MADRE_DIIO')) || undefined,
             padreDiio: limpiarTexto(leer('PADRE_DIIO')) || undefined,
@@ -420,6 +456,22 @@ const procesarExcelPreview = async (buffer, opciones = {}) => {
         MovimientoFinanciero: preparadas.FINANZAS?.columnasValidas ? mapearFinanzas(preparadas.FINANZAS, errores, catalogos) : [],
         Pesaje: []
     };
+    const resolverCobertura = opciones.resolverPasto || resolverPastoPorTexto;
+    for (const potrero of registros.Potrero) {
+        if (!potrero.pastoTexto) continue;
+        const categoria = potrero.tipoArea === 'BANCO_FORRAJERO' ? 'Pasto de corte' : 'Pasto';
+        const uso = potrero.tipoArea === 'BANCO_FORRAJERO' ? 'CORTE' : 'PASTOREO';
+        const catalogado = await resolverCobertura(potrero.pastoTexto, categoria, uso);
+        if (catalogado) {
+            potrero.pastoPrincipal = catalogado._id;
+        } else {
+            potrero.descripcionCobertura = potrero.pastoTexto;
+            advertencias.push({
+                hoja: 'POTREROS',
+                mensaje: `Fila ${potrero.filaOrigen}: el pasto "${potrero.pastoTexto}" no está en el catálogo y quedará pendiente de revisión.`
+            });
+        }
+    }
     const diiosDisponibles = new Set([...(opciones.diiosExistentes || []).map(normalizarTexto), ...registros.Animal.map((animal) => normalizarTexto(animal.diio))]);
     if (preparadas.PESAJES?.columnasValidas) registros.Pesaje = mapearPesajes(preparadas.PESAJES, errores, diiosDisponibles);
 
@@ -451,6 +503,12 @@ const procesarExcelPreview = async (buffer, opciones = {}) => {
 const sinVacios = (datos) => Object.fromEntries(
     Object.entries(datos).filter(([clave, valor]) => clave !== 'filaOrigen'
         && clave !== 'potreroCodigo'
+        && clave !== 'pastoTexto'
+        && clave !== 'pastoPrincipal'
+        && clave !== 'fechaEstablecimientoPasto'
+        && clave !== 'diasDescansoObjetivo'
+        && clave !== 'observacionCobertura'
+        && clave !== 'descripcionCobertura'
         && valor !== undefined
         && valor !== null
         && valor !== '')
@@ -474,10 +532,40 @@ const importarPotreros = async (registros, modo, resultado) => {
                 }
                 Object.assign(existente, sinVacios(registro));
                 await existente.save();
+                if (registro.pastoTexto || registro.diasDescansoObjetivo !== undefined || registro.intervaloCorteObjetivoDias !== undefined || registro.observacionCobertura) {
+                    const vigente = await HistorialCoberturaPotrero.findOne({ potrero: existente._id, fechaFin: null });
+                    const mismaCobertura = String(vigente?.pastoPrincipal || '') === String(registro.pastoPrincipal || '')
+                        && String(vigente?.descripcionCobertura || '') === String(registro.descripcionCobertura || '');
+                    if (!vigente || !mismaCobertura
+                        || Number(vigente.diasDescansoObjetivo ?? -1) !== Number(registro.diasDescansoObjetivo ?? -1)
+                        || Number(vigente.intervaloCorteObjetivoDias ?? -1) !== Number(registro.intervaloCorteObjetivoDias ?? -1)
+                        || String(vigente.observacionCobertura || '') !== String(registro.observacionCobertura || '')) {
+                        await guardarCobertura(existente._id, {
+                            pastoPrincipal: registro.pastoPrincipal,
+                            descripcionCobertura: registro.descripcionCobertura,
+                            fechaEstablecimientoPasto: registro.fechaEstablecimientoPasto,
+                            fechaCambio: registro.fechaEstablecimientoPasto || new Date(),
+                            diasDescansoObjetivo: registro.diasDescansoObjetivo,
+                            intervaloCorteObjetivoDias: registro.intervaloCorteObjetivoDias,
+                            observacionCobertura: registro.observacionCobertura
+                        }, { soloInicial: !vigente });
+                    }
+                }
                 resultado.actualizados += 1;
                 continue;
             }
-            await Potrero.create(sinVacios(registro));
+            const creado = await Potrero.create(sinVacios(registro));
+            if (registro.pastoTexto || registro.diasDescansoObjetivo !== undefined || registro.intervaloCorteObjetivoDias !== undefined || registro.observacionCobertura) {
+                await guardarCobertura(creado._id, {
+                    pastoPrincipal: registro.pastoPrincipal,
+                    descripcionCobertura: registro.descripcionCobertura,
+                    fechaEstablecimientoPasto: registro.fechaEstablecimientoPasto,
+                    fechaCambio: registro.fechaEstablecimientoPasto || new Date(),
+                    diasDescansoObjetivo: registro.diasDescansoObjetivo,
+                    intervaloCorteObjetivoDias: registro.intervaloCorteObjetivoDias,
+                    observacionCobertura: registro.observacionCobertura
+                }, { soloInicial: true });
+            }
             resultado.creados += 1;
         } catch (error) {
             registrarErrorConfirmacion(resultado, registro, error);
@@ -489,7 +577,7 @@ const importarAnimales = async (registros, modo, resultado) => {
     for (const registro of registros) {
         try {
             const existente = await Animal.findOne({ $or: [{ diio: registro.diio }, { identificadorFinca: registro.diio }] });
-            const datos = sinVacios(registro);
+            let datos = sinVacios(registro);
             if (registro.potreroCodigo) {
                 const potrero = await Potrero.findOne({ codigo: registro.potreroCodigo }).select('_id');
                 if (!potrero) throw new Error(`No existe el potrero ${registro.potreroCodigo}.`);
@@ -518,6 +606,7 @@ const importarAnimales = async (registros, modo, resultado) => {
                         await asegurarPuedeCrearAnimal({ especie: datos.especie || existente.especie || 'Bovino' });
                     }
                 }
+                datos = prepararDatosRaciales(datos, existente.toObject());
                 Object.assign(existente, datos);
                 await existente.save();
                 resultado.actualizados += 1;
@@ -531,6 +620,7 @@ const importarAnimales = async (registros, modo, resultado) => {
                 especie: datos.especie || 'Bovino',
                 objetivoProductivo: datos.objetivoProductivo
             });
+            datos = prepararDatosRaciales(datos);
             await Animal.create(datos);
             resultado.creados += 1;
         } catch (error) {
@@ -660,21 +750,31 @@ const generarPlantillaExcel = (catalogos = {}) => {
         ['USO', 'Conserve los nombres de hojas y columnas. Puede eliminar hojas que no vaya a importar.'],
         ['FECHAS', 'Use DD/MM/AAAA.'],
         ['INVENTARIO', 'DIIO, ESPECIE, SEXO y CATEGORIA son obligatorios.'],
+        ['RAZAS', 'RAZA conserva la descripción libre. RAZA_PRINCIPAL y RAZA_SECUNDARIA permiten normalizar bovinos.'],
+        ['GENEALOGIA', 'MADRE_DIIO y PADRE_DIIO se enlazan si existen; si no, se conservan para resolverlos después.'],
         ['FINANZAS', 'Las categorías y destinos deben existir y estar activos en Catálogos de Finanzas.'],
         ['PESAJES', 'Hoja opcional. El DIIO debe existir o venir en INVENTARIO.'],
+        ['PASTOS', 'En POTREROS use TIPO_AREA y PASTO_PRINCIPAL. BANCO_FORRAJERO acepta forrajes de corte.'],
         ['ROTACIONES', 'No forman parte del importador estándar. Se gestionan dentro de la aplicación.']
     ];
     const hojaInstrucciones = XLSX.utils.aoa_to_sheet(instrucciones);
     hojaInstrucciones['!cols'] = [{ wch: 24 }, { wch: 100 }];
     XLSX.utils.book_append_sheet(libro, hojaInstrucciones, 'INSTRUCCIONES');
 
-    XLSX.utils.book_append_sheet(libro, hojaConColumnas([...COLUMNAS.POTREROS.requeridas, ...COLUMNAS.POTREROS.opcionales], [18, 28, 18, 20, 28, 18, 45]), 'POTREROS');
+    XLSX.utils.book_append_sheet(libro, hojaConColumnas(
+        ['CODIGO', 'NOMBRE', 'TIPO_AREA', 'AREA_HECTAREAS', 'CAPACIDAD_MAXIMA', 'UBICACION', 'ESTADO', 'PASTO_PRINCIPAL', 'FECHA_ESTABLECIMIENTO_PASTO', 'DIAS_DESCANSO_OBJETIVO', 'INTERVALO_CORTE_OBJETIVO_DIAS', 'OBSERVACION_COBERTURA', 'OBSERVACIONES'],
+        [18, 28, 22, 18, 20, 28, 18, 28, 24, 24, 28, 38, 45]
+    ), 'POTREROS');
     XLSX.utils.book_append_sheet(libro, hojaConColumnas([...COLUMNAS.INVENTARIO.requeridas, ...COLUMNAS.INVENTARIO.opcionales], [18, 14, 12, 18, 24, 20, 20, 18, 18, 18, 16, 22, 20, 45]), 'INVENTARIO');
     XLSX.utils.book_append_sheet(libro, hojaConColumnas([...COLUMNAS.FINANZAS.requeridas, ...COLUMNAS.FINANZAS.opcionales], [16, 14, 24, 22, 42, 16, 12, 28, 14, 14, 18, 26, 22, 20, 22, 22, 45]), 'FINANZAS');
     XLSX.utils.book_append_sheet(libro, hojaConColumnas([...COLUMNAS.PESAJES.requeridas, ...COLUMNAS.PESAJES.opcionales], [18, 16, 14, 45]), 'PESAJES');
 
-    const largo = Math.max(categorias.length, destinos.length, TIPOS_MOVIMIENTO_FINANCIERO.length, 8);
-    const filasCatalogos = [['CATEGORIAS_FINANCIERAS', 'DESTINOS_USO', 'TIPOS_MOVIMIENTO', 'NATURALEZAS', 'MONEDAS', 'ESPECIES', 'SEXOS', 'ESTADOS_POTRERO']];
+    const catalogoRacial = obtenerCatalogoRacial();
+    const pastos = CATALOGO_PASTOS_BASE.filter((item) => item.categoria === 'Pasto').map((item) => item.nombre);
+    const forrajesCorte = CATALOGO_PASTOS_BASE.filter((item) => item.categoria === 'Pasto de corte').map((item) => item.nombre);
+    const leguminosas = CATALOGO_PASTOS_BASE.filter((item) => item.categoria === 'Leguminosa/Forraje').map((item) => item.nombre);
+    const largo = Math.max(categorias.length, destinos.length, TIPOS_MOVIMIENTO_FINANCIERO.length, catalogoRacial.razas.length, pastos.length, forrajesCorte.length, 8);
+    const filasCatalogos = [['CATEGORIAS_FINANCIERAS', 'DESTINOS_USO', 'TIPOS_MOVIMIENTO', 'NATURALEZAS', 'MONEDAS', 'ESPECIES', 'SEXOS', 'ESTADOS_POTRERO', 'TIPOS_AREA', 'RAZAS_BOVINAS', 'GRADOS_RACIALES', 'COMPOSICIONES_RACIALES', 'PASTOS', 'FORRAJES_CORTE', 'LEGUMINOSAS_FORRAJES']];
     for (let indice = 0; indice < largo; indice += 1) {
         filasCatalogos.push([
             categorias[indice] || '',
@@ -684,11 +784,18 @@ const generarPlantillaExcel = (catalogos = {}) => {
             MONEDAS_FINANCIERAS[indice] || '',
             ['Bovino', 'Porcino'][indice] || '',
             ['Macho', 'Hembra'][indice] || '',
-            ['Disponible', 'Ocupado', 'Descanso', 'Mantenimiento'][indice] || ''
+            ['Disponible', 'Ocupado', 'Descanso', 'Mantenimiento'][indice] || '',
+            ['PASTOREO', 'BANCO_FORRAJERO'][indice] || '',
+            catalogoRacial.razas[indice] || '',
+            catalogoRacial.gradosRaciales[indice] || '',
+            catalogoRacial.composicionesRaciales[indice] || '',
+            pastos[indice] || '',
+            forrajesCorte[indice] || '',
+            leguminosas[indice] || ''
         ]);
     }
     const hojaCatalogos = XLSX.utils.aoa_to_sheet(filasCatalogos);
-    hojaCatalogos['!cols'] = Array.from({ length: 8 }, () => ({ wch: 26 }));
+    hojaCatalogos['!cols'] = Array.from({ length: 15 }, () => ({ wch: 26 }));
     XLSX.utils.book_append_sheet(libro, hojaCatalogos, 'CATALOGOS');
 
     return XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' });

@@ -2502,6 +2502,45 @@ Filtros de productos:
 
 Los reportes de productos usan `categoria`, `unidadNormalizada`, `factorUnidad` y `cantidadFisica` cuando existen. Si un movimiento viejo no tiene campos de unidad normalizada, el reporte usa `unidad` y calcula la cantidad fisica en el pipeline como respaldo.
 
+## Rendimiento de potreros y cobertura
+
+```text
+GET /api/reportes/potreros/rendimiento?fechaInicio=&fechaFin=
+GET /api/reportes/potreros/por-pasto?fechaInicio=&fechaFin=&agruparPor=pasto
+```
+
+Fuentes: `Potrero`, `RotacionPotrero`, `CatalogoPasto` e `HistorialCoberturaPotrero`.
+
+La primera ruta compara potreros e incluye la cobertura actual y el descanso real frente a `diasDescansoObjetivo`. La segunda acepta `agruparPor=pasto` o `agruparPor=especieBase` y devuelve:
+
+- cantidad de potreros y area observada.
+- dias ocupados, porcentaje promedio y numero de rotaciones.
+- animales promedio, animal-dias y animal-dias por hectarea.
+- descanso promedio, minimo, maximo, objetivo y diferencia.
+- detalle comparable de los potreros incluidos en el grupo.
+
+La asignacion es historica: si una rotacion cruza un cambio de cobertura, el servicio reparte sus dias y animal-dias entre ambos periodos. Las rotaciones previas al primer registro aparecen como `Sin cobertura registrada`; una descripcion importada sin catalogar aparece como pendiente de revision.
+
+Estos reportes describen desempeno observado. No califican un pasto como mejor, no atribuyen causalidad y no mezclan GMD con la evaluacion de cobertura.
+
+## Razas bovinas
+
+```text
+GET /api/reportes/bovinos/razas
+```
+
+Fuente: inventario bovino. Usa `grupoRacial` para el primer nivel y la combinación `razaPrincipal × razaSecundaria` para el detalle. Los animales históricos sin estructura aparecen como pendientes de normalización y no se reinterpretan destructivamente.
+
+## Descendencia bovina
+
+```text
+GET /api/reportes/bovinos/descendencia?fechaInicio=&fechaFin=
+```
+
+Las crías se derivan de `Animal.madre` y `Animal.padre`. Cuando no hay referencia interna se usa `madreDiio` o `padreDiio` como respaldo. Los partos se cuentan separadamente desde `RegistroReproductivo.fechaPartoReal`.
+
+El período filtra la fecha real del parto y la fecha de nacimiento de la cría. Una vaca puede mostrar más crías que partos si hubo un parto múltiple. El reporte de toros muestra utilización registrada (`crías` y `madres diferentes`), no una calificación genética.
+
 Filtros porcinos:
 
 - `fechaInicio`

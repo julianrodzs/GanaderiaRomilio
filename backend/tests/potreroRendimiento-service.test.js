@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
     calcularDiasRotacion,
+    calcularRendimientoPorPastoConDatos,
     calcularRendimientoPotrero,
     resolverPeriodo
 } = require('../services/potreroRendimiento-service');
@@ -19,6 +20,56 @@ test('recorta rotaciones que cruzan meses y omite las planificadas', () => {
         fechaEntrada: '2026-09-05',
         fechaSalida: '2026-09-08'
     }, periodoSeptiembre), 0);
+});
+
+test('asigna una rotacion que cruza un cambio a cada cobertura historica', () => {
+    const resultado = calcularRendimientoPorPastoConDatos({
+        potreros: [{ _id: 'p1', codigo: 'P-1', nombre: 'Uno', area: 2 }],
+        rotaciones: [{ _id: 'r1', potrero: 'p1', estado: 'Finalizada', fechaEntrada: '2026-01-10', fechaSalida: '2026-01-20', numeroAnimales: 10 }],
+        historiales: [
+            { potrero: 'p1', pastoPrincipal: { _id: 'a', nombre: 'Brizantha', especieBase: 'Urochloa brizantha' }, fechaInicio: '2025-01-01', fechaFin: '2026-01-14' },
+            { potrero: 'p1', pastoPrincipal: { _id: 'b', nombre: 'Mombaza', especieBase: 'Megathyrsus maximus' }, fechaInicio: '2026-01-15', fechaFin: null }
+        ]
+    }, { fechaInicio: '2026-01-01', fechaFin: '2026-01-31', hoy: '2026-01-31' });
+
+    assert.equal(resultado.grupos.length, 2);
+    assert.equal(resultado.grupos.find((item) => item.nombre === 'Brizantha').animalDias, 50);
+    assert.equal(resultado.grupos.find((item) => item.nombre === 'Mombaza').animalDias, 50);
+});
+
+test('agrupa potreros con el mismo pasto sin duplicar su area', () => {
+    const pasto = { _id: 'a', nombre: 'Toledo', especieBase: 'Urochloa brizantha' };
+    const resultado = calcularRendimientoPorPastoConDatos({
+        potreros: [
+            { _id: 'p1', codigo: 'P-1', nombre: 'Uno', area: 2 },
+            { _id: 'p2', codigo: 'P-2', nombre: 'Dos', area: 3 }
+        ],
+        rotaciones: [
+            { _id: 'r1', potrero: 'p1', estado: 'Finalizada', fechaEntrada: '2026-01-01', fechaSalida: '2026-01-11', numeroAnimales: 10 },
+            { _id: 'r2', potrero: 'p2', estado: 'Finalizada', fechaEntrada: '2026-01-01', fechaSalida: '2026-01-06', numeroAnimales: 20 }
+        ],
+        historiales: [
+            { potrero: 'p1', pastoPrincipal: pasto, fechaInicio: '2025-01-01', fechaFin: null },
+            { potrero: 'p2', pastoPrincipal: pasto, fechaInicio: '2025-01-01', fechaFin: null }
+        ]
+    }, { fechaInicio: '2026-01-01', fechaFin: '2026-01-31', hoy: '2026-01-31' });
+
+    assert.equal(resultado.grupos.length, 1);
+    assert.equal(resultado.grupos[0].cantidadPotreros, 2);
+    assert.equal(resultado.grupos[0].areaHectareas, 5);
+    assert.equal(resultado.grupos[0].animalDias, 200);
+    assert.equal(resultado.grupos[0].animalDiasPorHectarea, 40);
+});
+
+test('mantiene un grupo explicito para rotaciones sin cobertura', () => {
+    const resultado = calcularRendimientoPorPastoConDatos({
+        potreros: [{ _id: 'p1', codigo: 'P-1', nombre: 'Uno', area: 1 }],
+        rotaciones: [{ _id: 'r1', potrero: 'p1', estado: 'Finalizada', fechaEntrada: '2026-01-01', fechaSalida: '2026-01-03', numeroAnimales: 4 }],
+        historiales: []
+    }, { fechaInicio: '2026-01-01', fechaFin: '2026-01-31' });
+
+    assert.equal(resultado.grupos[0].nombre, 'Sin cobertura registrada');
+    assert.equal(resultado.grupos[0].animalDias, 8);
 });
 
 test('una rotacion real de entrada y salida el mismo dia cuenta un dia', () => {

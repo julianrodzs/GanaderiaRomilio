@@ -36,6 +36,13 @@ const animalSchema = new Schema(
         nombre: { type: String, trim: true },
         sexo: { type: String, enum: ['Macho', 'Hembra'], required: true },
         raza: { type: String, trim: true },
+        razaPrincipal: { type: String, trim: true },
+        razaSecundaria: { type: String, trim: true },
+        grupoRacial: { type: String, trim: true },
+        gradoRacial: { type: String, trim: true },
+        variedadRacial: { type: String, trim: true },
+        descripcionRacial: { type: String, trim: true },
+        composicionRacial: { type: String, trim: true },
         madreDiio: { type: String, trim: true },
         padreDiio: { type: String, trim: true },
         padre: { type: Schema.Types.ObjectId, ref: 'Animal' },
@@ -102,5 +109,10 @@ animalSchema.index({ especie: 1, categoria: 1 });
 animalSchema.index({ especie: 1, objetivoProductivo: 1, estado: 1 });
 animalSchema.index({ camadaOrigen: 1, categoria: 1 });
 animalSchema.index({ estado: 1, potreroActual: 1 });
+animalSchema.index({ organizacionId: 1, fincaId: 1, madre: 1, fechaNacimiento: -1 });
+animalSchema.index({ organizacionId: 1, fincaId: 1, padre: 1, fechaNacimiento: -1 });
+animalSchema.index({ organizacionId: 1, fincaId: 1, madreDiio: 1, fechaNacimiento: -1 });
+animalSchema.index({ organizacionId: 1, fincaId: 1, padreDiio: 1, fechaNacimiento: -1 });
+animalSchema.index({ organizacionId: 1, fincaId: 1, especie: 1, grupoRacial: 1 });
 
 module.exports = model('Animal', animalSchema);

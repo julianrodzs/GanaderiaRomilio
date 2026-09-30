@@ -16,6 +16,7 @@ const { nombreUsuario, notificarAccionSegura } = require('../services/notificaci
 const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
 const { asegurarPuedeCrearAnimal } = require('../services/plan-service');
 const { validarObjetivoProductivoFinca } = require('../services/finca-service');
+const { prepararDatosRaciales } = require('../services/raza-service');
 const { respuestaErrorPlan } = require('../middleware/plan');
 
 const reproduccionCtrl = {};
@@ -245,12 +246,16 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
                 })
                 : null;
 
-        const datosTernero = prepararDatosGenealogia({
+        const datosTernero = prepararDatosRaciales(prepararDatosGenealogia({
             identificadorFinca: identificador,
             diio: req.body.diio || undefined,
             nombre: req.body.nombre,
             sexo: req.body.sexo,
-            raza: req.body.raza || madre.raza,
+            raza: req.body.raza || madre.descripcionRacial || madre.raza,
+            razaPrincipal: req.body.razaPrincipal,
+            razaSecundaria: req.body.razaSecundaria,
+            gradoRacial: req.body.gradoRacial,
+            descripcionRacial: req.body.descripcionRacial || req.body.raza,
             especie: madre.especie || 'Bovino',
             madre: madre._id,
             madreDiio: madre.diio || madre.identificadorFinca,
@@ -261,7 +266,7 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             pesoNacimiento: req.body.pesoNacimiento,
             estado: 'Activo',
             observaciones: req.body.observaciones
-        });
+        }));
 
         await validarRelacionGenealogica(null, datosTernero.padre, datosTernero.madre);
         await asegurarPuedeCrearAnimal({

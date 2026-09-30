@@ -10,6 +10,7 @@ import {
 } from '../services/api';
 import { obtenerRangoMesActual } from '../utils/fechas';
 import SelectorEspecie from './SelectorEspecie';
+import { ContenidoPaginado } from './PaginacionTabla';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -401,8 +402,10 @@ const Compras = ({ soloLectura = false }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando compras...</div>}
 
-      <div className="tabla-scroll tabla-dinamica">
-        <table>
+      <ContenidoPaginado datos={compras}>
+        {(comprasPagina) => (
+          <div className="tabla-scroll tabla-dinamica">
+            <table>
           <thead>
             <tr>
               <th>Fecha</th>
@@ -415,7 +418,7 @@ const Compras = ({ soloLectura = false }) => {
             </tr>
           </thead>
           <tbody>
-            {compras.map((compra) => (
+            {comprasPagina.map((compra) => (
               <tr key={compra._id}>
                 <td>{formatearFecha(compra.fechaCompra)}</td>
                 <td>{compra.proveedor}</td>
@@ -434,8 +437,10 @@ const Compras = ({ soloLectura = false }) => {
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>
+            </table>
+          </div>
+        )}
+      </ContenidoPaginado>
 
       {detalle && (
         <div className="modal-backdrop">
@@ -463,25 +468,29 @@ const Compras = ({ soloLectura = false }) => {
                 Ver comprobante
               </button>
             )}
-            <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
-              <table>
-                <thead>
-                  <tr><th>{etiquetaId}</th><th>Animal</th><th>Sexo</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
-                </thead>
-                <tbody>
-                  {detalle.animales?.map((item, indice) => (
-                    <tr key={item.animal?._id || `${item.identificadorFinca}-${indice}`}>
-                      <td>{item.animal?.diio || item.diio || item.identificadorFinca || '--'}</td>
-                      <td>{item.animal?.nombre || item.nombre || '--'}</td>
-                      <td>{item.animal?.sexo || item.sexo || '--'}</td>
-                      <td>{formatearNumero(item.pesoCompraKg)} kg</td>
-                      <td>{formatearMoneda(item.precioKg)}</td>
-                      <td>{formatearMoneda(item.subtotal)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ContenidoPaginado datos={detalle.animales || []}>
+              {(animalesPagina) => (
+                <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
+                  <table>
+                    <thead>
+                      <tr><th>{etiquetaId}</th><th>Animal</th><th>Sexo</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
+                    </thead>
+                    <tbody>
+                      {animalesPagina.map((item, indice) => (
+                        <tr key={item.animal?._id || `${item.identificadorFinca}-${indice}`}>
+                          <td>{item.animal?.diio || item.diio || item.identificadorFinca || '--'}</td>
+                          <td>{item.animal?.nombre || item.nombre || '--'}</td>
+                          <td>{item.animal?.sexo || item.sexo || '--'}</td>
+                          <td>{formatearNumero(item.pesoCompraKg)} kg</td>
+                          <td>{formatearMoneda(item.precioKg)}</td>
+                          <td>{formatearMoneda(item.subtotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </ContenidoPaginado>
           </section>
         </div>
       )}

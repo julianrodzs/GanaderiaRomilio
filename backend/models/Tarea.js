@@ -13,6 +13,8 @@ const TIPOS_TAREA = [
     'Limpieza',
     'Alimentación',
     'Reproducción',
+    'Siembra',
+    'Corte de forraje',
     'Venta',
     'Sacrificio',
     'Otro'
@@ -52,10 +54,22 @@ const tareaSchema = new Schema(
                 texto: { type: String, trim: true },
                 fecha: { type: Date, default: Date.now }
             }
-        ]
+        ],
+        operacionesIdempotentes: {
+            type: [{
+                _id: false,
+                clave: { type: String, required: true, trim: true },
+                tipo: { type: String, required: true, trim: true },
+                usuario: { type: Schema.Types.ObjectId, ref: 'Usuario' },
+                ejecutadaEn: { type: Date, default: Date.now }
+            }],
+            default: [],
+            select: false
+        }
     },
     {
-        timestamps: true
+        timestamps: true,
+        optimisticConcurrency: true
     }
 );
 
@@ -65,6 +79,7 @@ tareaSchema.index({ fechaProgramada: 1 });
 tareaSchema.index({ prioridad: 1 });
 tareaSchema.index({ referenciaId: 1, moduloOrigen: 1, creadoAutomaticamente: 1 });
 tareaSchema.index({ especie: 1, estado: 1, fechaProgramada: 1 });
+tareaSchema.index({ 'operacionesIdempotentes.clave': 1 });
 
 module.exports = {
     Tarea: model('Tarea', tareaSchema),

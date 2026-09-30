@@ -17,6 +17,19 @@
 }
 
 .plan-upgrade-message span { color: #52645a; }
+.plan-upgrade-message small {
+  color: #66756c;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.plan-upgrade-message p { margin: 0; color: #31473a; }
+.reportes-bloqueados {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  grid-column: 1 / -1;
+}
 
 .mi-plan-page { display: grid; gap: 22px; }
 .mi-plan-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
@@ -318,7 +331,7 @@
 
 .app-header {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   padding-bottom: 16px;
@@ -582,10 +595,43 @@
 
 .app-nav {
   display: flex;
+  min-width: 0;
   gap: 6px;
   overflow-x: auto;
   padding-bottom: 2px;
   scrollbar-width: none;
+}
+
+.app-nav-shell {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 5px;
+}
+
+.app-nav-scroll {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #d5ddd5;
+  border-radius: 3px;
+  background: #f7f8f5;
+  color: #0b3b21;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.app-nav-scroll:hover {
+  border-color: #0b3b21;
+  background: #edf3ed;
+}
+
+.app-nav-scroll:disabled {
+  cursor: default;
+  opacity: 0.35;
 }
 
 .app-nav::-webkit-scrollbar {
@@ -673,6 +719,150 @@
   color: #8b5e00;
 }
 
+.sync-badge-conflict {
+  background: #ffe4df;
+  color: #a6221c;
+}
+
+.offline-status {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.offline-status-trigger {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #ccd6ce;
+  border-radius: 3px;
+  background: #f7f9f5;
+  color: #173d28;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.offline-status-trigger strong {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  background: #fff0cf;
+  color: #704500;
+}
+
+.offline-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #23824d;
+}
+
+.offline-status-trigger.offline .offline-status-dot {
+  background: #bc3028;
+}
+
+.offline-panel {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(390px, calc(100vw - 24px));
+  border: 1px solid #ccd6ce;
+  border-radius: 4px;
+  background: #fffdf7;
+  box-shadow: 0 12px 28px rgba(9, 52, 28, 0.16);
+  padding: 14px;
+}
+
+.offline-panel-header,
+.offline-panel-header > div,
+.offline-changes article,
+.offline-changes article > div:first-child {
+  display: flex;
+}
+
+.offline-panel-header,
+.offline-changes article > div:first-child {
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.offline-panel-header > div,
+.offline-changes article {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.offline-panel-header span,
+.offline-last-sync,
+.offline-changes small,
+.offline-scope-note {
+  color: #657269;
+  font-size: 11px;
+}
+
+.offline-panel-header button,
+.offline-change-actions button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #ccd6ce;
+  border-radius: 3px;
+  background: #f7f9f5;
+  color: #0b4a2a;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.offline-last-sync,
+.offline-scope-note,
+.offline-empty {
+  margin: 10px 0 0;
+}
+
+.offline-changes {
+  display: grid;
+  max-height: 320px;
+  margin-top: 10px;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.offline-changes article {
+  gap: 5px;
+  border: 1px solid #dfe3dc;
+  padding: 10px;
+}
+
+.offline-changes article p {
+  margin: 0;
+  color: #8b2822;
+  font-size: 12px;
+}
+
+.offline-change-state {
+  padding: 4px 6px;
+  background: #fff3d5;
+  color: #765000;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.offline-change-state.estado-conflicto,
+.offline-change-state.estado-fallido {
+  background: #ffe4df;
+  color: #a6221c;
+}
+
+.offline-change-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .dashboard-hero {
   display: flex;
   align-items: center;
@@ -742,6 +932,249 @@
 .metric-card-ipg strong,
 .metric-card-ipg small {
   color: inherit;
+}
+
+.calendario-operativo {
+  margin-top: 18px;
+  border: 1px solid #cfd8d0;
+  background: #fffdf7;
+  padding: 18px;
+}
+
+.calendario-operativo-header,
+.calendario-actividades-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.calendario-operativo-header h2,
+.calendario-actividades h3,
+.calendario-luna-resumen h3 {
+  margin: 0;
+}
+
+.selector-rango-calendario {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
+  border: 1px solid #b9c6bb;
+  padding: 3px;
+  background: #eef2ed;
+}
+
+.selector-rango-calendario button {
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  color: #284333;
+  font-weight: 800;
+}
+
+.selector-rango-calendario button.activo {
+  background: #0b4a2b;
+  color: #ffffff;
+}
+
+.calendario-operativo-contenido {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(420px, 1.4fr);
+  margin-top: 16px;
+  border-top: 1px solid #d9e0da;
+}
+
+.calendario-luna-resumen,
+.calendario-actividades {
+  min-width: 0;
+  padding-top: 16px;
+}
+
+.calendario-luna-resumen {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  border-right: 1px solid #d9e0da;
+  padding-right: 18px;
+}
+
+.calendario-actividades {
+  padding-left: 18px;
+}
+
+.calendario-hoy {
+  display: grid;
+  gap: 8px;
+}
+
+.calendario-hoy > span,
+.calendario-actividades-titulo > span {
+  color: #526058;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.info-lunar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #173d29;
+}
+
+.info-lunar-icono {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.info-lunar > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.info-lunar small {
+  color: #637068;
+  font-size: 12px;
+}
+
+.info-lunar-compacta {
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.info-lunar-compacta .info-lunar-icono {
+  font-size: 16px;
+}
+
+.fases-lunares-lista {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 8px;
+  border-top: 1px solid #dfe4df;
+}
+
+.fases-lunares-lista > div,
+.fases-lunares-lista > button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 2px 7px;
+  align-items: center;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid #dfe4df;
+  background: transparent;
+  padding: 10px 5px;
+  color: #173d29;
+  text-align: left;
+}
+
+.fases-lunares-lista > button:hover {
+  background: #edf3ed;
+}
+
+.fases-lunares-lista small {
+  grid-column: 2;
+  color: #66736b;
+}
+
+.calendario-actividad {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  border: 0;
+  border-bottom: 1px solid #dfe4df;
+  background: transparent;
+  padding: 9px 0;
+  color: #142119;
+  text-align: left;
+}
+
+.calendario-actividad:hover {
+  background: #f3f6f2;
+}
+
+.calendario-actividad time {
+  color: #0b4a2b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.calendario-actividad > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.calendario-actividad small,
+.calendario-error {
+  color: #68756d;
+}
+
+.calendario-ver-todas {
+  margin-top: 12px;
+}
+
+.selector-fecha-lunar {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.selector-fecha-lunar-info {
+  display: grid;
+  gap: 8px;
+  border-left: 3px solid #0b4a2b;
+  background: #eef4ee;
+  padding: 10px 12px;
+}
+
+.selector-fecha-lunar-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selector-fecha-lunar-acciones .boton-link {
+  min-height: 32px;
+  padding: 0;
+}
+
+.ayuda-lunar {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid #789080;
+  border-radius: 50%;
+  color: #0b4a2b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: none;
+}
+
+.tarea-reprogramar-modal {
+  width: min(100%, 620px);
+}
+
+.tarea-reprogramar-modal > .selector-fecha-lunar > label {
+  display: grid;
+  gap: 8px;
+  color: #314137;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tarea-reprogramar-modal input {
+  min-height: 46px;
+  border: 1px solid #c9d2ca;
+  padding: 0 12px;
+  background: #f8f9f5;
 }
 
 .dashboard-ipg-card {
@@ -1417,6 +1850,53 @@
   color: #0b3b21;
 }
 
+.areas-tabs {
+  margin-bottom: 18px;
+  background: #f5f7f2;
+  border: 1px solid #d8ded4;
+  padding: 6px 8px 0;
+}
+
+.areas-tabs button {
+  min-width: 150px;
+}
+
+.estado-vacio {
+  margin: 0;
+  padding: 24px;
+  color: #52645a;
+  text-align: center;
+}
+
+.forraje-graficos-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.forraje-grafico {
+  border: 1px solid #d8ded4;
+  background: #fffdf7;
+  padding: 16px;
+}
+
+.forraje-grafico h3 { margin: 0 0 14px; }
+.forraje-grafico svg { width: 100%; min-height: 180px; }
+.forraje-eje { display: flex; justify-content: space-between; gap: 6px; color: #52645a; font-size: 11px; overflow: hidden; }
+.forraje-barras, .forraje-intervalos { display: grid; gap: 11px; }
+.forraje-barra > div:first-child { display: flex; justify-content: space-between; gap: 12px; }
+.forraje-barra-pista { height: 10px; background: #e4e9e2; margin-top: 5px; }
+.forraje-barra-pista span { display: block; height: 100%; background: #0b4a2a; }
+.forraje-intervalos { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.forraje-intervalos article { display: grid; gap: 4px; border-left: 3px solid #d59b2d; background: #f5f7f2; padding: 10px; }
+.forraje-intervalos span, .forraje-intervalos small { color: #52645a; }
+
+@media (max-width: 760px) {
+  .forraje-graficos-grid { grid-template-columns: 1fr; }
+  .reportes-bloqueados { grid-template-columns: 1fr; }
+  .forraje-barra > div:first-child { align-items: flex-start; flex-direction: column; gap: 2px; }
+}
+
 .potrero-informacion,
 .rendimiento-metricas {
   display: grid;
@@ -1524,6 +2004,84 @@
   padding: 0;
 }
 
+.cobertura-form-section {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid #dfe3dc;
+  border-bottom: 1px solid #dfe3dc;
+  padding: 20px 0;
+}
+
+.cobertura-form-section h3 {
+  margin: 3px 0 0;
+  color: #102e1e;
+  font-size: 20px;
+}
+
+.cobertura-selector {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.65fr);
+  align-items: end;
+  gap: 8px;
+}
+
+.cobertura-selector > select {
+  min-height: 44px;
+}
+
+.cobertura-seleccionados {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 30px;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.cobertura-seleccionados span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #bfcdbf;
+  background: #edf3ec;
+  color: #17432b;
+  padding: 5px 7px 5px 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cobertura-seleccionados button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #17432b;
+  padding: 0;
+  font-size: 18px;
+}
+
+.cobertura-historial {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
+.cobertura-historial table {
+  min-width: 680px;
+}
+
+.rendimiento-vistas {
+  margin-bottom: -4px;
+}
+
+.reporte-nota-metodologica {
+  margin: 0;
+  border-left: 3px solid #78947f;
+  color: #526057;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 .mapa-potreros-panel {
   display: grid;
   grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
@@ -1622,6 +2180,73 @@
 .tabla-dinamica td {
   color: #142119;
   font-weight: 700;
+}
+
+.paginacion-tabla {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  border: 1px solid #a7b5aa;
+  border-top: 0;
+  background: #e9efea;
+  padding: 7px 10px;
+  color: #173d29;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.paginacion-tabla label,
+.paginacion-tabla > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paginacion-tabla select,
+.paginacion-tabla button {
+  min-height: 34px;
+  border: 1px solid #7f9384;
+  border-radius: 3px;
+  background: #fffdf7;
+  color: #0b3b21;
+  font: inherit;
+}
+
+.paginacion-tabla select {
+  padding: 0 28px 0 9px;
+  background-color: #ffffff;
+  font-weight: 900;
+}
+
+.paginacion-tabla button {
+  width: 34px;
+  padding: 0;
+  border-color: #0b4a2b;
+  background: #0b4a2b;
+  color: #ffffff;
+  font-size: 20px;
+}
+
+.paginacion-tabla button:disabled {
+  cursor: not-allowed;
+  border-color: #aeb9b0;
+  background: #d9e0da;
+  color: #68756c;
+  opacity: 1;
+}
+
+@media (max-width: 720px) {
+  .paginacion-tabla {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .paginacion-tabla > div {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 
 .acciones-tabla {
@@ -2808,12 +3433,13 @@
 
 .productos-reportes-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
 .productos-reportes-grid > article {
   display: grid;
+  min-width: 0;
   gap: 12px;
   border: 1px solid #dfe3dc;
   background: #f8f9f5;
@@ -2824,6 +3450,16 @@
   margin: 0;
   color: #09160e;
   font-size: 18px;
+}
+
+.productos-reportes-grid .tabla-dinamica table {
+  min-width: 800px;
+}
+
+.productos-reportes-grid .tabla-dinamica th,
+.productos-reportes-grid .tabla-dinamica td {
+  vertical-align: top;
+  white-space: normal;
 }
 
 .tabla-productos-compacta td {
@@ -3795,6 +4431,98 @@
   margin: 0;
 }
 
+.raza-bovina-form {
+  border-left: 4px solid #0b4b2a;
+}
+
+.selector-cruce {
+  border: 0;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.selector-cruce legend {
+  color: #10291b;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.selector-cruce > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.selector-cruce button {
+  background: #f8f9f5;
+  border: 1px solid #cfd8d0;
+  color: #16472c;
+  min-height: 44px;
+}
+
+.selector-cruce button.activo {
+  background: #073f24;
+  color: #fff;
+}
+
+.detalles-raciales-opcionales {
+  border-top: 1px solid #dfe3dc;
+  padding-top: 12px;
+}
+
+.detalles-raciales-opcionales summary {
+  color: #16472c;
+  cursor: pointer;
+  font-weight: 800;
+  margin-bottom: 14px;
+}
+
+.descendencia-tabla table {
+  min-width: 920px;
+}
+
+.reporte-racial-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.reporte-racial-grid > article {
+  border: 1px solid #dfe3dc;
+  padding: 14px;
+}
+
+.reporte-racial-titulo {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.reporte-racial-titulo span {
+  background: #e7f0e8;
+  color: #073f24;
+  font-weight: 900;
+  padding: 5px 8px;
+}
+
+.descendencia-reporte-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.descendencia-reporte-panel h3 {
+  margin: 4px 0 0;
+}
+
+.descendencia-reporte-tabla table {
+  min-width: 980px;
+}
+
 .chips-lista {
   display: flex;
   flex-wrap: wrap;
@@ -3807,6 +4535,20 @@
   font-size: 0.86rem;
   font-weight: 800;
   padding: 8px 10px;
+}
+
+.chips-lista button {
+  background: #e7f0e8;
+  border: 1px solid #cad8cc;
+  color: #043c22;
+  font-size: 0.86rem;
+  font-weight: 800;
+  padding: 8px 10px;
+}
+
+.madres-asociadas {
+  display: grid;
+  gap: 10px;
 }
 
 .evaluar-cruce-panel {
@@ -4031,6 +4773,21 @@
     grid-template-columns: 1fr;
   }
 
+  .calendario-operativo-contenido {
+    grid-template-columns: 1fr;
+  }
+
+  .calendario-luna-resumen {
+    border-right: 0;
+    border-bottom: 1px solid #d9e0da;
+    padding-right: 0;
+    padding-bottom: 16px;
+  }
+
+  .calendario-actividades {
+    padding-left: 0;
+  }
+
   .acciones-encabezado {
     justify-content: flex-start;
   }
@@ -4041,7 +4798,7 @@
   }
 
   .app-header {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
     padding-bottom: 12px;
   }
 
@@ -4059,6 +4816,14 @@
     background: #fffdf7;
     padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
     box-shadow: 0 -10px 24px rgba(15, 26, 18, 0.12);
+  }
+
+  .app-nav-shell {
+    display: contents;
+  }
+
+  .app-nav-scroll {
+    display: none;
   }
 
   .nav-item {
@@ -4963,12 +5728,41 @@
 }
 
 @media (max-width: 560px) {
+  .cobertura-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .cobertura-seleccionados {
+    grid-column: 1;
+  }
+
   .auth-copy h1 {
     font-size: 34px;
   }
 
   .metricas-grid {
     grid-template-columns: 1fr;
+  }
+
+  .calendario-operativo {
+    padding: 14px;
+  }
+
+  .calendario-operativo-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fases-lunares-lista {
+    grid-template-columns: 1fr;
+  }
+
+  .calendario-actividad {
+    grid-template-columns: 62px minmax(0, 1fr);
+  }
+
+  .calendario-actividad .info-lunar {
+    grid-column: 2;
   }
 
   .dashboard-shell {

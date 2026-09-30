@@ -3,7 +3,7 @@ import SelectorAnimalesSanidad from './SelectorAnimalesSanidad';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
-const FormularioAplicacionUnica = ({ especie, animales, onGuardar, onCancelar, guardando, error }) => {
+const FormularioAplicacionUnica = ({ especie, animales, usuariosAsignables = [], onGuardar, onCancelar, guardando, error }) => {
   const [formulario, setFormulario] = useState({
     animales: [],
     especie,
@@ -12,7 +12,7 @@ const FormularioAplicacionUnica = ({ especie, animales, onGuardar, onCancelar, g
     tipo: '',
     dosis: '',
     viaAplicacion: '',
-    responsable: '',
+    responsableUsuario: '',
     motivo: '',
     observaciones: ''
   });
@@ -65,8 +65,15 @@ const FormularioAplicacionUnica = ({ especie, animales, onGuardar, onCancelar, g
             <input name="viaAplicacion" value={formulario.viaAplicacion} onChange={actualizar} placeholder="Intramuscular" />
           </label>
           <label>
-            Responsable
-            <input name="responsable" value={formulario.responsable} onChange={actualizar} />
+            Encargado de la aplicación
+            <select name="responsableUsuario" value={formulario.responsableUsuario} onChange={actualizar} required>
+              <option value="">Seleccionar responsable</option>
+              {usuariosAsignables.map((usuario) => (
+                <option key={usuario._id} value={usuario._id}>
+                  {[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo} - {usuario.rol}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="campo-completo">
             Motivo

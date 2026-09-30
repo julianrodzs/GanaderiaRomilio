@@ -1,5 +1,6 @@
 const Potrero = require('../models/Potrero');
 const RotacionPotrero = require('../models/RotacionPotrero');
+const HistorialCoberturaPotrero = require('../models/HistorialCoberturaPotrero');
 
 const MS_DIA = 24 * 60 * 60 * 1000;
 const ESTADOS_REALES = ['Activa', 'Finalizada'];
@@ -36,38 +37,44 @@ const resolverPeriodo = ({ fechaInicio, fechaFin } = {}) => {
     return { fechaInicio: inicio, fechaFin: fin };
 };
 
-const calcularDiasRotacion = (rotacion, periodo, hoy = diaUTC(new Date())) => {
-    if (!ESTADOS_REALES.includes(rotacion.estado)) return 0;
+const obtenerTramoRotacion = (rotacion, periodo, hoy = diaUTC(new Date())) => {
+    if (!ESTADOS_REALES.includes(rotacion.estado)) return null;
     const entrada = diaUTC(rotacion.fechaEntrada);
-    if (!entrada) return 0;
+    if (!entrada) return null;
 
     let salida = rotacion.estado === 'Activa' ? hoy : diaUTC(rotacion.fechaSalida);
-    if (!salida || salida < entrada) return 0;
+    if (!salida || salida < entrada) return null;
     if (salida.getTime() === entrada.getTime()) salida = sumarDias(entrada, 1);
 
     const inicioPeriodo = diaUTC(periodo.fechaInicio);
     const finPeriodoExclusivo = sumarDias(diaUTC(periodo.fechaFin), 1);
     const inicioTramo = maxFecha(entrada, inicioPeriodo);
     const finTramo = minFecha(salida, finPeriodoExclusivo);
-    return Math.max(0, diasEntre(inicioTramo, finTramo));
+    if (finTramo <= inicioTramo) return null;
+    return { fechaInicio: inicioTramo, fechaFinExclusiva: finTramo, dias: diasEntre(inicioTramo, finTramo) };
+};
+
+const calcularDiasRotacion = (rotacion, periodo, hoy = diaUTC(new Date())) => obtenerTramoRotacion(rotacion, periodo, hoy)?.dias || 0;
+
+const calcularIntervalosDescanso = (rotaciones) => {
+    const reales = rotaciones
+        .filter((item) => ESTADOS_REALES.includes(item.estado) && diaUTC(item.fechaEntrada))
+        .sort((a, b) => diaUTC(a.fechaEntrada) - diaUTC(b.fechaEntrada));
+    const intervalos = [];
+    for (let indice = 1; indice < reales.length; indice += 1) {
+        const salidaAnterior = diaUTC(reales[indice - 1].fechaSalida);
+        const entradaActual = diaUTC(reales[indice].fechaEntrada);
+        if (!salidaAnterior || entradaActual < salidaAnterior) continue;
+        intervalos.push({ fechaSalida: salidaAnterior, fechaEntrada: entradaActual, dias: diasEntre(salidaAnterior, entradaActual) });
+    }
+    return intervalos;
 };
 
 const calcularDescansos = (rotaciones, periodo, hoy = diaUTC(new Date())) => {
     const reales = rotaciones
         .filter((item) => ESTADOS_REALES.includes(item.estado) && diaUTC(item.fechaEntrada))
         .sort((a, b) => diaUTC(a.fechaEntrada) - diaUTC(b.fechaEntrada));
-    const descansosHistoricos = [];
-
-    for (let indice = 1; indice < reales.length; indice += 1) {
-        const salidaAnterior = diaUTC(reales[indice - 1].fechaSalida);
-        const entradaActual = diaUTC(reales[indice].fechaEntrada);
-        if (!salidaAnterior || entradaActual < salidaAnterior) continue;
-        descansosHistoricos.push({
-            fechaSalida: salidaAnterior,
-            fechaEntrada: entradaActual,
-            dias: diasEntre(salidaAnterior, entradaActual)
-        });
-    }
+    const descansosHistoricos = calcularIntervalosDescanso(rotaciones);
 
     const inicio = diaUTC(periodo.fechaInicio);
     const fin = diaUTC(periodo.fechaFin);
@@ -146,10 +153,29 @@ const calcularRendimientoPotrero = (potrero, rotaciones, periodo, opciones = {})
         && (!item.fechaSalida || diaUTC(item.fechaSalida) >= periodo.fechaInicio));
     const { tramos, ...rendimiento } = resumen;
 
+    const objetivo = Number.isFinite(Number(potrero.diasDescansoObjetivo)) ? Number(potrero.diasDescansoObjetivo) : null;
+    const descansoReferencia = rendimiento.descansoActual ?? rendimiento.descansoPromedio;
     return {
-        potrero: { id: potrero._id, codigo: potrero.codigo, nombre: potrero.nombre, area: potrero.area, estado: potrero.estado },
+        potrero: {
+            id: potrero._id,
+            codigo: potrero.codigo,
+            nombre: potrero.nombre,
+            area: potrero.area,
+            estado: potrero.estado,
+            coberturaActual: potrero.pastoPrincipal || null,
+            pastosSecundarios: potrero.pastosSecundarios || [],
+            leguminosasAsociadas: potrero.leguminosasAsociadas || [],
+            diasDescansoObjetivo: objetivo,
+            observacionCobertura: potrero.observacionCobertura || null,
+            descripcionCobertura: potrero.descripcionCobertura || null
+        },
         periodo: { fechaInicio: fechaTexto(periodo.fechaInicio), fechaFin: fechaTexto(periodo.fechaFin) },
-        rendimiento,
+        rendimiento: {
+            ...rendimiento,
+            descansoObjetivo: objetivo,
+            diferenciaDescansoObjetivo: objetivo !== null && descansoReferencia !== null ? redondear(descansoReferencia - objetivo) : null,
+            diasParaObjetivo: objetivo !== null && descansoReferencia !== null ? Math.max(0, redondear(objetivo - descansoReferencia)) : null
+        },
         ultimaRotacion: ultima ? {
             id: ultima.rotacion._id,
             fechaEntrada: ultima.rotacion.fechaEntrada,
@@ -168,7 +194,7 @@ const calcularRendimientoPotrero = (potrero, rotaciones, periodo, opciones = {})
 const obtenerRendimientoPotrero = async (potreroId, filtros = {}) => {
     const periodo = resolverPeriodo(filtros);
     const [potrero, rotaciones] = await Promise.all([
-        Potrero.findById(potreroId).lean(),
+        Potrero.findById(potreroId).populate('pastoPrincipal').populate('pastosSecundarios').populate('leguminosasAsociadas').lean(),
         RotacionPotrero.find({ potrero: potreroId }).lean()
     ]);
     if (!potrero) return null;
@@ -178,7 +204,7 @@ const obtenerRendimientoPotrero = async (potreroId, filtros = {}) => {
 const calcularComparativoPotreros = async (filtros = {}) => {
     const periodo = resolverPeriodo(filtros);
     const [potreros, rotaciones] = await Promise.all([
-        Potrero.find().sort({ codigo: 1 }).lean(),
+        Potrero.find().populate('pastoPrincipal').populate('pastosSecundarios').populate('leguminosasAsociadas').sort({ codigo: 1 }).lean(),
         RotacionPotrero.find().lean()
     ]);
     const porPotrero = rotaciones.reduce((grupos, rotacion) => {
@@ -197,14 +223,203 @@ const calcularComparativoPotreros = async (filtros = {}) => {
     };
 };
 
+const obtenerId = (valor) => String(valor?._id || valor || '');
+const obtenerNombreCobertura = (cobertura) => cobertura?.pastoPrincipal?.nombre
+    || cobertura?.descripcionCobertura
+    || 'Sin cobertura registrada';
+
+const dividirTramoPorCoberturas = (tramo, historial = []) => {
+    const ordenado = [...historial].sort((a, b) => diaUTC(a.fechaInicio) - diaUTC(b.fechaInicio));
+    const segmentos = [];
+    let cursor = tramo.fechaInicio;
+    while (cursor < tramo.fechaFinExclusiva) {
+        const cobertura = ordenado.find((item) => {
+            const inicio = diaUTC(item.fechaInicio);
+            const finExclusivo = item.fechaFin ? sumarDias(diaUTC(item.fechaFin), 1) : tramo.fechaFinExclusiva;
+            return inicio <= cursor && finExclusivo > cursor;
+        });
+        const siguienteInicio = ordenado
+            .map((item) => diaUTC(item.fechaInicio))
+            .filter((fecha) => fecha > cursor)
+            .sort((a, b) => a - b)[0];
+        const finCobertura = cobertura?.fechaFin ? sumarDias(diaUTC(cobertura.fechaFin), 1) : tramo.fechaFinExclusiva;
+        const finSegmento = minFecha(tramo.fechaFinExclusiva, cobertura ? finCobertura : (siguienteInicio || tramo.fechaFinExclusiva));
+        if (finSegmento <= cursor) break;
+        segmentos.push({ cobertura: cobertura || null, fechaInicio: cursor, fechaFinExclusiva: finSegmento, dias: diasEntre(cursor, finSegmento) });
+        cursor = finSegmento;
+    }
+    return segmentos;
+};
+
+const claveCobertura = (cobertura, agruparPor) => {
+    if (!cobertura) return { clave: 'sin-cobertura', nombre: 'Sin cobertura registrada', especieBase: null, catalogoPastoId: null };
+    const pasto = cobertura.pastoPrincipal;
+    if (!pasto) {
+        const nombre = cobertura.descripcionCobertura ? `Pendiente de catalogar: ${cobertura.descripcionCobertura}` : 'Sin cobertura registrada';
+        return { clave: `descripcion:${nombre}`, nombre, especieBase: null, catalogoPastoId: null };
+    }
+    if (agruparPor === 'especieBase') {
+        const especieBase = pasto.especieBase || pasto.nombre;
+        return { clave: `especie:${especieBase}`, nombre: especieBase, especieBase, catalogoPastoId: null };
+    }
+    return { clave: `pasto:${obtenerId(pasto)}`, nombre: pasto.nombre, especieBase: pasto.especieBase || null, catalogoPastoId: obtenerId(pasto) };
+};
+
+const crearAcumulador = (datosClave) => ({
+    ...datosClave,
+    segmentos: [],
+    rotaciones: new Set(),
+    potreros: new Map(),
+    descansos: [],
+    objetivoDiasPonderados: 0,
+    objetivoPeso: 0
+});
+
+const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], historiales = [] }, filtros = {}) => {
+    const periodo = resolverPeriodo(filtros);
+    const agruparPor = filtros.agruparPor === 'especieBase' ? 'especieBase' : 'pasto';
+    const potreroPorId = new Map(potreros.map((item) => [obtenerId(item), item]));
+    const historialPorPotrero = historiales.reduce((grupos, item) => {
+        const clave = obtenerId(item.potrero);
+        if (!grupos[clave]) grupos[clave] = [];
+        grupos[clave].push(item);
+        return grupos;
+    }, {});
+    const rotacionesPorPotrero = rotaciones.reduce((grupos, item) => {
+        const clave = obtenerId(item.potrero);
+        if (!grupos[clave]) grupos[clave] = [];
+        grupos[clave].push(item);
+        return grupos;
+    }, {});
+    const grupos = new Map();
+    const hoy = filtros.hoy ? diaUTC(filtros.hoy) : diaUTC(new Date());
+
+    rotaciones.forEach((rotacion, indice) => {
+        const tramo = obtenerTramoRotacion(rotacion, periodo, hoy);
+        if (!tramo) return;
+        const potreroId = obtenerId(rotacion.potrero);
+        const potrero = potreroPorId.get(potreroId);
+        if (!potrero) return;
+        dividirTramoPorCoberturas(tramo, historialPorPotrero[potreroId] || []).forEach((segmento) => {
+            const datosClave = claveCobertura(segmento.cobertura, agruparPor);
+            if (!grupos.has(datosClave.clave)) grupos.set(datosClave.clave, crearAcumulador(datosClave));
+            const grupo = grupos.get(datosClave.clave);
+            const numeroAnimales = Number(rotacion.numeroAnimales) || 0;
+            const animalDias = numeroAnimales * segmento.dias;
+            const rotacionId = obtenerId(rotacion._id) || `${potreroId}:${rotacion.fechaEntrada}:${indice}`;
+            grupo.segmentos.push({ potreroId, dias: segmento.dias, animalDias });
+            grupo.rotaciones.add(rotacionId);
+            if (!grupo.potreros.has(potreroId)) grupo.potreros.set(potreroId, { potrero, diasOcupados: 0, animalDias: 0, rotaciones: new Set() });
+            const resumenPotrero = grupo.potreros.get(potreroId);
+            resumenPotrero.diasOcupados += segmento.dias;
+            resumenPotrero.animalDias += animalDias;
+            resumenPotrero.rotaciones.add(rotacionId);
+            const objetivo = Number(segmento.cobertura?.diasDescansoObjetivo);
+            if (Number.isFinite(objetivo)) {
+                grupo.objetivoDiasPonderados += objetivo * segmento.dias;
+                grupo.objetivoPeso += segmento.dias;
+            }
+        });
+    });
+
+    Object.entries(rotacionesPorPotrero).forEach(([potreroId, items]) => {
+        calcularIntervalosDescanso(items)
+            .filter((item) => item.fechaEntrada >= periodo.fechaInicio && item.fechaEntrada <= periodo.fechaFin)
+            .forEach((descanso) => {
+                const fechaReferencia = new Date(descanso.fechaEntrada.getTime() - MS_DIA);
+                const cobertura = (historialPorPotrero[potreroId] || []).find((item) => {
+                    const inicio = diaUTC(item.fechaInicio);
+                    const fin = item.fechaFin ? diaUTC(item.fechaFin) : null;
+                    return inicio <= fechaReferencia && (!fin || fin >= fechaReferencia);
+                }) || null;
+                const datosClave = claveCobertura(cobertura, agruparPor);
+                if (!grupos.has(datosClave.clave)) grupos.set(datosClave.clave, crearAcumulador(datosClave));
+                const grupo = grupos.get(datosClave.clave);
+                grupo.descansos.push(descanso.dias);
+                const objetivo = Number(cobertura?.diasDescansoObjetivo);
+                if (Number.isFinite(objetivo)) {
+                    grupo.objetivoDiasPonderados += objetivo * Math.max(descanso.dias, 1);
+                    grupo.objetivoPeso += Math.max(descanso.dias, 1);
+                }
+            });
+    });
+
+    const diasPeriodo = diasEntre(periodo.fechaInicio, sumarDias(periodo.fechaFin, 1));
+    const resultados = [...grupos.values()].map((grupo) => {
+        const diasOcupados = grupo.segmentos.reduce((total, item) => total + item.dias, 0);
+        const animalDias = grupo.segmentos.reduce((total, item) => total + item.animalDias, 0);
+        const potrerosGrupo = [...grupo.potreros.values()];
+        const area = potrerosGrupo.reduce((total, item) => total + (Number(item.potrero.area) || 0), 0);
+        const descansoPromedio = grupo.descansos.length
+            ? redondear(grupo.descansos.reduce((total, valor) => total + valor, 0) / grupo.descansos.length)
+            : null;
+        const descansoObjetivo = grupo.objetivoPeso ? redondear(grupo.objetivoDiasPonderados / grupo.objetivoPeso) : null;
+        return {
+            clave: grupo.clave,
+            nombre: grupo.nombre,
+            especieBase: grupo.especieBase,
+            catalogoPastoId: grupo.catalogoPastoId,
+            cantidadPotreros: potrerosGrupo.length,
+            areaHectareas: redondear(area),
+            diasOcupados,
+            porcentajeOcupacionPromedio: potrerosGrupo.length && diasPeriodo ? redondear((diasOcupados / (potrerosGrupo.length * diasPeriodo)) * 100) : 0,
+            numeroRotaciones: grupo.rotaciones.size,
+            animalesPromedio: diasOcupados ? redondear(animalDias / diasOcupados) : null,
+            animalDias: redondear(animalDias),
+            animalDiasPorHectarea: area > 0 ? redondear(animalDias / area) : null,
+            descansoPromedio,
+            descansoMinimo: grupo.descansos.length ? Math.min(...grupo.descansos) : null,
+            descansoMaximo: grupo.descansos.length ? Math.max(...grupo.descansos) : null,
+            descansoObjetivo,
+            diferenciaDescansoObjetivo: descansoPromedio !== null && descansoObjetivo !== null ? redondear(descansoPromedio - descansoObjetivo) : null,
+            potreros: potrerosGrupo.map((item) => ({
+                id: item.potrero._id,
+                codigo: item.potrero.codigo,
+                nombre: item.potrero.nombre,
+                area: item.potrero.area,
+                diasOcupados: item.diasOcupados,
+                numeroRotaciones: item.rotaciones.size,
+                animalDias: redondear(item.animalDias),
+                animalDiasPorHectarea: Number(item.potrero.area) > 0 ? redondear(item.animalDias / Number(item.potrero.area)) : null
+            }))
+        };
+    }).sort((a, b) => b.animalDias - a.animalDias);
+
+    return {
+        periodo: { fechaInicio: fechaTexto(periodo.fechaInicio), fechaFin: fechaTexto(periodo.fechaFin) },
+        agrupacion: agruparPor,
+        grupos: resultados,
+        nota: 'Los resultados describen el desempeño observado durante el período; no prueban causalidad del tipo de pasto.'
+    };
+};
+
+const calcularRendimientoPorPasto = async (filtros = {}) => {
+    const [potreros, rotaciones, historiales] = await Promise.all([
+        Potrero.find().sort({ codigo: 1 }).lean(),
+        RotacionPotrero.find().lean(),
+        HistorialCoberturaPotrero.find()
+            .populate('pastoPrincipal')
+            .populate('pastosSecundarios')
+            .populate('leguminosasAsociadas')
+            .sort({ fechaInicio: 1 })
+            .lean()
+    ]);
+    return calcularRendimientoPorPastoConDatos({ potreros, rotaciones, historiales }, filtros);
+};
+
 module.exports = {
     calcularAnimalDias: (numeroAnimales, dias) => (Number(numeroAnimales) || 0) * (Number(dias) || 0),
     calcularAnimalDiasPorHectarea: (animalDias, area) => (Number(area) > 0 ? redondear(Number(animalDias) / Number(area)) : null),
     calcularComparativoPotreros,
     calcularDescansos,
     calcularDiasRotacion,
+    calcularIntervalosDescanso,
+    calcularRendimientoPorPasto,
+    calcularRendimientoPorPastoConDatos,
     calcularRendimientoMensual,
     calcularRendimientoPotrero,
     obtenerRendimientoPotrero,
+    obtenerTramoRotacion,
+    dividirTramoPorCoberturas,
     resolverPeriodo
 };

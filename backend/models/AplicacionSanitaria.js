@@ -20,6 +20,7 @@ const aplicacionSanitariaSchema = new Schema(
         dosis: { type: String, trim: true },
         viaAplicacion: { type: String, trim: true },
         responsable: { type: String, trim: true },
+        responsableUsuario: { type: Schema.Types.ObjectId, ref: 'Usuario', default: null },
         motivo: { type: String, trim: true },
         observaciones: { type: String, trim: true },
         naturaleza: { type: String, enum: NATURALEZAS_APLICACION, required: true },
@@ -65,6 +66,7 @@ aplicacionSanitariaSchema.index({ organizacionId: 1, tratamiento: 1, numeroAplic
     partialFilterExpression: { tratamiento: { $type: 'objectId' }, numeroAplicacion: { $type: 'number' } }
 });
 aplicacionSanitariaSchema.index({ planSanitario: 1, fechaAplicacion: -1 });
+aplicacionSanitariaSchema.index({ responsableUsuario: 1, fechaAplicacion: -1 });
 
 const AplicacionSanitaria = model('AplicacionSanitaria', aplicacionSanitariaSchema);
 

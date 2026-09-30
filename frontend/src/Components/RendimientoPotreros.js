@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { obtenerRendimientoPotrero, obtenerRendimientoPotreros } from '../services/api';
+import {
+  obtenerCoberturaPotrero,
+  obtenerRendimientoPotrero,
+  obtenerRendimientoPotreros,
+  obtenerReporteRendimientoPotreros,
+  obtenerRendimientoPotrerosPorPasto
+} from '../services/api';
+import { ContenidoPaginado } from './PaginacionTabla';
 
 const fechaInput = (fecha) => {
   const anio = fecha.getFullYear();
@@ -93,13 +100,16 @@ export const DetallePotrero = ({ potrero, rotaciones, onCerrar }) => {
   const [tab, setTab] = useState('rendimiento');
   const { preset, rango, setRango, cambiarPreset } = usarPeriodo();
   const [datos, setDatos] = useState(null);
+  const [datosCobertura, setDatosCobertura] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!potrero?._id || !rango.fechaInicio || !rango.fechaFin) return;
     setDatos(null);
     setError('');
-    obtenerRendimientoPotrero(potrero._id, rango).then(setDatos).catch((err) => setError(err.message));
+    Promise.all([obtenerRendimientoPotrero(potrero._id, rango), obtenerCoberturaPotrero(potrero._id)])
+      .then(([rendimiento, cobertura]) => { setDatos(rendimiento); setDatosCobertura(cobertura); })
+      .catch((err) => setError(err.message));
   }, [potrero?._id, rango.fechaInicio, rango.fechaFin]);
 
   const rotacionesPotrero = rotaciones.filter((item) => String(item.potrero?._id || item.potrero) === String(potrero._id));
@@ -121,6 +131,17 @@ export const DetallePotrero = ({ potrero, rotaciones, onCerrar }) => {
             <article><span>Estado</span><strong>{potrero.estado}</strong></article>
             <article><span>Capacidad máxima</span><strong>{mostrarNumero(potrero.capacidadMaxima)}</strong></article>
             <article><span>Ubicación</span><strong>{potrero.ubicacion || '--'}</strong></article>
+            <article><span>Pasto principal</span><strong>{potrero.pastoPrincipal?.nombre || potrero.descripcionCobertura || '--'}</strong></article>
+            <article><span>Descanso objetivo</span><strong>{mostrarNumero(potrero.diasDescansoObjetivo, ' días')}</strong></article>
+            {datosCobertura?.historial?.length > 0 && (
+              <ContenidoPaginado datos={datosCobertura.historial}>
+                {(coberturasPagina) => (
+                  <div className="tabla-scroll tabla-panel cobertura-historial">
+                    <table><thead><tr><th>Desde</th><th>Hasta</th><th>Pasto principal</th><th>Descanso objetivo</th></tr></thead><tbody>{coberturasPagina.map((item) => <tr key={item._id}><td>{mostrarFecha(item.fechaInicio)}</td><td>{item.fechaFin ? mostrarFecha(item.fechaFin) : 'Vigente'}</td><td>{item.pastoPrincipal?.nombre || item.descripcionCobertura || 'Sin registrar'}</td><td>{mostrarNumero(item.diasDescansoObjetivo, ' días')}</td></tr>)}</tbody></table>
+                  </div>
+                )}
+              </ContenidoPaginado>
+            )}
           </div>
         )}
 
@@ -150,29 +171,40 @@ export const DetallePotrero = ({ potrero, rotaciones, onCerrar }) => {
         )}
 
         {tab === 'rotaciones' && (
-          <div className="tabla-scroll tabla-panel rotaciones-detalle">
-            <table><thead><tr><th>Entrada</th><th>Salida</th><th>Animales</th><th>Estado</th></tr></thead><tbody>{rotacionesPotrero.map((item) => <tr key={item._id}><td>{mostrarFecha(item.fechaEntrada)}</td><td>{mostrarFecha(item.fechaSalida)}</td><td>{item.numeroAnimales ?? '--'}</td><td>{item.estado}</td></tr>)}</tbody></table>
-            {!rotacionesPotrero.length && <p>Este potrero no tiene rotaciones registradas.</p>}
-          </div>
+          <ContenidoPaginado datos={rotacionesPotrero}>
+            {(rotacionesPagina) => (
+              <div className="tabla-scroll tabla-panel rotaciones-detalle">
+                <table><thead><tr><th>Entrada</th><th>Salida</th><th>Animales</th><th>Estado</th></tr></thead><tbody>{rotacionesPagina.map((item) => <tr key={item._id}><td>{mostrarFecha(item.fechaEntrada)}</td><td>{mostrarFecha(item.fechaSalida)}</td><td>{item.numeroAnimales ?? '--'}</td><td>{item.estado}</td></tr>)}</tbody></table>
+                {!rotacionesPotrero.length && <p>Este potrero no tiene rotaciones registradas.</p>}
+              </div>
+            )}
+          </ContenidoPaginado>
         )}
       </section>
     </div>
   );
 };
 
-const RendimientoPotreros = () => {
+const RendimientoPotreros = ({ rangoControlado = null, usarRutaReportes = false }) => {
   const { preset, rango, setRango, cambiarPreset } = usarPeriodo();
+  const rangoConsulta = rangoControlado || rango;
   const [datos, setDatos] = useState([]);
   const [orden, setOrden] = useState('animalDiasPorHectarea');
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(true);
+  const [vista, setVista] = useState('potrero');
+  const [agruparPor, setAgruparPor] = useState('pasto');
+  const [datosPorPasto, setDatosPorPasto] = useState([]);
 
   useEffect(() => {
-    if (!rango.fechaInicio || !rango.fechaFin) return;
+    if (!rangoConsulta.fechaInicio || !rangoConsulta.fechaFin) return;
     setCargando(true);
     setError('');
-    obtenerRendimientoPotreros(rango).then((respuesta) => setDatos(respuesta.potreros || [])).catch((err) => setError(err.message)).finally(() => setCargando(false));
-  }, [rango.fechaInicio, rango.fechaFin]);
+    const solicitud = vista === 'potrero'
+      ? (usarRutaReportes ? obtenerReporteRendimientoPotreros(rangoConsulta) : obtenerRendimientoPotreros(rangoConsulta)).then((respuesta) => setDatos(respuesta.potreros || []))
+      : obtenerRendimientoPotrerosPorPasto({ ...rangoConsulta, agruparPor }, usarRutaReportes).then((respuesta) => setDatosPorPasto(respuesta.grupos || []));
+    solicitud.catch((err) => setError(err.message)).finally(() => setCargando(false));
+  }, [rangoConsulta.fechaInicio, rangoConsulta.fechaFin, vista, agruparPor, usarRutaReportes]);
 
   const ordenados = useMemo(() => [...datos].sort((a, b) => (Number(b[orden]) || 0) - (Number(a[orden]) || 0)), [datos, orden]);
 
@@ -181,16 +213,38 @@ const RendimientoPotreros = () => {
       <div className="panel-title">
         <div><p className="eyebrow">Uso histórico</p><h2>Rendimiento de potreros</h2></div>
       </div>
+      <div className="potrero-tabs rendimiento-vistas">
+        <button className={vista === 'potrero' ? 'activo' : ''} type="button" onClick={() => setVista('potrero')}>Por potrero</button>
+        <button className={vista === 'pasto' ? 'activo' : ''} type="button" onClick={() => setVista('pasto')}>Por tipo de pasto</button>
+      </div>
       <div className="rendimiento-toolbar">
-        <SelectorPeriodo preset={preset} rango={rango} onPreset={cambiarPreset} onRango={setRango} />
-        <label>Ordenar por<select value={orden} onChange={(e) => setOrden(e.target.value)}><option value="animalDias">Animal-días</option><option value="animalDiasPorHectarea">Animal-días / ha</option><option value="diasOcupados">Días ocupados</option><option value="descansoPromedio">Descanso promedio</option></select></label>
+        {!rangoControlado && <SelectorPeriodo preset={preset} rango={rango} onPreset={cambiarPreset} onRango={setRango} />}
+        {vista === 'potrero'
+          ? <label>Ordenar por<select value={orden} onChange={(e) => setOrden(e.target.value)}><option value="animalDias">Animal-días</option><option value="animalDiasPorHectarea">Animal-días / ha</option><option value="diasOcupados">Días ocupados</option><option value="descansoPromedio">Descanso promedio</option></select></label>
+          : <label>Agrupar por<select value={agruparPor} onChange={(e) => setAgruparPor(e.target.value)}><option value="pasto">Pasto o cultivar</option><option value="especieBase">Especie base</option></select></label>}
       </div>
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Calculando rendimiento...</div>}
-      {!cargando && (
-        <div className="tabla-scroll tabla-panel rendimiento-tabla">
-          <table><thead><tr><th>Potrero</th><th>Área</th><th>Días ocupado</th><th>Ocupación</th><th>Rotaciones</th><th>Animal-días</th><th>Animal-días / ha</th><th>Descanso promedio</th></tr></thead><tbody>{ordenados.map((item) => <tr key={item.id}><td><strong>{item.codigo}</strong><small>{item.nombre}</small></td><td>{mostrarNumero(item.area, ' ha')}</td><td>{mostrarNumero(item.diasOcupados)}</td><td>{mostrarNumero(item.porcentajeOcupacion, ' %')}</td><td>{item.numeroRotaciones}</td><td>{mostrarNumero(item.animalDias)}</td><td>{mostrarNumero(item.animalDiasPorHectarea)}</td><td>{mostrarNumero(item.descansoPromedio, ' días')}</td></tr>)}</tbody></table>
-        </div>
+      {!cargando && vista === 'potrero' && (
+        <ContenidoPaginado datos={ordenados}>
+          {(potrerosPagina) => (
+            <div className="tabla-scroll tabla-panel rendimiento-tabla">
+              <table><thead><tr><th>Potrero</th><th>Pasto actual</th><th>Área</th><th>Días ocupado</th><th>Ocupación</th><th>Rotaciones</th><th>Animal-días</th><th>Animal-días / ha</th><th>Descanso real / objetivo</th></tr></thead><tbody>{potrerosPagina.map((item) => <tr key={item.id}><td><strong>{item.codigo}</strong><small>{item.nombre}</small></td><td>{item.coberturaActual?.nombre || item.descripcionCobertura || '--'}</td><td>{mostrarNumero(item.area, ' ha')}</td><td>{mostrarNumero(item.diasOcupados)}</td><td>{mostrarNumero(item.porcentajeOcupacion, ' %')}</td><td>{item.numeroRotaciones}</td><td>{mostrarNumero(item.animalDias)}</td><td>{mostrarNumero(item.animalDiasPorHectarea)}</td><td>{mostrarNumero(item.descansoPromedio, ' días')} / {mostrarNumero(item.descansoObjetivo, ' días')}</td></tr>)}</tbody></table>
+            </div>
+          )}
+        </ContenidoPaginado>
+      )}
+      {!cargando && vista === 'pasto' && (
+        <>
+          <ContenidoPaginado datos={datosPorPasto}>
+            {(pastosPagina) => (
+              <div className="tabla-scroll tabla-panel rendimiento-tabla">
+                <table><thead><tr><th>{agruparPor === 'pasto' ? 'Pasto' : 'Especie base'}</th><th>Potreros</th><th>Área</th><th>Días ocupado</th><th>Rotaciones</th><th>Animales promedio</th><th>Animal-días</th><th>Animal-días / ha</th><th>Descanso real / objetivo</th></tr></thead><tbody>{pastosPagina.map((item) => <tr key={item.clave}><td><strong>{item.nombre}</strong><small>{agruparPor === 'pasto' ? item.especieBase : ''}</small></td><td>{item.cantidadPotreros}</td><td>{mostrarNumero(item.areaHectareas, ' ha')}</td><td>{mostrarNumero(item.diasOcupados)}</td><td>{item.numeroRotaciones}</td><td>{mostrarNumero(item.animalesPromedio)}</td><td>{mostrarNumero(item.animalDias)}</td><td>{mostrarNumero(item.animalDiasPorHectarea)}</td><td>{mostrarNumero(item.descansoPromedio, ' días')} / {mostrarNumero(item.descansoObjetivo, ' días')}</td></tr>)}</tbody></table>
+              </div>
+            )}
+          </ContenidoPaginado>
+          <p className="reporte-nota-metodologica">Los resultados describen el desempeño observado en cada cobertura durante el período; no atribuyen causalidad al tipo de pasto.</p>
+        </>
       )}
     </section>
   );

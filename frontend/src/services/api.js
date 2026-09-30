@@ -40,8 +40,15 @@ const request = async (ruta, opciones = {}) => {
 
   if (!respuesta.ok) {
     if (respuesta.status === 401) {
+      const sesionGuardada = localStorage.getItem('ganaderiaSesion');
+      let sesion = null;
+      try {
+        sesion = JSON.parse(sesionGuardada || 'null');
+      } catch (error) {
+        sesion = null;
+      }
+      window.dispatchEvent(new CustomEvent('ganaderiaSesionExpirada', { detail: { sesion } }));
       localStorage.removeItem('ganaderiaSesion');
-      window.dispatchEvent(new Event('ganaderiaSesionExpirada'));
     }
 
     const error = new Error(data.mensaje || data.message || 'Error en la solicitud');
@@ -240,14 +247,16 @@ export const cambiarEstadoTarea = (id, estado, observaciones = '') => {
   });
 };
 
-export const completarTarea = ({ id, observaciones, evidencia }) => {
+export const completarTarea = ({ id, observaciones, evidencia, idempotencyKey, versionEsperada }) => {
   const formData = new FormData();
   if (observaciones) formData.append('observaciones', observaciones);
   if (evidencia) formData.append('evidencia', evidencia);
+  if (versionEsperada) formData.append('versionEsperada', versionEsperada);
 
   return request(`/tareas/${id}/completar`, {
     method: 'PATCH',
-    body: formData
+    body: formData,
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
   });
 };
 
@@ -397,8 +406,10 @@ export const obtenerArbolGenealogico = (animalId, generaciones = 3) => {
 };
 
 export const obtenerDescendenciaAnimal = (animalId) => {
-  return request(`/genealogia/animal/${animalId}/descendencia`);
+  return request(`/animales/${animalId}/descendencia`);
 };
+
+export const obtenerCatalogoRacial = () => request('/animales/catalogos/razas');
 
 export const obtenerParentesco = ({ animalA, animalB }) => {
   const params = new URLSearchParams();
@@ -464,9 +475,36 @@ export const eliminarEventoAnimal = (id) => {
 
 export const obtenerPotreros = () => request('/potreros');
 
+export const obtenerCatalogoPastos = (filtros = {}) => request(`/pastos${construirQuery(filtros)}`);
+
+export const obtenerCoberturaPotrero = (id) => request(`/potreros/${id}/cobertura`);
+
+export const crearCoberturaPotrero = (id, cobertura) => request(`/potreros/${id}/cobertura`, {
+  method: 'POST',
+  body: JSON.stringify(cobertura)
+});
+
+export const actualizarCoberturaPotrero = (id, cobertura) => request(`/potreros/${id}/cobertura`, {
+  method: 'PUT',
+  body: JSON.stringify(cobertura)
+});
+
 export const obtenerRendimientoPotreros = (filtros = {}) => request(`/potreros/rendimiento${construirQuery(filtros)}`);
 
+export const obtenerReporteRendimientoPotreros = (filtros = {}) => request(`/reportes/potreros/rendimiento${construirQuery(filtros)}`);
+
+export const obtenerRendimientoPotrerosPorPasto = (filtros = {}, usarRutaReportes = false) => request(`${usarRutaReportes ? '/reportes/potreros/por-pasto' : '/potreros/rendimiento/por-pasto'}${construirQuery(filtros)}`);
+
 export const obtenerRendimientoPotrero = (id, filtros = {}) => request(`/potreros/${id}/rendimiento${construirQuery(filtros)}`);
+
+export const obtenerCortesForraje = (potreroId, filtros = {}) => request(`/potreros/${potreroId}/cortes${construirQuery(filtros)}`);
+
+export const registrarCorteForraje = (potreroId, datos) => request(`/potreros/${potreroId}/cortes`, {
+  method: 'POST',
+  body: JSON.stringify(datos)
+});
+
+export const obtenerRendimientoForrajes = (filtros = {}) => request(`/reportes/forrajes/rendimiento${construirQuery(filtros)}`);
 
 export const crearPotrero = (potrero) => {
   return request('/potreros', {
@@ -969,6 +1007,16 @@ export const obtenerEficienciaEngorde = ({ fechaInicio, fechaFin, especie } = {}
   if (especie && especie !== 'Todos') params.append('especie', especie);
   const query = params.toString();
   return request(`/reportes/engorde${query ? `?${query}` : ''}`);
+};
+
+export const obtenerReporteRazasBovinas = () => request('/reportes/bovinos/razas');
+
+export const obtenerReporteDescendenciaBovina = ({ fechaInicio, fechaFin } = {}) => {
+  const params = new URLSearchParams();
+  if (fechaInicio) params.append('fechaInicio', fechaInicio);
+  if (fechaFin) params.append('fechaFin', fechaFin);
+  const query = params.toString();
+  return request(`/reportes/bovinos/descendencia${query ? `?${query}` : ''}`);
 };
 
 export const obtenerConfiguracionProductiva = () => request('/reportes/configuracion-productiva');

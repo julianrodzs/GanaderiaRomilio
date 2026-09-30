@@ -1,1056 +1,1538 @@
-Necesito implementar dos nuevos índices productivos a NIVEL DE FINCA en GanaderiaRomilio:
+Necesito implementar en GanaderiaRomilio el manejo de BANCOS FORRAJEROS / PASTOS DE CORTE dentro del módulo actual de Potreros.
 
-1. ICP = Índice de Crecimiento Porcino
-2. IEE = Índice de Eficiencia de Engorde
+OBJETIVOS:
 
-IMPORTANTE:
-
-Estos índices NO deben mostrarse como índices individuales por animal.
-
-El resultado principal debe representar el rendimiento de la FINCA durante el período seleccionado.
-
-Internamente se pueden usar pesajes individuales para realizar los cálculos correctamente.
-
-No mezclar estos índices con el IPG de cría bovina existente.
-
-Debemos tener tres conceptos independientes:
-
-IPG
-→ productividad de cría bovina
-
-ICP
-→ crecimiento porcino general de la finca
-
-IEE
-→ eficiencia general del engorde de la finca
-
-==================================================
-1. PRINCIPIO GENERAL
-==================================================
-
-Los índices deben funcionar por período.
-
-Aceptar:
-
-- fechaInicio
-- fechaFin
-
-El usuario debe poder consultar:
-
-- este mes
-- últimos 3 meses
-- últimos 6 meses
-- este año
-- período personalizado
-
-No guardar el resultado del índice directamente en Animal.
-
-Calcularlo desde los datos históricos.
-
-==================================================
-2. METAS PRODUCTIVAS CONFIGURABLES
-==================================================
-
-No hardcodear las metas productivas directamente dentro de los servicios de reportes.
-
-Crear una configuración productiva.
-
-Puede llamarse:
-
-ConfiguracionProductiva
-
-o reutilizar una configuración existente si ya existe algo equivalente.
-
-Por ahora puede ser una configuración global de la aplicación.
-
-En el futuro deberá poder pertenecer a cada Organización/Finca cuando se implemente multi-tenant.
-
-Campos sugeridos:
-
-porcinos: {
-  gmdFase1KgDia,
-  gmdFase2KgDia,
-  gmdFase3KgDia,
-  gmdDesarrolloKgDia,
-  gmdEngordeKgDia,
-  pesoObjetivoEngordeKg
-}
-
-bovinosEngorde: {
-  gmdObjetivoKgDia,
-  pesoObjetivoKg
-}
-
-Valores iniciales sugeridos para porcinos:
-
-fase1:
-0.300 kg/día
-
-fase2:
-0.400 kg/día
-
-fase3:
-0.550 kg/día
-
-desarrollo:
-0.750 kg/día
-
-engorde:
-0.850 kg/día
-
-pesoObjetivoEngorde:
-110 kg
+1. Registrar áreas destinadas a producir forraje para corte y acarreo.
+2. Mantenerlas diferenciadas de los potreros donde pastorean animales.
+3. Registrar siembra, establecimiento, cortes y cantidades producidas.
+4. Tener historial real de producción.
+5. Generar próximas actividades de corte mediante Tareas.
+6. Preparar datos para futura relación con alimentación y engorde.
+7. Crear análisis de rendimiento productivo, PERO disponible solamente desde el plan Gestión.
 
 IMPORTANTE:
 
-Estos valores deben ser editables.
+NO crear un módulo principal nuevo llamado "Forrajes".
 
-Para bovinos NO imponer una meta universal rígida.
+Debe seguir dentro de:
 
-Permitir configurar:
+Potreros
 
-gmdObjetivoKgDia
+Visualmente:
 
-Ejemplo inicial configurable:
+POTREROS
 
-0.90 kg/día
+[ Pastoreo ] [ Bancos forrajeros ]
 
-pero tratarlo como una meta de negocio configurable, no como estándar universal.
-
-==================================================
-3. ICP - ÍNDICE DE CRECIMIENTO PORCINO
-==================================================
-
-El ICP debe responder:
-
-"¿Qué tan cerca está el crecimiento porcino de la finca del objetivo esperado para las etapas productivas?"
-
-El ICP final debe ser un número alrededor de 100.
-
-Interpretación:
-
-100
-= crecimiento exactamente en objetivo
-
-> 100
-= crecimiento superior al objetivo
-
-< 100
-= crecimiento inferior al objetivo
+Esto evita aumentar el menú principal y evita mezclar visualmente las métricas de pastoreo con las métricas de corte.
 
 ==================================================
-4. FUENTE DE DATOS DEL ICP
+1. REVISIÓN PREVIA
 ==================================================
 
-Usar:
+Antes de modificar:
 
-- Animal
-- Pesaje
+- revisar Potrero
+- revisar RotacionPotrero
+- revisar catálogo de pastos recientemente implementado
+- revisar HistorialCoberturaPotrero
+- revisar potreroRendimientoService
+- revisar Tarea
+- revisar MovimientoFinanciero
+- revisar sistema de planes / PlanService
+- revisar FeatureGate
+- revisar calendario lunar implementado para tareas de Siembra
+- revisar importador
 
-Solo animales:
+NO duplicar:
 
-especie = 'Porcino'
+- catálogo de pastos
+- servicios de rendimiento
+- historial de cobertura
+- tareas
+- lógica de planes
 
-estado activo o equivalente según el modelo real.
-
-Para calcular crecimiento se necesitan al menos 2 pesajes válidos.
-
-No usar animales con un solo pesaje para calcular GMD.
-
-No interpretar ausencia de pesajes como crecimiento 0.
-
-==================================================
-5. CÁLCULO DE GMD PORCINA
-==================================================
-
-Para cada animal porcino con suficientes datos dentro del período:
-
-pesoInicial =
-primer pesaje válido considerado
-
-pesoFinal =
-último pesaje válido considerado
-
-dias =
-diferencia entre fechas
-
-gananciaKg =
-pesoFinal - pesoInicial
-
-gmdReal =
-gananciaKg / dias
-
-Excluir cálculos donde:
-
-- dias <= 0
-- peso inicial inválido
-- peso final inválido
-
-Si gananciaKg es negativa:
-
-mantenerla como valor real.
-
-No convertirla automáticamente a 0.
-
-Esto puede indicar pérdida de peso.
+Si CatalogoPasto ya existe, extenderlo para soportar también especies de corte en lugar de crear otro catálogo incompatible.
 
 ==================================================
-6. DETERMINAR ETAPA PORCINA
+2. CONCEPTO: TIPO DE ÁREA
 ==================================================
 
-Revisar si actualmente Animal ya tiene:
+Agregar al Potrero, o adaptar estructura existente:
 
-- etapa
-- categoria
-- objetivoProductivo
-- peso
-- edad
+tipoArea
 
-Reutilizar primero lo existente.
+Valores iniciales:
 
-No crear campos duplicados.
+PASTOREO
+BANCO_FORRAJERO
 
-Necesitamos determinar la etapa productiva para asignar la meta correcta.
+Preparar opcionalmente:
 
-Etapas objetivo:
+MIXTO
 
-- Fase 1
-- Fase 2
-- Fase 3
-- Desarrollo
-- Engorde
+pero NO complicar la primera versión si el modelo actual no lo necesita.
 
-Si ya existe una etapa explícita, utilizarla.
+PASTOREO:
 
-Si no existe, preparar un helper centralizado para determinarla según los datos disponibles.
+animales entran al área.
 
-NO inventar rangos de peso arbitrarios sin revisar primero cómo está modelada actualmente la producción porcina.
+Sus indicadores principales siguen siendo:
 
-Si no se puede determinar la etapa:
+- días ocupados
+- ocupación
+- rotaciones
+- animal-días
+- animal-días/ha
+- descanso
 
-marcar ese animal como:
+BANCO_FORRAJERO:
 
-sinMetaProductiva
+el animal normalmente NO entra.
 
-y no incluirlo en el cálculo normalizado del ICP.
+El forraje se:
+
+- corta
+- pica
+- transporta
+- suministra a animales
+
+Sus indicadores son diferentes:
+
+- kg de forraje producido
+- kg/ha/corte
+- cortes
+- días entre cortes
+- producción acumulada
+- producción/ha
+
+NO calcular animal-días/ha para un banco forrajero.
 
 ==================================================
-7. NORMALIZACIÓN DEL CRECIMIENTO
+3. CATÁLOGO ÚNICO DE FORRAJES
 ==================================================
 
-Para cada animal:
+Extender el catálogo existente para manejar:
 
-cumplimientoGmd =
-gmdReal / gmdObjetivoEtapa * 100
+tipoUso o usosPermitidos.
 
 Ejemplo:
 
-gmdReal:
-0.806 kg/día
+usosPermitidos: [
+  'PASTOREO',
+  'CORTE',
+  'ENSILAJE'
+]
 
-gmdObjetivo:
-0.850 kg/día
+Un mismo material puede admitir más de un uso.
 
-cumplimiento:
-94.82 %
-
-==================================================
-8. ICP GENERAL DE FINCA
-==================================================
-
-NO calcular:
-
-promedio simple de todos los porcentajes individuales.
-
-Utilizar ponderación por tiempo real evaluado.
-
-Para cada animal:
-
-animalDiasEvaluados = dias utilizados para calcular su GMD
-
-ICP finca:
-
-SUM(
-  cumplimientoGmdAnimal * animalDiasEvaluados
-)
-/
-SUM(animalDiasEvaluados)
-
-Esto permite que un animal observado durante 60 días tenga mayor peso estadístico que uno observado solo durante 5 días.
-
-El resultado final es:
-
-icp
-
-==================================================
-9. CLASIFICACIÓN ICP
-==================================================
-
-Usar inicialmente estas reglas de negocio:
-
-ICP >= 105
-"Por encima del objetivo"
-
-ICP >= 95 y < 105
-"En objetivo"
-
-ICP >= 80 y < 95
-"Bajo objetivo"
-
-ICP < 80
-"Requiere revisión"
-
-IMPORTANTE:
-
-Esta clasificación es una regla interna de negocio.
-
-Debe quedar en configuración o constantes centralizadas.
-
-No presentarla como una escala veterinaria universal.
-
-==================================================
-10. RESPUESTA ICP
-==================================================
-
-Crear endpoint equivalente:
-
-GET /api/reportes/porcinos/crecimiento
-
-Query:
-
-fechaInicio
-fechaFin
-
-Respuesta sugerida:
+Ejemplo conceptual:
 
 {
-  icp: 94.8,
-
-  clasificacion: "Bajo objetivo",
-
-  resumen: {
-    porcinosEvaluados: 82,
-    porcinosSinDatosSuficientes: 14,
-    animalDiasEvaluados: 4210,
-    gananciaKgTotal: 2860,
-    gmdRealPonderada: 0.79,
-    gmdObjetivoPonderada: 0.83
-  },
-
-  porEtapa: [
-    {
-      etapa: "Desarrollo",
-      animales: 35,
-      gmdReal: 0.72,
-      gmdObjetivo: 0.75,
-      cumplimiento: 96
-    },
-    {
-      etapa: "Engorde",
-      animales: 47,
-      gmdReal: 0.81,
-      gmdObjetivo: 0.85,
-      cumplimiento: 95.3
-    }
-  ],
-
-  datosInsuficientes: false
+  nombre: "Cuba OM-22",
+  categoria: "Pasto de corte",
+  usosPermitidos: ["CORTE"],
+  activo: true
 }
 
-==================================================
-11. DATOS INSUFICIENTES ICP
-==================================================
+No crear listas separadas completamente incompatibles de:
 
-Si no existen suficientes porcinos con al menos 2 pesajes:
-
-NO devolver:
-
-ICP = 0
-
-porque eso significaría falsamente que el crecimiento fue pésimo.
-
-Devolver:
-
-{
-  icp: null,
-  datosInsuficientes: true,
-  mensaje:
-  "No existen suficientes pesajes para calcular el índice de crecimiento porcino."
-}
-
-==================================================
-12. IEE - ÍNDICE DE EFICIENCIA DE ENGORDE
-==================================================
-
-Crear un índice general de engorde a nivel finca.
-
-Debe funcionar para:
-
-- Bovinos de engorde
-- Porcinos de engorde
-
-Puede existir una finca:
-
-solo bovina
-solo porcina
-o mixta
-
-El IEE debe permitir obtener:
-
-- IEE bovino
-- IEE porcino
-- IEE general de finca
-
-IMPORTANTE:
-
-Nunca comparar directamente kg/día de bovinos contra kg/día de porcinos.
-
-Cada especie debe normalizarse primero contra SU PROPIA meta.
-
-==================================================
-13. IDENTIFICAR ANIMALES DE ENGORDE
-==================================================
-
-Revisar primero si existe:
-
-objetivoProductivo
-
-o campo equivalente.
-
-La lógica objetivo es identificar animales con:
-
-objetivoProductivo = 'Engorde'
-
-No asumir que todo macho está en engorde.
-
-No asumir que todos los porcinos están en engorde.
-
-==================================================
-14. COMPONENTES DEL IEE
-==================================================
-
-Primera versión del IEE:
-
-60 % Cumplimiento de GMD
-
-25 % Eficiencia del tiempo
-
-15 % Supervivencia
-
-Formula:
-
-IEE =
-cumplimientoGmd * 0.60
-+
-eficienciaTiempo * 0.25
-+
-supervivencia * 0.15
-
-Para la ponderación:
-
-cada componente puede limitarse a máximo 100.
-
-Esto evita que una GMD extraordinariamente alta compense completamente mortalidad o una mala eficiencia de tiempo.
-
-Ejemplo:
-
-cumplimientoGmdPonderacion =
-Math.min(cumplimientoGmd, 100)
-
-==================================================
-15. COMPONENTE 1 - CUMPLIMIENTO GMD
-==================================================
-
-Para Bovinos:
-
-usar meta:
-
-ConfiguracionProductiva.bovinosEngorde.gmdObjetivoKgDia
-
-Para Porcinos:
-
-usar:
-
-ConfiguracionProductiva.porcinos.gmdEngordeKgDia
-
-Calcular la GMD real agregada de cada especie utilizando los pesajes.
+CatalogoPasto
+CatalogoForraje
 
 Preferencia:
 
-GMD agregada =
-SUM(gananciaKg)
-/
-SUM(animalDiasEvaluados)
+un catálogo productivo único reutilizable.
 
-Después:
+Puede renombrarse internamente a:
 
-cumplimientoGmd =
-gmdRealAgregada / gmdObjetivo * 100
+CatalogoForraje
 
-Calcular independientemente para:
-
-- Bovino
-- Porcino
+solo si la migración es segura.
 
 ==================================================
-16. COMPONENTE 2 - EFICIENCIA DEL TIEMPO
+4. CATÁLOGO INICIAL DE PASTOS DE CORTE / FORRAJES
 ==================================================
 
-Necesitamos:
+Agregar:
 
-- peso inicial del período/ciclo
-- peso objetivo
-- GMD objetivo
+Cuba OM-22 / Cuba 22
+Cuba CT-115
+King Grass
+Taiwán
+Taiwán rojo
+Camerún
+Maralfalfa
+Elefante
+Gigante
+Caña de azúcar
+Imperial
+Maíz forrajero
+Sorgo forrajero
+Prodigioso
+Otro
 
-Calcular:
+Mantener además los materiales de pastoreo ya existentes:
 
-kgObjetivoGanancia =
-pesoObjetivo - pesoInicialPromedio
-
-diasObjetivo =
-kgObjetivoGanancia / gmdObjetivo
-
-Para animales/lotes finalizados, si existe duración real:
-
-eficienciaTiempo =
-diasObjetivo / diasReales * 100
-
-Para animales activos:
-
-usar duración proyectada.
-
-kgRestante =
-pesoObjetivo - pesoActual
-
-diasRestantesEstimados =
-kgRestante / gmdReal
-
-diasProyectados =
-diasYaTranscurridos + diasRestantesEstimados
-
-eficienciaTiempo =
-diasObjetivo / diasProyectados * 100
-
-Manejar casos donde:
-
-- peso actual >= peso objetivo
-- gmdReal <= 0
-- peso objetivo no está configurado
-
-Si no existe información suficiente:
-
-no inventar eficiencia.
-
-Marcar componente como:
-
-null
+Brizantha
+Toledo
+Marandú
+Piatá
+Xaraés
+Diamantes 1
+MG-5 Victoria
+Mombaza
+Tanzania
+Massai
+Guinea
+Estrella Africana
+Ratana
+Decumbens
+Humidícola
+Mulato
+Mulato II
+Tanner
+Brachipará
+Gamalote
+Jaragua
+Kikuyo
+etc.
 
 ==================================================
-17. COMPONENTE 3 - SUPERVIVENCIA
+5. LEGUMINOSAS / COMPLEMENTOS
 ==================================================
 
-Calcular por especie y período.
+Mantener separadas conceptualmente las leguminosas asociadas.
 
-animalesEngordeIniciales =
-animales considerados en engorde durante el período
+Catálogo inicial:
 
-muertesEngorde =
-animales de engorde muertos durante el período
-
-supervivencia =
-
-(animalesEngordeIniciales - muertesEngorde)
-/
-animalesEngordeIniciales
-* 100
-
-IMPORTANTE:
-
-Revisar cómo se registra actualmente fechaMuerte.
-
-Si solo existe estado = Muerto sin fecha confiable:
-
-documentar la limitación.
-
-No usar updatedAt silenciosamente como fecha de muerte sin indicarlo.
-
-==================================================
-18. IEE POR ESPECIE
-==================================================
-
-Calcular:
-
-ieeBovino
-
-usando:
-
-- cumplimientoGmdBovino
-- eficienciaTiempoBovino
-- supervivenciaBovina
-
-Calcular:
-
-ieePorcino
-
-usando:
-
-- cumplimientoGmdPorcino
-- eficienciaTiempoPorcino
-- supervivenciaPorcina
-
-Si un componente no puede calcularse:
-
-NO asignarle 0 automáticamente.
-
-Reponderar únicamente entre componentes disponibles.
+Maní forrajero
+Kudzú
+Cratylia
+Stylosanthes
+Otra
+Ninguna
 
 Ejemplo:
 
-si solo tenemos:
+Banco Norte
 
-GMD = 60 %
-Supervivencia = 15 %
+Forraje principal:
+Cuba OM-22
 
-peso disponible = 75
+Leguminosa asociada:
+Cratylia
 
-IEE =
-(
-GMD * 0.60
-+
-Supervivencia * 0.15
-)
-/
-0.75
-
-Esto evita castigar al cliente simplemente porque todavía no registra peso objetivo.
-
-Incluir en respuesta:
-
-componentesDisponibles
+No confundir ambos como una única especie.
 
 ==================================================
-19. IEE GENERAL DE FINCA
+6. DATOS DE UN BANCO FORRAJERO
 ==================================================
 
-Si solamente existe una especie en engorde:
+Para tipoArea = BANCO_FORRAJERO:
 
-IEE finca =
-IEE de esa especie
+registrar:
 
-Si existen Bovinos y Porcinos:
+nombre
+codigo
+area
+forrajePrincipal
+forrajesSecundarios
+leguminosasAsociadas
 
-NO usar promedio simple.
+fechaEstablecimiento
 
-Ponderar por:
+intervaloCorteObjetivoDias
 
-animal-días de engorde evaluados
+observaciones
 
-Ejemplo:
+estado
 
-IEE bovino = 92
-animalDiasBovino = 5000
+No guardar manualmente:
 
-IEE porcino = 96
-animalDiasPorcino = 2000
+ultimoCorte
+proximoCorte
 
-IEE finca =
+si pueden derivarse de los registros de cortes.
 
-(
-92 * 5000
-+
-96 * 2000
-)
-/
-7000
-
-Esto permite comparar el cumplimiento productivo de ambas actividades sin comparar directamente sus kg/día.
+Pueden exponerse como campos virtuales/calculados.
 
 ==================================================
-20. CLASIFICACIÓN IEE
+7. EJEMPLO
 ==================================================
 
-Crear clasificación inicial de negocio:
+BANCO NORTE
 
-IEE >= 95
-"Excelente desempeño"
+Área:
+0.8 ha
 
-IEE >= 85
-"Buen desempeño"
+Forraje principal:
+Cuba OM-22
 
-IEE >= 70
-"Desempeño medio"
+Fecha establecimiento:
+15/03/2026
 
-IEE < 70
-"Requiere revisión"
+Intervalo objetivo:
+60 días
 
-IMPORTANTE:
+Último corte:
+22/08/2026
 
-Esta clasificación debe quedar centralizada/configurable.
+Próximo corte estimado:
+21/10/2026
 
-No afirmar que es un estándar universal.
-
-==================================================
-21. ENDPOINT IEE
-==================================================
-
-Crear equivalente:
-
-GET /api/reportes/engorde
-
-Query:
-
-fechaInicio
-fechaFin
-especie opcional
-
-especie:
-
-Bovino
-Porcino
-Todos
-
-Respuesta:
-
-{
-  ieeGeneral: 91.7,
-
-  clasificacion: "Buen desempeño",
-
-  componentes: {
-    cumplimientoGmd: 93.4,
-    eficienciaTiempo: 87.6,
-    supervivencia: 99.1
-  },
-
-  bovinos: {
-    iee: 90.8,
-    animalesEvaluados: 75,
-    animalDias: 6300,
-    gmdReal: 0.84,
-    gmdObjetivo: 0.90,
-    cumplimientoGmd: 93.3,
-    pesoPromedioActual: 412,
-    pesoObjetivo: 500,
-    eficienciaTiempo: 86.5,
-    supervivencia: 99
-  },
-
-  porcinos: {
-    iee: 94.5,
-    animalesEvaluados: 130,
-    animalDias: 4100,
-    gmdReal: 0.82,
-    gmdObjetivo: 0.85,
-    cumplimientoGmd: 96.5,
-    pesoPromedioActual: 86,
-    pesoObjetivo: 110,
-    eficienciaTiempo: 91,
-    supervivencia: 99.3
-  },
-
-  datosInsuficientes: false
-}
+Producción último corte:
+4.250 kg
 
 ==================================================
-22. OTROS INDICADORES DE ENGORDE
-==================================================
-
-Además del IEE, devolver:
-
-- animales actualmente en engorde
-- peso promedio actual
-- ganancia total de peso
-- GMD real
-- GMD objetivo
-- cumplimiento GMD %
-- días promedio en engorde
-- peso objetivo
-- kg promedio restantes
-- días estimados restantes
-- animales que ya alcanzaron peso objetivo
-- animales sin pesajes recientes
-
-Separar:
-
-bovinos
-porcinos
-
-y total cuando tenga sentido.
-
-==================================================
-23. FRONTEND
-==================================================
-
-No crear un módulo nuevo.
-
-Agregar dentro de Reportes.
-
-Estructura sugerida:
-
-REPORTES
-
-Bovinos
-- Cría
-- Engorde
-
-Porcinos
-- Reproducción
-- Camadas
-- Crecimiento
-- Engorde
-
-==================================================
-24. VISTA ICP
-==================================================
-
-En:
-
-Reportes > Porcinos > Crecimiento
-
-Mostrar tarjeta principal:
-
-Índice de Crecimiento Porcino
-
-ICP
-94.8
-
-"Bajo objetivo"
-
-Debajo:
-
-- Porcinos evaluados
-- GMD real
-- GMD objetivo
-- Ganancia total
-- Datos sin suficientes pesajes
-
-Mostrar además comparación por etapa:
-
-Etapa
-Animales
-GMD real
-Meta
-Cumplimiento
-
-==================================================
-25. VISTA IEE
-==================================================
-
-En:
-
-Reportes > Engorde
-
-Mostrar:
-
-Índice de Eficiencia de Engorde
-
-IEE general:
-91.7
-
-Buen desempeño
-
-Componentes:
-
-GMD:
-93.4 %
-
-Tiempo:
-87.6 %
-
-Supervivencia:
-99.1 %
-
-Si la finca tiene ambas especies:
-
-mostrar debajo:
-
-Bovinos
-IEE: 90.8
-
-Porcinos
-IEE: 94.5
-
-No presentar esto como competencia entre especies.
-
-Solo como desempeño relativo contra las metas propias de cada sistema.
-
-==================================================
-26. PROYECCIÓN DE PESO OBJETIVO
-==================================================
-
-Mostrar proyección cuando exista información suficiente.
-
-Ejemplo:
-
-Peso promedio actual:
-412 kg
-
-Peso objetivo:
-500 kg
-
-GMD:
-0.84 kg/día
-
-Faltante:
-88 kg
-
-Estimación:
-105 días
-
-Texto:
-
-"Al ritmo de crecimiento actual, el grupo alcanzaría el peso objetivo aproximadamente en 105 días."
-
-Usar lenguaje de proyección.
-
-No afirmar que es una fecha garantizada.
-
-==================================================
-27. NO IMPLEMENTAR TODAVÍA
-==================================================
-
-No incluir todavía en IEE:
-
-- conversión alimenticia
-- kg alimento / kg ganado
-- consumo real de alimento
-- costo por kg ganado dentro del índice
-- margen económico dentro del índice
-
-Motivo:
-
-la aplicación todavía no controla con suficiente precisión el alimento realmente consumido por cada grupo de engorde.
-
-No deducir consumo desde compras de alimento.
-
-Comprar alimento != consumirlo.
-
-==================================================
-28. PREPARAR SEGUNDA VERSIÓN
-==================================================
-
-Dejar la arquitectura preparada para posteriormente incorporar:
-
-conversionAlimenticia
-
-y:
-
-eficienciaEconomica
-
-Futura versión del IEE podría incluir:
-
-- GMD
-- conversión alimenticia
-- supervivencia
-- eficiencia económica
-
-Pero NO implementarla ahora.
-
-==================================================
-29. SERVICIO CENTRAL
+8. MODELO DE CORTE
 ==================================================
 
 Crear:
 
-indicesProductivosService
+CorteForraje
+
+o nombre equivalente.
+
+Campos sugeridos:
+
+{
+  area: ObjectId ref Potrero,
+
+  fechaCorte: Date,
+
+  forraje: ObjectId ref CatalogoForraje,
+
+  areaCortadaHa: Number,
+
+  cantidadForrajeVerdeKg: Number,
+
+  porcentajeMateriaSeca: Number | null,
+
+  cantidadMateriaSecaKg: Number | null,
+
+  destino: {
+    tipo,
+    referenciaId,
+    descripcion
+  },
+
+  responsable: ObjectId,
+
+  observaciones: String,
+
+  registradoPor: ObjectId,
+
+  createdAt,
+  updatedAt
+}
+
+==================================================
+9. ÁREA CORTADA
+==================================================
+
+No asumir siempre que se corta el 100 % del banco.
+
+Permitir:
+
+areaCortadaHa
+
+Ejemplo:
+
+Banco:
+
+0.8 ha
+
+Corte realizado:
+
+0.4 ha
+
+Producción:
+
+2.100 kg
+
+Entonces:
+
+kgForrajeVerdePorHa =
+
+2100 / 0.4
+
+NO:
+
+2100 / 0.8
+
+==================================================
+10. CANTIDAD PRODUCIDA
+==================================================
+
+La medida principal normalizada debe ser:
+
+kg de forraje verde
+
+En frontend permitir ingresar:
+
+kg
+toneladas
+
+Si usuario ingresa:
+
+4.25 toneladas
+
+normalizar internamente:
+
+4250 kg
+
+No mezclar unidades sin conversión.
+
+Si posteriormente se permiten:
+
+carretas
+sacos
+cargas
+
+no convertirlas a kg si no existe un peso equivalente conocido.
+
+==================================================
+11. MATERIA SECA
+==================================================
+
+porcentajeMateriaSeca:
+
+opcional.
+
+NO obligarlo.
+
+Si existe:
+
+cantidadMateriaSecaKg =
+
+cantidadForrajeVerdeKg *
+porcentajeMateriaSeca / 100
+
+Ejemplo:
+
+4250 kg forraje verde
+
+20 % MS
+
+=
+
+850 kg materia seca
+
+NO estimar porcentaje de materia seca automáticamente por especie en esta primera versión.
+
+Si usuario no lo conoce:
+
+cantidadMateriaSecaKg = null
+
+==================================================
+12. DESTINO DEL FORRAJE
+==================================================
+
+Registrar opcionalmente hacia dónde fue destinado el corte.
+
+Valores iniciales:
+
+FINCA_GENERAL
+BOVINOS
+PORCINOS
+ENGORDE_BOVINO
+ENGORDE_PORCINO
+LOTE
+ANIMAL
+OTRO
+
+Si existe modelo de lote:
+
+permitir referencia.
+
+Si no existe:
+
+no inventarlo únicamente por esto.
+
+Conservar:
+
+descripcionDestino
+
+cuando no haya referencia estructurada.
+
+Ejemplo:
+
+Destino:
+Engorde bovino
+
+Esto servirá posteriormente para relacionar producción de forraje con alimentación.
+
+==================================================
+13. NO CALCULAR CONVERSIÓN ALIMENTICIA
+==================================================
+
+IMPORTANTE:
+
+Cantidad cosechada NO significa automáticamente cantidad consumida.
+
+Por tanto todavía NO calcular:
+
+- conversión alimenticia
+- alimento/kg ganado
+- IEE alimenticio
+- consumo por animal
+
+Un corte puede tener:
+
+- desperdicio
+- almacenamiento
+- pérdidas
+- alimento no consumido
+
+Solo registrar:
+
+producción
+destino
+
+Preparar arquitectura futura.
+
+==================================================
+14. REGISTRAR CORTE
+==================================================
+
+Flujo:
+
+Banco Norte
+→ Registrar corte
+
+Fecha:
+22/08/2026
+
+Área cortada:
+0.8 ha
+
+Cantidad:
+4.250 kg
+
+Materia seca:
+opcional
+
+Destino:
+Engorde bovino
+
+Responsable:
+...
+
+Observaciones:
+...
+
+Guardar CorteForraje.
+
+==================================================
+15. PRÓXIMO CORTE
+==================================================
+
+Si existe:
+
+intervaloCorteObjetivoDias
+
+entonces:
+
+proximoCorteEstimado =
+
+ultimoCorte.fechaCorte
++
+intervaloCorteObjetivoDias
+
+Ejemplo:
+
+Último corte:
+22 agosto
+
+Intervalo objetivo:
+60 días
+
+Próximo:
+21 octubre
+
+==================================================
+16. TAREAS AUTOMÁTICAS
+==================================================
+
+Si banco tiene:
+
+intervaloCorteObjetivoDias
+
+después de registrar un corte:
+
+crear o actualizar tarea automática:
+
+"Cortar Banco Norte"
+
+fechaProgramada:
+proximoCorteEstimado
+
+moduloOrigen:
+Potreros
+
+referenciaId:
+Banco/Potrero
+
+categoriaAutomatica:
+CORTE_FORRAJE
+
+creadoAutomaticamente:
+true
+
+También se debe registrar la tarea del primer corte con la fecha qeu indico porque puede que registre el corte sin haberlo hecho, etonces crear la tarea con el responsable.
+Usar estructura real de Tarea.
+
+==================================================
+17. NO DUPLICAR TAREAS
+==================================================
+
+Si ya existe una tarea automática pendiente para el próximo corte:
+
+actualizarla.
+
+No crear duplicados.
+
+Si usuario registra corte antes de la fecha prevista:
+
+cerrar/completar correctamente la tarea correspondiente
+y programar la siguiente.
+
+No modificar tareas ya completadas históricamente.
+
+==================================================
+18. SIEMBRA / ESTABLECIMIENTO
+==================================================
+
+Al crear o renovar un banco forrajero:
+
+permitir crear tarea:
+
+SIEMBRA
+
+Ejemplo:
+
+"Sembrar Banco Norte - Cuba OM-22"
+
+La tarea debe integrarse con el calendario lunar que ya implementamos.
+
+Cuando usuario:
+
+- crea
+- edita
+- reprograma
+
+una tarea categoría SIEMBRA:
+
+mostrar:
+
+fase lunar
+próximas fases
+
+como información.
+
+NO modificar la fecha automáticamente.
+
+==================================================
+19. HISTORIAL DE COBERTURA
+==================================================
+
+Reutilizar:
+
+HistorialCoberturaPotrero
+
+si ya existe.
+
+Ejemplo:
+
+Banco Norte
+
+Cuba OM-22
+2026-03-15 → 2028-02-01
+
+Maralfalfa
+2028-02-02 → actual
+
+Los cortes históricos deben conservar el forraje correcto de su época.
+
+NO mostrar cortes antiguos como Maralfalfa solo porque actualmente el banco tenga Maralfalfa.
+
+==================================================
+20. CAMBIO / RENOVACIÓN DE FORRAJE
+==================================================
+
+Cuando usuario cambia:
+
+Cuba OM-22
+→ Maralfalfa
+
+pedir:
+
+Fecha del cambio/establecimiento
+
+Cerrar cobertura anterior.
+
+Crear cobertura nueva.
+
+Actualizar forraje actual.
+
+NO destruir historial.
+
+==================================================
+21. INTERFAZ POTREROS
+==================================================
+
+Dentro del módulo actual:
+
+POTREROS
+
+[ Pastoreo ] [ Bancos forrajeros ]
+
+Vista Pastoreo:
+
+mantener funcionamiento actual.
+
+Vista Bancos forrajeros:
+
+mostrar cards/tabla:
+
+Nombre
+Área
+Forraje
+Último corte
+Próximo corte
+Producción último corte
+Estado
+
+Acciones:
+
+Ver
+Registrar corte
+Editar
+Programar actividad
+
+==================================================
+22. DETALLE DEL BANCO
+==================================================
+
+Secciones:
+
+INFORMACIÓN
+
+Área
+Forraje principal
+Forrajes asociados
+Fecha establecimiento
+Intervalo objetivo
+
+ESTADO ACTUAL
+
+Último corte
+Días desde último corte
+Próximo corte estimado
+Días faltantes
+
+HISTORIAL DE CORTES
+
+Fecha
+Área cortada
+Kg forraje verde
+Kg/ha
+Materia seca si existe
+Destino
+Responsable
+
+TAREAS
+
+Próximo corte
+Siembra
+Fertilización
+otras asociadas
+
+==================================================
+23. PLANES - FUNCIONALIDAD BÁSICA
+==================================================
+
+Toda la gestión de bancos forrajeros debe estar disponible en:
+
+ESENCIAL
+GESTION
+PRO
+PREMIUM
+
+Esto incluye:
+
+- crear banco forrajero
+- editar
+- catálogo
+- registrar cortes
+- historial de cortes
+- producción de cada corte
+- próximo corte
+- tareas
+- destino
+- materia seca opcional
+
+NO bloquear el manejo operativo en Esencial.
+
+==================================================
+24. FEATURE DE PLAN
+==================================================
+
+Si existe configuración de features:
+
+agregar o utilizar:
+
+bancosForrajeros: true
+
+para TODOS los planes.
+
+Ejemplo:
+
+ESENCIAL:
+bancosForrajeros = true
+
+GESTION:
+bancosForrajeros = true
+
+PRO:
+bancosForrajeros = true
+
+PREMIUM:
+bancosForrajeros = true
+
+==================================================
+25. QUÉ ES BÁSICO Y QUÉ ES ANALÍTICA
+==================================================
+
+IMPORTANTE PARA PLANES:
+
+TODOS LOS PLANES pueden ver en cada banco:
+
+- último corte
+- producción de ese corte
+- kg/ha de ese corte
+- historial de cortes
+- próximo corte
+- días entre dos cortes concretos
+
+Eso forma parte del manejo operativo.
+
+Lo que se bloquea es:
+
+ANÁLISIS AGREGADO / COMPARATIVO DE RENDIMIENTO.
+
+==================================================
+26. ANÁLISIS DE RENDIMIENTO
+==================================================
+
+Disponible desde:
+
+GESTION
+
+y también:
+
+PRO
+PREMIUM
+
+ESENCIAL:
+NO
+
+Usar preferentemente la feature existente:
+
+analiticaProductiva
+
+No crear lógica:
+
+if plan === 'GESTION'
+
+Usar:
+
+requireFeature('analiticaProductiva')
 
 o equivalente.
 
-Funciones sugeridas:
-
-calcularGmd()
-obtenerMetaGmdPorcina()
-calcularCumplimientoGmd()
-calcularIcpPorcino()
-calcularGmdEngordePorEspecie()
-calcularEficienciaTiempo()
-calcularSupervivenciaEngorde()
-calcularIeeEspecie()
-calcularIeeGeneral()
-obtenerProyeccionPesoObjetivo()
-
-No duplicar fórmulas en controladores.
-
 ==================================================
-30. REUTILIZAR REPORTES EXISTENTES
+27. ENDPOINT DE ANALÍTICA
 ==================================================
 
-Antes de programar revisar:
+Crear endpoint equivalente:
 
-- reporte crecimiento-pesajes
-- Pesaje
-- Animal
-- reporte compras animales
-- sustentabilidad
-- ventas
-- estados de Animal
-- categorías porcinas
-- objetivoProductivo si ya existe
+GET /api/reportes/forrajes/rendimiento
 
-Ya existen cálculos de crecimiento.
+protegido por:
 
-Reutilizar helpers cuando sea posible.
+requireFeature('analiticaProductiva')
 
-No implementar una segunda versión distinta de GMD en otro archivo si se puede centralizar.
+Filtros:
+
+fechaInicio
+fechaFin
+areaId
+forrajeId
 
 ==================================================
-31. CASOS DE PRUEBA
+28. INDICADORES DE RENDIMIENTO
+==================================================
+
+Para el período:
+
+totalBancos
+
+areaTotalHa
+
+totalCortes
+
+forrajeVerdeTotalKg
+
+materiaSecaTotalKg
+solo cuando exista información
+
+produccionForrajeVerdeKgHa
+
+produccionMateriaSecaKgHa
+cuando sea posible
+
+promedioKgHaCorte
+
+diasPromedioEntreCortes
+
+cumplimientoIntervaloCorte
+
+produccionPorMes
+
+produccionPorForraje
+
+produccionPorBanco
+
+destinos
+
+==================================================
+29. KG/HA/CORTE
+==================================================
+
+Para cada corte:
+
+kgHaCorte =
+
+cantidadForrajeVerdeKg
+/
+areaCortadaHa
+
+Solo calcular si:
+
+areaCortadaHa > 0
+
+No usar área total del banco si se registró área cortada específica.
+
+==================================================
+30. PRODUCCIÓN DEL PERÍODO POR HA
+==================================================
+
+Diferenciar:
+
+kg/ha/corte
+
+de:
+
+kg/ha acumulados en el período.
+
+Ejemplo:
+
+Banco 1 ha
+
+Corte 1:
+4.000 kg
+
+Corte 2:
+4.500 kg
+
+Corte 3:
+4.200 kg
+
+Producción acumulada:
+
+12.700 kg
+
+Producción período:
+
+12.700 kg/ha
+
+Promedio por corte:
+
+4.233 kg/ha/corte
+
+No confundir ambos indicadores.
+
+==================================================
+31. DÍAS ENTRE CORTES
+==================================================
+
+Para cada banco:
+
+ordenar cortes cronológicamente.
+
+Calcular:
+
+diasEntreCortes
+
+entre corte N y N+1.
+
+Después:
+
+diasPromedioEntreCortes
+
+minimo
+maximo
+
+Comparar con:
+
+intervaloCorteObjetivoDias
+
+==================================================
+32. CUMPLIMIENTO DEL INTERVALO
+==================================================
+
+NO clasificar automáticamente como "mejor" por cortar más rápido.
+
+Mostrar:
+
+Objetivo:
+60 días
+
+Real promedio:
+64 días
+
+Diferencia:
++4 días
+
+o:
+
+Objetivo:
+60
+
+Real:
+55
+
+Diferencia:
+-5
+
+La interpretación pertenece al productor/técnico.
+
+==================================================
+33. RENDIMIENTO POR FORRAJE
+==================================================
+
+Agrupar por:
+
+forrajePrincipal / forraje registrado en CorteForraje.
+
+Ejemplo:
+
+Cuba OM-22
+
+Bancos:
+3
+
+Área evaluada:
+2.4 ha
+
+Cortes:
+14
+
+Forraje producido:
+63.500 kg
+
+Promedio:
+4.535 kg/ha/corte
+
+Intervalo promedio:
+58 días
+
+==================================================
+34. RENDIMIENTO POR BANCO
+==================================================
+
+Ejemplo:
+
+Banco Norte
+
+Forraje:
+Cuba OM-22
+
+Área:
+0.8 ha
+
+Cortes:
+6
+
+Total:
+25.400 kg
+
+Promedio:
+5.292 kg/ha/corte
+
+Días promedio:
+61
+
+==================================================
+35. COMPARAR EL MISMO FORRAJE
+==================================================
+
+Permitir:
+
+Cuba OM-22
+
+Banco Norte:
+5.200 kg/ha/corte
+
+Banco Sur:
+4.400 kg/ha/corte
+
+Banco Bajo:
+3.900 kg/ha/corte
+
+Esto puede ayudar a detectar diferencias de:
+
+- suelo
+- manejo
+- fertilización
+- humedad
+- edad del cultivo
+
+Pero NO afirmar automáticamente causalidad.
+
+==================================================
+36. NO DECIR "MEJOR FORRAJE"
+==================================================
+
+Usar lenguaje:
+
+"Rendimiento observado"
+
+"Mayor producción registrada"
+
+"Producción promedio en esta finca"
+
+NO usar:
+
+"Este es el mejor pasto"
+
+"Este forraje es superior"
+
+porque existen múltiples factores de manejo.
+
+==================================================
+37. GRÁFICOS
+==================================================
+
+En análisis avanzado incluir:
+
+Producción mensual
+→ línea
+
+Kg/ha/corte por banco
+→ barras
+
+Producción por forraje
+→ barras
+
+Días entre cortes
+→ tendencia/histórico
+
+Destino del forraje
+→ distribución si tiene datos suficientes
+
+==================================================
+38. DATOS INSUFICIENTES
+==================================================
+
+Si hay un único corte:
+
+se puede mostrar:
+
+producción del corte
+kg/ha/corte
+
+pero NO:
+
+promedio entre cortes
+
+Si no existe área cortada:
+
+NO inventar kg/ha.
+
+Si no existe materia seca:
+
+NO estimarla.
+
+Mostrar:
+
+"Sin información suficiente"
+
+en vez de cero cuando cero sería engañoso.
+
+==================================================
+39. FRONTEND - ESENCIAL
+==================================================
+
+Usuario Esencial entra a Banco Norte.
+
+Puede ver:
+
+Área:
+0.8 ha
+
+Cuba OM-22
+
+Último corte:
+22 agosto
+
+Producción:
+4.250 kg
+
+Rendimiento de ese corte:
+5.313 kg/ha
+
+Próximo corte:
+21 octubre
+
+Historial:
+...
+
+Pero en sección:
+
+ANÁLISIS DE RENDIMIENTO
+
+mostrar tarjeta bloqueada:
+
+"Análisis de rendimiento de forrajes"
+
+"Disponible desde el plan Gestión."
+
+[Mejorar plan]
+
+Usar FeatureGate existente.
+
+==================================================
+40. FRONTEND - GESTIÓN / PRO / PREMIUM
+==================================================
+
+Además del manejo operativo:
+
+mostrar:
+
+ANÁLISIS DE RENDIMIENTO
+
+Tarjetas:
+
+Producción total
+63.500 kg
+
+Producción/ha
+...
+
+Cortes
+14
+
+Promedio kg/ha/corte
+...
+
+Intervalo promedio
+...
+
+Luego:
+
+Producción mensual
+
+Rendimiento por banco
+
+Rendimiento por forraje
+
+==================================================
+41. BACKEND TAMBIÉN DEBE PROTEGER
+==================================================
+
+No basta con ocultar frontend.
+
+Si Esencial llama:
+
+GET /api/reportes/forrajes/rendimiento
+
+responder:
+
+403
+
+{
+  code: "PLAN_FEATURE_NOT_AVAILABLE",
+  feature: "analiticaProductiva",
+  message:
+    "El análisis de rendimiento de forrajes está disponible desde el plan Gestión."
+}
+
+==================================================
+42. RELACIÓN CON FINANZAS - PREPARAR
+==================================================
+
+En el futuro queremos poder asociar:
+
+MovimientoFinanciero
+→ Banco forrajero
+
+Ejemplos:
+
+fertilizante
+semilla
+mano de obra
+herbicida
+combustible
+
+Entonces podremos calcular:
+
+costo/ha
+costo/corte
+costo/kg forraje producido
+
+NO implementar estos indicadores si actualmente los movimientos financieros no se pueden asociar correctamente al área.
+
+Pero dejar referencias preparadas.
+
+==================================================
+43. FUTURO: COSTO POR KG DE FORRAJE
+==================================================
+
+Cuando existan costos confiables:
+
+costoKgForraje =
+
+costosBancoPeriodo
+/
+kgForrajeProducidoPeriodo
+
+Esto será analítica avanzada.
+
+NO inventarlo ahora con gastos generales de toda la finca.
+
+==================================================
+44. RELACIÓN FUTURA CON ENGORDE
+==================================================
+
+Guardar destino permitirá posteriormente relacionar:
+
+Banco
+→ Corte
+→ kg producidos
+→ lote destino
+
+y eventualmente:
+
+lote
+→ pesajes
+→ GMD
+
+Pero NO asumir todavía:
+
+kg cosechado = kg consumido.
+
+Por eso todavía no modificar:
+
+ICP
+IEE
+conversión alimenticia
+
+con estos datos.
+
+==================================================
+45. IMPORTADOR
+==================================================
+
+Permitir importar:
+
+tipoArea
+forrajePrincipal
+fechaEstablecimiento
+intervaloCorteObjetivoDias
+
+Opcionalmente historial:
+
+fechaCorte
+cantidadForrajeVerdeKg
+areaCortadaHa
+
+No obligar a tener historial previo.
+
+==================================================
+46. MIGRACIÓN
+==================================================
+
+Potreros actuales:
+
+tipoArea = PASTOREO
+
+solo si esta inferencia es completamente segura.
+
+Si no:
+
+hacer migración controlada.
+
+No transformar ningún potrero existente en Banco Forrajero automáticamente.
+
+Los nuevos bancos:
+
+tipoArea = BANCO_FORRAJERO
+
+==================================================
+47. ÍNDICES MONGODB
+==================================================
+
+Revisar y agregar índices útiles:
+
+CorteForraje.area
+CorteForraje.fechaCorte
+CorteForraje.forraje
+
+Posiblemente compuesto:
+
+area + fechaCorte
+
+No duplicar índices existentes.
+
+==================================================
+48. CASOS DE PRUEBA
 ==================================================
 
 Probar:
 
-- finca solo bovina
-- finca solo porcina
-- finca mixta
-- animales con 1 pesaje
-- animales con varios pesajes
-- pérdida de peso
-- pesajes el mismo día
-- sin metas configuradas
-- sin peso objetivo
-- animales muertos
-- animal que alcanza peso objetivo
-- animal sobre peso objetivo
-- período sin pesajes
-- período que atraviesa cambio de etapa porcina
-- mezcla de porcinos en distintas etapas
+- banco Cuba OM-22
+- banco King Grass
+- banco Maralfalfa
+- banco con leguminosa
+- banco sin fecha establecimiento
+- corte de toda el área
+- corte parcial
+- toneladas convertidas a kg
+- corte sin materia seca
+- corte con materia seca
+- varios cortes
+- un solo corte
+- sin cortes
+- cambio de Cuba OM-22 a Maralfalfa
+- historial antes/después del cambio
+- tarea de próximo corte
+- evitar duplicado de tarea
+- tarea de siembra
+- calendario lunar en tarea de siembra
+- Esencial accediendo al manejo operativo
+- Esencial intentando análisis
+- Gestión accediendo a análisis
+- Pro accediendo a análisis
+- Premium accediendo a análisis
 
 ==================================================
-32. PRINCIPIO FINAL
+49. RESULTADO DE NEGOCIO
 ==================================================
 
-Los índices principales son de FINCA.
+La estructura comercial debe quedar:
 
-ICP:
+ESENCIAL
 
-mide qué tan bien está creciendo la producción porcina de la finca respecto a las metas correspondientes a cada etapa.
+✓ Bancos forrajeros
+✓ Registro de pastos de corte
+✓ Historial de cortes
+✓ Cantidad producida
+✓ kg/ha del corte individual
+✓ Próximo corte
+✓ Tareas
+✓ Siembra
+✓ Calendario lunar informativo
 
-IEE:
+✗ Análisis agregado de rendimiento
 
-mide qué tan eficientemente está funcionando el engorde total de la finca.
 
-IEE puede consolidar:
+GESTIÓN
 
-- Bovinos
-- Porcinos
+Todo Esencial
 
-pero solamente después de normalizar cada especie contra sus propias metas.
++
 
-No comparar directamente:
+✓ Análisis de rendimiento
+✓ Producción histórica
+✓ Comparación de bancos
+✓ Comparación por forraje
+✓ Tendencias
 
-kg/día bovino
-vs
-kg/día porcino.
 
-La jerarquía final debe ser:
+PRO
 
-IPG
-→ Cría bovina
+Todo Gestión
 
-ICP
-→ Crecimiento porcino
++
 
-IEE
-→ Engorde bovino/porcino
+futuras relaciones económicas avanzadas
 
-Todos mostrados principalmente a nivel de FINCA.
+
+PREMIUM
+
+Todo Pro
+
++
+
+futura consolidación multi-finca
+
+==================================================
+50. PRINCIPIO FINAL
+==================================================
+
+No queremos crear simplemente:
+
+"un campo de pasto de corte".
+
+Queremos modelar un pequeño sistema productivo:
+
+BANCO FORRAJERO
+      ↓
+FORRAJE
+      ↓
+ESTABLECIMIENTO
+      ↓
+CORTE
+      ↓
+CANTIDAD PRODUCIDA
+      ↓
+DESTINO
+      ↓
+PRÓXIMO CORTE
+      ↓
+TAREA
+
+y desde Gestión:
+
+HISTORIAL DE CORTES
+      ↓
+ANÁLISIS DE RENDIMIENTO
+      ↓
+kg/ha
+kg/ha/corte
+producción por período
+intervalos
+comparación de bancos
+comparación de forrajes
+
+Todo dentro de Potreros.
+
+No crear un nuevo módulo del menú.
+
+Al finalizar indicar:
+
+- modelos creados/modificados
+- catálogo extendido
+- semillas agregadas
+- endpoints creados
+- servicios creados
+- tareas automáticas implementadas
+- integración con calendario lunar
+- FeatureGate implementado
+- endpoints protegidos por plan
+- migraciones
+- cambios al importador
+- pruebas realizadas

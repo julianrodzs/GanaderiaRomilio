@@ -23,6 +23,12 @@
     ,"superadmin:apply": "node scripts/asignarSuperAdministrador.js --apply"
     ,"migrate:objetivos-bovinos:check": "node scripts/actualizarObjetivosCategoriasBovinos.js"
     ,"migrate:objetivos-bovinos": "node scripts/actualizarObjetivosCategoriasBovinos.js --apply"
+    ,"job:alertas": "node scripts/ejecutarAlertasProgramadas.js"
+    ,"migrate:razas:check": "node scripts/normalizarRazasBovinas.js"
+    ,"migrate:razas": "node scripts/normalizarRazasBovinas.js --apply"
+    ,"seed:pastos": "node scripts/inicializarCatalogoPastos.js"
+    ,"migrate:tipos-area:check": "node scripts/migrarTiposAreaPotreros.js"
+    ,"migrate:tipos-area": "node scripts/migrarTiposAreaPotreros.js --apply"
   },
   "keywords": [],
   "author": "",

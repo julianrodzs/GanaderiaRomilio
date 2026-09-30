@@ -15,7 +15,11 @@ const tareaCtrl = {};
 const POPULATE_TAREA = [
     { path: 'asignadoA', select: 'nombre apellido correo rol estado' },
     { path: 'creadoPor', select: 'nombre apellido correo rol' },
-    { path: 'potrero', select: 'codigo nombre area estado' },
+    {
+        path: 'potrero',
+        select: 'codigo nombre area estado pastoPrincipal',
+        populate: { path: 'pastoPrincipal', select: 'nombre cultivar especieBase' }
+    },
     { path: 'animal', select: 'diio identificadorFinca nombre sexo estado especie categoria' },
     { path: 'comentarios.usuario', select: 'nombre apellido correo rol' }
 ];
@@ -332,11 +336,22 @@ tareaCtrl.cambiarEstadoTarea = async (req, res) => {
 };
 
 tareaCtrl.completarTarea = async (req, res) => {
+    const claveIdempotencia = String(req.get('Idempotency-Key') || '').trim();
+
     try {
-        const tarea = await Tarea.findById(req.params.id);
+        if (claveIdempotencia.length > 160) {
+            return res.status(400).json({ mensaje: 'La clave de idempotencia no es valida' });
+        }
+
+        const tarea = await Tarea.findById(req.params.id).select('+operacionesIdempotentes');
 
         if (!tarea) {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
+        }
+
+        if (claveIdempotencia && tarea.operacionesIdempotentes?.some((operacion) => operacion.clave === claveIdempotencia)) {
+            res.set('X-Idempotent-Replay', 'true');
+            return res.json(await obtenerTareaPoblada(tarea._id));
         }
 
         if (esModoConsulta(req)) {
@@ -345,6 +360,26 @@ tareaCtrl.completarTarea = async (req, res) => {
 
         if (!puedeGestionarTareas(req) && !esAsignado(req, tarea)) {
             return res.status(403).json({ mensaje: 'No puedes completar esta tarea' });
+        }
+
+        if (['Completada', 'Cancelada'].includes(tarea.estado)) {
+            return res.status(409).json({
+                codigo: tarea.estado === 'Completada' ? 'TAREA_YA_COMPLETADA' : 'TAREA_CANCELADA',
+                mensaje: tarea.estado === 'Completada'
+                    ? 'La tarea ya fue completada desde otro dispositivo.'
+                    : 'La tarea fue cancelada y no puede completarse.',
+                tareaActual: await obtenerTareaPoblada(tarea._id)
+            });
+        }
+
+        const versionEsperada = req.body.versionEsperada ? new Date(req.body.versionEsperada) : null;
+        if (versionEsperada && !Number.isNaN(versionEsperada.getTime())
+            && tarea.updatedAt.getTime() !== versionEsperada.getTime()) {
+            return res.status(409).json({
+                codigo: 'TAREA_MODIFICADA',
+                mensaje: 'La tarea cambio mientras el dispositivo estaba sin conexion. Revisa su estado antes de reintentar.',
+                tareaActual: await obtenerTareaPoblada(tarea._id)
+            });
         }
 
         tarea.estado = 'Completada';
@@ -358,11 +393,35 @@ tareaCtrl.completarTarea = async (req, res) => {
             tarea.observaciones = req.body.observaciones;
         }
 
+        if (claveIdempotencia) {
+            tarea.operacionesIdempotentes = [
+                ...(tarea.operacionesIdempotentes || []),
+                {
+                    clave: claveIdempotencia,
+                    tipo: 'Completar tarea',
+                    usuario: req.usuario.id,
+                    ejecutadaEn: new Date()
+                }
+            ].slice(-50);
+        }
+
         const tareaActualizada = await tarea.save();
         await sincronizarBitacoraTarea(tareaActualizada, req.usuario?.id);
         await ejecutarNotificacionSegura(() => notificarTareaCompletada(tareaActualizada, req.usuario));
         res.json(await obtenerTareaPoblada(tareaActualizada._id));
     } catch (error) {
+        if (error?.name === 'VersionError') {
+            const tareaActual = await Tarea.findById(req.params.id).select('+operacionesIdempotentes');
+            if (claveIdempotencia && tareaActual?.operacionesIdempotentes?.some((operacion) => operacion.clave === claveIdempotencia)) {
+                res.set('X-Idempotent-Replay', 'true');
+                return res.json(await obtenerTareaPoblada(tareaActual._id));
+            }
+            return res.status(409).json({
+                codigo: 'TAREA_MODIFICADA',
+                mensaje: 'La tarea fue modificada por otro usuario. Actualiza la informacion antes de reintentar.',
+                tareaActual: tareaActual ? await obtenerTareaPoblada(tareaActual._id) : null
+            });
+        }
         res.status(400).json({ mensaje: 'Error al completar tarea', error: error.message });
     }
 };

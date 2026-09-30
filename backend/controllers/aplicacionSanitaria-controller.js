@@ -1,6 +1,7 @@
 const { AplicacionSanitaria, NATURALEZAS_APLICACION } = require('../models/AplicacionSanitaria');
 const { crearAplicacionSanitaria } = require('../services/aplicacionSanitaria-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
+const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
 
 const aplicacionSanitariaCtrl = {};
 
@@ -8,6 +9,7 @@ const poblarAplicacion = (query) => query
     .populate('animales', 'diio identificadorFinca nombre especie categoria estado')
     .populate('planSanitario', 'actividad producto grupoGanado')
     .populate('tratamiento', 'motivo producto estado')
+    .populate('responsableUsuario', 'nombre apellido correo estado')
     .populate('registradoPor', 'nombre apellido correo');
 
 aplicacionSanitariaCtrl.getAplicaciones = async (req, res) => {
@@ -50,6 +52,8 @@ aplicacionSanitariaCtrl.getAplicacionById = async (req, res) => {
 
 aplicacionSanitariaCtrl.createAplicacionUnica = async (req, res) => {
     try {
+        const responsable = await validarUsuarioAsignable(req.body.responsableUsuario, 'Sanidad');
+        const responsableNombre = [responsable.nombre, responsable.apellido].filter(Boolean).join(' ') || responsable.correo;
         const aplicacion = await crearAplicacionSanitaria({
             animales: req.body.animales,
             especie: req.body.especie,
@@ -58,7 +62,8 @@ aplicacionSanitariaCtrl.createAplicacionUnica = async (req, res) => {
             tipo: req.body.tipo,
             dosis: req.body.dosis,
             viaAplicacion: req.body.viaAplicacion,
-            responsable: req.body.responsable,
+            responsable: responsableNombre,
+            responsableUsuario: responsable._id,
             motivo: req.body.motivo,
             observaciones: req.body.observaciones,
             naturaleza: 'Aplicacion unica'

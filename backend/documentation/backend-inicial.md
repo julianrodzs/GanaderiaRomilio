@@ -528,6 +528,24 @@ Campos:
 - `ultimaFertilizacion`
 - `estado`
 - `observaciones`
+- `pastoPrincipal` (`CatalogoPasto`)
+- `pastosSecundarios` (`CatalogoPasto[]`)
+- `leguminosasAsociadas` (`CatalogoPasto[]`)
+- `fechaEstablecimientoPasto`
+- `diasDescansoObjetivo`
+- `observacionCobertura`
+- `descripcionCobertura` para importaciones pendientes de catalogar
+
+`CatalogoPasto` es un catalogo central, no una lista del frontend. Separa `Pasto` de `Leguminosa/Forraje` y conserva nombre comun, nombre cientifico, especie base y cultivar. El comando idempotente `npm run seed:pastos` inicializa 34 pastos y 6 leguminosas/forrajes.
+
+Cada cambio crea `HistorialCoberturaPotrero`. El periodo vigente tiene `fechaFin = null`; al cambiar, el anterior termina el dia previo al inicio del nuevo. Las modificaciones se centralizan en `potreroCobertura-service.js`; el CRUD normal de Potrero ignora campos de cobertura para impedir saltos de historial.
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/api/pastos` | Catalogo activo; acepta `categoria` y `buscar` |
+| GET | `/api/potreros/:id/cobertura` | Cobertura vigente e historial |
+| POST | `/api/potreros/:id/cobertura` | Registra cobertura inicial |
+| PUT | `/api/potreros/:id/cobertura` | Cierra la vigente y registra el cambio |
 
 Estados:
 
@@ -573,6 +591,8 @@ Reglas de estado de potrero:
 | --- | --- | --- |
 | GET | `/api/potreros/rendimiento` | Comparativo de todos los potreros |
 | GET | `/api/potreros/:id/rendimiento` | Rendimiento e historico mensual individual |
+| GET | `/api/reportes/potreros/rendimiento` | Alias del comparativo para Reportes |
+| GET | `/api/reportes/potreros/por-pasto` | Rendimiento historico por pasto o especie base |
 
 Ambas rutas aceptan `fechaInicio` y `fechaFin` en formato `AAAA-MM-DD`; sin parametros usan el mes actual.
 
@@ -584,6 +604,11 @@ Ambas rutas aceptan `fechaInicio` y `fechaFin` en formato `AAAA-MM-DD`; sin para
 - ocupacion, promedios, animal-dias y animal-dias por hectarea.
 - descansos historicos y descanso actual.
 - agrupacion mensual y comparativo por potrero.
+- resolucion de la cobertura vigente durante cada tramo de una rotacion.
+- agrupacion por cultivar o `especieBase`, con comparaciones entre potreros de la misma cobertura.
+- descanso real, objetivo y diferencia.
+
+El reporte por pasto acepta `agruparPor=pasto|especieBase`. Reporta hechos observados; no atribuye causalidad al pasto ni usa GMD como conclusion forrajera.
 
 ### Plan Sanitario
 
@@ -676,6 +701,8 @@ Naturalezas:
 - `Aplicacion unica`: no tiene plan ni tratamiento.
 
 Una aplicacion puede incluir varios animales en un solo documento. El servicio `aplicacionSanitaria-service.js` crea un `EventoAnimal` independiente para cada animal, todos con el ID de la aplicacion como `referenciaId`.
+
+Las aplicaciones unicas nuevas exigen seleccionar `responsableUsuario` desde los usuarios activos compatibles con Sanidad (`Administrador`, `Encargado` o `Veterinario`). El backend valida que pertenezca a la organizacion actual y conserva tambien el nombre en `responsable` para mostrarlo junto con registros historicos que solo tenian texto libre.
 
 Base:
 
@@ -1499,9 +1526,11 @@ Hojas de datos exactas:
 - `FINANZAS`
 - `PESAJES` opcional
 
-`INVENTARIO` admite `OBJETIVO_PRODUCTIVO` y `ETAPA_PRODUCTIVA`. `PESAJES` admite `ETAPA_PRODUCTIVA` como fotografia de la fase porcina en la fecha del pesaje. El importador no deduce etapas por rangos de peso.
+`INVENTARIO` admite `OBJETIVO_PRODUCTIVO` y `ETAPA_PRODUCTIVA`. Para bovinos también admite `RAZA`, `RAZA_PRINCIPAL`, `RAZA_SECUNDARIA`, `DESCRIPCION_RACIAL`, `GRADO_RACIAL`, `VARIEDAD_RACIAL` y `COMPOSICION_RACIAL`. `RAZA` conserva la descripción histórica y los campos estructurados alimentan reportes. `MADRE_DIIO` y `PADRE_DIIO` se resuelven después de importar todos los animales y se conservan si todavía no existe el progenitor. `PESAJES` admite `ETAPA_PRODUCTIVA` como fotografia de la fase porcina en la fecha del pesaje. El importador no deduce etapas por rangos de peso.
 
 El importador no contiene detectores de hojas antiguas ni mapeos especificos por cliente. `ROTACIONES` y Sanidad se administran en sus modulos.
+
+`POTREROS` admite `PASTO_PRINCIPAL`, `FECHA_ESTABLECIMIENTO_PASTO`, `DIAS_DESCANSO_OBJETIVO` y `OBSERVACION_COBERTURA`. Tambien reconoce los encabezados alternativos `PASTO` y `TIPO_PASTO`. La coincidencia con `CatalogoPasto` ignora mayusculas y tildes; `Brachiaria brizantha` resuelve a la entrada generica Brizantha. Un nombre sin coincidencia no se pierde: se guarda en `descripcionCobertura` y la vista previa genera una advertencia.
 
 La vista previa valida el libro completo y persiste en `ImportacionExcel`:
 

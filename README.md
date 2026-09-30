@@ -24,7 +24,7 @@ La aplicacion ya cuenta con:
 - Tareas asignadas por usuario.
 - Importacion Excel por modulos.
 - Conteo por drone con backend Node y servicio IA separado en Python/FastAPI.
-- PWA instalable con soporte offline inicial para trabajadores.
+- PWA instalable con modo offline operativo para inventario, potreros y finalizacion de tareas asignadas.
 - Despliegue preparado para Vercel, Render y MongoDB Atlas.
 
 ## Estructura
@@ -243,6 +243,10 @@ Potreros incluyen:
 - ultima chapia.
 - ultima fertilizacion.
 - estado.
+- cobertura forrajera actual: pasto principal, pastos secundarios y leguminosas/forrajes asociados.
+- fecha de establecimiento, descanso objetivo y observacion de cobertura.
+
+El catalogo distingue especie base y cultivar. Por ejemplo, `Brizantha` generica no se mezcla con `Toledo`, `Marandu`, `Piata`, `Xaraes`, `Diamantes 1` o `MG-5 Victoria`. Los cambios cierran el periodo anterior y abren uno nuevo en `HistorialCoberturaPotrero`; los potreros historicos sin informacion quedan sin cobertura, sin valores inventados.
 
 Rotaciones guardan historico de entrada/salida, dias de ocupacion y descanso.
 
@@ -259,6 +263,9 @@ La seccion `Rendimiento` calcula el uso de cada potrero desde `RotacionPotrero`;
 - Las rotaciones `Finalizada` cuentan hasta su salida y las `Activa` hasta hoy.
 - Las rotaciones `Planificada` se separan como uso proyectado y no alteran resultados reales.
 - Una rotacion real cuya entrada y salida ocurren el mismo dia cuenta como un dia.
+- La vista `Por tipo de pasto` agrupa rendimiento observado por cultivar o especie base.
+- Si una rotacion atraviesa un cambio de cobertura, sus dias y animal-dias se reparten entre los periodos historicos correspondientes.
+- El reporte compara descanso real contra `diasDescansoObjetivo`, sin afirmar causalidad ni recomendar un pasto ganador.
 
 ### Reproduccion/Gestacion bovina
 
@@ -649,6 +656,8 @@ Reglas importantes:
 - La confirmacion usa el lote validado guardado en backend y solo puede ejecutarse una vez.
 - El mismo archivo confirmado no puede volver a importarse por accidente.
 - Rotaciones y Sanidad no forman parte del importador estandar.
+- `POTREROS` acepta `PASTO_PRINCIPAL`; por compatibilidad tambien reconoce `PASTO` y `TIPO_PASTO`.
+- El nombre del pasto se resuelve sin distinguir mayusculas ni tildes. Un valor desconocido se conserva como descripcion pendiente de revision y no se descarta.
 
 ### Fincas y lineas productivas
 
@@ -742,15 +751,15 @@ El frontend esta configurado como PWA:
 
 - manifest.
 - service worker.
-- cache basico.
+- cache de la interfaz estatica, sin almacenar respuestas generales de la API.
 - instalable desde navegador.
-- soporte offline inicial.
-- IndexedDB para datos de trabajadores:
-  - tareas.
-  - inventario basico.
-  - gestacion.
-  - potreros.
-  - cambios pendientes.
+- IndexedDB aislado por organizacion, finca y usuario.
+- consulta offline de inventario por especie y potreros.
+- tareas asignadas con finalizacion offline, idempotencia, reintentos y deteccion de conflictos.
+- panel global con ultima descarga, ultima sincronizacion y estado individual de cambios pendientes.
+- limpieza del contexto local al cerrar sesion.
+
+El alcance oficial y el flujo operativo se documentan en `backend/documentation/modo-offline.md`.
 
 ## Despliegue
 
@@ -805,6 +814,8 @@ node -e "require('./app'); console.log('backend ok')"
 
 - Backend: `backend/documentation/backend-inicial.md`
 - Reportes: `backend/documentation/reportes.md`
+- Razas bovinas y descendencia: `backend/documentation/razas-genealogia.md`
+- Modo offline: `backend/documentation/modo-offline.md`
 - IA drone: `ia-service/README.md`
 - Despliegue Vercel: `DEPLOY_VERCEL.md`
 - Despliegue Render: `DEPLOY_RENDER.md`

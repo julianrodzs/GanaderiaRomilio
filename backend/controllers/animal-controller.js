@@ -16,6 +16,7 @@ const {
 } = require('../services/genealogiaService');
 const { asegurarPuedeCrearAnimal, puedeUsarEspecie } = require('../services/plan-service');
 const { validarObjetivoProductivoFinca } = require('../services/finca-service');
+const { obtenerCatalogoRacial, prepararDatosRaciales } = require('../services/raza-service');
 const { respuestaErrorPlan } = require('../middleware/plan');
 
 const limpiarDiio = (diio) => {
@@ -236,6 +237,7 @@ animalCtrl.createAnimal = async (req, res) => {
             ...req.body,
             diio: limpiarDiio(req.body.diio)
         });
+        datos = prepararDatosRaciales(datos);
         datos = await prepararRelacionCamada(datos);
         await validarObjetivoProductivoFinca({
             fincaId: req.fincaId,
@@ -309,6 +311,8 @@ animalCtrl.updateAnimal = async (req, res) => {
             return res.status(404).json({ mensaje: 'Animal no encontrado' });
         }
 
+        datos = prepararDatosRaciales(datos, animalAnterior);
+
         delete datos.estadoSanitario;
         if (datos.estado === 'En tratamiento') {
             return res.status(400).json({ mensaje: 'En tratamiento ya no es un estado de inventario. Use el estado sanitario.' });
@@ -370,6 +374,10 @@ animalCtrl.updateAnimal = async (req, res) => {
         if (respuestaErrorPlan(error, res)) return;
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar animal', error: error.message });
     }
+};
+
+animalCtrl.getCatalogoRacial = (req, res) => {
+    res.json(obtenerCatalogoRacial());
 };
 
 animalCtrl.updateEstadoSanitario = async (req, res) => {

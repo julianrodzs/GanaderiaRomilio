@@ -11,6 +11,8 @@ import {
   obtenerReporteProductosResumen,
   obtenerReporteCrecimientoPesajes,
   obtenerReporteReproductivoPorcino,
+  obtenerReporteRazasBovinas,
+  obtenerReporteDescendenciaBovina,
   obtenerReporteSanidad,
   obtenerReporteTareasCamadas,
   obtenerResumenVentas,
@@ -22,8 +24,11 @@ import {
 import SelectorEspecie from './SelectorEspecie';
 import ReporteComprasAnimales from './ReporteComprasAnimales';
 import FeatureGate from './FeatureGate';
+import UpgradeMessage from './UpgradeMessage';
 import { usePlan } from '../context/PlanContext';
 import ReporteIndicesProductivos from './ReporteIndicesProductivos';
+import RendimientoPotreros from './RendimientoPotreros';
+import PaginacionTabla, { ContenidoPaginado } from './PaginacionTabla';
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR').format(Math.round(valor || 0));
 
@@ -165,7 +170,7 @@ const LineaPeso = ({ puntos = [] }) => {
 };
 
 const Reportes = ({ usuario }) => {
-  const { tieneFeature } = usePlan();
+  const { tieneFeature, puedeUsarEspecie } = usePlan();
   const [filtros, setFiltros] = useState({
     fechaInicio: `${obtenerAnioActual()}-01-01`,
     fechaFin: `${obtenerAnioActual()}-12-31`,
@@ -192,6 +197,10 @@ const Reportes = ({ usuario }) => {
   const [porcinosReporte, setPorcinosReporte] = useState(null);
   const [destinosFinancieros, setDestinosFinancieros] = useState([]);
   const [sanidadReporte, setSanidadReporte] = useState(null);
+  const [razasBovinas, setRazasBovinas] = useState(null);
+  const [descendenciaBovina, setDescendenciaBovina] = useState(null);
+  const [paginaProductos, setPaginaProductos] = useState(1);
+  const [limiteProductos, setLimiteProductos] = useState(10);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const etiquetaId = 'DIIO';
@@ -200,6 +209,7 @@ const Reportes = ({ usuario }) => {
     try {
       setCargando(true);
       setError('');
+      const incluirReportesPorcinos = especie !== 'Bovino' && puedeUsarEspecie('Porcino');
       const filtrosGenerales = {
         fechaInicio: filtros.fechaInicio,
         fechaFin: filtros.fechaFin,
@@ -224,7 +234,9 @@ const Reportes = ({ usuario }) => {
         fechaFin: filtros.fechaFin,
         producto: filtros.productoFiltro,
         categoria: filtros.categoriaProducto,
-        proveedor: filtros.proveedorProducto
+        proveedor: filtros.proveedorProducto,
+        pagina: paginaProductos,
+        limite: limiteProductos
       };
       const [
         data,
@@ -244,7 +256,9 @@ const Reportes = ({ usuario }) => {
         reproduccionPorcinaData,
         tareasCamadasData,
         economiaCamadasData,
-        sanidadData
+        sanidadData,
+        razasBovinasData,
+        descendenciaBovinaData
       ] = await Promise.all([
         obtenerResumenReportes({
           ...filtrosGenerales,
@@ -268,11 +282,13 @@ const Reportes = ({ usuario }) => {
           fechaInicio: filtros.fechaInicio,
           fechaFin: filtros.fechaFin
         }),
-        obtenerReporteCamadas(filtrosGenerales),
-        tieneFeature('analiticaProductiva') ? obtenerReporteReproductivoPorcino(filtrosGenerales) : Promise.resolve(null),
-        obtenerReporteTareasCamadas(filtrosGenerales),
-        tieneFeature('analiticaEconomica') ? obtenerReporteEconomicoCamadas(filtrosGenerales) : Promise.resolve(null),
-        obtenerReporteSanidad(filtrosGenerales)
+        incluirReportesPorcinos ? obtenerReporteCamadas(filtrosGenerales) : Promise.resolve(null),
+        incluirReportesPorcinos && tieneFeature('analiticaProductiva') ? obtenerReporteReproductivoPorcino(filtrosGenerales) : Promise.resolve(null),
+        incluirReportesPorcinos ? obtenerReporteTareasCamadas(filtrosGenerales) : Promise.resolve(null),
+        incluirReportesPorcinos && tieneFeature('analiticaEconomica') ? obtenerReporteEconomicoCamadas(filtrosGenerales) : Promise.resolve(null),
+        obtenerReporteSanidad(filtrosGenerales),
+        tieneFeature('analiticaProductiva') && especie !== 'Porcino' ? obtenerReporteRazasBovinas() : Promise.resolve(null),
+        tieneFeature('analiticaProductiva') && especie !== 'Porcino' ? obtenerReporteDescendenciaBovina(filtrosGenerales) : Promise.resolve(null)
       ]);
       setReporte(data);
       setProductividad(productividadData);
@@ -287,29 +303,36 @@ const Reportes = ({ usuario }) => {
       }
       setProductosReporte({
         resumen: productosResumenData,
-        porProducto: productosPorProductoData,
+        porProducto: productosPorProductoData?.datos || productosPorProductoData || [],
+        paginacionProductos: productosPorProductoData?.paginacion || null,
         porCategoria: productosPorCategoriaData,
         combustibles: productosCombustiblesData,
         proveedores: productosProveedoresData
       });
       setDestinosFinancieros(destinosFinancierosData || []);
-      setPorcinosReporte({
+      setPorcinosReporte(incluirReportesPorcinos ? {
         camadas: camadasData,
         reproduccion: reproduccionPorcinaData,
         tareasCamadas: tareasCamadasData,
         economia: economiaCamadasData
-      });
+      } : null);
       setSanidadReporte(sanidadData);
+      setRazasBovinas(razasBovinasData);
+      setDescendenciaBovina(descendenciaBovinaData);
     } catch (err) {
       setError(err.message);
     } finally {
       setCargando(false);
     }
-  }, [filtros, especie, tieneFeature]);
+  }, [filtros, especie, tieneFeature, puedeUsarEspecie, paginaProductos, limiteProductos]);
 
   useEffect(() => {
     cargarReportes();
   }, [cargarReportes]);
+
+  useEffect(() => {
+    setPaginaProductos(1);
+  }, [filtros.fechaInicio, filtros.fechaFin, filtros.productoFiltro, filtros.categoriaProducto, filtros.proveedorProducto]);
 
   const egresos = useMemo(() => {
     return reporte?.finanzas?.porNaturaleza?.find((item) => item.naturaleza === 'Egreso')?.total || 0;
@@ -331,6 +354,22 @@ const Reportes = ({ usuario }) => {
       .sort((a, b) => b.total - a.total);
   }, [destinosFinancieros]);
   const maxDestino = obtenerMaximo(destinosOrdenados, 'total');
+  const productosConPaginacionRemota = Boolean(productosReporte?.paginacionProductos);
+  const productosPorProducto = productosReporte?.porProducto || [];
+  const productosPagina = productosConPaginacionRemota
+    ? productosPorProducto
+    : productosPorProducto.slice(
+      (paginaProductos - 1) * limiteProductos,
+      paginaProductos * limiteProductos
+    );
+  const paginacionProductosActual = productosReporte
+    ? (productosReporte.paginacionProductos || {
+      pagina: paginaProductos,
+      limite: limiteProductos,
+      total: productosPorProducto.length,
+      totalPaginas: Math.max(Math.ceil(productosPorProducto.length / limiteProductos), 1)
+    })
+    : null;
   const aplicarPeriodoRapido = (tipo) => {
     const hoy = new Date();
     let inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
@@ -418,13 +457,37 @@ const Reportes = ({ usuario }) => {
             </article>
           </section>
 
-          <FeatureGate feature="analiticaProductiva">
+          {!tieneFeature('analiticaProductiva') && (
+            <section className="reportes-bloqueados" aria-label="Reportes de analítica productiva disponibles en otros planes">
+              <UpgradeMessage feature="analiticaProductiva" titulo="Índice de Productividad Ganadera" pregunta="¿Cómo se comportan la natalidad, el destete, la gestación y la supervivencia?" etiqueta="Reporte productivo" />
+              <UpgradeMessage feature="analiticaProductiva" titulo="Análisis de pesajes históricos" pregunta="¿Qué animales están creciendo mejor y cuáles necesitan seguimiento de peso?" etiqueta="Reporte de crecimiento" />
+              <UpgradeMessage feature="analiticaProductiva" titulo="Vacas a revisar" pregunta="¿Qué vacas llevan demasiado tiempo sin parto, gestación o resultados de destete?" etiqueta="Reporte reproductivo" />
+              <UpgradeMessage feature="analiticaProductiva" titulo="Partos por vaca y año" pregunta="¿Cuántos partos registra cada vaca y cuáles están bajo el objetivo anual?" etiqueta="Reporte reproductivo" />
+              {especie !== 'Porcino' && <UpgradeMessage feature="analiticaProductiva" titulo="Razas y descendencia bovina" pregunta="¿Cómo se distribuyen las razas y qué resultados reproductivos tiene cada progenitor?" etiqueta="Reporte genealógico" />}
+              {especie !== 'Bovino' && puedeUsarEspecie('Porcino') && <UpgradeMessage feature="analiticaProductiva" titulo="Reproductivo porcino" pregunta="¿Qué resultados tienen los ciclos, partos y destetes de las madres porcinas?" etiqueta="Reporte porcino" />}
+            </section>
+          )}
+
+          {!tieneFeature('analiticaEconomica') && (
+            <section className="reportes-bloqueados" aria-label="Reportes de analítica económica disponibles en otros planes">
+              <UpgradeMessage feature="analiticaEconomica" titulo="Finanzas de cría" pregunta="¿Cuánto se ha invertido, gastado e ingresado y cuál es el patrimonio ganadero estimado?" etiqueta="Reporte económico" />
+              <UpgradeMessage feature="analiticaEconomica" titulo="Sustentabilidad de cría" pregunta="¿Las ventas cubren las compras y el costo operativo asignado a los animales?" etiqueta="Reporte económico" />
+              <UpgradeMessage feature="analiticaEconomica" titulo="Rentabilidad y rotación de ventas" pregunta="¿De dónde provienen los animales vendidos y cuánto tiempo permanecieron en la finca?" etiqueta="Análisis de ventas" />
+              {especie !== 'Bovino' && puedeUsarEspecie('Porcino') && <UpgradeMessage feature="analiticaEconomica" titulo="Económico por camada" pregunta="¿Cuál es el costo, ingreso y margen estimado de cada camada?" etiqueta="Reporte porcino" />}
+            </section>
+          )}
+
+          <FeatureGate feature="analiticaProductiva" titulo="Indicadores productivos de la finca" pregunta="¿Cómo avanza la productividad según la especie y el objetivo productivo de la finca?" etiqueta="Analítica productiva">
             <ReporteIndicesProductivos
               fechaInicio={filtros.fechaInicio}
               fechaFin={filtros.fechaFin}
               especie={especie}
               puedeConfigurar={usuario?.rol === 'Administrador'}
             />
+          </FeatureGate>
+
+          <FeatureGate feature="analiticaProductiva" titulo="Rendimiento de potreros" pregunta="¿Cómo se comparan la ocupación, los descansos y los animal-días entre potreros?" etiqueta="Analítica de potreros">
+            <RendimientoPotreros rangoControlado={{ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin }} usarRutaReportes />
           </FeatureGate>
 
           {productividad && (
@@ -575,8 +638,10 @@ const Reportes = ({ usuario }) => {
               </div>
 
               {(sustentabilidadCria.detalleAnimales || []).length > 0 && (
-                <div className="tabla-scroll tabla-dinamica sustentabilidad-tabla">
-                  <table>
+                <ContenidoPaginado datos={sustentabilidadCria.detalleAnimales || []}>
+                  {(animalesPagina) => (
+                    <div className="tabla-scroll tabla-dinamica sustentabilidad-tabla">
+                      <table>
                     <thead>
                       <tr>
                         <th>{etiquetaId}</th>
@@ -593,7 +658,7 @@ const Reportes = ({ usuario }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {sustentabilidadCria.detalleAnimales.map((animal) => (
+                      {animalesPagina.map((animal) => (
                         <tr key={animal.animalId}>
                           <td>{animal.diio}</td>
                           <td>{animal.origen}</td>
@@ -609,8 +674,10 @@ const Reportes = ({ usuario }) => {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                </div>
+                      </table>
+                    </div>
+                  )}
+                </ContenidoPaginado>
               )}
 
               {(sustentabilidadCria.animalesIgnorados || []).length > 0 && (
@@ -699,8 +766,10 @@ const Reportes = ({ usuario }) => {
                       <h3>Comportamiento mensual de ventas</h3>
                     </div>
                   </div>
-                  <div className="tabla-scroll tabla-dinamica ventas-mes-tabla">
-                    <table>
+                  <ContenidoPaginado datos={ventasReporte.ventasPorMes || []}>
+                    {(ventasPagina) => (
+                      <div className="tabla-scroll tabla-dinamica ventas-mes-tabla">
+                        <table>
                       <thead>
                         <tr>
                           <th>Mes</th>
@@ -712,7 +781,7 @@ const Reportes = ({ usuario }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {ventasReporte.ventasPorMes.map((item) => (
+                        {ventasPagina.map((item) => (
                           <tr key={item.mes}>
                             <td>{item.mes}</td>
                             <td>{item.ventas}</td>
@@ -723,8 +792,10 @@ const Reportes = ({ usuario }) => {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
-                  </div>
+                        </table>
+                      </div>
+                    )}
+                  </ContenidoPaginado>
                 </div>
               )}
 
@@ -736,8 +807,10 @@ const Reportes = ({ usuario }) => {
                       <h3>Animales vendidos y tiempo en finca</h3>
                     </div>
                   </div>
-                  <div className="tabla-scroll tabla-dinamica ventas-mes-tabla">
-                    <table>
+                  <ContenidoPaginado datos={ventasReporte.rotacionInventarioVendido.detalle || []}>
+                    {(animalesPagina) => (
+                      <div className="tabla-scroll tabla-dinamica ventas-mes-tabla">
+                        <table>
                       <thead>
                         <tr>
                           <th>{etiquetaId}</th>
@@ -751,7 +824,7 @@ const Reportes = ({ usuario }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {ventasReporte.rotacionInventarioVendido.detalle.slice(0, 12).map((item) => (
+                        {animalesPagina.map((item) => (
                           <tr key={item.animalId || `${item.diio}-${item.fechaVenta}`}>
                             <td>{item.diio}</td>
                             <td>{item.nombre || '--'}</td>
@@ -764,14 +837,16 @@ const Reportes = ({ usuario }) => {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
-                  </div>
+                        </table>
+                      </div>
+                    )}
+                  </ContenidoPaginado>
                 </div>
               )}
             </section>
           )}
 
-          <FeatureGate feature="analiticaEconomica">
+          <FeatureGate feature="analiticaEconomica" titulo="Análisis de compras de animales" pregunta="¿Qué se está comprando, a qué precio y cómo cambia por especie, sexo y origen?" etiqueta="Reporte económico">
             <ReporteComprasAnimales
               fechaInicio={filtros.fechaInicio}
               fechaFin={filtros.fechaFin}
@@ -783,8 +858,8 @@ const Reportes = ({ usuario }) => {
             <section className="reporte-panel reporte-panel-amplio productos-reportes-panel">
               <div className="partos-panel-header">
                 <div>
-                  <p className="eyebrow">Productos e insumos</p>
-                  <h2>Cantidades y costos registrados</h2>
+                  <p className="eyebrow">Compras de productos e insumos</p>
+                  <h2>Cantidades y costos comprados</h2>
                 </div>
                 <div className="partos-filtros productos-filtros">
                   <label>
@@ -816,17 +891,17 @@ const Reportes = ({ usuario }) => {
 
               <div className="reportes-metricas finanzas-cria-metricas">
                 <article>
-                  <span>Monto total</span>
+                  <span>Monto comprado</span>
                   <strong>{formatearMoneda(productosReporte.resumen?.montoTotal)}</strong>
-                  <small>Productos con cantidad/costo en el rango</small>
+                  <small>Compras con producto y cantidad en el rango</small>
                 </article>
                 <article>
                   <span>Registros</span>
                   <strong>{formatearNumero(productosReporte.resumen?.cantidadMovimientos)}</strong>
-                  <small>Movimientos de productos</small>
+                  <small>Movimientos de compra</small>
                 </article>
                 <article>
-                  <span>Producto más usado</span>
+                  <span>Producto más comprado</span>
                   <strong>{productosReporte.resumen?.productosMasRegistrados?.[0]?.producto || '--'}</strong>
                   <small>
                     {formatearCantidadCompra(productosReporte.resumen?.productosMasRegistrados?.[0]?.cantidadTotal, productosReporte.resumen?.productosMasRegistrados?.[0]?.unidadMedida)}
@@ -849,7 +924,7 @@ const Reportes = ({ usuario }) => {
 
               <div className="productos-reportes-grid">
                 <article>
-                  <h3>Por producto</h3>
+                  <h3>Detalle de compras por producto</h3>
                   <div className="tabla-scroll tabla-dinamica tabla-productos-compacta">
                     <table>
                       <thead>
@@ -861,52 +936,75 @@ const Reportes = ({ usuario }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {(productosReporte.porProducto || []).slice(0, 12).map((item) => (
+                        {productosPagina.map((item) => (
                           <tr key={`${item.producto}-${item.categoria}-${item.unidadMedida}`}>
                             <td>{item.producto}</td>
                             <td>{item.categoria}</td>
                             <td>
-                              <strong>{formatearCantidadCompra(item.cantidadTotal, item.unidadMedida)}</strong>
-                              {item.cantidadFisicaTotal > 0 && item.unidadBase !== item.unidadMedida && (
-                                <small>Total: {formatearCantidadFisica(item.cantidadFisicaTotal, item.unidadBase)}</small>
-                              )}
+                              <strong>
+                                {formatearCantidadFisica(item.cantidadFisicaTotal, item.unidadBase || item.unidadMedida)
+                                  || formatearCantidadCompra(item.cantidadTotal, item.unidadMedida)}
+                              </strong>
+                              <small>{formatearNumero(item.cantidadRegistros)} compras registradas</small>
                             </td>
                             <td>
                               <strong>{formatearMoneda(item.montoTotal)}</strong>
-                              <small>Prom: {formatearMoneda(item.precioPromedio)}</small>
+                              <small>
+                                Promedio: {formatearMoneda(item.precioPromedio)}
+                                {item.unidadBase ? ` / ${item.unidadBase}` : ''}
+                              </small>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  {(productosReporte.porProducto || []).length === 0 && <span className="reporte-vacio">Sin productos para este rango.</span>}
+                  {productosPorProducto.length === 0 && <span className="reporte-vacio">Sin productos para este rango.</span>}
+                  {paginacionProductosActual && (
+                    <PaginacionTabla
+                      pagina={paginacionProductosActual.pagina}
+                      tamanoPagina={paginacionProductosActual.limite}
+                      total={paginacionProductosActual.total}
+                      totalPaginas={paginacionProductosActual.totalPaginas}
+                      onPagina={setPaginaProductos}
+                      onTamanoPagina={(limite) => {
+                        setLimiteProductos(limite);
+                        setPaginaProductos(1);
+                      }}
+                    />
+                  )}
                 </article>
 
                 <article>
-                  <h3>Por categoría</h3>
-                  <div className="tabla-scroll tabla-dinamica">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Categoría</th>
-                          <th>Cantidad total</th>
-                          <th>Monto total</th>
-                          <th>% total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(productosReporte.porCategoria || []).map((item) => (
-                          <tr key={item.categoria}>
-                            <td>{item.categoria}</td>
-                            <td>{formatearNumero(item.cantidadTotal)}</td>
-                            <td>{formatearMoneda(item.montoTotal)}</td>
-                            <td>{formatearPorcentaje(item.porcentajeDelTotal)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <h3>Gasto de productos por categoría</h3>
+                  <ContenidoPaginado datos={productosReporte.porCategoria || []}>
+                    {(categoriasPagina) => (
+                      <div className="tabla-scroll tabla-dinamica">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Categoría</th>
+                              <th>Productos</th>
+                              <th>Compras</th>
+                              <th>Monto total</th>
+                              <th>% del gasto</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {categoriasPagina.map((item) => (
+                              <tr key={item.categoria}>
+                                <td>{item.categoria}</td>
+                                <td>{(item.productosIncluidos || []).filter(Boolean).join(', ') || '--'}</td>
+                                <td>{formatearNumero(item.cantidadRegistros)}</td>
+                                <td>{formatearMoneda(item.montoTotal)}</td>
+                                <td>{formatearPorcentaje(item.porcentajeDelTotal)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </ContenidoPaginado>
                   {(productosReporte.porCategoria || []).length === 0 && <span className="reporte-vacio">Sin categorías para este rango.</span>}
                 </article>
 
@@ -956,7 +1054,7 @@ const Reportes = ({ usuario }) => {
             </section>
           )}
 
-          {porcinosReporte && (
+          {especie !== 'Bovino' && puedeUsarEspecie('Porcino') && porcinosReporte && (
             <section className="reporte-panel reporte-panel-amplio porcinos-reportes-panel">
               <div className="partos-panel-header">
                 <div>
@@ -1161,6 +1259,85 @@ const Reportes = ({ usuario }) => {
             </section>
           )}
 
+          {razasBovinas && (
+            <section className="reporte-panel reporte-panel-amplio reporte-racial-panel">
+              <div className="partos-panel-header">
+                <div>
+                  <p className="eyebrow">Bovinos · Inventario</p>
+                  <h2>Composición racial de la finca</h2>
+                </div>
+                <span>{formatearNumero(razasBovinas.resumen?.totalBovinos)} bovinos</span>
+              </div>
+              <div className="reporte-racial-grid">
+                {(razasBovinas.porGrupo || []).map((grupo) => (
+                  <article key={grupo.grupoRacial}>
+                    <div className="reporte-racial-titulo">
+                      <strong>{grupo.grupoRacial}</strong>
+                      <span>{formatearNumero(grupo.total)}</span>
+                    </div>
+                    {(grupo.detalles || []).slice(0, 6).map((detalle) => (
+                      <div className="reporte-lista-item" key={detalle.detalle}>
+                        <strong>{detalle.detalle}</strong>
+                        <span>{formatearNumero(detalle.total)} animales</span>
+                      </div>
+                    ))}
+                  </article>
+                ))}
+              </div>
+              {razasBovinas.resumen?.pendientesNormalizacion > 0 && (
+                <span className="reporte-vacio">{formatearNumero(razasBovinas.resumen.pendientesNormalizacion)} animales históricos pendientes de normalizar.</span>
+              )}
+            </section>
+          )}
+
+          {descendenciaBovina && (
+            <section className="reporte-panel reporte-panel-amplio descendencia-reporte-panel">
+              <div className="partos-panel-header">
+                <div>
+                  <p className="eyebrow">Bovinos · Genealogía</p>
+                  <h2>Descendencia registrada</h2>
+                </div>
+                <span>Partos y crías se contabilizan por separado</span>
+              </div>
+
+              <h3>Vacas</h3>
+              <ContenidoPaginado datos={descendenciaBovina.vacas || []}>
+                {(vacasPagina) => (
+                  <div className="tabla-scroll tabla-dinamica descendencia-reporte-tabla">
+                    <table>
+                  <thead><tr><th>DIIO</th><th>Vaca</th><th>Partos</th><th>Crías</th><th>Vivas</th><th>Machos</th><th>Hembras</th><th>Última cría</th><th>Edad</th><th>Estado reproductivo</th></tr></thead>
+                  <tbody>
+                    {vacasPagina.map((vaca) => (
+                      <tr key={vaca.animalId}>
+                        <td>{vaca.diio || '--'}</td><td>{vaca.nombre || '--'}</td><td>{vaca.partosRegistrados}</td><td>{vaca.criasRegistradas}</td><td>{vaca.criasVivas}</td><td>{vaca.machos}</td><td>{vaca.hembras}</td><td>{formatearFecha(vaca.ultimaCria)}</td><td>{formatearEdadMeses(vaca.edadMeses)}</td><td>{vaca.estadoReproductivo}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                    </table>
+                  </div>
+                )}
+              </ContenidoPaginado>
+
+              <h3>Toros</h3>
+              <ContenidoPaginado datos={descendenciaBovina.toros || []}>
+                {(torosPagina) => (
+                  <div className="tabla-scroll tabla-dinamica descendencia-reporte-tabla">
+                    <table>
+                  <thead><tr><th>DIIO</th><th>Toro</th><th>Crías</th><th>Madres diferentes</th><th>Machos</th><th>Hembras</th><th>Última cría</th></tr></thead>
+                  <tbody>
+                    {torosPagina.map((toro) => (
+                      <tr key={toro.animalId}>
+                        <td>{toro.diio || '--'}</td><td>{toro.nombre || '--'}</td><td>{toro.criasRegistradas}</td><td>{toro.madresDiferentes}</td><td>{toro.machos}</td><td>{toro.hembras}</td><td>{formatearFecha(toro.ultimaCria)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                    </table>
+                  </div>
+                )}
+              </ContenidoPaginado>
+            </section>
+          )}
+
           <section className="reportes-grid">
             <article className="reporte-panel">
               <p className="eyebrow">Inventario</p>
@@ -1187,7 +1364,7 @@ const Reportes = ({ usuario }) => {
 
             <article className="reporte-panel">
               <p className="eyebrow">Finanzas</p>
-              <h2>Gastos por categoria</h2>
+              <h2>Gastos por categoría</h2>
               {(reporte.finanzas.porCategoria || []).map((item) => (
                 <BarraReporte
                   key={item.categoria}
@@ -1305,7 +1482,7 @@ const Reportes = ({ usuario }) => {
               ))}
             </article>
 
-            <article className="reporte-panel reporte-panel-amplio">
+            {tieneFeature('analiticaProductiva') && <article className="reporte-panel reporte-panel-amplio">
               <div className="partos-panel-header">
                 <div>
                   <p className="eyebrow">Reproduccion</p>
@@ -1362,8 +1539,10 @@ const Reportes = ({ usuario }) => {
               )}
 
               {reporte.reproduccion.partos.porVaca.length > 0 && (
-                <div className="tabla-scroll tabla-dinamica partos-tabla">
-                  <table>
+                <ContenidoPaginado datos={reporte.reproduccion.partos.porVaca}>
+                  {(vacasPagina) => (
+                    <div className="tabla-scroll tabla-dinamica partos-tabla">
+                      <table>
                     <thead>
                       <tr>
                         <th>{etiquetaId}</th>
@@ -1377,7 +1556,7 @@ const Reportes = ({ usuario }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {reporte.reproduccion.partos.porVaca.map((vaca) => (
+                      {vacasPagina.map((vaca) => (
                         <tr key={vaca.animalId}>
                           <td>{vaca.diio}</td>
                           <td>{vaca.nombre || '--'}</td>
@@ -1403,10 +1582,12 @@ const Reportes = ({ usuario }) => {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                </div>
+                      </table>
+                    </div>
+                  )}
+                </ContenidoPaginado>
               )}
-            </article>
+            </article>}
 
             {vacasImproductivas && (
               <article className="reporte-panel reporte-panel-amplio">
@@ -1474,8 +1655,10 @@ const Reportes = ({ usuario }) => {
                 )}
 
                 {vacasImproductivas.vacas.length > 0 && (
-                  <div className="tabla-scroll tabla-dinamica partos-tabla">
-                    <table>
+                  <ContenidoPaginado datos={vacasImproductivas.vacas}>
+                    {(vacasPagina) => (
+                      <div className="tabla-scroll tabla-dinamica partos-tabla">
+                        <table>
                       <thead>
                         <tr>
                           <th>{etiquetaId}</th>
@@ -1489,7 +1672,7 @@ const Reportes = ({ usuario }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {vacasImproductivas.vacas.map((vaca) => (
+                        {vacasPagina.map((vaca) => (
                           <tr key={vaca.animalId}>
                             <td>{vaca.diio}</td>
                             <td>{vaca.nombre || '--'}</td>
@@ -1506,8 +1689,10 @@ const Reportes = ({ usuario }) => {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
-                  </div>
+                        </table>
+                      </div>
+                    )}
+                  </ContenidoPaginado>
                 )}
               </article>
             )}

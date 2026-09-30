@@ -40,20 +40,7 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/index.html',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp}'],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 4,
-              expiration: {
-                maxEntries: 80,
-                maxAgeSeconds: 60 * 60 * 24
-              }
-            }
-          }
-        ]
+        cleanupOutdatedCaches: true
       }
     })
   ],

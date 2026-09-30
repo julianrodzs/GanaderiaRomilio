@@ -26,7 +26,7 @@ const normalizarUnidadBase = (unidad) => {
 
 const normalizarUnidad = ({ unidad, cantidad } = {}) => {
     const unidadTexto = String(unidad || '').trim();
-    const coincidencia = unidadTexto.match(/^([0-9]+(?:[,.][0-9]+)?)\s*(.+)$/);
+    const coincidencia = unidadTexto.match(/^([0-9]+(?:[,.][0-9]+)?)\s*(?:x\s*)?(.+)$/i);
     const factorUnidad = coincidencia
         ? Number(coincidencia[1].replace(',', '.'))
         : 1;

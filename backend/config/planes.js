@@ -12,10 +12,10 @@ const FEATURES = Object.freeze({
     CONFIGURACION_EMAIL_AVANZADA: 'configuracionEmailAvanzada',
     AMBOS_TIPOS_ANIMALES: 'ambosTiposAnimales',
     REPORTES_MULTI_FINCA: 'reportesMultiFinca',
-    AUDITORIA_AVANZADA: 'auditoriaAvanzada'
+    AUDITORIA_AVANZADA: 'auditoriaAvanzada',
+    BANCOS_FORRAJEROS: 'bancosForrajeros'
 });
 
-const rolesBasicos = ['Administrador', 'Encargado', 'Trabajador'];
 const todosLosRoles = ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta'];
 
 const planesConfig = Object.freeze({
@@ -34,7 +34,7 @@ const planesConfig = Object.freeze({
             modoConteoDrone: 'LIMITADO_POR_ESPECIE'
         },
         especies: { modo: 'UNA_ESPECIE' },
-        rolesPermitidos: rolesBasicos,
+        rolesPermitidos: todosLosRoles,
         funcionalidades: {
             centroAlertas: true,
             emailsOperativos: false,
@@ -44,7 +44,8 @@ const planesConfig = Object.freeze({
             ambosTiposAnimales: false,
             configuracionEmailAvanzada: false,
             reportesMultiFinca: false,
-            auditoriaAvanzada: false
+            auditoriaAvanzada: false,
+            bancosForrajeros: true
         }
     },
     GESTION: {
@@ -59,7 +60,7 @@ const planesConfig = Object.freeze({
             modoConteoDrone: 'LIMITADO'
         },
         especies: { modo: 'AMBAS' },
-        rolesPermitidos: rolesBasicos,
+        rolesPermitidos: todosLosRoles,
         funcionalidades: {
             centroAlertas: true,
             emailsOperativos: false,
@@ -69,7 +70,8 @@ const planesConfig = Object.freeze({
             ambosTiposAnimales: true,
             configuracionEmailAvanzada: false,
             reportesMultiFinca: false,
-            auditoriaAvanzada: false
+            auditoriaAvanzada: false,
+            bancosForrajeros: true
         }
     },
     PRO: {
@@ -94,7 +96,8 @@ const planesConfig = Object.freeze({
             ambosTiposAnimales: true,
             configuracionEmailAvanzada: false,
             reportesMultiFinca: false,
-            auditoriaAvanzada: true
+            auditoriaAvanzada: true,
+            bancosForrajeros: true
         }
     },
     PREMIUM: {
@@ -119,7 +122,8 @@ const planesConfig = Object.freeze({
             ambosTiposAnimales: true,
             configuracionEmailAvanzada: true,
             reportesMultiFinca: true,
-            auditoriaAvanzada: true
+            auditoriaAvanzada: true,
+            bancosForrajeros: true
         },
         caracteristicasComerciales: {
             soportePrioritario: true

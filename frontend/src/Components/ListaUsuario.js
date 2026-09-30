@@ -26,8 +26,14 @@ import {
   obtenerRegistrosReproductivos,
   obtenerSustentabilidadCria
 } from '../services/api';
-import { obtenerCambiosPendientes } from '../services/offlineStorage';
+import {
+  eliminarCambioPendiente,
+  obtenerCambiosPendientes,
+  obtenerEstadoSincronizacionOffline
+} from '../services/offlineStorage';
+import { reintentarCambioOffline, sincronizarCambiosOffline } from '../services/offlineSync';
 import { usePlan } from '../context/PlanContext';
+import CalendarioOperativo from './CalendarioOperativo';
 
 const obtenerRangoAnioActual = () => {
   const anio = new Date().getFullYear();
@@ -103,7 +109,11 @@ const ListaUsuario = ({ usuario, onLogout }) => {
   });
   const [estadoConexion, setEstadoConexion] = useState({
     online: navigator.onLine,
-    pendientes: 0
+    pendientes: 0,
+    cambios: [],
+    ultimaSincronizacion: null,
+    recursosOffline: {},
+    sincronizando: false
   });
 
   useEffect(() => {
@@ -169,24 +179,76 @@ const ListaUsuario = ({ usuario, onLogout }) => {
 
   useEffect(() => {
     const actualizarEstadoConexion = async () => {
-      const cambios = await obtenerCambiosPendientes().catch(() => []);
-      setEstadoConexion({
+      const [cambios, metadata] = await Promise.all([
+        obtenerCambiosPendientes().catch(() => []),
+        obtenerEstadoSincronizacionOffline().catch(() => ({}))
+      ]);
+      setEstadoConexion((actual) => ({
+        ...actual,
         online: navigator.onLine,
-        pendientes: cambios.length
-      });
+        pendientes: cambios.length,
+        cambios,
+        ultimaSincronizacion: metadata.ultimaSincronizacion || null,
+        recursosOffline: metadata.recursos || {}
+      }));
     };
 
-    window.addEventListener('online', actualizarEstadoConexion);
-    window.addEventListener('offline', actualizarEstadoConexion);
+    const sincronizar = async () => {
+      if (!navigator.onLine) return actualizarEstadoConexion();
+      setEstadoConexion((actual) => ({ ...actual, online: true, sincronizando: true }));
+      await sincronizarCambiosOffline().catch(() => {});
+      await actualizarEstadoConexion();
+      setEstadoConexion((actual) => ({ ...actual, sincronizando: false }));
+    };
+
+    const alRecuperarConexion = () => sincronizar();
+    const alPerderConexion = () => actualizarEstadoConexion();
+
+    window.addEventListener('online', alRecuperarConexion);
+    window.addEventListener('offline', alPerderConexion);
     window.addEventListener('ganaderiaOfflineCambios', actualizarEstadoConexion);
+    window.addEventListener('ganaderiaOfflineSincronizado', actualizarEstadoConexion);
     actualizarEstadoConexion();
+    sincronizar();
+    const intervalo = window.setInterval(sincronizar, 60_000);
 
     return () => {
-      window.removeEventListener('online', actualizarEstadoConexion);
-      window.removeEventListener('offline', actualizarEstadoConexion);
+      window.removeEventListener('online', alRecuperarConexion);
+      window.removeEventListener('offline', alPerderConexion);
       window.removeEventListener('ganaderiaOfflineCambios', actualizarEstadoConexion);
+      window.removeEventListener('ganaderiaOfflineSincronizado', actualizarEstadoConexion);
+      window.clearInterval(intervalo);
     };
   }, []);
+
+  const sincronizarAhora = async () => {
+    setEstadoConexion((actual) => ({ ...actual, sincronizando: true }));
+    await sincronizarCambiosOffline({ forzar: true }).catch(() => {});
+    const [cambios, metadata] = await Promise.all([
+      obtenerCambiosPendientes().catch(() => []),
+      obtenerEstadoSincronizacionOffline().catch(() => ({}))
+    ]);
+    setEstadoConexion((actual) => ({
+      ...actual,
+      online: navigator.onLine,
+      pendientes: cambios.length,
+      cambios,
+      ultimaSincronizacion: metadata.ultimaSincronizacion || null,
+      recursosOffline: metadata.recursos || {},
+      sincronizando: false
+    }));
+  };
+
+  const reintentarCambio = async (id) => {
+    setEstadoConexion((actual) => ({ ...actual, sincronizando: true }));
+    await reintentarCambioOffline(id).catch(() => {});
+    await sincronizarAhora();
+  };
+
+  const descartarCambio = async (id) => {
+    if (!window.confirm('¿Descartar este cambio local? La tarea conservara su estado actual en el servidor.')) return;
+    await eliminarCambioPendiente(id).catch(() => {});
+  };
 
   const navegarNotificacion = (notificacion) => {
     const entidadId = notificacion?.entidadId || '';
@@ -214,7 +276,11 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     onLogout,
     usuario,
     onAbrirNotificaciones: () => setVistaActiva('Notificaciones'),
-    onNavegarNotificacion: navegarNotificacion
+    onNavegarNotificacion: navegarNotificacion,
+    estadoConexion,
+    onSincronizar: sincronizarAhora,
+    onReintentarCambio: reintentarCambio,
+    onDescartarCambio: descartarCambio
   };
   const navegacion = <Navegacion {...propsNavegacion} />;
   const sinAcceso = (
@@ -262,8 +328,8 @@ const ListaUsuario = ({ usuario, onLogout }) => {
       <main className="dashboard-shell">
         {navegacion}
         <Animales
-          soloLectura={!puedeGestionarModulo(rol, 'Inventario')}
-          puedeGestionarSanidad={puedeGestionarModulo(rol, 'Sanidad')}
+          soloLectura={!puedeGestionarModulo(rol, 'Inventario') || !estadoConexion.online}
+          puedeGestionarSanidad={puedeGestionarModulo(rol, 'Sanidad') && estadoConexion.online}
         />
       </main>
     );
@@ -273,7 +339,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Potreros soloLectura={!puedeGestionarModulo(rol, 'Potreros')} />
+        <Potreros soloLectura={!puedeGestionarModulo(rol, 'Potreros') || !estadoConexion.online} />
       </main>
     );
   }
@@ -282,7 +348,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Pesajes soloLectura={!puedeGestionarModulo(rol, 'Pesajes')} />
+        <Pesajes soloLectura={!puedeGestionarModulo(rol, 'Pesajes') || !estadoConexion.online} />
       </main>
     );
   }
@@ -291,7 +357,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <PlanSanitario soloLectura={!puedeGestionarModulo(rol, 'Sanidad')} />
+        <PlanSanitario soloLectura={!puedeGestionarModulo(rol, 'Sanidad') || !estadoConexion.online} />
       </main>
     );
   }
@@ -300,7 +366,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Reproduccion soloLectura={!puedeGestionarModulo(rol, 'Reproduccion')} />
+        <Reproduccion soloLectura={!puedeGestionarModulo(rol, 'Reproduccion') || !estadoConexion.online} />
       </main>
     );
   }
@@ -318,7 +384,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Ventas soloLectura={!puedeGestionarModulo(rol, 'Ventas')} />
+        <Ventas soloLectura={!puedeGestionarModulo(rol, 'Ventas') || !estadoConexion.online} />
       </main>
     );
   }
@@ -327,7 +393,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Compras soloLectura={!puedeGestionarModulo(rol, 'Compras')} />
+        <Compras soloLectura={!puedeGestionarModulo(rol, 'Compras') || !estadoConexion.online} />
       </main>
     );
   }
@@ -452,6 +518,14 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           <small>{metricas.potrerosDescanso} en descanso</small>
         </article>
       </section>
+
+      <CalendarioOperativo
+        usuario={usuario}
+        onAbrirTarea={(tareaId) => {
+          setTareaInicialId(tareaId);
+          setVistaActiva(puedeAccederModulo(rol, 'Tareas') ? 'Tareas' : 'Mis tareas');
+        }}
+      />
 
       <section className="dashboard-content">
         <article className="panel-mapa">

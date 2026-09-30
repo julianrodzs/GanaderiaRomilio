@@ -17,6 +17,7 @@ import {
 } from '../services/api';
 import FormularioMovimientoFinanciero from './FormularioMovimientoFinanciero';
 import TablaDinamica from './TablaDinamica';
+import { ContenidoPaginado } from './PaginacionTabla';
 
 const tipos = ['Todos', 'Planilla', 'Inversion', 'Compra'];
 
@@ -633,8 +634,8 @@ const Finanzas = () => {
         <section className="finanzas-panel">
           <div className="panel-title">
             <div>
-              <p className="eyebrow">Consumo físico</p>
-              <h2>Productos comprados</h2>
+              <p className="eyebrow">Compras físicas</p>
+              <h2>Productos e insumos comprados</h2>
             </div>
           </div>
           <div className="finanzas-consumo-grid">
@@ -777,8 +778,10 @@ const Finanzas = () => {
           </div>
 
           {revisionDatos.muestras.length > 0 && (
-            <div className="tabla-scroll tabla-dinamica finanzas-revision-tabla">
-              <table>
+            <ContenidoPaginado datos={revisionDatos.muestras}>
+              {(muestrasPagina) => (
+              <div className="tabla-scroll tabla-dinamica finanzas-revision-tabla">
+                <table>
                 <thead>
                   <tr>
                     <th>Fecha</th>
@@ -790,7 +793,7 @@ const Finanzas = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {revisionDatos.muestras.map(({ movimiento, problemas }) => (
+                  {muestrasPagina.map(({ movimiento, problemas }) => (
                     <tr key={movimiento._id}>
                       <td>{formatearFecha(movimiento.fecha)}</td>
                       <td>{movimiento.tipoMovimiento}</td>
@@ -805,8 +808,10 @@ const Finanzas = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+              )}
+            </ContenidoPaginado>
           )}
         </section>
 

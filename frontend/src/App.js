@@ -7,10 +7,26 @@ import OlvideContrasena from './Components/OlvideContrasena';
 import RestablecerContrasena from './Components/RestablecerContrasena';
 import { obtenerPerfilUsuario } from './services/api';
 import { PlanProvider } from './context/PlanContext';
+import {
+  limpiarCacheApiLegado,
+  limpiarDatosOfflineContexto,
+  obtenerCambiosPendientes
+} from './services/offlineStorage';
 
 const obtenerTokenRestablecimiento = () => {
   const partes = window.location.pathname.split('/').filter(Boolean);
   return partes[0] === 'restablecer-contrasena' ? partes[1] || '' : '';
+};
+
+const tokenOfflineVigente = (token) => {
+  try {
+    const payloadBase = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = payloadBase.padEnd(Math.ceil(payloadBase.length / 4) * 4, '=');
+    const datos = JSON.parse(atob(payload));
+    return Boolean(datos.exp && Date.now() < datos.exp * 1000);
+  } catch (error) {
+    return false;
+  }
 };
 
 function App() {
@@ -22,6 +38,7 @@ function App() {
 
   useEffect(() => {
     const validarSesion = async () => {
+      limpiarCacheApiLegado().catch(() => {});
       const tokenRuta = obtenerTokenRestablecimiento();
 
       if (tokenRuta) {
@@ -39,8 +56,14 @@ function App() {
       }
 
       try {
+        const sesionLocal = JSON.parse(sesionGuardada);
         if (!navigator.onLine) {
-          const sesionLocal = JSON.parse(sesionGuardada);
+          if (!tokenOfflineVigente(sesionLocal?.token || '')) {
+            localStorage.removeItem('ganaderiaSesion');
+            setMensaje('La sesion offline expiro. Conectate a internet para iniciar sesion nuevamente.');
+            setValidandoSesion(false);
+            return;
+          }
           setSesion(sesionLocal);
           setVista('dashboard');
           setMensaje('Sin conexion. Usando datos guardados en este dispositivo.');
@@ -49,11 +72,11 @@ function App() {
         }
 
         const data = await obtenerPerfilUsuario();
-        const sesionLocal = JSON.parse(sesionGuardada);
         const sesionValidada = {
           ...sesionLocal,
           usuario: data.usuario,
-          organizacion: data.organizacion || sesionLocal.organizacion
+          organizacion: data.organizacion || sesionLocal.organizacion,
+          validadaEn: new Date().toISOString()
         };
 
         localStorage.setItem('ganaderiaSesion', JSON.stringify(sesionValidada));
@@ -82,13 +105,22 @@ function App() {
   }, []);
 
   const iniciarSesion = (data) => {
-    localStorage.setItem('ganaderiaSesion', JSON.stringify(data));
-    setSesion(data);
+    const sesionNueva = { ...data, validadaEn: new Date().toISOString() };
+    localStorage.setItem('ganaderiaSesion', JSON.stringify(sesionNueva));
+    setSesion(sesionNueva);
     setVista('dashboard');
     setMensaje('');
   };
 
-  const cerrarSesion = () => {
+  const cerrarSesion = async () => {
+    const pendientes = await obtenerCambiosPendientes().catch(() => []);
+    if (pendientes.length > 0) {
+      const confirmar = window.confirm(
+        `Hay ${pendientes.length} cambio(s) sin sincronizar. Cerrar sesion los descartara de este dispositivo. ¿Deseas continuar?`
+      );
+      if (!confirmar) return;
+    }
+    await limpiarDatosOfflineContexto(sesion).catch(() => {});
     localStorage.removeItem('ganaderiaSesion');
     setSesion(null);
     setVista('login');

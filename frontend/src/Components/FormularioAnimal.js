@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { obtenerFincas } from '../services/api';
+import CamposRazaBovina from './CamposRazaBovina';
 
 const OBJETIVOS_PRODUCTIVOS = ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro'];
 
@@ -13,6 +14,13 @@ const estadoInicial = {
   nombre: '',
   sexo: 'Hembra',
   raza: '',
+  razaPrincipal: '',
+  razaSecundaria: '',
+  grupoRacial: '',
+  gradoRacial: '',
+  variedadRacial: '',
+  descripcionRacial: '',
+  composicionRacial: '',
   madreDiio: '',
   padreDiio: '',
   padre: '',
@@ -233,11 +241,17 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
             </select>
           </label>
 
-          <label>
-            Raza
-            <input name="raza" value={formulario.raza} onChange={actualizarCampo} />
-          </label>
+          {formulario.especie === 'Porcino' && (
+            <label>
+              Raza
+              <input name="raza" value={formulario.raza} onChange={actualizarCampo} />
+            </label>
+          )}
         </div>
+
+        {formulario.especie === 'Bovino' && (
+          <CamposRazaBovina formulario={formulario} setFormulario={setFormulario} />
+        )}
 
         <div className="form-grid">
           <label>

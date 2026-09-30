@@ -5,6 +5,10 @@ const puedeVer = autorizarPermiso('reportes.ver');
 const { requireFeature } = require('../middleware/plan');
 const analiticaProductiva = requireFeature('analiticaProductiva');
 const analiticaEconomica = requireFeature('analiticaEconomica');
+const {
+    getRendimientoPotreros,
+    getRendimientoPorPasto
+} = require('../controllers/potrero-controller');
 
 const {
     getResumenReportes,
@@ -30,7 +34,10 @@ const {
     getCrecimientoPorcino,
     getEficienciaEngorde,
     getConfiguracionProductiva,
-    updateConfiguracionProductiva
+    updateConfiguracionProductiva,
+    getRazasBovinas,
+    getDescendenciaBovina
+    ,getRendimientoForrajes
 } = require('../controllers/reporte-controller');
 
 router.use(puedeVer);
@@ -43,6 +50,11 @@ router.get('/vacas-improductivas', analiticaProductiva, getVacasImproductivas);
 router.get('/crecimiento-pesajes', analiticaProductiva, getCrecimientoPesajes);
 router.get('/porcinos/crecimiento', analiticaProductiva, getCrecimientoPorcino);
 router.get('/engorde', analiticaProductiva, getEficienciaEngorde);
+router.get('/potreros/rendimiento', analiticaProductiva, getRendimientoPotreros);
+router.get('/potreros/por-pasto', analiticaProductiva, getRendimientoPorPasto);
+router.get('/forrajes/rendimiento', analiticaProductiva, getRendimientoForrajes);
+router.get('/bovinos/razas', analiticaProductiva, getRazasBovinas);
+router.get('/bovinos/descendencia', analiticaProductiva, getDescendenciaBovina);
 router.get('/configuracion-productiva', analiticaProductiva, getConfiguracionProductiva);
 router.put('/configuracion-productiva', analiticaProductiva, autorizarPermiso('reportes.configurar'), updateConfiguracionProductiva);
 router.get('/productos/resumen', getProductosResumen);

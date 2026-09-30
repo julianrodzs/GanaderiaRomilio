@@ -77,6 +77,7 @@ const construirDatosEventoAplicacion = (aplicacion, usuarioId) => ({
             dosis: aplicacion.dosis,
             viaAplicacion: aplicacion.viaAplicacion,
             responsable: aplicacion.responsable,
+            responsableUsuario: aplicacion.responsableUsuario,
             motivo: aplicacion.motivo,
             planSanitarioId: aplicacion.planSanitario,
             tratamientoId: aplicacion.tratamiento,

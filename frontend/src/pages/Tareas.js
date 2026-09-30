@@ -17,12 +17,15 @@ import useArchivoProtegido from '../hooks/useArchivoProtegido';
 import {
   guardarCambiosPendientes,
   guardarTareasOffline,
-  limpiarCambiosPendientes,
   obtenerCambiosPendientes,
   obtenerTareasOffline
 } from '../services/offlineStorage';
 import { obtenerRangoMesActual } from '../utils/fechas';
 import { puedeGestionarModulo } from '../constants/permisosRoles';
+import { ContenidoPaginado } from '../Components/PaginacionTabla';
+import InfoLunarFecha from '../Components/InfoLunarFecha';
+import SelectorFechaConLuna from '../Components/SelectorFechaConLuna';
+import { esTareaConInfoLunar } from '../utils/tareasLuna.mjs';
 
 const tipos = [
   'Chapia',
@@ -36,6 +39,8 @@ const tipos = [
   'Limpieza',
   'Alimentación',
   'Reproducción',
+  'Siembra',
+  'Corte de forraje',
   'Venta',
   'Sacrificio',
   'Otro'
@@ -166,6 +171,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
   const [comentario, setComentario] = useState('');
   const [evidencia, setEvidencia] = useState(null);
   const [observacionesCompletar, setObservacionesCompletar] = useState('');
+  const [reprogramacion, setReprogramacion] = useState(null);
 
   const cargarDatos = async () => {
     try {
@@ -176,11 +182,20 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       const pendientes = await obtenerCambiosPendientes().catch(() => []);
       const tareasConPendientes = tareasData.map((tarea) => {
         const cambioPendiente = pendientes.find((cambio) => cambio.tipo === 'completar-tarea' && cambio.referenciaId === tarea._id);
-        return cambioPendiente ? { ...tarea, estado: 'Completada', pendienteSincronizar: true } : tarea;
+        if (!cambioPendiente) return tarea;
+        if (cambioPendiente.estadoSincronizacion === 'Conflicto') {
+          return { ...tarea, conflictoSincronizacion: true };
+        }
+        return {
+          ...tarea,
+          estado: 'Completada',
+          pendienteSincronizar: true,
+          estadoSincronizacion: cambioPendiente.estadoSincronizacion
+        };
       });
       setTareas(tareasConPendientes);
       if (!puedeGestionar) {
-        await guardarTareasOffline(tareasConPendientes);
+        await guardarTareasOffline(tareasConPendientes, { filtros: filtrosActivos }).catch(() => {});
       }
 
       if (puedeGestionar) {
@@ -195,7 +210,8 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       }
     } catch (err) {
       if (!puedeGestionar) {
-        const tareasOffline = await obtenerTareasOffline().catch(() => []);
+        const filtrosActivos = Object.fromEntries(Object.entries(filtros).filter(([, valor]) => Boolean(valor)));
+        const tareasOffline = await obtenerTareasOffline({ filtros: filtrosActivos }).catch(() => []);
         setTareas(tareasOffline);
         setError(tareasOffline.length ? 'Sin conexion. Mostrando tareas guardadas en este dispositivo.' : err.message);
       } else {
@@ -203,33 +219,6 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       }
     } finally {
       setCargando(false);
-    }
-  };
-
-  const sincronizarCambiosPendientes = async () => {
-    if (!navigator.onLine) return;
-
-    const cambios = await obtenerCambiosPendientes().catch(() => []);
-    const cambiosTareas = cambios.filter((cambio) => cambio.tipo === 'completar-tarea');
-    if (cambiosTareas.length === 0) return;
-
-    const sincronizados = [];
-    for (const cambio of cambiosTareas) {
-      try {
-        await completarTarea({
-          id: cambio.referenciaId,
-          observaciones: cambio.payload?.observaciones || '',
-          evidencia: cambio.payload?.evidencia || null
-        });
-        sincronizados.push(cambio.id);
-      } catch (err) {
-        console.error('No se pudo sincronizar tarea pendiente', cambio, err);
-      }
-    }
-
-    if (sincronizados.length > 0) {
-      await limpiarCambiosPendientes(sincronizados);
-      await cargarDatos();
     }
   };
 
@@ -249,10 +238,12 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
   ]);
 
   useEffect(() => {
-    window.addEventListener('online', sincronizarCambiosPendientes);
-    sincronizarCambiosPendientes();
-    return () => window.removeEventListener('online', sincronizarCambiosPendientes);
-  }, [usuario?.rol]);
+    const actualizarTrasSincronizacion = () => {
+      if (navigator.onLine) cargarDatos();
+    };
+    window.addEventListener('ganaderiaOfflineSincronizado', actualizarTrasSincronizacion);
+    return () => window.removeEventListener('ganaderiaOfflineSincronizado', actualizarTrasSincronizacion);
+  }, [usuario?.rol, filtros]);
 
   useEffect(() => {
     if (!tareaInicialId) return;
@@ -363,14 +354,22 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
 
   const reprogramarTarea = async (tarea) => {
     if (!puedeGestionar) return;
-    const nuevaFecha = window.prompt('Nueva fecha programada (YYYY-MM-DD):', fechaInput(tarea.fechaProgramada));
-    if (!nuevaFecha) return;
+    setDetalle(null);
+    setReprogramacion({ tarea, fecha: fechaInput(tarea.fechaProgramada) });
+  };
+
+  const guardarReprogramacion = async (evento) => {
+    evento.preventDefault();
+    if (!reprogramacion?.fecha) return;
 
     try {
       setGuardando(true);
-      await actualizarTarea(tarea._id, { fechaProgramada: nuevaFecha });
+      await actualizarTarea(reprogramacion.tarea._id, { fechaProgramada: reprogramacion.fecha });
       await cargarDatos();
-      setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, fechaProgramada: nuevaFecha } : actual));
+      setDetalle((actual) => (actual?._id === reprogramacion.tarea._id
+        ? { ...actual, fechaProgramada: reprogramacion.fecha }
+        : actual));
+      setReprogramacion(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -385,16 +384,19 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
         await guardarCambiosPendientes({
           tipo: 'completar-tarea',
           referenciaId: tarea._id,
+          titulo: tarea.titulo,
           payload: {
             observaciones: observacionesCompletar,
-            evidencia
+            evidencia,
+            versionEsperada: tarea.updatedAt
           }
         });
         const tareasActualizadas = tareas.map((item) => (
           item._id === tarea._id ? { ...item, estado: 'Completada', pendienteSincronizar: true } : item
         ));
         setTareas(tareasActualizadas);
-        await guardarTareasOffline(tareasActualizadas);
+        const filtrosActivos = Object.fromEntries(Object.entries(filtros).filter(([, valor]) => Boolean(valor)));
+        await guardarTareasOffline(tareasActualizadas, { filtros: filtrosActivos });
         setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, estado: 'Completada', pendienteSincronizar: true } : actual));
         setError('Sin conexion. La tarea queda pendiente de sincronizar.');
       } else {
@@ -512,8 +514,10 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando tareas...</div>}
 
-      <div className="tabla-scroll tabla-dinamica">
-        <table>
+      <ContenidoPaginado datos={tareas}>
+        {(tareasPagina) => (
+          <div className="tabla-scroll tabla-dinamica">
+            <table>
           <thead>
             <tr>
               <th>Titulo</th>
@@ -529,7 +533,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
             </tr>
           </thead>
           <tbody>
-            {tareas.map((tarea) => (
+            {tareasPagina.map((tarea) => (
               <tr key={tarea._id} className={estaVencida(tarea) ? 'tarea-vencida' : ''}>
                 <td>
                   <div className="tarea-titulo-celda">
@@ -542,7 +546,10 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
                 <td>{tarea.categoriaAutomatica || '--'}</td>
                 <td>{nombreUsuario(tarea.asignadoA)}</td>
                 <td>{nombrePotreroAnimal(tarea)}</td>
-                <td>{formatearFecha(tarea.fechaProgramada)}</td>
+                <td>
+                  {formatearFecha(tarea.fechaProgramada)}
+                  {esTareaConInfoLunar(tarea) && <InfoLunarFecha fecha={tarea.fechaProgramada} compacta mostrarIluminacion={false} />}
+                </td>
                 <td>{formatearFecha(tarea.fechaLimite)}</td>
                 <td><span className={`tarea-prioridad tarea-prioridad-${slug(tarea.prioridad)}`}>{tarea.prioridad}</span></td>
                 <td>
@@ -550,6 +557,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
                     {estaVencida(tarea) ? 'Vencida' : tarea.estado}
                   </span>
                   {tarea.pendienteSincronizar && <span className="sync-badge">Pendiente de sincronizar</span>}
+                  {tarea.conflictoSincronizacion && <span className="sync-badge sync-badge-conflict">Requiere revisión</span>}
                 </td>
                 <td>
                   <div className="acciones-tabla acciones-tabla-amplia">
@@ -566,8 +574,10 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>
+            </table>
+          </div>
+        )}
+      </ContenidoPaginado>
 
       {modoFormulario && (
         <div className="modal-backdrop">
@@ -585,7 +595,13 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
               <label>Estado<select name="estado" value={formulario.estado} onChange={actualizarCampo}>{estados.map((estado) => <option key={estado} value={estado}>{estado}</option>)}</select></label>
               <label>Tipo<select name="tipo" value={formulario.tipo} onChange={actualizarCampo}>{tipos.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
               <label>Prioridad<select name="prioridad" value={formulario.prioridad} onChange={actualizarCampo}>{prioridades.map((prioridad) => <option key={prioridad} value={prioridad}>{prioridad}</option>)}</select></label>
-              <label>Fecha programada<input name="fechaProgramada" type="date" value={formulario.fechaProgramada} onChange={actualizarCampo} required /></label>
+              <SelectorFechaConLuna
+                etiqueta="Fecha programada"
+                value={formulario.fechaProgramada}
+                onChange={(fechaProgramada) => setFormulario((actual) => ({ ...actual, fechaProgramada }))}
+                mostrarLuna={esTareaConInfoLunar(formulario)}
+                required
+              />
               <label>Fecha limite<input name="fechaLimite" type="date" value={formulario.fechaLimite} onChange={actualizarCampo} /></label>
               <label>Asignado a<select name="asignadoA" value={formulario.asignadoA} onChange={actualizarCampo} required>{usuarios.map((usuarioItem) => <option key={usuarioItem._id} value={usuarioItem._id}>{nombreUsuario(usuarioItem)}</option>)}</select></label>
               <label>Potrero<select name="potrero" value={formulario.potrero} onChange={actualizarCampo}><option value="">Sin potrero</option>{potreros.map((potrero) => <option key={potrero._id} value={potrero._id}>{potrero.codigo} - {potrero.nombre}</option>)}</select></label>
@@ -596,6 +612,27 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
             <div className="form-actions">
               <button className="boton-link" type="button" onClick={() => setModoFormulario(false)}>Cancelar</button>
               <button className="boton-primario compacto" type="submit" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar tarea'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {reprogramacion && (
+        <div className="modal-backdrop modal-backdrop-superior">
+          <form className="modal-panel tarea-reprogramar-modal" onSubmit={guardarReprogramacion}>
+            <div className="panel-title">
+              <div><p className="eyebrow">Reprogramar tarea</p><h2>{reprogramacion.tarea.titulo}</h2></div>
+              <button className="boton-link" type="button" onClick={() => setReprogramacion(null)}>Cerrar</button>
+            </div>
+            <SelectorFechaConLuna
+              value={reprogramacion.fecha}
+              onChange={(fecha) => setReprogramacion((actual) => ({ ...actual, fecha }))}
+              mostrarLuna={esTareaConInfoLunar(reprogramacion.tarea)}
+              required
+            />
+            <div className="form-actions">
+              <button className="boton-link" type="button" onClick={() => setReprogramacion(null)}>Cancelar</button>
+              <button className="boton-primario compacto" type="submit" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar fecha'}</button>
             </div>
           </form>
         </div>
@@ -614,7 +651,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
             <div className="detalle-animal-grid">
               <article><span>Tipo</span><strong>{detalle.tipo}</strong></article>
               <article><span>Responsable</span><strong>{nombreUsuario(detalle.asignadoA)}</strong></article>
-              <article><span>Programada</span><strong>{formatearFecha(detalle.fechaProgramada)}</strong></article>
+              <article><span>Programada</span><strong>{formatearFecha(detalle.fechaProgramada)}</strong>{esTareaConInfoLunar(detalle) && <InfoLunarFecha fecha={detalle.fechaProgramada} compacta />}</article>
               <article><span>Limite</span><strong>{formatearFecha(detalle.fechaLimite)}</strong></article>
               <article><span>Prioridad</span><strong>{detalle.prioridad}</strong></article>
               <article><span>Estado</span><strong>{detalle.estado}</strong></article>

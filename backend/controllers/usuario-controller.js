@@ -305,7 +305,7 @@ usuarioCtrl.loginUsuario = async (req, res) => {
         const membresias = await Membresia.find({
             usuario: usuario._id,
             estado: 'Activo'
-        }).populate('organizacionId', 'nombre slug estado zonaHoraria');
+        }).populate('organizacionId', 'nombre slug estado zonaHoraria fincaPrincipal');
 
         const membresiasActivas = membresias.filter((item) => item.organizacionId?.estado === 'Activa');
         const organizacionSolicitada = req.body.organizacionId;

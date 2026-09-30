@@ -4,6 +4,7 @@ import {
   descargarPlantillaImportacion,
   previsualizarExcel
 } from '../services/api';
+import { ContenidoPaginado } from './PaginacionTabla';
 
 const MODELOS = [
   { id: 'Potrero', nombre: 'Potreros', campos: ['codigo', 'nombre', 'estado'] },
@@ -196,18 +197,22 @@ const ImportarExcel = () => {
           {preview.errores?.length > 0 && (
             <section className="errores-importacion">
               <p className="eyebrow">Errores por corregir</p>
-              <div className="tabla-scroll">
-                <table>
-                  <thead><tr><th>Hoja</th><th>Fila</th><th>Campo</th><th>Detalle</th></tr></thead>
-                  <tbody>
-                    {preview.errores.map((item, indice) => (
-                      <tr key={`${item.hoja}-${item.fila}-${item.campo}-${indice}`}>
-                        <td>{item.hoja}</td><td>{item.fila || '--'}</td><td>{item.campo}</td><td>{item.mensaje}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ContenidoPaginado datos={preview.errores}>
+                {(erroresPagina) => (
+                  <div className="tabla-scroll">
+                    <table>
+                      <thead><tr><th>Hoja</th><th>Fila</th><th>Campo</th><th>Detalle</th></tr></thead>
+                      <tbody>
+                        {erroresPagina.map((item, indice) => (
+                          <tr key={`${item.hoja}-${item.fila}-${item.campo}-${indice}`}>
+                            <td>{item.hoja}</td><td>{item.fila || '--'}</td><td>{item.campo}</td><td>{item.mensaje}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </ContenidoPaginado>
             </section>
           )}
 
