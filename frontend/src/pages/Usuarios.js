@@ -292,7 +292,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
       {vista === 'usuarios' && cargando && <div className="estado-importacion">Cargando usuarios...</div>}
 
       {vista === 'usuarios' && (
-        <ContenidoPaginado datos={usuariosFiltrados}>
+        <ContenidoPaginado datos={usuariosFiltrados} clavePaginacion="usuarios-listado">
           {(usuariosPagina) => (
             <div className="tabla-scroll tabla-dinamica">
               <table>
@@ -372,7 +372,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
 
           {cargandoAuditoria && <div className="estado-importacion">Cargando auditoría...</div>}
 
-          <ContenidoPaginado datos={auditorias}>
+          <ContenidoPaginado datos={auditorias} clavePaginacion="usuarios-auditoria">
             {(auditoriasPagina) => (
               <div className="tabla-scroll tabla-dinamica">
                 <table>

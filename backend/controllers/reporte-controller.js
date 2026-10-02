@@ -113,13 +113,7 @@ reporteCtrl.getEficienciaEngorde = async (req, res) => {
         const { fechaInicio, fechaFin } = obtenerPeriodoIndices(req.query);
         const especie = ['Bovino', 'Porcino'].includes(req.query.especie) ? req.query.especie : 'Todos';
         const filtroEspecie = especie === 'Todos' ? {} : crearFiltroEspecieAnimal(especie);
-        const filtroEngorde = {
-            $or: [
-                { objetivoProductivo: 'Engorde' },
-                { objetivoProductivo: { $exists: false }, categoria: 'Engorde' },
-                { objetivoProductivo: null, categoria: 'Engorde' }
-            ]
-        };
+        const filtroEngorde = { objetivoProductivo: 'ENGORDE' };
         const animales = await Animal.find(
             Object.keys(filtroEspecie).length ? { $and: [filtroEspecie, filtroEngorde] } : filtroEngorde
         ).lean();

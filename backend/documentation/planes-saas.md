@@ -114,7 +114,7 @@ Después de habilitarlo, el usuario debe volver a iniciar sesión o recargar una
     "codigo": "PRINCIPAL",
     "ubicacion": "Alajuela",
     "lineasProductivas": [
-      { "especie": "Bovino", "objetivos": ["Cría", "Engorde"] },
+      { "especie": "Bovino", "objetivos": ["REPRODUCCION", "ENGORDE"] },
       { "especie": "Porcino", "objetivos": ["Reproducción", "Engorde"] }
     ]
   },

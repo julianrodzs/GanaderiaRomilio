@@ -27,25 +27,11 @@ import FormularioEstadoSanitario from './FormularioEstadoSanitario';
 import SelectorEspecie from './SelectorEspecie';
 import TablaDinamica from './TablaDinamica';
 import { ContenidoPaginado } from './PaginacionTabla';
+import Lotes from './Lotes';
+import { calcularEdadMeses, obtenerAptitudReproductivaPorEdad, obtenerCategoriaVisible } from '../utils/categoriasAnimales';
+import { etiquetaObjetivoProductivo } from '../constants/objetivosProductivos';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
-
-const calcularEdadMeses = (fechaNacimiento) => {
-  if (!fechaNacimiento) return null;
-
-  const nacimiento = new Date(fechaNacimiento);
-  if (Number.isNaN(nacimiento.getTime())) return null;
-
-  const hoy = new Date();
-  let meses = (hoy.getFullYear() - nacimiento.getFullYear()) * 12;
-  meses += hoy.getMonth() - nacimiento.getMonth();
-
-  if (hoy.getDate() < nacimiento.getDate()) {
-    meses -= 1;
-  }
-
-  return Math.max(meses, 0);
-};
 
 const formatearEdad = (fechaNacimiento) => {
   const meses = calcularEdadMeses(fechaNacimiento);
@@ -59,30 +45,11 @@ const formatearEdad = (fechaNacimiento) => {
   return `${anios} años ${mesesRestantes} meses`;
 };
 
-const estaListaMontaPorEdad = (animal) => {
-  if (animal.sexo !== 'Hembra') return false;
-
-  const edadMeses = calcularEdadMeses(animal.fechaNacimiento);
-  if (edadMeses === null) return false;
-
-  return animal.especie === 'Porcino' ? edadMeses >= 7 : edadMeses >= 24;
-};
-
 const obtenerEstadoMontaEdad = (animal) => {
-  if (animal.sexo !== 'Hembra') return 'No aplica';
-  return estaListaMontaPorEdad(animal) ? 'Lista' : 'Esperar';
+  return obtenerAptitudReproductivaPorEdad(animal).etiqueta;
 };
 
-const obtenerCategoriaAnimal = (animal) => {
-  if (animal.categoria) return animal.categoria;
-  if (animal.especie === 'Porcino') return animal.sexo === 'Macho' ? 'Verraco' : 'Chancha';
-
-  const meses = calcularEdadMeses(animal.fechaNacimiento);
-  if (meses !== null && meses < 12) return 'Ternero';
-  if (animal.sexo === 'Hembra') return meses !== null && meses >= 24 ? 'Vaca' : 'Novilla';
-  if (animal.sexo === 'Macho') return meses !== null && meses >= 24 ? 'Toro' : 'Novillo';
-  return '--';
-};
+const obtenerCategoriaAnimal = obtenerCategoriaVisible;
 
 const formatearFecha = (fecha) => {
   if (!fecha) return '--';
@@ -166,11 +133,11 @@ const columnas = [
     id: 'listaMontaEdad',
     label: 'Edad reproductiva',
     accessor: obtenerEstadoMontaEdad,
-    render: (animal) => (
-      <span className={estaListaMontaPorEdad(animal) ? 'estado-badge estado-Gestante' : 'estado-badge estado-Vacía'}>
-        {obtenerEstadoMontaEdad(animal)}
-      </span>
-    )
+    render: (animal) => {
+      const aptitud = obtenerAptitudReproductivaPorEdad(animal);
+      const clase = !aptitud.calculable ? 'estado-Pendiente' : aptitud.listo ? 'estado-Gestante' : 'estado-Vacía';
+      return <span className={`estado-badge ${clase}`}>{aptitud.etiqueta}</span>;
+    }
   },
   { id: 'pesoActual', label: 'Peso actual', accessor: (animal) => animal.pesoActual },
   { id: 'estado', label: 'Estado', accessor: (animal) => animal.estado },
@@ -193,11 +160,13 @@ const columnaCamadaOrigen = {
 };
 
 const filtros = [
-  { id: 'categoria', accessor: obtenerCategoriaAnimal },
-  { id: 'sexo', accessor: (animal) => animal.sexo },
-  { id: 'estado', accessor: (animal) => animal.estado },
+  { id: 'categoria', label: 'Categoría', accessor: obtenerCategoriaAnimal },
+  { id: 'sexo', label: 'Sexo', accessor: (animal) => animal.sexo },
+  { id: 'objetivoProductivo', label: 'Objetivo productivo', accessor: (animal) => etiquetaObjetivoProductivo(animal.objetivoProductivo) },
+  { id: 'estado', label: 'Estado', accessor: (animal) => animal.estado },
   {
     id: 'estadoSanitario',
+    label: 'Estado sanitario',
     accessor: (animal) => animal.estadoSanitario || 'Sano',
     opciones: ['Sano', 'En observación', 'Enfermo', 'Recuperación', 'Con tratamiento activo'],
     predicate: (animal, valor) => valor === 'Con tratamiento activo'
@@ -257,7 +226,7 @@ const filtrosCamadas = [
   { id: 'destino', accessor: (camada) => camada.destino }
 ];
 
-const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
+const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavegar }) => {
   const [animales, setAnimales] = useState([]);
   const [camadas, setCamadas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -290,13 +259,13 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
   const [cambiandoEstadoSanitario, setCambiandoEstadoSanitario] = useState(false);
   const [errorEstadoSanitario, setErrorEstadoSanitario] = useState('');
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
-  const [vistaPorcina, setVistaPorcina] = useState('Animales');
+  const [vistaInventario, setVistaInventario] = useState('Animales');
   const etiquetaId = 'DIIO';
 
   const cambiarEspecie = (valor) => {
     localStorage.setItem('ganaderiaEspecie', valor);
     setEspecie(valor);
-    setVistaPorcina('Animales');
+    setVistaInventario('Animales');
   };
 
   const cargarAnimales = async () => {
@@ -680,18 +649,21 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
   return (
     <>
       <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
-      {especie === 'Porcino' && (
-        <div className="inventario-tabs">
-          <button className={vistaPorcina === 'Animales' ? 'activo' : ''} type="button" onClick={() => setVistaPorcina('Animales')}>
+      <div className="inventario-tabs">
+          <button className={vistaInventario === 'Animales' ? 'activo' : ''} type="button" onClick={() => setVistaInventario('Animales')}>
             Animales
           </button>
-          <button className={vistaPorcina === 'Camadas' ? 'activo' : ''} type="button" onClick={() => setVistaPorcina('Camadas')}>
-            Camadas
+          <button className={vistaInventario === 'Lotes' ? 'activo' : ''} type="button" onClick={() => setVistaInventario('Lotes')}>
+            Lotes
           </button>
-        </div>
-      )}
+          {especie === 'Porcino' && <button className={vistaInventario === 'Camadas' ? 'activo' : ''} type="button" onClick={() => setVistaInventario('Camadas')}>
+            Camadas
+          </button>}
+      </div>
 
-      {especie === 'Porcino' && vistaPorcina === 'Camadas' ? (
+      {vistaInventario === 'Lotes' ? (
+        <Lotes especie={especie} animales={animales} soloLectura={soloLectura} onNavegar={onNavegar} />
+      ) : especie === 'Porcino' && vistaInventario === 'Camadas' ? (
         <TablaDinamica
           titulo="Camadas porcinas"
           subtitulo="Inventario"
@@ -851,7 +823,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
               </article>
               <article>
                 <span>Edad reproductiva</span>
-                <strong>{estaListaMontaPorEdad(animalDetalle) ? 'Sí' : 'No'}</strong>
+                <strong>{obtenerEstadoMontaEdad(animalDetalle)}</strong>
               </article>
               {animalDetalle.especie !== 'Porcino' && (
                 <>
@@ -906,6 +878,10 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
               <article>
                 <span>Peso actual</span>
                 <strong>{formatearPeso(animalDetalle.pesoActual)}</strong>
+              </article>
+              <article>
+                <span>Lote actual</span>
+                <strong>{animalDetalle.loteActual ? `${animalDetalle.loteActual.codigo} · ${animalDetalle.loteActual.nombre}` : 'Sin lote'}</strong>
               </article>
               <article>
                 <span>Peso compra</span>
@@ -1035,7 +1011,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
                       <article><span>Última cría</span><strong>{formatearFecha(descendenciaAnimal?.resumen?.ultimaCria)}</strong></article>
                     </div>
                     {(descendenciaAnimal?.crias || []).length > 0 && (
-                      <ContenidoPaginado datos={descendenciaAnimal.crias}>
+                      <ContenidoPaginado datos={descendenciaAnimal.crias} clavePaginacion={`animal-${animalDetalle._id}-crias`}>
                         {(criasPagina) => (
                         <div className="tabla-scroll tabla-dinamica descendencia-tabla">
                           <table>
@@ -1107,7 +1083,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false }) => {
               )}
 
               {pesajesConDiferencia.length > 0 && (
-                <ContenidoPaginado datos={pesajesConDiferencia}>
+                <ContenidoPaginado datos={pesajesConDiferencia} clavePaginacion={`animal-${animalDetalle._id}-pesajes`}>
                   {(pesajesPagina) => (
                   <div className="tabla-scroll tabla-dinamica historial-pesajes-tabla">
                     <table>

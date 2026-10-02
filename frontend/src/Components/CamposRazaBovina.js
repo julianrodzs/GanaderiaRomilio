@@ -12,6 +12,7 @@ const CamposRazaBovina = ({ formulario, setFormulario }) => {
 
   const tipoCruce = useMemo(() => {
     if (formulario.razaSecundaria) return 'Si';
+    if (formulario.gradoRacial === 'Cruce conocido') return 'Si';
     if (formulario.gradoRacial === 'Cruce no definido') return 'No se';
     return 'No';
   }, [formulario.gradoRacial, formulario.razaSecundaria]);

@@ -125,13 +125,13 @@ const construirReporteDescendencia = ({ animales = [], registros = [], fechaInic
 
     const candidatas = bovinos.filter((animal) => animal.sexo === 'Hembra' && (
         animal.categoria === 'Vaca'
-        || ['Cría', 'Reproducción'].includes(animal.objetivoProductivo)
+        || animal.objetivoProductivo === 'REPRODUCCION'
         || criasPorMadre.has(String(animal._id))
         || registrosPorAnimal.has(String(animal._id))
     ));
     const candidatos = bovinos.filter((animal) => animal.sexo === 'Macho' && (
         animal.categoria === 'Toro'
-        || animal.objetivoProductivo === 'Reproducción'
+        || animal.objetivoProductivo === 'REPRODUCCION'
         || criasPorPadre.has(String(animal._id))
     ));
 

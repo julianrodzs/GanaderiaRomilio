@@ -28,6 +28,7 @@ import RegistrarAplicacionSanitaria from './RegistrarAplicacionSanitaria';
 import RegistrarAplicacionTratamiento from './RegistrarAplicacionTratamiento';
 import SelectorEspecie from './SelectorEspecie';
 import { ContenidoPaginado } from './PaginacionTabla';
+import { etiquetaUsuarioConRol } from '../utils/usuarios';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -37,8 +38,6 @@ const formatearFecha = (fecha) => {
 };
 
 const identificadorAnimal = (animal) => animal?.diio || animal?.identificadorFinca || '--';
-const nombreUsuario = (usuario) => [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') || usuario?.correo || '--';
-
 const nombresAnimales = (animales = []) => {
   if (!animales.length) return '--';
   const nombres = animales.map((animal) => identificadorAnimal(animal));
@@ -80,6 +79,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
   const [detalleAplicacion, setDetalleAplicacion] = useState(null);
   const [tratamientoCompletar, setTratamientoCompletar] = useState(null);
   const [mostrarCambioEstadoSanitario, setMostrarCambioEstadoSanitario] = useState(false);
+  const [animalesPreseleccionados, setAnimalesPreseleccionados] = useState([]);
   const [filtrosHistorial, setFiltrosHistorial] = useState(() => ({
     ...obtenerRangoMesActual(),
     animal: '',
@@ -115,6 +115,17 @@ const PlanSanitario = ({ soloLectura = false }) => {
   useEffect(() => {
     cargarDatos();
   }, [cargarDatos]);
+
+  useEffect(() => {
+    try {
+      const accion = JSON.parse(sessionStorage.getItem('ganaderiaAccionLote') || 'null');
+      if (accion?.modulo !== 'Sanidad') return;
+      sessionStorage.removeItem('ganaderiaAccionLote');
+      setEspecie(accion.especie || 'Bovino');
+      setAnimalesPreseleccionados(accion.animales || []);
+      setVistaFormulario('unica');
+    } catch (_) { sessionStorage.removeItem('ganaderiaAccionLote'); }
+  }, []);
 
   const cambiarEspecie = (valor) => {
     localStorage.setItem('ganaderiaEspecie', valor);
@@ -269,6 +280,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
       <FormularioAplicacionUnica
         especie={especie}
         animales={animalesActivos}
+        animalesIniciales={animalesPreseleccionados}
         usuariosAsignables={usuariosAsignables}
         onGuardar={guardarAplicacionUnica}
         onCancelar={cerrarFormulario}
@@ -320,14 +332,14 @@ const PlanSanitario = ({ soloLectura = false }) => {
       {cargando && <div className="estado-importacion">Cargando información sanitaria...</div>}
 
       {pestana === 'planes' && (
-        <ContenidoPaginado datos={planes}>
+        <ContenidoPaginado datos={planes} clavePaginacion={`sanidad-${especie}-planes`}>
           {(planesPagina) => (
             <div className="tabla-scroll tabla-dinamica sanidad-tabla">
               <table>
             <thead><tr><th>Grupo</th><th>DIIO</th><th>Actividad</th><th>Producto</th><th>Responsable</th><th>Última aplicación</th><th>Frecuencia</th><th>Próxima aplicación</th><th>Estado</th>{!soloLectura && <th>Acciones</th>}</tr></thead>
             <tbody>{planesPagina.map((plan) => (
               <tr key={plan._id}>
-                <td>{plan.grupoGanado}</td><td>{plan.animales?.length ? nombresAnimales(plan.animales) : plan.animalDiio || '--'}</td><td>{plan.actividad}</td><td>{plan.producto}</td><td>{nombreUsuario(plan.asignadoA)}</td>
+                <td>{plan.grupoGanado}</td><td>{plan.animales?.length ? nombresAnimales(plan.animales) : plan.animalDiio || '--'}</td><td>{plan.actividad}</td><td>{plan.producto}</td><td>{etiquetaUsuarioConRol(plan.asignadoA)}</td>
                 <td>{formatearFecha(plan.ultimaAplicacionReal)}</td><td>{plan.frecuenciaCantidad} {plan.frecuenciaUnidad}</td><td>{formatearFecha(plan.proximaAplicacion)}</td>
                 <td><span className={`estado-badge estado-${plan.estado}`}>{plan.estado}</span></td>
                 {!soloLectura && (
@@ -348,7 +360,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
       )}
 
       {pestana === 'tratamientos' && (
-        <ContenidoPaginado datos={tratamientos}>
+        <ContenidoPaginado datos={tratamientos} clavePaginacion={`sanidad-${especie}-tratamientos`}>
           {(tratamientosPagina) => (
             <div className="tabla-scroll tabla-dinamica sanidad-tabla">
               <table>
@@ -357,7 +369,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
               const visual = estadoVisualTratamiento(tratamiento);
               return (
                 <tr key={tratamiento._id}>
-                  <td>{tratamiento.motivo}</td><td title={nombresAnimales(tratamiento.animales)}>{tratamiento.animales?.length || 0} · {nombresAnimales(tratamiento.animales)}</td><td>{tratamiento.producto}</td><td>{nombreUsuario(tratamiento.asignadoA)}</td><td>{formatearFecha(tratamiento.fechaInicio)}</td><td>{tratamiento.aplicacionesRealizadas} / {tratamiento.cantidadAplicaciones}</td><td>{formatearFecha(tratamiento.proximaAplicacion)}</td>
+                  <td>{tratamiento.motivo}</td><td title={nombresAnimales(tratamiento.animales)}>{tratamiento.animales?.length || 0} · {nombresAnimales(tratamiento.animales)}</td><td>{tratamiento.producto}</td><td>{etiquetaUsuarioConRol(tratamiento.asignadoA)}</td><td>{formatearFecha(tratamiento.fechaInicio)}</td><td>{tratamiento.aplicacionesRealizadas} / {tratamiento.cantidadAplicaciones}</td><td>{formatearFecha(tratamiento.proximaAplicacion)}</td>
                   <td><span className={`estado-badge estado-${tratamiento.estado} ${visual.includes('pendiente') || visual.includes('hoy') ? 'estado-atencion' : ''}`}>{visual}</span></td>
                   <td>
                     <div className="acciones-tabla acciones-iconos-sanidad">
@@ -388,7 +400,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
             <label>Responsable<input value={filtrosHistorial.responsable} onChange={(evento) => setFiltrosHistorial((actual) => ({ ...actual, responsable: evento.target.value }))} /></label>
             <button className="boton-secundario compacto" type="submit">Aplicar filtros</button>
           </form>
-          <ContenidoPaginado datos={aplicaciones}>
+          <ContenidoPaginado datos={aplicaciones} clavePaginacion={`sanidad-${especie}-historial`}>
             {(aplicacionesPagina) => (
               <div className="tabla-scroll tabla-dinamica sanidad-tabla">
                 <table>
@@ -411,7 +423,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
         <div className="modal-backdrop"><section className="modal-panel detalle-sanidad-modal">
           <div className="panel-title"><div><p className="eyebrow">Tratamiento</p><h2>{detalleTratamiento.tratamiento.producto}</h2></div><button className="boton-link" type="button" onClick={() => setDetalleTratamiento(null)}>Cerrar</button></div>
           <div className="detalle-sanidad-grid"><article><span>Motivo</span><strong>{detalleTratamiento.tratamiento.motivo}</strong></article><article><span>Estado</span><strong>{detalleTratamiento.tratamiento.estado}</strong></article><article><span>Animales</span><strong>{nombresAnimales(detalleTratamiento.tratamiento.animales)}</strong></article><article><span>Progreso</span><strong>{detalleTratamiento.tratamiento.aplicacionesRealizadas} / {detalleTratamiento.tratamiento.cantidadAplicaciones}</strong></article></div>
-          <ContenidoPaginado datos={detalleTratamiento.aplicaciones || []}>
+          <ContenidoPaginado datos={detalleTratamiento.aplicaciones || []} clavePaginacion={`tratamiento-${detalleTratamiento.tratamiento._id}-aplicaciones`}>
             {(aplicacionesPagina) => (
               <div className="tabla-scroll tabla-dinamica detalle-aplicaciones-tabla"><table><thead><tr><th>Número</th><th>Fecha real</th><th>Dosis</th><th>Responsable</th></tr></thead><tbody>{aplicacionesPagina.map((aplicacion) => <tr key={aplicacion._id}><td>{aplicacion.numeroAplicacion}</td><td>{formatearFecha(aplicacion.fechaAplicacion)}</td><td>{aplicacion.dosis || '--'}</td><td>{aplicacion.responsable || '--'}</td></tr>)}</tbody></table></div>
             )}

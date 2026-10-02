@@ -20,10 +20,12 @@ import Ventas from './Ventas';
 import { puedeAccederModulo, puedeGestionarModulo } from '../constants/permisosRoles';
 import {
   obtenerAnimales,
+  obtenerLotes,
   obtenerPlanesSanitarios,
   obtenerPotreros,
   obtenerProductividadCria,
   obtenerRegistrosReproductivos,
+  obtenerResumenAlimentacionHoy,
   obtenerSustentabilidadCria
 } from '../services/api';
 import {
@@ -34,6 +36,7 @@ import {
 import { reintentarCambioOffline, sincronizarCambiosOffline } from '../services/offlineSync';
 import { usePlan } from '../context/PlanContext';
 import CalendarioOperativo from './CalendarioOperativo';
+import Alimentacion from './Alimentacion';
 
 const obtenerRangoAnioActual = () => {
   const anio = new Date().getFullYear();
@@ -83,7 +86,7 @@ const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
 const ListaUsuario = ({ usuario, onLogout }) => {
   const { tieneFeature } = usePlan();
   const rol = usuario?.rol || 'Consulta';
-  const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
+  const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Alimentacion', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
   const obtenerVistaInicial = () => modulosOrden.find((modulo) => puedeAccederModulo(rol, modulo)) || 'Mis tareas';
   const [vistaActiva, setVistaActiva] = useState(obtenerVistaInicial);
   const [tareaInicialId, setTareaInicialId] = useState('');
@@ -92,6 +95,10 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     bovinos: 0,
     porcinos: 0,
     potreros: 0,
+    lotesActivos: 0,
+    lotesBovinos: 0,
+    lotesPorcinos: 0,
+    lotesFinalizacion: 0,
     vacasReproductivas: 0,
     vacasPrenadas: 0,
     proximosPartos: 0,
@@ -105,7 +112,8 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     proximasSanidad: 0,
     vencidasSanidad: 0,
     ipg: 0,
-    clasificacionIpg: 'Deficiente'
+    clasificacionIpg: 'Deficiente',
+    alimentacionHoy: { suministros: 0, lotes: 0, ultimo: null }
   });
   const [estadoConexion, setEstadoConexion] = useState({
     online: navigator.onLine,
@@ -123,13 +131,15 @@ const ListaUsuario = ({ usuario, onLogout }) => {
 
     const cargarMetricas = async () => {
       try {
-        const [animales, potreros, planes, reproduccion, productividad, sustentabilidadMes] = await Promise.all([
+        const [animales, potreros, planes, reproduccion, productividad, sustentabilidadMes, lotes, alimentacionHoy] = await Promise.all([
           obtenerAnimales(),
           obtenerPotreros(),
           obtenerPlanesSanitarios(),
           obtenerRegistrosReproductivos(),
           tieneFeature('analiticaProductiva') ? obtenerProductividadCria(obtenerRangoAnioActual()) : Promise.resolve(null),
-          tieneFeature('analiticaEconomica') ? obtenerSustentabilidadCria(obtenerRangoMesActual()) : Promise.resolve(null)
+          tieneFeature('analiticaEconomica') ? obtenerSustentabilidadCria(obtenerRangoMesActual()) : Promise.resolve(null),
+          obtenerLotes({ estado: 'ACTIVO' }),
+          obtenerResumenAlimentacionHoy()
         ]);
         const animalesActivos = animales.filter((animal) => !['Muerto', 'Vendido'].includes(animal.estado));
         const ciclosActivos = reproduccion.filter((registro) => (registro.estadoCiclo || 'Activo') === 'Activo' && registro.activoParaAlertas !== false);
@@ -148,6 +158,10 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           bovinos: animalesActivos.filter((animal) => (animal.especie || 'Bovino') === 'Bovino').length,
           porcinos: animalesActivos.filter((animal) => animal.especie === 'Porcino').length,
           potreros: potreros.length,
+          lotesActivos: lotes.length,
+          lotesBovinos: lotes.filter((lote) => lote.especie === 'Bovino').length,
+          lotesPorcinos: lotes.filter((lote) => lote.especie === 'Porcino').length,
+          lotesFinalizacion: lotes.filter((lote) => lote.etapaOperativa === 'FINALIZACION').length,
           vacasReproductivas,
           vacasPrenadas,
           proximosPartos: ciclosActivos.filter((registro) => registro.estado === 'Próxima a parto').length,
@@ -161,7 +175,8 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           proximasSanidad: planes.filter((plan) => plan.estado === 'Próximo').length,
           vencidasSanidad: planes.filter((plan) => plan.estado === 'Vencido').length,
           ipg: productividad?.ipg || 0,
-          clasificacionIpg: productividad?.clasificacion || 'Deficiente'
+          clasificacionIpg: productividad?.clasificacion || 'Deficiente',
+          alimentacionHoy
         });
       } catch (error) {
         console.error('Error cargando metricas del dashboard', error);
@@ -330,6 +345,7 @@ const ListaUsuario = ({ usuario, onLogout }) => {
         <Animales
           soloLectura={!puedeGestionarModulo(rol, 'Inventario') || !estadoConexion.online}
           puedeGestionarSanidad={puedeGestionarModulo(rol, 'Sanidad') && estadoConexion.online}
+          onNavegar={setVistaActiva}
         />
       </main>
     );
@@ -340,6 +356,18 @@ const ListaUsuario = ({ usuario, onLogout }) => {
       <main className="dashboard-shell">
         {navegacion}
         <Potreros soloLectura={!puedeGestionarModulo(rol, 'Potreros') || !estadoConexion.online} />
+      </main>
+    );
+  }
+
+  if (vistaActiva === 'Alimentacion') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <Alimentacion
+          soloLectura={!puedeGestionarModulo(rol, 'Alimentacion') || !estadoConexion.online}
+          puedeRegistrar={['Administrador', 'Encargado', 'Trabajador'].includes(rol) && estadoConexion.online}
+        />
       </main>
     );
   }
@@ -516,6 +544,16 @@ const ListaUsuario = ({ usuario, onLogout }) => {
           <span>Potreros</span>
           <strong>{metricas.potreros}</strong>
           <small>{metricas.potrerosDescanso} en descanso</small>
+        </article>
+        <article className="metric-card">
+          <span>Lotes activos</span>
+          <strong>{metricas.lotesActivos}</strong>
+          <small>{metricas.lotesBovinos} bovinos · {metricas.lotesPorcinos} porcinos · {metricas.lotesFinalizacion} en finalización</small>
+        </article>
+        <article className="metric-card">
+          <span>Alimentación hoy</span>
+          <strong>{metricas.alimentacionHoy.suministros}</strong>
+          <small>{metricas.alimentacionHoy.lotes} lotes con registros{metricas.alimentacionHoy.ultimo?.lote?.codigo ? ` · último ${metricas.alimentacionHoy.ultimo.lote.codigo} ${new Date(metricas.alimentacionHoy.ultimo.fechaHora).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}` : ''}</small>
         </article>
       </section>
 

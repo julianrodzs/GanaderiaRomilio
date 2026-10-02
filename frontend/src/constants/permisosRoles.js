@@ -6,6 +6,7 @@ export const permisosPorModulo = {
   'Mis tareas': ['Trabajador', 'Veterinario', 'Contador', 'Consulta'],
   Importar: ['Administrador'],
   Inventario: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Consulta'],
+  Alimentacion: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Consulta'],
   Pesajes: ['Administrador', 'Encargado', 'Veterinario', 'Consulta'],
   Potreros: ['Administrador', 'Encargado', 'Trabajador', 'Consulta'],
   Sanidad: ['Administrador', 'Encargado', 'Veterinario', 'Consulta'],
@@ -23,6 +24,7 @@ export const permisosPorModulo = {
 export const rolesGestionPorModulo = {
   Tareas: ['Administrador', 'Encargado'],
   Inventario: ['Administrador', 'Encargado'],
+  Alimentacion: ['Administrador', 'Encargado'],
   Pesajes: ['Administrador', 'Encargado', 'Veterinario'],
   Potreros: ['Administrador', 'Encargado'],
   Sanidad: ['Administrador', 'Encargado', 'Veterinario'],

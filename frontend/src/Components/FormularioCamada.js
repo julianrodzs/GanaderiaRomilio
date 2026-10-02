@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import SelectorAnimalBuscable from './SelectorAnimalBuscable';
 
 const estadoInicial = {
   madre: '',
@@ -117,17 +118,11 @@ const FormularioCamada = ({
       {error && <div className="alerta-formulario">{error}</div>}
 
       <div className="form-grid">
-        <label>
-          Madre
-          <select name="madre" value={formulario.madre} onChange={actualizarCampo} required disabled={Boolean(madreFija)}>
-            <option value="">Seleccionar chancha</option>
-            {madreFija ? (
-              <option value={madreFija._id}>{etiquetaAnimal(madreFija)}</option>
-            ) : madres.map((madre) => (
-              <option key={madre._id} value={madre._id}>{etiquetaAnimal(madre)}</option>
-            ))}
-          </select>
-        </label>
+        {madreFija ? (
+          <label>Madre<input value={etiquetaAnimal(madreFija)} disabled /></label>
+        ) : (
+          <SelectorAnimalBuscable titulo="Madre" name="madre" value={formulario.madre} onChange={actualizarCampo} animales={madres} textoVacio="Seleccionar chancha" required />
+        )}
 
         <label>
           Código camada

@@ -94,7 +94,7 @@ test('ICP no inventa meta cuando la etapa no está definida', () => {
 test('IEE calcula fincas bovinas, porcinas y mixtas contra metas propias', () => {
     const animales = [
         { _id: 'b1', especie: 'Bovino', estado: 'Activo', objetivoProductivo: 'Engorde', createdAt: '2025-01-01' },
-        { _id: 'p1', especie: 'Porcino', estado: 'Activo', categoria: 'Engorde', createdAt: '2025-01-01' }
+        { _id: 'p1', especie: 'Porcino', estado: 'Activo', categoria: 'Cerdo adulto', objetivoProductivo: 'Engorde', createdAt: '2025-01-01' }
     ];
     const pesajes = [
         { animal: 'b1', fecha: '2026-01-01', peso: 300 },
@@ -193,7 +193,7 @@ test('IEE conserva GMD y supervivencia cuando falta peso objetivo', () => {
 
 test('período sin pesajes devuelve datos insuficientes, no cero', () => {
     const resultado = calcularIeeGeneral({
-        animales: [{ _id: 'p1', especie: 'Porcino', estado: 'Activo', categoria: 'Engorde' }],
+        animales: [{ _id: 'p1', especie: 'Porcino', estado: 'Activo', categoria: 'Cerdo adulto', objetivoProductivo: 'Engorde' }],
         pesajes: [],
         configuracion,
         ...periodo,

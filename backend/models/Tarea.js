@@ -38,6 +38,7 @@ const tareaSchema = new Schema(
         creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
         potrero: { type: Schema.Types.ObjectId, ref: 'Potrero' },
         animal: { type: Schema.Types.ObjectId, ref: 'Animal' },
+        lote: { type: Schema.Types.ObjectId, ref: 'Lote' },
         moduloOrigen: { type: String, trim: true },
         referenciaId: { type: Schema.Types.ObjectId },
         creadoAutomaticamente: { type: Boolean, default: false },
@@ -78,6 +79,7 @@ tareaSchema.index({ asignadoA: 1, estado: 1, fechaProgramada: 1 });
 tareaSchema.index({ fechaProgramada: 1 });
 tareaSchema.index({ prioridad: 1 });
 tareaSchema.index({ referenciaId: 1, moduloOrigen: 1, creadoAutomaticamente: 1 });
+tareaSchema.index({ lote: 1, estado: 1, fechaProgramada: 1 });
 tareaSchema.index({ especie: 1, estado: 1, fechaProgramada: 1 });
 tareaSchema.index({ 'operacionesIdempotentes.clave': 1 });
 

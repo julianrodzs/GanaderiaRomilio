@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { etiquetaUsuarioConRol } from '../utils/usuarios';
+import SelectorAnimalBuscable from './SelectorAnimalBuscable';
 
 const estadoInicial = {
   animal: '',
@@ -190,16 +192,15 @@ const FormularioReproduccion = ({
       <form className="form-card" onSubmit={enviarFormulario}>
         {error && <div className="alerta-formulario">{error}</div>}
 
-        <label>
-          {esPorcino ? 'Chancha' : 'Hembra'}
-          <select name="animal" value={formulario.animal} onChange={actualizarCampo} required>
-            {hembras.map((animal) => (
-              <option key={animal._id} value={animal._id}>
-                {animal.diio || animal.identificadorFinca} - {animal.nombre || 'Sin nombre'}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SelectorAnimalBuscable
+          titulo={esPorcino ? 'Chancha' : 'Hembra'}
+          name="animal"
+          value={formulario.animal}
+          onChange={actualizarCampo}
+          animales={hembras.filter((animal) => (animal.especie || 'Bovino') === formulario.especie)}
+          textoVacio={`Seleccionar ${esPorcino ? 'chancha' : 'hembra'}`}
+          required
+        />
 
         <div className="form-grid">
           <label>
@@ -208,7 +209,7 @@ const FormularioReproduccion = ({
               <option value="">Seleccionar responsable</option>
               {usuariosAsignables.map((usuario) => (
                 <option key={usuario._id} value={usuario._id}>
-                  {[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo} - {usuario.rol}
+                  {etiquetaUsuarioConRol(usuario)}
                 </option>
               ))}
             </select>

@@ -26,6 +26,7 @@ import { ContenidoPaginado } from '../Components/PaginacionTabla';
 import InfoLunarFecha from '../Components/InfoLunarFecha';
 import SelectorFechaConLuna from '../Components/SelectorFechaConLuna';
 import { esTareaConInfoLunar } from '../utils/tareasLuna.mjs';
+import { etiquetaUsuarioConRol, nombreUsuario } from '../utils/usuarios';
 
 const tipos = [
   'Chapia',
@@ -81,11 +82,6 @@ const formatearFecha = (fecha) => {
     month: '2-digit',
     day: '2-digit'
   });
-};
-
-const nombreUsuario = (usuario) => {
-  if (!usuario) return '--';
-  return [usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo || '--';
 };
 
 const nombrePotreroAnimal = (tarea) => {
@@ -504,7 +500,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
             <select name="asignadoA" value={filtros.asignadoA} onChange={actualizarFiltro}>
               <option value="">Todos los responsables</option>
               {usuarios.map((usuarioItem) => (
-                <option key={usuarioItem._id} value={usuarioItem._id}>{nombreUsuario(usuarioItem)}</option>
+                <option key={usuarioItem._id} value={usuarioItem._id}>{etiquetaUsuarioConRol(usuarioItem)}</option>
               ))}
             </select>
           )}
@@ -514,7 +510,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando tareas...</div>}
 
-      <ContenidoPaginado datos={tareas}>
+      <ContenidoPaginado datos={tareas} clavePaginacion="tareas-listado">
         {(tareasPagina) => (
           <div className="tabla-scroll tabla-dinamica">
             <table>
@@ -544,7 +540,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
                 </td>
                 <td>{tarea.tipo}</td>
                 <td>{tarea.categoriaAutomatica || '--'}</td>
-                <td>{nombreUsuario(tarea.asignadoA)}</td>
+                <td>{etiquetaUsuarioConRol(tarea.asignadoA)}</td>
                 <td>{nombrePotreroAnimal(tarea)}</td>
                 <td>
                   {formatearFecha(tarea.fechaProgramada)}
@@ -603,7 +599,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
                 required
               />
               <label>Fecha limite<input name="fechaLimite" type="date" value={formulario.fechaLimite} onChange={actualizarCampo} /></label>
-              <label>Asignado a<select name="asignadoA" value={formulario.asignadoA} onChange={actualizarCampo} required>{usuarios.map((usuarioItem) => <option key={usuarioItem._id} value={usuarioItem._id}>{nombreUsuario(usuarioItem)}</option>)}</select></label>
+              <label>Asignado a<select name="asignadoA" value={formulario.asignadoA} onChange={actualizarCampo} required>{usuarios.map((usuarioItem) => <option key={usuarioItem._id} value={usuarioItem._id}>{etiquetaUsuarioConRol(usuarioItem)}</option>)}</select></label>
               <label>Potrero<select name="potrero" value={formulario.potrero} onChange={actualizarCampo}><option value="">Sin potrero</option>{potreros.map((potrero) => <option key={potrero._id} value={potrero._id}>{potrero.codigo} - {potrero.nombre}</option>)}</select></label>
               <label>Animal<select name="animal" value={formulario.animal} onChange={actualizarCampo}><option value="">Sin animal</option>{animales.map((animal) => <option key={animal._id} value={animal._id}>{animal.diio || animal.identificadorFinca}</option>)}</select></label>
               <label className="campo-completo">Descripcion<textarea name="descripcion" rows="3" value={formulario.descripcion} onChange={actualizarCampo} /></label>
@@ -650,7 +646,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
             </div>
             <div className="detalle-animal-grid">
               <article><span>Tipo</span><strong>{detalle.tipo}</strong></article>
-              <article><span>Responsable</span><strong>{nombreUsuario(detalle.asignadoA)}</strong></article>
+              <article><span>Responsable</span><strong>{etiquetaUsuarioConRol(detalle.asignadoA)}</strong></article>
               <article><span>Programada</span><strong>{formatearFecha(detalle.fechaProgramada)}</strong>{esTareaConInfoLunar(detalle) && <InfoLunarFecha fecha={detalle.fechaProgramada} compacta />}</article>
               <article><span>Limite</span><strong>{formatearFecha(detalle.fechaLimite)}</strong></article>
               <article><span>Prioridad</span><strong>{detalle.prioridad}</strong></article>

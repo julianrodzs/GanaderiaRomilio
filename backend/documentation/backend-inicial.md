@@ -1332,6 +1332,8 @@ Base:
 
 Modelo: `CompraAnimal`.
 
+El formulario solicita un único `DIIO` por animal; `identificadorFinca` se completa internamente con ese valor para conservar compatibilidad. Cada detalle guarda `sexo` y `objetivoProductivo`, y al crear la compra puede generarse opcionalmente un lote rápido indicando únicamente nombre y objetivo. En ese flujo todos los animales deben compartir el mismo objetivo, el código del lote se genera automáticamente y `loteAsignado` impide asignar la compra más de una vez. La configuración restante se completa después desde Inventario > Lotes.
+
 Funciones:
 
 - registrar compra de uno o varios animales.
@@ -1468,6 +1470,8 @@ GET /api/usuarios/asignables?modulo=Tareas
 ```
 
 El endpoint exige autenticacion y permiso de gestion del modulo. Devuelve solo nombre, apellido, correo, rol y estado de usuarios activos compatibles, sin exponer la administracion completa de usuarios.
+
+En cualquier selector usado para asignar una tarea o responsabilidad operativa, cada opción se presenta como `Nombre · Rol`. El rol es el de la membresía activa del usuario en la organización actual. Esta presentación se centraliza en el frontend y aplica a Tareas, Sanidad, Reproducción y responsables operativos de Potreros.
 
 Reglas automaticas:
 
@@ -1826,25 +1830,64 @@ La finca contiene `lineasProductivas`, una lista sin especies repetidas:
 
 ```js
 [
-  { especie: 'Bovino', objetivos: ['Cria', 'Engorde'], activa: true },
+  { especie: 'Bovino', objetivos: ['REPRODUCCION', 'ENGORDE'], activa: true },
   { especie: 'Porcino', objetivos: ['Reproduccion', 'Engorde'], activa: true }
 ]
 ```
 
-Los valores persistidos usan las variantes acentuadas `Cría` y `Reproducción`. La migracion inicial habilita todos los objetivos para cada especie encontrada, evitando bloquear datos existentes; el administrador puede afinarlos despues.
+Los valores persistidos son canónicos: `ENGORDE`, `REPRODUCCION`, `REEMPLAZO`, `OTRO` y `SIN_DEFINIR`. Las etiquetas acentuadas pertenecen solamente a la interfaz.
 
-### Objetivos y categorias bovinas iniciales
+### Objetivos productivos y categorías de animales
 
 `objetivoProductivo` expresa para qué se conserva el animal en la finca; `categoria` describe su grupo por sexo y edad. Para la finca inicial se aplicó la siguiente normalización:
 
-- Todas las hembras bovinas: objetivo `Cría`.
+En Inventario, la señal **Edad reproductiva** se calcula para ambos sexos. Los umbrales operativos son 24 meses para hembras bovinas, 12 meses para machos bovinos, 7 meses para hembras porcinas y 8 meses para machos porcinos. La interfaz muestra `Lista/Listo`, `No lista/No listo` o `Sin fecha`. Esta señal indica únicamente cumplimiento de edad y no reemplaza condición corporal, examen andrológico ni evaluación veterinaria.
+
+- Las hembras bovinas destinadas a producir descendencia: objetivo `REPRODUCCION`.
 - Machos activos con categoría calculada `Toro`: objetivo `Reproducción`.
 - Machos vendidos o muertos: no se modifican.
 - Menores de 12 meses: `Ternero`.
 - De 12 a 23 meses: `Novilla` o `Novillo` según sexo.
 - Desde 24 meses: `Vaca` o `Toro` según sexo.
 
-La categoría bovina es un dato derivable de `fechaNacimiento` y `sexo`, por lo que técnicamente está desnormalizada al persistirse. Se conserva por compatibilidad con filtros, índices y reportes actuales. `objetivoProductivo` no es redundante: dos toros de la misma edad pueden tener objetivos distintos, por ejemplo `Reproducción` y `Engorde`.
+La categoría es un dato derivable de especie, `fechaNacimiento` y sexo. Se persiste por compatibilidad con filtros e índices, pero el servicio de inventario la calcula y valida de forma centralizada. `objetivoProductivo` no es redundante: animales de igual edad y sexo pueden tener objetivos distintos.
+
+Las consultas de inventario devuelven siempre la categoría calculada a la fecha actual. Además, el trabajo programado diario sincroniza el valor persistido cuando un animal cruza un umbral de edad, para mantener consistentes los filtros y reportes que consultan MongoDB directamente.
+
+Reglas vigentes:
+
+- Bovinos menores de 12 meses: `Ternero` o `Ternera`.
+- Bovinos de 12 a 23 meses: `Novillo` o `Novilla`.
+- Bovinos desde 24 meses: `Toro` o `Vaca`.
+- Porcinos menores de 3 meses: `Lechón` o `Lechona`.
+- Porcinos de 3 a 6 meses: `Cerdo joven` o `Cerda joven`.
+- Porcinos desde 7 meses: `Cerdo adulto` o `Chancha`.
+
+`Engorde`, `Reemplazo` y `Reproducción` pertenecen a `objetivoProductivo`; `Verraco` dejó de utilizarse como categoría porque describe una función reproductiva. Si falta una fecha válida, la aplicación no inventa la categoría y conserva los datos históricos para revisión.
+
+### Normalización de Cría y Reproducción
+
+`Cría` ya no es un valor de `Animal.objetivoProductivo` ni de `Lote.proposito`. Cuando describe un animal destinado a producir descendencia se almacena `REPRODUCCION`; el término cría se conserva para descendencia, camadas, indicadores y sistemas productivos donde mantiene su significado real.
+
+Antes de ejecutar la migración en producción se debe crear un snapshot de MongoDB. Comandos:
+
+```bash
+npm run migrate:cria-reproduccion:check
+npm run migrate:cria-reproduccion
+```
+
+El primer comando no escribe datos. El segundo normaliza todos los tenants y comprueba totales generales y por especie; no crea eventos en la bitácora productiva.
+
+Los terneros registrados desde un parto conservan `categoria` según edad y sexo, usan `SIN_DEFINIR` como objetivo inicial salvo decisión explícita y enlazan `madre` con el animal interno del ciclo reproductivo. `madreDiio` se conserva como referencia legible, pero no convierte a la madre en externa. En formularios genealógicos, una coincidencia única por DIIO o identificador puede recuperarse como relación interna al guardar.
+
+Los registros históricos que solo conservan `madreDiio` se pueden revisar y enlazar sin inferencias mediante:
+
+```bash
+npm run migrate:madres-internas:check
+npm run migrate:madres-internas
+```
+
+La herramienta exige una única hembra coincidente dentro de la misma organización, finca y especie. Las coincidencias ambiguas o inexistentes se reportan y no se modifican.
 
 La migración es idempotente y puede revisarse antes de aplicarse:
 

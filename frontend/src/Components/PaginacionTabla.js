@@ -1,14 +1,76 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 
-export const usePaginacionTabla = (datos = [], tamanoInicial = 10) => {
-  const [pagina, setPagina] = useState(1);
-  const [tamanoPagina, setTamanoPagina] = useState(tamanoInicial);
+const PREFIJO_PAGINACION = 'ganaderia-romilio:paginacion:';
+const TAMANOS_PERMITIDOS = [10, 25, 50];
+
+const leerPaginacion = (clave, tamanoInicial) => {
+  if (!clave || typeof window === 'undefined') return { pagina: 1, tamanoPagina: tamanoInicial };
+
+  try {
+    const guardado = JSON.parse(window.sessionStorage.getItem(`${PREFIJO_PAGINACION}${clave}`));
+    const pagina = Number.isInteger(guardado?.pagina) && guardado.pagina > 0 ? guardado.pagina : 1;
+    const tamanoPagina = TAMANOS_PERMITIDOS.includes(guardado?.tamanoPagina)
+      ? guardado.tamanoPagina
+      : tamanoInicial;
+    return { pagina, tamanoPagina };
+  } catch {
+    return { pagina: 1, tamanoPagina: tamanoInicial };
+  }
+};
+
+export const usePaginacionControlada = (clave, tamanoInicial = 10) => {
+  const inicial = useMemo(() => leerPaginacion(clave, tamanoInicial), [clave, tamanoInicial]);
+  const [pagina, setPagina] = useState(inicial.pagina);
+  const [tamanoPagina, setTamanoPagina] = useState(inicial.tamanoPagina);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        `${PREFIJO_PAGINACION}${clave}`,
+        JSON.stringify({ pagina, tamanoPagina })
+      );
+    } catch {
+      // La navegación sigue funcionando aunque el navegador bloquee sessionStorage.
+    }
+  }, [clave, pagina, tamanoPagina]);
+
+  return { pagina, setPagina, tamanoPagina, setTamanoPagina };
+};
+
+export const usePaginacionTabla = (datos = [], tamanoInicial = 10, clavePersistencia = '') => {
+  const idAutomatico = useId();
+  const rutaActual = typeof window === 'undefined' ? 'servidor' : window.location.pathname;
+  const clave = clavePersistencia || `automatica:${rutaActual}:${idAutomatico}`;
+  const estadoInicial = useMemo(() => leerPaginacion(clave, tamanoInicial), [clave, tamanoInicial]);
+  const [pagina, setPagina] = useState(estadoInicial.pagina);
+  const [tamanoPagina, setTamanoPagina] = useState(estadoInicial.tamanoPagina);
+  const claveAnterior = useRef(clave);
   const total = datos.length;
   const totalPaginas = Math.max(Math.ceil(total / tamanoPagina), 1);
 
   useEffect(() => {
-    setPagina((actual) => Math.min(actual, totalPaginas));
-  }, [totalPaginas]);
+    if (total > 0) setPagina((actual) => Math.min(actual, totalPaginas));
+  }, [total, totalPaginas]);
+
+  useEffect(() => {
+    if (claveAnterior.current !== clave) return;
+    try {
+      window.sessionStorage.setItem(
+        `${PREFIJO_PAGINACION}${clave}`,
+        JSON.stringify({ pagina, tamanoPagina })
+      );
+    } catch {
+      // La navegación sigue funcionando aunque el navegador bloquee sessionStorage.
+    }
+  }, [clave, pagina, tamanoPagina]);
+
+  useEffect(() => {
+    if (claveAnterior.current === clave) return;
+    const guardado = leerPaginacion(clave, tamanoInicial);
+    claveAnterior.current = clave;
+    setPagina(guardado.pagina);
+    setTamanoPagina(guardado.tamanoPagina);
+  }, [clave, tamanoInicial]);
 
   const datosPagina = useMemo(() => {
     const inicio = (pagina - 1) * tamanoPagina;
@@ -78,8 +140,8 @@ const PaginacionTabla = ({
   );
 };
 
-export const ContenidoPaginado = ({ datos = [], children, tamanoInicial = 10 }) => {
-  const paginacion = usePaginacionTabla(datos, tamanoInicial);
+export const ContenidoPaginado = ({ datos = [], children, tamanoInicial = 10, clavePaginacion = '' }) => {
+  const paginacion = usePaginacionTabla(datos, tamanoInicial, clavePaginacion);
 
   return (
     <>

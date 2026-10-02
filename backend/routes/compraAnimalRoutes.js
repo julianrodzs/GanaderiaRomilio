@@ -8,7 +8,8 @@ const {
     deleteCompra,
     getCompraById,
     getCompras,
-    getResumenCompras
+    getResumenCompras,
+    asignarCompraALote
 } = require('../controllers/compraAnimalController');
 
 const router = Router();
@@ -28,6 +29,7 @@ router.get('/:id', puedeVer, getCompraById);
 router.post('/', puedeGestionar, upload.single('comprobante'), crearCompra);
 router.put('/:id', puedeGestionar, upload.single('comprobante'), actualizarCompra);
 router.patch('/:id/anular', puedeGestionar, anularCompra);
+router.post('/:id/asignar-lote', puedeGestionar, asignarCompraALote);
 router.delete('/:id', puedeEliminar, deleteCompra);
 
 module.exports = router;

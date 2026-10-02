@@ -32,6 +32,8 @@ app.use('/api/plan', auth, require('./routes/plan'));
 app.use('/api/fincas', auth, require('./routes/finca'));
 app.use('/api/tareas', require('./routes/tareaRoutes'));
 app.use('/api/animales', auth, require('./routes/animal'));
+app.use('/api/lotes', auth, require('./routes/loteRoutes'));
+app.use('/api/alimentacion', auth, require('./routes/alimentacionRoutes'));
 app.use('/api/camadas', auth, require('./routes/camadaRoutes'));
 app.use('/api/genealogia', auth, require('./routes/genealogiaRoutes'));
 app.use('/api/eventos-animal', auth, require('./routes/eventoAnimalRoutes'));

@@ -1,6 +1,7 @@
 const Animal = require('../models/Animal');
 const { AplicacionSanitaria } = require('../models/AplicacionSanitaria');
 const { eliminarEventosPorReferencia, upsertEventoAnimal } = require('./eventoAnimal-service');
+const EventoLote = require('../models/EventoLote');
 
 const normalizarIds = (animales = []) => [...new Set(
     animales.map((animal) => (animal?._id || animal)?.toString()).filter(Boolean)
@@ -17,7 +18,7 @@ const validarAnimalesSanidad = async (animales = [], especieEsperada, { soloActi
     }
 
     const encontrados = await Animal.find({ _id: { $in: ids } })
-        .select('_id especie diio identificadorFinca nombre estado');
+        .select('_id especie diio identificadorFinca nombre estado loteActual');
 
     if (encontrados.length !== ids.length) {
         const error = new Error('Uno o más animales seleccionados no existen');
@@ -95,6 +96,21 @@ const crearEventosAplicacion = async (aplicacion, usuarioId) => {
     })));
 };
 
+const crearEventosLoteAplicacion = async (aplicacion, animales, usuarioId) => {
+    const lotes = [...new Set(animales.map((animal) => String(animal.loteActual || '')).filter(Boolean))];
+    await Promise.all(lotes.map((lote) => EventoLote.create({
+        lote,
+        tipo: 'APLICACION_SANITARIA',
+        fecha: aplicacion.fechaAplicacion,
+        titulo: 'Aplicación sanitaria',
+        descripcion: `${aplicacion.producto} · ${etiquetaNaturaleza(aplicacion.naturaleza)}`,
+        referenciaId: aplicacion._id,
+        entidadTipo: 'AplicacionSanitaria',
+        registradoPor: usuarioId,
+        metadata: { producto: aplicacion.producto, animales: aplicacion.animales }
+    })));
+};
+
 const crearAplicacionSanitaria = async (datos, usuarioId, { soloActivos = false } = {}) => {
     const validacion = await validarAnimalesSanidad(datos.animales, datos.especie, { soloActivos });
     const aplicacion = await AplicacionSanitaria.create({
@@ -106,9 +122,11 @@ const crearAplicacionSanitaria = async (datos, usuarioId, { soloActivos = false 
 
     try {
         await crearEventosAplicacion(aplicacion, usuarioId);
+        await crearEventosLoteAplicacion(aplicacion, validacion.animales, usuarioId);
         return aplicacion;
     } catch (error) {
         await eliminarEventosPorReferencia({ moduloOrigen: 'Sanidad', referenciaId: aplicacion._id });
+        await EventoLote.deleteMany({ entidadTipo: 'AplicacionSanitaria', referenciaId: aplicacion._id });
         await AplicacionSanitaria.findByIdAndDelete(aplicacion._id);
         throw error;
     }
@@ -117,6 +135,7 @@ const crearAplicacionSanitaria = async (datos, usuarioId, { soloActivos = false 
 const eliminarAplicacionSanitariaCreada = async (aplicacionId) => {
     if (!aplicacionId) return;
     await eliminarEventosPorReferencia({ moduloOrigen: 'Sanidad', referenciaId: aplicacionId });
+    await EventoLote.deleteMany({ entidadTipo: 'AplicacionSanitaria', referenciaId: aplicacionId });
     await AplicacionSanitaria.findByIdAndDelete(aplicacionId);
 };
 

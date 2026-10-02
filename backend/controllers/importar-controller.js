@@ -7,6 +7,7 @@ const {
 const Animal = require('../models/Animal');
 const CatalogoFinanciero = require('../models/CatalogoFinanciero');
 const ImportacionExcel = require('../models/ImportacionExcel');
+const Lote = require('../models/Lote');
 
 const importarCtrl = {};
 
@@ -48,14 +49,16 @@ importarCtrl.previewExcel = async (req, res) => {
             });
         }
 
-        const [catalogosFinancieros, diios, identificadores] = await Promise.all([
+        const [catalogosFinancieros, diios, identificadores, lotes] = await Promise.all([
             obtenerCatalogosActivos(),
             Animal.distinct('diio', { diio: { $nin: [null, ''] } }),
-            Animal.distinct('identificadorFinca', { identificadorFinca: { $nin: [null, ''] } })
+            Animal.distinct('identificadorFinca', { identificadorFinca: { $nin: [null, ''] } }),
+            Lote.find({}).select('codigo especie proposito estado').lean()
         ]);
         const resultado = await procesarExcelPreview(req.file.buffer, {
             catalogosFinancieros,
-            diiosExistentes: [...diios, ...identificadores]
+            diiosExistentes: [...diios, ...identificadores],
+            lotesExistentes: lotes
         });
         const importacion = await ImportacionExcel.create({
             archivo: req.file.originalname,

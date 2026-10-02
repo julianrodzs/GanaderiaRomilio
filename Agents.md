@@ -1,1538 +1,1281 @@
-Necesito implementar en GanaderiaRomilio el manejo de BANCOS FORRAJEROS / PASTOS DE CORTE dentro del módulo actual de Potreros.
+Necesito hacer una LIMPIEZA Y MIGRACIÓN de objetivoProductivo y propósito de Lotes en GanaderiaRomilio.
 
-OBJETIVOS:
+OBJETIVO:
 
-1. Registrar áreas destinadas a producir forraje para corte y acarreo.
-2. Mantenerlas diferenciadas de los potreros donde pastorean animales.
-3. Registrar siembra, establecimiento, cortes y cantidades producidas.
-4. Tener historial real de producción.
-5. Generar próximas actividades de corte mediante Tareas.
-6. Preparar datos para futura relación con alimentación y engorde.
-7. Crear análisis de rendimiento productivo, PERO disponible solamente desde el plan Gestión.
+Eliminar la redundancia entre:
+
+CRIA
+REPRODUCCION
+
+y dejar una única categoría:
+
+REPRODUCCION
+
+Esto debe aplicarse tanto a:
+
+BOVINOS
+PORCINOS
+
+y debe migrar correctamente todos los datos existentes de clientes.
 
 IMPORTANTE:
 
-NO crear un módulo principal nuevo llamado "Forrajes".
-
-Debe seguir dentro de:
-
-Potreros
-
-Visualmente:
-
-POTREROS
-
-[ Pastoreo ] [ Bancos forrajeros ]
-
-Esto evita aumentar el menú principal y evita mezclar visualmente las métricas de pastoreo con las métricas de corte.
+NO perder animales.
+NO borrar históricos.
+NO cambiar especie.
+NO modificar información reproductiva.
+NO alterar compras, ventas, sanidad, pesajes o genealogía.
 
 ==================================================
-1. REVISIÓN PREVIA
+1. REVISAR IMPLEMENTACIÓN ACTUAL
 ==================================================
 
 Antes de modificar:
 
-- revisar Potrero
-- revisar RotacionPotrero
-- revisar catálogo de pastos recientemente implementado
-- revisar HistorialCoberturaPotrero
-- revisar potreroRendimientoService
-- revisar Tarea
-- revisar MovimientoFinanciero
-- revisar sistema de planes / PlanService
-- revisar FeatureGate
-- revisar calendario lunar implementado para tareas de Siembra
-- revisar importador
+buscar en todo backend y frontend referencias a:
 
-NO duplicar:
+CRIA
+Cría
+Cria
+cría
+cria
 
-- catálogo de pastos
-- servicios de rendimiento
-- historial de cobertura
-- tareas
-- lógica de planes
+especialmente en:
 
-Si CatalogoPasto ya existe, extenderlo para soportar también especies de corte en lugar de crear otro catálogo incompatible.
+Animal
+Lote
+PertenenciaLote
+PlanAlimentacion
+Racion
+AsignacionPlanAlimentacion
+AsignacionRacionLote
+Reportes
+Filtros
+Importador
+Dashboard
+Inventario
+Porcinos
+Bovinos
+Reproducción
+Pesajes
+Sanidad
+Compras
+Ventas
+Feature/config files
+Enums/constants
+validaciones
+tests
 
-==================================================
-2. CONCEPTO: TIPO DE ÁREA
-==================================================
+No hacer únicamente cambio visual.
 
-Agregar al Potrero, o adaptar estructura existente:
+Necesitamos consistencia en:
 
-tipoArea
-
-Valores iniciales:
-
-PASTOREO
-BANCO_FORRAJERO
-
-Preparar opcionalmente:
-
-MIXTO
-
-pero NO complicar la primera versión si el modelo actual no lo necesita.
-
-PASTOREO:
-
-animales entran al área.
-
-Sus indicadores principales siguen siendo:
-
-- días ocupados
-- ocupación
-- rotaciones
-- animal-días
-- animal-días/ha
-- descanso
-
-BANCO_FORRAJERO:
-
-el animal normalmente NO entra.
-
-El forraje se:
-
-- corta
-- pica
-- transporta
-- suministra a animales
-
-Sus indicadores son diferentes:
-
-- kg de forraje producido
-- kg/ha/corte
-- cortes
-- días entre cortes
-- producción acumulada
-- producción/ha
-
-NO calcular animal-días/ha para un banco forrajero.
+BD
+backend
+frontend
+importación
+reportes
+validaciones
 
 ==================================================
-3. CATÁLOGO ÚNICO DE FORRAJES
+2. OBJETIVO PRODUCTIVO FINAL
 ==================================================
 
-Extender el catálogo existente para manejar:
+Animal.objetivoProductivo debe utilizar únicamente:
 
-tipoUso o usosPermitidos.
+ENGORDE
+REPRODUCCION
+REEMPLAZO
+OTRO
+SIN_DEFINIR
+
+o los equivalentes exactos que ya utiliza el proyecto.
+
+Eliminar:
+
+CRIA
+
+como valor permitido.
+
+==================================================
+3. SIGNIFICADO
+==================================================
+
+REPRODUCCION:
+
+Animales cuyo objetivo productivo actual es formar parte del sistema reproductivo.
+
+Ejemplos bovinos:
+
+- vaca reproductora
+- toro reproductor
+- novilla incorporada a reproducción
+
+Ejemplos porcinos:
+
+- cerda reproductora
+- verraco reproductor
+- hembra incorporada al plantel reproductivo
+
+REEMPLAZO:
+
+Animales seleccionados para convertirse posteriormente en reproductores.
 
 Ejemplo:
 
-usosPermitidos: [
-  'PASTOREO',
-  'CORTE',
-  'ENSILAJE'
-]
+Novilla de reemplazo
 
-Un mismo material puede admitir más de un uso.
+REEMPLAZO
+→ posteriormente
+REPRODUCCION
 
-Ejemplo conceptual:
+==================================================
+4. CRÍA NO ES OBJETIVO PRODUCTIVO
+==================================================
 
-{
-  nombre: "Cuba OM-22",
-  categoria: "Pasto de corte",
-  usosPermitidos: ["CORTE"],
-  activo: true
-}
+Eliminar CRIA porque se estaba utilizando como sinónimo de:
 
-No crear listas separadas completamente incompatibles de:
+REPRODUCCION.
 
-CatalogoPasto
-CatalogoForraje
+Esto generaba casos como:
+
+Animal A:
+Cría
+
+Animal B:
+Reproducción
+
+aunque ambos realmente tenían el mismo objetivo.
+
+Después de esta migración:
+
+ambos serán:
+
+REPRODUCCION.
+
+==================================================
+5. MIGRACIÓN DE ANIMALES EXISTENTES
+==================================================
+
+Crear script de migración específico.
+
+Ejemplo:
+
+scripts/migrations/migrateCriaToReproduccion.js
+
+o ubicación equivalente del proyecto.
+
+Debe buscar TODOS los animales existentes:
+
+Bovinos
+Porcinos
+
+sin importar:
+
+estado
+finca
+fecha
+sexo
+
+cuando:
+
+objetivoProductivo corresponda a Cría.
+
+==================================================
+6. VALORES A NORMALIZAR
+==================================================
+
+Como mínimo reconocer:
+
+"CRIA"
+"Cría"
+"Cria"
+"cría"
+"cria"
+
+También:
+
+valores con espacios accidentales:
+
+" Cría"
+"Cría "
+" Cría "
+
+Normalizar trim/case/acento de manera segura.
+
+Todos deben convertirse a:
+
+REPRODUCCION
+
+o al valor canónico utilizado por el enum actual.
+
+==================================================
+7. NO HACER MIGRACIONES AMBIGUAS
+==================================================
+
+Si aparecen valores inesperados como:
+
+"Cría y engorde"
+"Cría/Reproducción"
+"Reproductora cría"
+"Cría futura"
+
+NO asumir automáticamente qué significan.
+
+El script debe reportarlos como:
+
+VALORES_NO_RECONOCIDOS
+
+para revisión.
+
+No migrarlos silenciosamente.
+
+==================================================
+8. APLICAR A TODOS LOS CLIENTES
+==================================================
+
+La migración NO debe aplicarse solamente a Ganadería Romilio.
+
+Debe ejecutarse sobre todos los documentos Animal existentes en la base de datos actual.
+
+Si ya existe:
+
+organizacionId
+fincaId
+tenantId
+
+NO filtrar una organización específica.
+
+Migrar:
+
+todos los tenants/clientes.
+
+Si todavía no existe multi-tenant:
+
+migrar toda la colección Animal.
+
+==================================================
+9. BOVINOS Y PORCINOS
+==================================================
+
+No crear lógica:
+
+if especie === Bovino
+
+La migración aplica a ambas especies.
+
+Ejemplo:
+
+Bovino:
+
+objetivoProductivo:
+Cría
+
+↓
+
+REPRODUCCION
+
+Porcino:
+
+objetivoProductivo:
+Cría
+
+↓
+
+REPRODUCCION
+
+==================================================
+10. MIGRACIÓN IDEMPOTENTE
+==================================================
+
+El script debe poder ejecutarse más de una vez sin causar problemas.
+
+Ejemplo:
+
+Primera ejecución:
+
+52 animales Cría
+→ 52 migrados
+
+Segunda ejecución:
+
+0 animales pendientes
+→ 0 cambios
+
+==================================================
+11. DRY RUN
+==================================================
+
+Agregar modo:
+
+--dry-run
+
+Ejemplo:
+
+node scripts/migrations/migrateCriaToReproduccion.js --dry-run
+
+Debe mostrar:
+
+Animales revisados: 853
+
+Cría encontrados: 47
+
+Bovinos: 39
+Porcinos: 8
+
+Serían migrados: 47
+
+Valores ambiguos: 2
+
+NO modificar BD.
+
+==================================================
+12. EJECUCIÓN REAL
+==================================================
+
+Ejemplo:
+
+node scripts/migrations/migrateCriaToReproduccion.js
+
+Resultado esperado:
+
+Animales revisados: 853
+Migrados: 47
+Bovinos: 39
+Porcinos: 8
+Errores: 0
+Valores ambiguos: 0
+
+==================================================
+13. LOG DE MIGRACIÓN
+==================================================
+
+Mostrar al menos:
+
+_id
+DIIO / ID interno si existe
+especie
+valorAnterior
+valorNuevo
+
+No imprimir información sensible innecesaria.
+
+Ejemplo:
+
+Animal 12345
+Bovino
+Cría
+→ REPRODUCCION
+
+==================================================
+14. NO CREAR EVENTOANIMAL POR MIGRACIÓN TÉCNICA
+==================================================
 
 Preferencia:
 
-un catálogo productivo único reutilizable.
+NO llenar la bitácora productiva de cada animal con:
 
-Puede renombrarse internamente a:
+"Objetivo cambiado de Cría a Reproducción"
 
-CatalogoForraje
+porque no es un cambio real de manejo.
 
-solo si la migración es segura.
+Es una normalización técnica.
+
+Registrar la migración mediante:
+
+log técnico
+auditoría de migración
+
+si la infraestructura existe.
 
 ==================================================
-4. CATÁLOGO INICIAL DE PASTOS DE CORTE / FORRAJES
+15. PROPÓSITO DE LOTE
 ==================================================
 
-Agregar:
+Revisar enum actual de:
 
-Cuba OM-22 / Cuba 22
-Cuba CT-115
-King Grass
-Taiwán
-Taiwán rojo
-Camerún
-Maralfalfa
-Elefante
-Gigante
-Caña de azúcar
-Imperial
-Maíz forrajero
-Sorgo forrajero
-Prodigioso
+Lote.proposito
+
+Eliminar también:
+
+CRIA
+
+si existe.
+
+Propósitos recomendados:
+
+ENGORDE
+REPRODUCCION
+REEMPLAZO
+DESTETE
+CUARENTENA
+VENTA
+OTRO
+
+No utilizar:
+
+CRIA
+
+==================================================
+16. MIGRAR LOTES EXISTENTES
+==================================================
+
+Si existen lotes con:
+
+proposito = CRIA
+
+migrarlos a:
+
+REPRODUCCION.
+
+Reconocer también variantes:
+
+Cría
+Cria
+cría
+cria
+
+Crear la migración dentro del mismo script o una migración separada claramente documentada.
+
+==================================================
+17. OBJETIVO PRODUCTIVO VS PROPÓSITO DEL LOTE
+==================================================
+
+Después de la limpieza:
+
+Animal:
+
+objetivoProductivo =
+REPRODUCCION
+
+puede pertenecer a:
+
+Lote:
+
+proposito =
+REPRODUCCION
+
+Esto simplifica validaciones.
+
+==================================================
+18. DESTETE NO ES OBJETIVO PRODUCTIVO
+==================================================
+
+No agregar:
+
+DESTETE
+
+a Animal.objetivoProductivo.
+
+Destete es:
+
+etapa / agrupación temporal.
+
+Sí puede existir como:
+
+Lote.proposito = DESTETE
+
+==================================================
+19. CUARENTENA NO ES OBJETIVO PRODUCTIVO
+==================================================
+
+No agregar:
+
+CUARENTENA
+
+a objetivoProductivo.
+
+Puede ser:
+
+Lote.proposito = CUARENTENA.
+
+==================================================
+20. VENTA NO ES OBJETIVO PRODUCTIVO
+==================================================
+
+No agregar:
+
+VENTA
+
+a objetivoProductivo.
+
+Puede mantenerse como propósito operativo de lote si ya lo utiliza el proyecto.
+
+==================================================
+21. FRONTEND - FORMULARIO ANIMAL
+==================================================
+
+Actualizar dropdown:
+
+Objetivo productivo
+
+Opciones:
+
+Engorde
+Reproducción
+Reemplazo
 Otro
+Sin definir
 
-Mantener además los materiales de pastoreo ya existentes:
+Eliminar:
 
-Brizantha
-Toledo
-Marandú
-Piatá
-Xaraés
-Diamantes 1
-MG-5 Victoria
-Mombaza
-Tanzania
-Massai
-Guinea
-Estrella Africana
-Ratana
-Decumbens
-Humidícola
-Mulato
-Mulato II
-Tanner
-Brachipará
-Gamalote
-Jaragua
-Kikuyo
+Cría
+
+==================================================
+22. FILTROS
+==================================================
+
+Actualizar filtros de:
+
+Inventario
+Pesajes
+Lotes
+Reportes
+Compras
+Ventas
+
+para que:
+
+Cría
+
+ya no aparezca como filtro independiente.
+
+Usar:
+
+Reproducción.
+
+==================================================
+23. DATOS HISTÓRICOS
+==================================================
+
+Después de migrar:
+
+un filtro:
+
+Reproducción
+
+debe incluir animales que antes estaban:
+
+Cría
+
+porque ya estarán almacenados con el valor canónico.
+
+No crear filtros:
+
+Cría + Reproducción
+
+permanentes.
+
+Eso solo perpetuaría la inconsistencia.
+
+==================================================
+24. IMPORTADOR
+==================================================
+
+El importador debe seguir siendo tolerante con archivos antiguos.
+
+Si un Excel contiene:
+
+Cría
+Cria
+cría
+cria
+
+normalizar automáticamente a:
+
+REPRODUCCION.
+
+Esto es importante porque clientes pueden reutilizar plantillas viejas.
+
+==================================================
+25. IMPORTACIONES NUEVAS
+==================================================
+
+Nunca guardar nuevamente:
+
+CRIA.
+
+Incluso si viene del Excel:
+
+Cría
+
+el backend debe transformar:
+
+Cría
+→ REPRODUCCION
+
+antes de guardar.
+
+==================================================
+26. BACKEND COMO ÚLTIMA BARRERA
+==================================================
+
+No depender solamente del frontend.
+
+Crear helper central:
+
+normalizarObjetivoProductivo()
+
+o utilizar mecanismo existente.
+
+Ejemplo conceptual:
+
+normalizarObjetivoProductivo("Cría")
+→ "REPRODUCCION"
+
+normalizarObjetivoProductivo("Reproducción")
+→ "REPRODUCCION"
+
+normalizarObjetivoProductivo("Engorde")
+→ "ENGORDE"
+
+==================================================
+27. VALOR REPRODUCCIÓN TAMBIÉN DEBE NORMALIZARSE
+==================================================
+
+Reconocer:
+
+REPRODUCCION
+Reproducción
+Reproduccion
+reproducción
+reproduccion
+
+→
+
+REPRODUCCION
+
+Esto evita nuevas inconsistencias.
+
+==================================================
+28. REEMPLAZO
+==================================================
+
+Normalizar también variantes obvias:
+
+REEMPLAZO
+Reemplazo
+reemplazo
+
+→
+
+REEMPLAZO
+
+Sin cambiar su significado.
+
+==================================================
+29. ENGORDE
+==================================================
+
+Normalizar:
+
+ENGORDE
+Engorde
+engorde
+
+→
+
+ENGORDE
+
+==================================================
+30. CONSTANTE ÚNICA
+==================================================
+
+Crear/reutilizar una única definición central.
+
+Ejemplo:
+
+OBJETIVOS_PRODUCTIVOS = {
+  ENGORDE: 'ENGORDE',
+  REPRODUCCION: 'REPRODUCCION',
+  REEMPLAZO: 'REEMPLAZO',
+  OTRO: 'OTRO',
+  SIN_DEFINIR: 'SIN_DEFINIR'
+}
+
+No repetir arrays distintos en:
+
+AnimalForm
+LoteForm
+Reportes
+Importador
 etc.
 
 ==================================================
-5. LEGUMINOSAS / COMPLEMENTOS
+31. LABELS
 ==================================================
 
-Mantener separadas conceptualmente las leguminosas asociadas.
+Separar:
 
-Catálogo inicial:
+valor interno
 
-Maní forrajero
-Kudzú
-Cratylia
-Stylosanthes
-Otra
-Ninguna
+de:
+
+label UI.
 
 Ejemplo:
 
-Banco Norte
+REPRODUCCION
+→
+"Reproducción"
 
-Forraje principal:
-Cuba OM-22
+REEMPLAZO
+→
+"Reemplazo"
 
-Leguminosa asociada:
-Cratylia
-
-No confundir ambos como una única especie.
-
-==================================================
-6. DATOS DE UN BANCO FORRAJERO
-==================================================
-
-Para tipoArea = BANCO_FORRAJERO:
-
-registrar:
-
-nombre
-codigo
-area
-forrajePrincipal
-forrajesSecundarios
-leguminosasAsociadas
-
-fechaEstablecimiento
-
-intervaloCorteObjetivoDias
-
-observaciones
-
-estado
-
-No guardar manualmente:
-
-ultimoCorte
-proximoCorte
-
-si pueden derivarse de los registros de cortes.
-
-Pueden exponerse como campos virtuales/calculados.
+No guardar labels traducidos directamente si actualmente el proyecto utiliza enums canónicos.
 
 ==================================================
-7. EJEMPLO
+32. VALIDACIÓN ANIMAL / LOTE
 ==================================================
 
-BANCO NORTE
+Actualizar reglas de compatibilidad.
 
-Área:
-0.8 ha
+Antes podía existir:
 
-Forraje principal:
-Cuba OM-22
+Animal:
+Cría
 
-Fecha establecimiento:
-15/03/2026
+Lote:
+Reproducción
 
-Intervalo objetivo:
-60 días
+y provocar incompatibilidad falsa.
 
-Último corte:
-22/08/2026
+Después:
 
-Próximo corte estimado:
-21/10/2026
+Animal:
+REPRODUCCION
 
-Producción último corte:
-4.250 kg
+Lote:
+REPRODUCCION
 
-==================================================
-8. MODELO DE CORTE
-==================================================
-
-Crear:
-
-CorteForraje
-
-o nombre equivalente.
-
-Campos sugeridos:
-
-{
-  area: ObjectId ref Potrero,
-
-  fechaCorte: Date,
-
-  forraje: ObjectId ref CatalogoForraje,
-
-  areaCortadaHa: Number,
-
-  cantidadForrajeVerdeKg: Number,
-
-  porcentajeMateriaSeca: Number | null,
-
-  cantidadMateriaSecaKg: Number | null,
-
-  destino: {
-    tipo,
-    referenciaId,
-    descripcion
-  },
-
-  responsable: ObjectId,
-
-  observaciones: String,
-
-  registradoPor: ObjectId,
-
-  createdAt,
-  updatedAt
-}
+→ compatible.
 
 ==================================================
-9. ÁREA CORTADA
+33. PLANES DE ALIMENTACIÓN
 ==================================================
 
-No asumir siempre que se corta el 100 % del banco.
+Revisar si:
 
-Permitir:
+PlanAlimentacion.proposito
 
-areaCortadaHa
+puede contener:
 
-Ejemplo:
-
-Banco:
-
-0.8 ha
-
-Corte realizado:
-
-0.4 ha
-
-Producción:
-
-2.100 kg
-
-Entonces:
-
-kgForrajeVerdePorHa =
-
-2100 / 0.4
-
-NO:
-
-2100 / 0.8
-
-==================================================
-10. CANTIDAD PRODUCIDA
-==================================================
-
-La medida principal normalizada debe ser:
-
-kg de forraje verde
-
-En frontend permitir ingresar:
-
-kg
-toneladas
-
-Si usuario ingresa:
-
-4.25 toneladas
-
-normalizar internamente:
-
-4250 kg
-
-No mezclar unidades sin conversión.
-
-Si posteriormente se permiten:
-
-carretas
-sacos
-cargas
-
-no convertirlas a kg si no existe un peso equivalente conocido.
-
-==================================================
-11. MATERIA SECA
-==================================================
-
-porcentajeMateriaSeca:
-
-opcional.
-
-NO obligarlo.
+CRIA.
 
 Si existe:
 
-cantidadMateriaSecaKg =
+migrar:
 
-cantidadForrajeVerdeKg *
-porcentajeMateriaSeca / 100
+CRIA
+→
+REPRODUCCION.
 
-Ejemplo:
+Lo mismo para:
 
-4250 kg forraje verde
+Racion.proposito
 
-20 % MS
-
-=
-
-850 kg materia seca
-
-NO estimar porcentaje de materia seca automáticamente por especie en esta primera versión.
-
-Si usuario no lo conoce:
-
-cantidadMateriaSecaKg = null
+si ya se implementó.
 
 ==================================================
-12. DESTINO DEL FORRAJE
+34. ASIGNACIONES EXISTENTES
 ==================================================
 
-Registrar opcionalmente hacia dónde fue destinado el corte.
+No modificar:
 
-Valores iniciales:
+AsignacionPlanAlimentacion
+AsignacionRacionLote
 
-FINCA_GENERAL
-BOVINOS
-PORCINOS
-ENGORDE_BOVINO
-ENGORDE_PORCINO
-LOTE
-ANIMAL
-OTRO
+si solo contienen referencias.
 
-Si existe modelo de lote:
+Si almacenan snapshot de propósito:
 
-permitir referencia.
+migrar también cualquier:
 
-Si no existe:
-
-no inventarlo únicamente por esto.
-
-Conservar:
-
-descripcionDestino
-
-cuando no haya referencia estructurada.
-
-Ejemplo:
-
-Destino:
-Engorde bovino
-
-Esto servirá posteriormente para relacionar producción de forraje con alimentación.
+CRIA
+→ REPRODUCCION.
 
 ==================================================
-13. NO CALCULAR CONVERSIÓN ALIMENTICIA
+35. REPORTES
+==================================================
+
+Buscar agregaciones como:
+
+$group por objetivoProductivo
+
+Después de migración:
+
+Reproducción debe aparecer como una sola categoría.
+
+Ejemplo antes:
+
+Cría: 31
+Reproducción: 18
+
+Después:
+
+Reproducción: 49
+
+==================================================
+36. DASHBOARD
+==================================================
+
+Si existe tarjeta/desglose:
+
+Cría
+Reproducción
+
+fusionarlas.
+
+Mostrar solamente:
+
+Reproducción.
+
+==================================================
+37. PORCINOS
+==================================================
+
+Revisar especialmente vistas porcinas.
+
+No confundir:
+
+Reproducción
+
+con:
+
+Camada.
+
+Una cerda puede ser:
+
+objetivoProductivo:
+REPRODUCCION
+
+y tener múltiples:
+
+RegistroReproductivo
+Camadas
+
+Esto no cambia.
+
+==================================================
+38. BOVINOS
+==================================================
+
+Una vaca puede ser:
+
+objetivoProductivo:
+REPRODUCCION
+
+y continuar con:
+
+gestaciones
+partos
+terneros
+genealogía
+
+sin ninguna modificación adicional.
+
+==================================================
+39. SISTEMA PRODUCTIVO "CRÍA"
 ==================================================
 
 IMPORTANTE:
 
-Cantidad cosechada NO significa automáticamente cantidad consumida.
+No eliminar necesariamente el término:
 
-Por tanto todavía NO calcular:
+CRÍA
 
-- conversión alimenticia
-- alimento/kg ganado
-- IEE alimenticio
-- consumo por animal
+de toda la aplicación.
 
-Un corte puede tener:
+Puede existir correctamente como:
 
-- desperdicio
-- almacenamiento
-- pérdidas
-- alimento no consumido
-
-Solo registrar:
-
-producción
-destino
-
-Preparar arquitectura futura.
-
-==================================================
-14. REGISTRAR CORTE
-==================================================
-
-Flujo:
-
-Banco Norte
-→ Registrar corte
-
-Fecha:
-22/08/2026
-
-Área cortada:
-0.8 ha
-
-Cantidad:
-4.250 kg
-
-Materia seca:
-opcional
-
-Destino:
-Engorde bovino
-
-Responsable:
-...
-
-Observaciones:
-...
-
-Guardar CorteForraje.
-
-==================================================
-15. PRÓXIMO CORTE
-==================================================
-
-Si existe:
-
-intervaloCorteObjetivoDias
-
-entonces:
-
-proximoCorteEstimado =
-
-ultimoCorte.fechaCorte
-+
-intervaloCorteObjetivoDias
+sistema productivo de la finca.
 
 Ejemplo:
 
-Último corte:
-22 agosto
+Sistema productivo:
 
-Intervalo objetivo:
-60 días
+Cría
+Engorde
+Ciclo completo
+Mixto
 
-Próximo:
-21 octubre
+El término que eliminamos es específicamente:
 
-==================================================
-16. TAREAS AUTOMÁTICAS
-==================================================
+Animal.objetivoProductivo = CRIA
 
-Si banco tiene:
+y:
 
-intervaloCorteObjetivoDias
+Lote.proposito = CRIA
 
-después de registrar un corte:
-
-crear o actualizar tarea automática:
-
-"Cortar Banco Norte"
-
-fechaProgramada:
-proximoCorteEstimado
-
-moduloOrigen:
-Potreros
-
-referenciaId:
-Banco/Potrero
-
-categoriaAutomatica:
-CORTE_FORRAJE
-
-creadoAutomaticamente:
-true
-
-También se debe registrar la tarea del primer corte con la fecha qeu indico porque puede que registre el corte sin haberlo hecho, etonces crear la tarea con el responsable.
-Usar estructura real de Tarea.
+cuando significa lo mismo que reproducción.
 
 ==================================================
-17. NO DUPLICAR TAREAS
+40. NO HACER REEMPLAZO GLOBAL DE TEXTO A CIEGAS
 ==================================================
 
-Si ya existe una tarea automática pendiente para el próximo corte:
+MUY IMPORTANTE:
 
-actualizarla.
+NO hacer:
 
-No crear duplicados.
+buscar "Cría"
+reemplazar todo por "Reproducción"
 
-Si usuario registra corte antes de la fecha prevista:
-
-cerrar/completar correctamente la tarea correspondiente
-y programar la siguiente.
-
-No modificar tareas ya completadas históricamente.
-
-==================================================
-18. SIEMBRA / ESTABLECIMIENTO
-==================================================
-
-Al crear o renovar un banco forrajero:
-
-permitir crear tarea:
-
-SIEMBRA
-
-Ejemplo:
-
-"Sembrar Banco Norte - Cuba OM-22"
-
-La tarea debe integrarse con el calendario lunar que ya implementamos.
-
-Cuando usuario:
-
-- crea
-- edita
-- reprograma
-
-una tarea categoría SIEMBRA:
-
-mostrar:
-
-fase lunar
-próximas fases
-
-como información.
-
-NO modificar la fecha automáticamente.
-
-==================================================
-19. HISTORIAL DE COBERTURA
-==================================================
-
-Reutilizar:
-
-HistorialCoberturaPotrero
-
-si ya existe.
-
-Ejemplo:
-
-Banco Norte
-
-Cuba OM-22
-2026-03-15 → 2028-02-01
-
-Maralfalfa
-2028-02-02 → actual
-
-Los cortes históricos deben conservar el forraje correcto de su época.
-
-NO mostrar cortes antiguos como Maralfalfa solo porque actualmente el banco tenga Maralfalfa.
-
-==================================================
-20. CAMBIO / RENOVACIÓN DE FORRAJE
-==================================================
-
-Cuando usuario cambia:
-
-Cuba OM-22
-→ Maralfalfa
-
-pedir:
-
-Fecha del cambio/establecimiento
-
-Cerrar cobertura anterior.
-
-Crear cobertura nueva.
-
-Actualizar forraje actual.
-
-NO destruir historial.
-
-==================================================
-21. INTERFAZ POTREROS
-==================================================
-
-Dentro del módulo actual:
-
-POTREROS
-
-[ Pastoreo ] [ Bancos forrajeros ]
-
-Vista Pastoreo:
-
-mantener funcionamiento actual.
-
-Vista Bancos forrajeros:
-
-mostrar cards/tabla:
-
-Nombre
-Área
-Forraje
-Último corte
-Próximo corte
-Producción último corte
-Estado
-
-Acciones:
-
-Ver
-Registrar corte
-Editar
-Programar actividad
-
-==================================================
-22. DETALLE DEL BANCO
-==================================================
-
-Secciones:
-
-INFORMACIÓN
-
-Área
-Forraje principal
-Forrajes asociados
-Fecha establecimiento
-Intervalo objetivo
-
-ESTADO ACTUAL
-
-Último corte
-Días desde último corte
-Próximo corte estimado
-Días faltantes
-
-HISTORIAL DE CORTES
-
-Fecha
-Área cortada
-Kg forraje verde
-Kg/ha
-Materia seca si existe
-Destino
-Responsable
-
-TAREAS
-
-Próximo corte
-Siembra
-Fertilización
-otras asociadas
-
-==================================================
-23. PLANES - FUNCIONALIDAD BÁSICA
-==================================================
-
-Toda la gestión de bancos forrajeros debe estar disponible en:
-
-ESENCIAL
-GESTION
-PRO
-PREMIUM
-
-Esto incluye:
-
-- crear banco forrajero
-- editar
-- catálogo
-- registrar cortes
-- historial de cortes
-- producción de cada corte
-- próximo corte
-- tareas
-- destino
-- materia seca opcional
-
-NO bloquear el manejo operativo en Esencial.
-
-==================================================
-24. FEATURE DE PLAN
-==================================================
-
-Si existe configuración de features:
-
-agregar o utilizar:
-
-bancosForrajeros: true
-
-para TODOS los planes.
-
-Ejemplo:
-
-ESENCIAL:
-bancosForrajeros = true
-
-GESTION:
-bancosForrajeros = true
-
-PRO:
-bancosForrajeros = true
-
-PREMIUM:
-bancosForrajeros = true
-
-==================================================
-25. QUÉ ES BÁSICO Y QUÉ ES ANALÍTICA
-==================================================
-
-IMPORTANTE PARA PLANES:
-
-TODOS LOS PLANES pueden ver en cada banco:
-
-- último corte
-- producción de ese corte
-- kg/ha de ese corte
-- historial de cortes
-- próximo corte
-- días entre dos cortes concretos
-
-Eso forma parte del manejo operativo.
-
-Lo que se bloquea es:
-
-ANÁLISIS AGREGADO / COMPARATIVO DE RENDIMIENTO.
-
-==================================================
-26. ANÁLISIS DE RENDIMIENTO
-==================================================
-
-Disponible desde:
-
-GESTION
-
-y también:
-
-PRO
-PREMIUM
-
-ESENCIAL:
-NO
-
-Usar preferentemente la feature existente:
-
-analiticaProductiva
-
-No crear lógica:
-
-if plan === 'GESTION'
-
-Usar:
-
-requireFeature('analiticaProductiva')
-
-o equivalente.
-
-==================================================
-27. ENDPOINT DE ANALÍTICA
-==================================================
-
-Crear endpoint equivalente:
-
-GET /api/reportes/forrajes/rendimiento
-
-protegido por:
-
-requireFeature('analiticaProductiva')
-
-Filtros:
-
-fechaInicio
-fechaFin
-areaId
-forrajeId
-
-==================================================
-28. INDICADORES DE RENDIMIENTO
-==================================================
-
-Para el período:
-
-totalBancos
-
-areaTotalHa
-
-totalCortes
-
-forrajeVerdeTotalKg
-
-materiaSecaTotalKg
-solo cuando exista información
-
-produccionForrajeVerdeKgHa
-
-produccionMateriaSecaKgHa
-cuando sea posible
-
-promedioKgHaCorte
-
-diasPromedioEntreCortes
-
-cumplimientoIntervaloCorte
-
-produccionPorMes
-
-produccionPorForraje
-
-produccionPorBanco
-
-destinos
-
-==================================================
-29. KG/HA/CORTE
-==================================================
-
-Para cada corte:
-
-kgHaCorte =
-
-cantidadForrajeVerdeKg
-/
-areaCortadaHa
-
-Solo calcular si:
-
-areaCortadaHa > 0
-
-No usar área total del banco si se registró área cortada específica.
-
-==================================================
-30. PRODUCCIÓN DEL PERÍODO POR HA
-==================================================
-
-Diferenciar:
-
-kg/ha/corte
-
-de:
-
-kg/ha acumulados en el período.
-
-Ejemplo:
-
-Banco 1 ha
-
-Corte 1:
-4.000 kg
-
-Corte 2:
-4.500 kg
-
-Corte 3:
-4.200 kg
-
-Producción acumulada:
-
-12.700 kg
-
-Producción período:
-
-12.700 kg/ha
-
-Promedio por corte:
-
-4.233 kg/ha/corte
-
-No confundir ambos indicadores.
-
-==================================================
-31. DÍAS ENTRE CORTES
-==================================================
-
-Para cada banco:
-
-ordenar cortes cronológicamente.
-
-Calcular:
-
-diasEntreCortes
-
-entre corte N y N+1.
-
-Después:
-
-diasPromedioEntreCortes
-
-minimo
-maximo
-
-Comparar con:
-
-intervaloCorteObjetivoDias
-
-==================================================
-32. CUMPLIMIENTO DEL INTERVALO
-==================================================
-
-NO clasificar automáticamente como "mejor" por cortar más rápido.
-
-Mostrar:
-
-Objetivo:
-60 días
-
-Real promedio:
-64 días
-
-Diferencia:
-+4 días
-
-o:
-
-Objetivo:
-60
-
-Real:
-55
-
-Diferencia:
--5
-
-La interpretación pertenece al productor/técnico.
-
-==================================================
-33. RENDIMIENTO POR FORRAJE
-==================================================
-
-Agrupar por:
-
-forrajePrincipal / forraje registrado en CorteForraje.
-
-Ejemplo:
-
-Cuba OM-22
-
-Bancos:
-3
-
-Área evaluada:
-2.4 ha
-
-Cortes:
-14
-
-Forraje producido:
-63.500 kg
-
-Promedio:
-4.535 kg/ha/corte
-
-Intervalo promedio:
-58 días
-
-==================================================
-34. RENDIMIENTO POR BANCO
-==================================================
-
-Ejemplo:
-
-Banco Norte
-
-Forraje:
-Cuba OM-22
-
-Área:
-0.8 ha
-
-Cortes:
-6
-
-Total:
-25.400 kg
-
-Promedio:
-5.292 kg/ha/corte
-
-Días promedio:
-61
-
-==================================================
-35. COMPARAR EL MISMO FORRAJE
-==================================================
-
-Permitir:
-
-Cuba OM-22
-
-Banco Norte:
-5.200 kg/ha/corte
-
-Banco Sur:
-4.400 kg/ha/corte
-
-Banco Bajo:
-3.900 kg/ha/corte
-
-Esto puede ayudar a detectar diferencias de:
-
-- suelo
-- manejo
-- fertilización
-- humedad
-- edad del cultivo
-
-Pero NO afirmar automáticamente causalidad.
-
-==================================================
-36. NO DECIR "MEJOR FORRAJE"
-==================================================
-
-Usar lenguaje:
-
-"Rendimiento observado"
-
-"Mayor producción registrada"
-
-"Producción promedio en esta finca"
-
-NO usar:
-
-"Este es el mejor pasto"
-
-"Este forraje es superior"
-
-porque existen múltiples factores de manejo.
-
-==================================================
-37. GRÁFICOS
-==================================================
-
-En análisis avanzado incluir:
-
-Producción mensual
-→ línea
-
-Kg/ha/corte por banco
-→ barras
-
-Producción por forraje
-→ barras
-
-Días entre cortes
-→ tendencia/histórico
-
-Destino del forraje
-→ distribución si tiene datos suficientes
-
-==================================================
-38. DATOS INSUFICIENTES
-==================================================
-
-Si hay un único corte:
-
-se puede mostrar:
-
-producción del corte
-kg/ha/corte
-
-pero NO:
-
-promedio entre cortes
-
-Si no existe área cortada:
-
-NO inventar kg/ha.
-
-Si no existe materia seca:
-
-NO estimarla.
-
-Mostrar:
-
-"Sin información suficiente"
-
-en vez de cero cuando cero sería engañoso.
-
-==================================================
-39. FRONTEND - ESENCIAL
-==================================================
-
-Usuario Esencial entra a Banco Norte.
-
-Puede ver:
-
-Área:
-0.8 ha
-
-Cuba OM-22
-
-Último corte:
-22 agosto
-
-Producción:
-4.250 kg
-
-Rendimiento de ese corte:
-5.313 kg/ha
-
-Próximo corte:
-21 octubre
-
-Historial:
-...
-
-Pero en sección:
-
-ANÁLISIS DE RENDIMIENTO
-
-mostrar tarjeta bloqueada:
-
-"Análisis de rendimiento de forrajes"
-
-"Disponible desde el plan Gestión."
-
-[Mejorar plan]
-
-Usar FeatureGate existente.
-
-==================================================
-40. FRONTEND - GESTIÓN / PRO / PREMIUM
-==================================================
-
-Además del manejo operativo:
-
-mostrar:
-
-ANÁLISIS DE RENDIMIENTO
-
-Tarjetas:
-
-Producción total
-63.500 kg
-
-Producción/ha
-...
-
-Cortes
-14
-
-Promedio kg/ha/corte
-...
-
-Intervalo promedio
-...
-
-Luego:
-
-Producción mensual
-
-Rendimiento por banco
-
-Rendimiento por forraje
-
-==================================================
-41. BACKEND TAMBIÉN DEBE PROTEGER
-==================================================
-
-No basta con ocultar frontend.
-
-Si Esencial llama:
-
-GET /api/reportes/forrajes/rendimiento
-
-responder:
-
-403
-
-{
-  code: "PLAN_FEATURE_NOT_AVAILABLE",
-  feature: "analiticaProductiva",
-  message:
-    "El análisis de rendimiento de forrajes está disponible desde el plan Gestión."
-}
-
-==================================================
-42. RELACIÓN CON FINANZAS - PREPARAR
-==================================================
-
-En el futuro queremos poder asociar:
-
-MovimientoFinanciero
-→ Banco forrajero
+porque existen textos donde "cría" es correcto.
 
 Ejemplos:
 
-fertilizante
-semilla
-mano de obra
-herbicida
-combustible
+Sistema de cría bovina
 
-Entonces podremos calcular:
+Informe de cría
 
-costo/ha
-costo/corte
-costo/kg forraje producido
+Costo de cría
 
-NO implementar estos indicadores si actualmente los movimientos financieros no se pueden asociar correctamente al área.
+Finca de cría
 
-Pero dejar referencias preparadas.
+Esos conceptos deben permanecer.
 
-==================================================
-43. FUTURO: COSTO POR KG DE FORRAJE
-==================================================
+Solo modificar campos/enums donde:
 
-Cuando existan costos confiables:
+CRIA
 
-costoKgForraje =
-
-costosBancoPeriodo
-/
-kgForrajeProducidoPeriodo
-
-Esto será analítica avanzada.
-
-NO inventarlo ahora con gastos generales de toda la finca.
+se utilizaba como objetivo o propósito reproductivo.
 
 ==================================================
-44. RELACIÓN FUTURA CON ENGORDE
+41. BACKUP / SEGURIDAD
 ==================================================
 
-Guardar destino permitirá posteriormente relacionar:
+Antes de migración productiva:
 
-Banco
-→ Corte
-→ kg producidos
-→ lote destino
+documentar recomendación de:
 
-y eventualmente:
+backup/snapshot de MongoDB.
 
-lote
-→ pesajes
-→ GMD
+El script debe:
 
-Pero NO asumir todavía:
-
-kg cosechado = kg consumido.
-
-Por eso todavía no modificar:
-
-ICP
-IEE
-conversión alimenticia
-
-con estos datos.
+- fallar de manera clara
+- no ocultar errores
+- devolver exit code incorrecto si falla
 
 ==================================================
-45. IMPORTADOR
+42. MIGRACIÓN SEGURA
 ==================================================
 
-Permitir importar:
+Preferir:
 
-tipoArea
-forrajePrincipal
-fechaEstablecimiento
-intervaloCorteObjetivoDias
+bulkWrite
 
-Opcionalmente historial:
+o estrategia eficiente equivalente.
 
-fechaCorte
-cantidadForrajeVerdeKg
-areaCortadaHa
+Pero no sacrificar validación.
 
-No obligar a tener historial previo.
+Ejemplo conceptual:
 
-==================================================
-46. MIGRACIÓN
-==================================================
+updateMany(
+  {
+    objetivoProductivo: {
+      $in: [...]
+    }
+  },
+  {
+    $set: {
+      objetivoProductivo: "REPRODUCCION"
+    }
+  }
+)
 
-Potreros actuales:
+Pero revisar primero si existen:
 
-tipoArea = PASTOREO
+valores inconsistentes
+schemas
+hooks
+multi-tenancy
 
-solo si esta inferencia es completamente segura.
-
-Si no:
-
-hacer migración controlada.
-
-No transformar ningún potrero existente en Banco Forrajero automáticamente.
-
-Los nuevos bancos:
-
-tipoArea = BANCO_FORRAJERO
+antes de usar updateMany ciegamente.
 
 ==================================================
-47. ÍNDICES MONGODB
+43. REPORTE ANTES/DESPUÉS
 ==================================================
 
-Revisar y agregar índices útiles:
+El script debe producir:
 
-CorteForraje.area
-CorteForraje.fechaCorte
-CorteForraje.forraje
+ANTES
 
-Posiblemente compuesto:
+ENGORDE: 302
+CRIA: 47
+REPRODUCCION: 91
+REEMPLAZO: 21
+OTRO: 4
 
-area + fechaCorte
+DESPUÉS
 
-No duplicar índices existentes.
+ENGORDE: 302
+REPRODUCCION: 138
+REEMPLAZO: 21
+OTRO: 4
 
-==================================================
-48. CASOS DE PRUEBA
-==================================================
+Comprobar:
 
-Probar:
+totalAntes === totalDespues
 
-- banco Cuba OM-22
-- banco King Grass
-- banco Maralfalfa
-- banco con leguminosa
-- banco sin fecha establecimiento
-- corte de toda el área
-- corte parcial
-- toneladas convertidas a kg
-- corte sin materia seca
-- corte con materia seca
-- varios cortes
-- un solo corte
-- sin cortes
-- cambio de Cuba OM-22 a Maralfalfa
-- historial antes/después del cambio
-- tarea de próximo corte
-- evitar duplicado de tarea
-- tarea de siembra
-- calendario lunar en tarea de siembra
-- Esencial accediendo al manejo operativo
-- Esencial intentando análisis
-- Gestión accediendo a análisis
-- Pro accediendo a análisis
-- Premium accediendo a análisis
+Ningún animal desaparece.
 
 ==================================================
-49. RESULTADO DE NEGOCIO
+44. VALIDACIÓN DE TOTALES
 ==================================================
 
-La estructura comercial debe quedar:
+Comprobar:
 
-ESENCIAL
+cantidad total Animal antes
+=
+cantidad total Animal después.
 
-✓ Bancos forrajeros
-✓ Registro de pastos de corte
-✓ Historial de cortes
-✓ Cantidad producida
-✓ kg/ha del corte individual
-✓ Próximo corte
-✓ Tareas
-✓ Siembra
-✓ Calendario lunar informativo
+También por especie:
 
-✗ Análisis agregado de rendimiento
+Bovinos antes
+=
+Bovinos después
 
-
-GESTIÓN
-
-Todo Esencial
-
-+
-
-✓ Análisis de rendimiento
-✓ Producción histórica
-✓ Comparación de bancos
-✓ Comparación por forraje
-✓ Tendencias
-
-
-PRO
-
-Todo Gestión
-
-+
-
-futuras relaciones económicas avanzadas
-
-
-PREMIUM
-
-Todo Pro
-
-+
-
-futura consolidación multi-finca
+Porcinos antes
+=
+Porcinos después
 
 ==================================================
-50. PRINCIPIO FINAL
+45. PRUEBAS
 ==================================================
 
-No queremos crear simplemente:
+Crear pruebas para:
 
-"un campo de pasto de corte".
+"Cría"
+→ REPRODUCCION
 
-Queremos modelar un pequeño sistema productivo:
+"Cria"
+→ REPRODUCCION
 
-BANCO FORRAJERO
-      ↓
-FORRAJE
-      ↓
-ESTABLECIMIENTO
-      ↓
-CORTE
-      ↓
-CANTIDAD PRODUCIDA
-      ↓
-DESTINO
-      ↓
-PRÓXIMO CORTE
-      ↓
-TAREA
+"CRIA"
+→ REPRODUCCION
 
-y desde Gestión:
+"cria"
+→ REPRODUCCION
 
-HISTORIAL DE CORTES
-      ↓
-ANÁLISIS DE RENDIMIENTO
-      ↓
-kg/ha
-kg/ha/corte
-producción por período
-intervalos
-comparación de bancos
-comparación de forrajes
+" Reproducción "
+→ REPRODUCCION
 
-Todo dentro de Potreros.
+Engorde
+→ ENGORDE
 
-No crear un nuevo módulo del menú.
+Reemplazo
+→ REEMPLAZO
 
-Al finalizar indicar:
+Animal bovino Cría
+→ migrado
 
-- modelos creados/modificados
-- catálogo extendido
-- semillas agregadas
-- endpoints creados
-- servicios creados
-- tareas automáticas implementadas
-- integración con calendario lunar
-- FeatureGate implementado
-- endpoints protegidos por plan
-- migraciones
-- cambios al importador
+Animal porcino Cría
+→ migrado
+
+Lote Cría
+→ Reproducción
+
+Plan alimentación Cría
+→ Reproducción
+
+Ración Cría
+→ Reproducción
+
+importación Excel Cría
+→ Reproducción
+
+valor ambiguo
+→ no migrar automáticamente
+
+segunda ejecución del script
+→ 0 cambios
+
+==================================================
+46. MIGRACIÓN DE CLIENTES EXISTENTES
+==================================================
+
+El resultado final esperado es:
+
+CLIENTE A
+
+Bovinos:
+17 objetivo Cría
+
+↓
+
+17 REPRODUCCION
+
+
+CLIENTE B
+
+Porcinos:
+8 objetivo Cría
+
+↓
+
+8 REPRODUCCION
+
+
+CLIENTE C
+
+Bovinos:
+Cría: 4
+Reproducción: 7
+
+↓
+
+Reproducción: 11
+
+Sin perder ningún animal.
+
+==================================================
+47. NO CAMBIAR OBJETIVO REEMPLAZO
+==================================================
+
+Un animal:
+
+REEMPLAZO
+
+NO debe convertirse automáticamente en:
+
+REPRODUCCION.
+
+Aunque eventualmente vaya a ser reproductor.
+
+El cambio:
+
+REEMPLAZO
+→ REPRODUCCION
+
+es un cambio productivo real y debe ocurrir cuando el productor lo determine.
+
+La migración solo:
+
+CRIA
+→ REPRODUCCION.
+
+==================================================
+48. RESULTADO FINAL
+==================================================
+
+Debe quedar una taxonomía consistente:
+
+ANIMAL
+
+Objetivo productivo:
+
+ENGORDE
+REPRODUCCION
+REEMPLAZO
+OTRO
+SIN_DEFINIR
+
+
+LOTE
+
+Propósito:
+
+ENGORDE
+REPRODUCCION
+REEMPLAZO
+DESTETE
+CUARENTENA
+VENTA
+OTRO
+
+==================================================
+49. EJEMPLOS FINALES
+==================================================
+
+VACA REPRODUCTORA
+
+objetivoProductivo:
+REPRODUCCION
+
+Lote:
+REP-01
+
+Estado reproductivo:
+GESTANTE
+
+
+NOVILLA DE REEMPLAZO
+
+objetivoProductivo:
+REEMPLAZO
+
+Lote:
+REEMP-01
+
+
+NOVILLO
+
+objetivoProductivo:
+ENGORDE
+
+Lote:
+ENG-01
+
+
+CERDA REPRODUCTORA
+
+objetivoProductivo:
+REPRODUCCION
+
+Lote:
+POR-REP-01
+
+
+CERDA JOVEN SELECCIONADA
+
+objetivoProductivo:
+REEMPLAZO
+
+Lote:
+POR-REEMP-01
+
+==================================================
+50. DOCUMENTACIÓN
+==================================================
+
+Actualizar documentación técnica indicando:
+
+"Cría" ya no es un objetivo productivo.
+
+Cuando se habla de:
+
+Animal destinado a producir descendencia
+
+usar:
+
+REPRODUCCION.
+
+"Cría" puede seguir utilizándose para describir:
+
+sistema productivo de cría bovina/porcina.
+
+==================================================
+51. ENTREGA FINAL DE CODEX
+==================================================
+
+Al terminar informar:
+
+- archivos modificados
+- enums modificados
+- referencias a CRIA encontradas
+- cuáles fueron modificadas
+- cuáles se conservaron porque realmente significaban sistema de cría
+- script de migración creado
+- comando dry-run
+- comando ejecución real
+- cantidad de documentos afectados
+- migración de bovinos
+- migración de porcinos
+- migración de lotes
+- migración de planes/raciones si aplicaba
+- importador actualizado
+- frontend actualizado
+- reportes actualizados
 - pruebas realizadas
+- cualquier valor ambiguo encontrado

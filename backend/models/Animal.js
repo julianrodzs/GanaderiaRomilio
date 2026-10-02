@@ -1,5 +1,6 @@
 const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
+const { OBJETIVOS_PRODUCTIVOS, normalizarObjetivoProductivo } = require('../config/objetivosProductivos');
 
 const animalSchema = new Schema(
     {
@@ -10,22 +11,26 @@ const animalSchema = new Schema(
             type: String,
             enum: [
                 'Ternero',
+                'Ternera',
                 'Novillo',
                 'Novilla',
                 'Toro',
                 'Vaca',
                 'Chancha',
-                'Verraco',
                 'Lechón',
-                'Engorde',
-                'Reemplazo',
+                'Lechona',
+                'Cerdo joven',
+                'Cerda joven',
+                'Cerdo adulto',
                 'Otro'
             ],
             trim: true
         },
         objetivoProductivo: {
             type: String,
-            enum: ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro'],
+            enum: OBJETIVOS_PRODUCTIVOS,
+            default: 'SIN_DEFINIR',
+            set: (valor) => normalizarObjetivoProductivo(valor) || valor,
             trim: true
         },
         etapaProductiva: {
@@ -86,6 +91,7 @@ const animalSchema = new Schema(
             default: 'Sano'
         },
         potreroActual: { type: Schema.Types.ObjectId, ref: 'Potrero' },
+        loteActual: { type: Schema.Types.ObjectId, ref: 'Lote' },
         fotoUrl: { type: String, trim: true },
         observaciones: { type: String, trim: true }
     },
@@ -109,6 +115,7 @@ animalSchema.index({ especie: 1, categoria: 1 });
 animalSchema.index({ especie: 1, objetivoProductivo: 1, estado: 1 });
 animalSchema.index({ camadaOrigen: 1, categoria: 1 });
 animalSchema.index({ estado: 1, potreroActual: 1 });
+animalSchema.index({ loteActual: 1, estado: 1 });
 animalSchema.index({ organizacionId: 1, fincaId: 1, madre: 1, fechaNacimiento: -1 });
 animalSchema.index({ organizacionId: 1, fincaId: 1, padre: 1, fechaNacimiento: -1 });
 animalSchema.index({ organizacionId: 1, fincaId: 1, madreDiio: 1, fechaNacimiento: -1 });

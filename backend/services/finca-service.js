@@ -1,4 +1,5 @@
 const { ESPECIES_PRODUCTIVAS, OBJETIVOS_PRODUCTIVOS, normalizarLineasProductivas } = require('../config/lineasProductivas');
+const { normalizarObjetivoProductivo } = require('../config/objetivosProductivos');
 const Finca = require('../models/Finca');
 
 const validarLineasProductivas = (lineas) => {
@@ -25,7 +26,7 @@ const validarLineasProductivas = (lineas) => {
             error.status = 400;
             throw error;
         }
-        const invalido = linea.objetivos.find((objetivo) => !OBJETIVOS_PRODUCTIVOS.includes(objetivo));
+        const invalido = linea.objetivos.find((objetivo) => !normalizarObjetivoProductivo(objetivo));
         if (invalido) {
             const error = new Error(`El objetivo ${invalido} no está permitido.`);
             error.status = 400;
@@ -65,7 +66,14 @@ const validarObjetivoProductivoFinca = async ({ fincaId, especie, objetivoProduc
         error.status = 400;
         throw error;
     }
-    if (objetivoProductivo && !linea.objetivos.includes(objetivoProductivo)) {
+    const objetivoCanonico = normalizarObjetivoProductivo(objetivoProductivo);
+    if (objetivoProductivo && !objetivoCanonico) {
+        const error = new Error(`${objetivoProductivo} no es un objetivo productivo válido.`);
+        error.status = 400;
+        throw error;
+    }
+    if (objetivoCanonico === 'SIN_DEFINIR') return true;
+    if (objetivoCanonico && !linea.objetivos.includes(objetivoCanonico)) {
         const error = new Error(`${objetivoProductivo} no está habilitado para ${especie} en esta finca.`);
         error.status = 400;
         throw error;

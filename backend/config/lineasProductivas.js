@@ -1,12 +1,14 @@
 const ESPECIES_PRODUCTIVAS = ['Bovino', 'Porcino'];
-const OBJETIVOS_PRODUCTIVOS = ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro'];
+const { OBJETIVOS_LINEA_PRODUCTIVA: OBJETIVOS_PRODUCTIVOS, normalizarObjetivoProductivo } = require('./objetivosProductivos');
 
 const normalizarLineasProductivas = (lineas = []) => {
     if (!Array.isArray(lineas)) return [];
     const porEspecie = new Map();
     lineas.forEach((linea) => {
         if (!ESPECIES_PRODUCTIVAS.includes(linea?.especie)) return;
-        const objetivos = [...new Set((linea.objetivos || []).filter((objetivo) => OBJETIVOS_PRODUCTIVOS.includes(objetivo)))];
+        const objetivos = [...new Set((linea.objetivos || [])
+            .map(normalizarObjetivoProductivo)
+            .filter((objetivo) => OBJETIVOS_PRODUCTIVOS.includes(objetivo)))];
         porEspecie.set(linea.especie, {
             especie: linea.especie,
             objetivos,

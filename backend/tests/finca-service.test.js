@@ -9,8 +9,8 @@ test('normaliza líneas productivas sin duplicar objetivos ni especies', () => {
         { especie: 'Bovino', objetivos: ['Cría'] }
     ]);
     assert.deepEqual(resultado, [
-        { especie: 'Bovino', objetivos: ['Cría'], activa: true },
-        { especie: 'Porcino', objetivos: ['Engorde', 'Reproducción'], activa: true }
+        { especie: 'Bovino', objetivos: ['REPRODUCCION'], activa: true },
+        { especie: 'Porcino', objetivos: ['ENGORDE', 'REPRODUCCION'], activa: true }
     ]);
 });
 

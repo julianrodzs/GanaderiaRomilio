@@ -1,5 +1,6 @@
 const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
+const { OBJETIVOS_PRODUCTIVOS, normalizarObjetivoProductivo } = require('../config/objetivosProductivos');
 
 const detalleCompraAnimalSchema = new Schema(
     {
@@ -8,6 +9,12 @@ const detalleCompraAnimalSchema = new Schema(
         diio: { type: String, trim: true },
         nombre: { type: String, trim: true },
         sexo: { type: String, enum: ['Macho', 'Hembra'], required: true },
+        objetivoProductivo: {
+            type: String,
+            enum: OBJETIVOS_PRODUCTIVOS,
+            default: 'SIN_DEFINIR',
+            set: (valor) => normalizarObjetivoProductivo(valor) || valor
+        },
         raza: { type: String, trim: true },
         fechaNacimiento: { type: Date },
         pesoCompraKg: { type: Number, required: true, min: 0.01 },
@@ -45,6 +52,7 @@ const compraAnimalSchema = new Schema(
             enum: ['Pendiente', 'Confirmada', 'Anulada'],
             default: 'Confirmada'
         },
+        loteAsignado: { type: Schema.Types.ObjectId, ref: 'Lote' },
         registradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' }
     },
     {
@@ -62,6 +70,7 @@ const calcularTotalesCompra = ({ animales = [], montoFinal } = {}) => {
             diio: item.diio,
             nombre: item.nombre,
             sexo: item.sexo,
+            objetivoProductivo: normalizarObjetivoProductivo(item.objetivoProductivo),
             raza: item.raza,
             fechaNacimiento: item.fechaNacimiento,
             pesoCompraKg: item.pesoCompraKg,
@@ -126,5 +135,6 @@ compraAnimalSchema.index({ estado: 1, fechaCompra: -1 });
 compraAnimalSchema.index({ especie: 1, estado: 1, fechaCompra: -1 });
 compraAnimalSchema.index({ proveedor: 1 });
 compraAnimalSchema.index({ 'animales.animal': 1 });
+compraAnimalSchema.index({ loteAsignado: 1 });
 
 module.exports = model('CompraAnimal', compraAnimalSchema);

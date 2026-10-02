@@ -778,7 +778,7 @@ const Finanzas = () => {
           </div>
 
           {revisionDatos.muestras.length > 0 && (
-            <ContenidoPaginado datos={revisionDatos.muestras}>
+            <ContenidoPaginado datos={revisionDatos.muestras} clavePaginacion="finanzas-revision-muestras">
               {(muestrasPagina) => (
               <div className="tabla-scroll tabla-dinamica finanzas-revision-tabla">
                 <table>

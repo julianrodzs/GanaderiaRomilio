@@ -29,6 +29,12 @@
     ,"seed:pastos": "node scripts/inicializarCatalogoPastos.js"
     ,"migrate:tipos-area:check": "node scripts/migrarTiposAreaPotreros.js"
     ,"migrate:tipos-area": "node scripts/migrarTiposAreaPotreros.js --apply"
+    ,"migrate:categorias-animales:check": "node scripts/migrarCategoriasAnimales.js"
+    ,"migrate:categorias-animales": "node scripts/migrarCategoriasAnimales.js --apply"
+    ,"migrate:cria-reproduccion:check": "node scripts/migrarCriaAReproduccion.js --dry-run"
+    ,"migrate:cria-reproduccion": "node scripts/migrarCriaAReproduccion.js"
+    ,"migrate:madres-internas:check": "node scripts/vincularMadresInternas.js"
+    ,"migrate:madres-internas": "node scripts/vincularMadresInternas.js --apply"
   },
   "keywords": [],
   "author": "",

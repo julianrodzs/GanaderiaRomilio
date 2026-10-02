@@ -5,9 +5,10 @@ import {
   obtenerOrganizacionesSaas
 } from '../services/api';
 import { ContenidoPaginado } from '../Components/PaginacionTabla';
+import { etiquetaObjetivoProductivo, OBJETIVOS_LINEA_PRODUCTIVA } from '../constants/objetivosProductivos';
 
 const PLANES = ['ESENCIAL', 'GESTION', 'PRO', 'PREMIUM'];
-const OBJETIVOS = ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro'];
+const OBJETIVOS = OBJETIVOS_LINEA_PRODUCTIVA;
 
 const crearEstadoInicial = () => ({
   organizacion: {
@@ -28,7 +29,7 @@ const crearEstadoInicial = () => ({
     codigo: 'PRINCIPAL',
     ubicacion: '',
     lineasProductivas: [
-      { especie: 'Bovino', objetivos: ['Cría', 'Engorde'], activa: true }
+      { especie: 'Bovino', objetivos: ['REPRODUCCION', 'ENGORDE'], activa: true }
     ]
   },
   administrador: {
@@ -117,8 +118,8 @@ const AdministracionSaas = ({ onCerrar }) => {
       finca: {
         ...actual.finca,
         lineasProductivas: codigo === 'ESENCIAL'
-          ? [{ especie, objetivos: ['Cría', 'Engorde'], activa: true }]
-          : ['Bovino', 'Porcino'].map((item) => ({ especie: item, objetivos: ['Cría', 'Engorde'], activa: true }))
+          ? [{ especie, objetivos: ['REPRODUCCION', 'ENGORDE'], activa: true }]
+          : ['Bovino', 'Porcino'].map((item) => ({ especie: item, objetivos: ['REPRODUCCION', 'ENGORDE'], activa: true }))
       }
     }));
   };
@@ -129,7 +130,7 @@ const AdministracionSaas = ({ onCerrar }) => {
       plan: { ...actual.plan, especiePlan: especie },
       finca: {
         ...actual.finca,
-        lineasProductivas: [{ especie, objetivos: ['Cría', 'Engorde'], activa: true }]
+        lineasProductivas: [{ especie, objetivos: ['REPRODUCCION', 'ENGORDE'], activa: true }]
       }
     }));
   };
@@ -262,7 +263,7 @@ const AdministracionSaas = ({ onCerrar }) => {
                     {OBJETIVOS.map((objetivo) => (
                       <label key={objetivo} className="saas-check">
                         <input type="checkbox" checked={linea.objetivos.includes(objetivo)} onChange={() => alternarObjetivo(linea.especie, objetivo)} />
-                        <span>{objetivo}</span>
+                        <span>{etiquetaObjetivoProductivo(objetivo)}</span>
                       </label>
                     ))}
                   </div>
@@ -294,7 +295,7 @@ const AdministracionSaas = ({ onCerrar }) => {
       </div>
 
       {cargando ? <div className="estado-importacion">Cargando clientes...</div> : (
-        <ContenidoPaginado datos={organizaciones}>
+        <ContenidoPaginado datos={organizaciones} clavePaginacion="saas-organizaciones">
           {(organizacionesPagina) => (
             <div className="tabla-scroll tabla-dinamica">
               <table className="saas-tabla">

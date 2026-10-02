@@ -18,6 +18,11 @@ const { asegurarPuedeCrearAnimal, puedeUsarEspecie } = require('../services/plan
 const { validarObjetivoProductivoFinca } = require('../services/finca-service');
 const { obtenerCatalogoRacial, prepararDatosRaciales } = require('../services/raza-service');
 const { respuestaErrorPlan } = require('../middleware/plan');
+const PertenenciaLote = require('../models/PertenenciaLote');
+const { cerrarPertenencia, validarAnimalParaLote } = require('../services/lote-service');
+const Lote = require('../models/Lote');
+const { obtenerCategoriaAnimal, validarYPrepararCategoriaAnimal } = require('../services/categoriaAnimal-service');
+const { prepararObjetivoProductivo } = require('../config/objetivosProductivos');
 
 const limpiarDiio = (diio) => {
     if (diio === undefined) return undefined;
@@ -209,12 +214,16 @@ animalCtrl.getAnimales = async (req, res) => {
     try {
         const encontrados = await Animal.find(crearFiltroEspecie(req.query.especie))
             .populate('potreroActual')
+            .populate('loteActual', 'codigo nombre proposito estado')
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo especie')
             .populate('madre', 'diio identificadorFinca nombre sexo especie')
             .sort({ createdAt: -1 })
             .lean();
-        let animales = await enriquecerConEstadoSanitario(encontrados);
+        let animales = await enriquecerConEstadoSanitario(encontrados.map((animal) => ({
+            ...animal,
+            categoria: obtenerCategoriaAnimal(animal) || animal.categoria
+        })));
 
         if (req.query.estadoSanitario) {
             animales = animales.filter((animal) => animal.estadoSanitario === req.query.estadoSanitario);
@@ -239,6 +248,8 @@ animalCtrl.createAnimal = async (req, res) => {
         });
         datos = prepararDatosRaciales(datos);
         datos = await prepararRelacionCamada(datos);
+        datos = validarYPrepararCategoriaAnimal(datos);
+        datos.objetivoProductivo = prepararObjetivoProductivo(datos.objetivoProductivo);
         await validarObjetivoProductivoFinca({
             fincaId: req.fincaId,
             especie: datos.especie || 'Bovino',
@@ -264,6 +275,7 @@ animalCtrl.getAnimal = async (req, res) => {
     try {
         const animal = await Animal.findById(req.params.id)
             .populate('potreroActual')
+            .populate('loteActual', 'codigo nombre proposito estado')
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo')
             .populate('madre', 'diio identificadorFinca nombre sexo')
@@ -287,6 +299,7 @@ animalCtrl.getAnimal = async (req, res) => {
 
         res.json({
             ...animal,
+            categoria: obtenerCategoriaAnimal(animal) || animal.categoria,
             estado: animal.estado === 'En tratamiento' ? 'Activo' : animal.estado,
             estadoSanitario: estadoSanitarioActual(animal),
             tieneTratamientoActivo: tratamientosActivos.length > 0,
@@ -326,6 +339,10 @@ animalCtrl.updateAnimal = async (req, res) => {
             especie: datos.especie || animalAnterior.especie,
             camadaOrigen: datos.camadaOrigen !== undefined ? datos.camadaOrigen : animalAnterior.camadaOrigen
         });
+        datos = validarYPrepararCategoriaAnimal(datos, animalAnterior);
+        if (Object.prototype.hasOwnProperty.call(datos, 'objetivoProductivo')) {
+            datos.objetivoProductivo = prepararObjetivoProductivo(datos.objetivoProductivo);
+        }
         const especieFinal = datos.especie || animalAnterior.especie || 'Bovino';
         const estadoFinal = datos.estado || animalAnterior.estado;
         const objetivoFinal = datos.objetivoProductivo !== undefined
@@ -352,6 +369,11 @@ animalCtrl.updateAnimal = async (req, res) => {
                 await asegurarPuedeCrearAnimal({ organizacionId: req.organizacionId, especie: especieFinal });
             }
         }
+        if (animalAnterior.loteActual && estadoFinal === 'Activo'
+            && (especieFinal !== animalAnterior.especie || String(objetivoFinal || '') !== String(animalAnterior.objetivoProductivo || ''))) {
+            const loteActual = await Lote.findById(animalAnterior.loteActual);
+            if (loteActual) validarAnimalParaLote({ ...animalAnterior, ...datos, especie: especieFinal, objetivoProductivo: objetivoFinal, estado: estadoFinal }, loteActual);
+        }
         await validarRelacionGenealogica(req.params.id, datos.padre, datos.madre);
 
         const animal = await Animal.findByIdAndUpdate(req.params.id, datos, {
@@ -359,6 +381,7 @@ animalCtrl.updateAnimal = async (req, res) => {
             runValidators: true
         })
             .populate('potreroActual')
+            .populate('loteActual', 'codigo nombre proposito estado')
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo')
             .populate('madre', 'diio identificadorFinca nombre sexo');
@@ -368,6 +391,18 @@ animalCtrl.updateAnimal = async (req, res) => {
         }
 
         await crearEventosInventario({ animal, animalAnterior, usuarioId: req.usuario?.id });
+
+        if (animalAnterior.estado === 'Activo' && ['Vendido', 'Muerto'].includes(animal.estado)) {
+            const pertenencia = await PertenenciaLote.findOne({ animal: animal._id, activo: true });
+            if (pertenencia) {
+                await cerrarPertenencia(pertenencia, {
+                    fechaSalida: animal.estado === 'Vendido' ? animal.fechaVenta || new Date() : animal.fechaMuerte || new Date(),
+                    motivoSalida: `Salida automática por estado ${animal.estado}`,
+                    usuarioId: req.usuario?.id
+                });
+                animal.loteActual = null;
+            }
+        }
 
         res.json(animal);
     } catch (error) {

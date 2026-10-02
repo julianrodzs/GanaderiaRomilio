@@ -13,7 +13,9 @@ const FEATURES = Object.freeze({
     AMBOS_TIPOS_ANIMALES: 'ambosTiposAnimales',
     REPORTES_MULTI_FINCA: 'reportesMultiFinca',
     AUDITORIA_AVANZADA: 'auditoriaAvanzada',
-    BANCOS_FORRAJEROS: 'bancosForrajeros'
+    BANCOS_FORRAJEROS: 'bancosForrajeros',
+    LOTES: 'lotes',
+    PLANES_ALIMENTACION: 'planesAlimentacion'
 });
 
 const todosLosRoles = ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta'];
@@ -45,7 +47,9 @@ const planesConfig = Object.freeze({
             configuracionEmailAvanzada: false,
             reportesMultiFinca: false,
             auditoriaAvanzada: false,
-            bancosForrajeros: true
+            bancosForrajeros: true,
+            lotes: true,
+            planesAlimentacion: true
         }
     },
     GESTION: {
@@ -71,7 +75,9 @@ const planesConfig = Object.freeze({
             configuracionEmailAvanzada: false,
             reportesMultiFinca: false,
             auditoriaAvanzada: false,
-            bancosForrajeros: true
+            bancosForrajeros: true,
+            lotes: true,
+            planesAlimentacion: true
         }
     },
     PRO: {
@@ -97,7 +103,9 @@ const planesConfig = Object.freeze({
             configuracionEmailAvanzada: false,
             reportesMultiFinca: false,
             auditoriaAvanzada: true,
-            bancosForrajeros: true
+            bancosForrajeros: true,
+            lotes: true,
+            planesAlimentacion: true
         }
     },
     PREMIUM: {
@@ -123,7 +131,9 @@ const planesConfig = Object.freeze({
             configuracionEmailAvanzada: true,
             reportesMultiFinca: true,
             auditoriaAvanzada: true,
-            bancosForrajeros: true
+            bancosForrajeros: true,
+            lotes: true,
+            planesAlimentacion: true
         },
         caracteristicasComerciales: {
             soportePrioritario: true

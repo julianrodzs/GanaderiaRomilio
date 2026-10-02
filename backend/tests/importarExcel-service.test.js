@@ -29,6 +29,30 @@ test('acepta inventario y pesajes con encabezados estandar', async () => {
     assert.equal(resultado.resumen.Pesaje, 1);
 });
 
+test('normaliza Cría de una plantilla antigua a REPRODUCCION', async () => {
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([['VERSION_PLANTILLA', '1']]), 'INSTRUCCIONES');
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([
+        ['DIIO', 'ESPECIE', 'SEXO', 'CATEGORIA', 'OBJETIVO_PRODUCTIVO'],
+        ['1101', 'Bovino', 'Hembra', 'Vaca', ' Cría ']
+    ]), 'INVENTARIO');
+    const resultado = await procesarExcelPreview(XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }));
+    assert.equal(resultado.valido, true);
+    assert.equal(resultado.registros.Animal[0].objetivoProductivo, 'REPRODUCCION');
+});
+
+test('rechaza una categoría de inventario incompatible con edad y sexo', async () => {
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([['VERSION_PLANTILLA', '1']]), 'INSTRUCCIONES');
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([
+        ['DIIO', 'ESPECIE', 'SEXO', 'CATEGORIA', 'FECHA_NACIMIENTO'],
+        ['2001', 'Porcino', 'Macho', 'Chancha', '01/01/2025']
+    ]), 'INVENTARIO');
+    const resultado = await procesarExcelPreview(XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }));
+    assert.equal(resultado.valido, false);
+    assert.ok(resultado.errores.some((item) => item.codigo === 'CATEGORIA_EDAD_SEXO_INCOMPATIBLE'));
+});
+
 test('bloquea DIIO duplicado dentro del mismo archivo', async () => {
     const resultado = await procesarExcelPreview(crearLibro([
         ['1001', 'Bovino', 'Hembra', 'Vaca'],
@@ -87,4 +111,24 @@ test('reconoce bancos forrajeros e intervalo de corte en el importador', async (
     assert.equal(resultado.registros.Potrero[0].tipoArea, 'BANCO_FORRAJERO');
     assert.equal(resultado.registros.Potrero[0].intervaloCorteObjetivoDias, 60);
     assert.match(resultado.registros.Potrero[0].pastoPrincipal, /Pasto de corte-CORTE/);
+});
+
+test('asocia inventario únicamente a lotes existentes compatibles', async () => {
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([['VERSION_PLANTILLA', '1']]), 'INSTRUCCIONES');
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([
+        ['DIIO', 'ESPECIE', 'SEXO', 'CATEGORIA', 'OBJETIVO_PRODUCTIVO', 'CODIGO_LOTE', 'PROPOSITO_LOTE'],
+        ['9001', 'Bovino', 'Macho', 'Novillo', 'Engorde', 'ENG-01', 'ENGORDE']
+    ]), 'INVENTARIO');
+    const buffer = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' });
+    const valido = await procesarExcelPreview(buffer, {
+        lotesExistentes: [{ codigo: 'ENG-01', especie: 'Bovino', proposito: 'ENGORDE', estado: 'ACTIVO' }]
+    });
+    assert.equal(valido.valido, true);
+    assert.equal(valido.registros.Animal[0].codigoLote, 'ENG-01');
+    assert.equal(valido.registros.Animal[0].objetivoProductivo, 'ENGORDE');
+
+    const invalido = await procesarExcelPreview(buffer, { lotesExistentes: [] });
+    assert.equal(invalido.valido, false);
+    assert.ok(invalido.errores.some((item) => item.codigo === 'REFERENCIA_NO_ENCONTRADA'));
 });

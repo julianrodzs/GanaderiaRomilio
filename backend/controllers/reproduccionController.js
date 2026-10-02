@@ -17,6 +17,8 @@ const { validarUsuarioAsignable } = require('../services/usuarioAsignable-servic
 const { asegurarPuedeCrearAnimal } = require('../services/plan-service');
 const { validarObjetivoProductivoFinca } = require('../services/finca-service');
 const { prepararDatosRaciales } = require('../services/raza-service');
+const { validarYPrepararCategoriaAnimal } = require('../services/categoriaAnimal-service');
+const { prepararObjetivoProductivo } = require('../config/objetivosProductivos');
 const { respuestaErrorPlan } = require('../middleware/plan');
 
 const reproduccionCtrl = {};
@@ -246,7 +248,7 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
                 })
                 : null;
 
-        const datosTernero = prepararDatosRaciales(prepararDatosGenealogia({
+        let datosTernero = prepararDatosRaciales(prepararDatosGenealogia({
             identificadorFinca: identificador,
             diio: req.body.diio || undefined,
             nombre: req.body.nombre,
@@ -259,14 +261,18 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             especie: madre.especie || 'Bovino',
             madre: madre._id,
             madreDiio: madre.diio || madre.identificadorFinca,
+            madreExternaNombre: null,
             padre: padreRegistrado?._id,
             padreDiio: req.body.padreDiio,
             padreExternoNombre: padreRegistrado ? undefined : req.body.padreExternoNombre || req.body.padreDiio,
+            origenGenealogico: 'Interno',
+            objetivoProductivo: prepararObjetivoProductivo(req.body.objetivoProductivo || 'SIN_DEFINIR'),
             fechaNacimiento: registro.fechaPartoReal,
             pesoNacimiento: req.body.pesoNacimiento,
             estado: 'Activo',
             observaciones: req.body.observaciones
         }));
+        datosTernero = validarYPrepararCategoriaAnimal(datosTernero);
 
         await validarRelacionGenealogica(null, datosTernero.padre, datosTernero.madre);
         await asegurarPuedeCrearAnimal({
@@ -280,6 +286,9 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
         });
         const nuevoTernero = new Animal(datosTernero);
         const terneroGuardado = await nuevoTernero.save();
+        if (!terneroGuardado.madre) {
+            throw new Error('No se pudo asociar la madre registrada al ternero.');
+        }
 
         await upsertEventoAnimal({
             animal: terneroGuardado._id,
@@ -314,6 +323,7 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             }
         });
 
+        await terneroGuardado.populate('madre', 'diio identificadorFinca nombre sexo especie');
         res.status(201).json(terneroGuardado);
     } catch (error) {
         if (respuestaErrorPlan(error, res)) return;

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import SelectorAnimalesSanidad from './SelectorAnimalesSanidad';
+import { etiquetaUsuarioConRol } from '../utils/usuarios';
 
 const estadoInicial = {
   grupoGanado: 'Todo el ganado',
@@ -204,7 +205,7 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, onRegistrarAplicacion,
               <option value="">Seleccionar responsable</option>
               {usuariosAsignables.map((usuario) => (
                 <option key={usuario._id} value={usuario._id}>
-                  {[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo} - {usuario.rol}
+                  {etiquetaUsuarioConRol(usuario)}
                 </option>
               ))}
             </select>

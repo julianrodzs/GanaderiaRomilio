@@ -6,9 +6,10 @@ import {
   obtenerFincas,
   seleccionarEspeciePlan
 } from '../services/api';
+import { etiquetaObjetivoProductivo, OBJETIVOS_LINEA_PRODUCTIVA } from '../constants/objetivosProductivos';
 
 const especiesProductivas = ['Bovino', 'Porcino'];
-const objetivosProductivos = ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro'];
+const objetivosProductivos = OBJETIVOS_LINEA_PRODUCTIVA;
 
 const funcionesPlan = [
   ['Centro de alertas', 'centroAlertas', 'Esencial'],
@@ -155,7 +156,7 @@ const MiPlan = () => {
                                 checked={(linea.objetivos || []).includes(objetivo)}
                                 onChange={(evento) => cambiarObjetivoFinca(finca._id, especie, objetivo, evento.target.checked)}
                               />
-                              {objetivo}
+                              {etiquetaObjetivoProductivo(objetivo)}
                             </label>
                           ))}
                         </div>

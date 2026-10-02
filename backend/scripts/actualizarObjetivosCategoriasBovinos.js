@@ -24,15 +24,15 @@ const prepararCambio = (animal, fechaReferencia) => {
     if (categoriaCalculada && distinto(animal.categoria, categoriaCalculada)) {
         cambios.categoria = categoriaCalculada;
     }
-    if (animal.sexo === 'Hembra' && distinto(animal.objetivoProductivo, 'Cría')) {
-        cambios.objetivoProductivo = 'Cría';
+    if (animal.sexo === 'Hembra' && distinto(animal.objetivoProductivo, 'REPRODUCCION')) {
+        cambios.objetivoProductivo = 'REPRODUCCION';
     }
 
     const esToro = categoriaCalculada === 'Toro'
         || (!categoriaCalculada && animal.categoria === 'Toro');
     if (animal.sexo === 'Macho' && animal.estado === 'Activo' && esToro
-        && distinto(animal.objetivoProductivo, 'Reproducción')) {
-        cambios.objetivoProductivo = 'Reproducción';
+        && distinto(animal.objetivoProductivo, 'REPRODUCCION')) {
+        cambios.objetivoProductivo = 'REPRODUCCION';
     }
 
     return {
@@ -65,7 +65,7 @@ const ejecutar = async () => {
     const resumen = {
         bovinosRevisados: animales.length,
         hembras: 0,
-        hembrasObjetivoCria: 0,
+        hembrasObjetivoReproduccion: 0,
         torosActivosObjetivoReproduccion: 0,
         categoriasActualizadas: 0,
         machosNoActivosOmitidos: 0,
@@ -82,8 +82,8 @@ const ejecutar = async () => {
         if (resultado.omitido === 'Sin fecha de nacimiento válida para categoría') resumen.sinFechaNacimientoValida += 1;
         if (!resultado.cambios) return;
 
-        if (resultado.cambios.objetivoProductivo === 'Cría') resumen.hembrasObjetivoCria += 1;
-        if (resultado.cambios.objetivoProductivo === 'Reproducción') resumen.torosActivosObjetivoReproduccion += 1;
+        if (resultado.cambios.objetivoProductivo === 'REPRODUCCION' && animal.sexo === 'Hembra') resumen.hembrasObjetivoReproduccion += 1;
+        if (resultado.cambios.objetivoProductivo === 'REPRODUCCION' && animal.sexo === 'Macho') resumen.torosActivosObjetivoReproduccion += 1;
         if (resultado.cambios.categoria) resumen.categoriasActualizadas += 1;
         resumen.documentosConCambios += 1;
 
@@ -114,8 +114,8 @@ const ejecutar = async () => {
         finca: finca.nombre,
         fechaReferencia,
         reglas: {
-            hembrasBovinas: 'Objetivo Cría',
-            torosActivos: 'Objetivo Reproducción',
+            hembrasBovinas: 'Objetivo REPRODUCCION',
+            torosActivos: 'Objetivo REPRODUCCION',
             categoriaEdad: '<12 Ternero; 12-23 Novillo/Novilla; >=24 Toro/Vaca',
             machosNoActivos: 'Sin cambios'
         },

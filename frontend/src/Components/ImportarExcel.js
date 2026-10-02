@@ -197,7 +197,7 @@ const ImportarExcel = () => {
           {preview.errores?.length > 0 && (
             <section className="errores-importacion">
               <p className="eyebrow">Errores por corregir</p>
-              <ContenidoPaginado datos={preview.errores}>
+              <ContenidoPaginado datos={preview.errores} clavePaginacion="importador-errores">
                 {(erroresPagina) => (
                   <div className="tabla-scroll">
                     <table>

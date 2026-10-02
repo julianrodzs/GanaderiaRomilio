@@ -46,7 +46,8 @@ const TablaDinamica = ({
   onEditar,
   onEliminar,
   accionesExtra,
-  mostrarAcciones = true
+  mostrarAcciones = true,
+  clavePaginacion = ''
 }) => {
   const [busqueda, setBusqueda] = useState('');
   const [filtrosActivos, setFiltrosActivos] = useState({});
@@ -91,7 +92,8 @@ const TablaDinamica = ({
       ['Todos', ...(filtro.opciones || Array.from(new Set(datos.map((fila) => filtro.accessor(fila)).filter(Boolean))).sort())]
     ]));
   }, [datos, filtros]);
-  const paginacion = usePaginacionTabla(datosFiltrados);
+  const clavePaginacionTabla = clavePaginacion || `tabla:${subtitulo || 'general'}:${titulo || 'registros'}`;
+  const paginacion = usePaginacionTabla(datosFiltrados, 10, clavePaginacionTabla);
 
   const cambiarOrden = (campo) => {
     paginacion.setPagina(1);
@@ -126,6 +128,8 @@ const TablaDinamica = ({
         {filtros.map((filtro) => (
           <select
             key={filtro.id}
+            aria-label={`Filtrar por ${filtro.label || filtro.id}`}
+            title={`Filtrar por ${filtro.label || filtro.id}`}
             value={filtrosActivos[filtro.id] || 'Todos'}
             onChange={(evento) => {
               setFiltrosActivos((actual) => ({ ...actual, [filtro.id]: evento.target.value }));
@@ -133,7 +137,9 @@ const TablaDinamica = ({
             }}
           >
             {opcionesFiltros[filtro.id]?.map((opcion) => (
-              <option key={opcion} value={opcion}>{opcion}</option>
+              <option key={opcion} value={opcion}>
+                {opcion === 'Todos' && filtro.label ? `${filtro.label}: Todos` : opcion}
+              </option>
             ))}
           </select>
         ))}

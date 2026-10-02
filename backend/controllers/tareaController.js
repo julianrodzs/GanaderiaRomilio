@@ -21,6 +21,7 @@ const POPULATE_TAREA = [
         populate: { path: 'pastoPrincipal', select: 'nombre cultivar especieBase' }
     },
     { path: 'animal', select: 'diio identificadorFinca nombre sexo estado especie categoria' },
+    { path: 'lote', select: 'codigo nombre especie proposito etapaOperativa estado' },
     { path: 'comentarios.usuario', select: 'nombre apellido correo rol' }
 ];
 

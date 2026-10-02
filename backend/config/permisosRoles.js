@@ -20,6 +20,15 @@ const permisosPorModulo = {
         ver: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Consulta'],
         gestionar: ['Administrador', 'Encargado']
     },
+    lotes: {
+        ver: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Consulta'],
+        gestionar: ['Administrador', 'Encargado']
+    },
+    alimentacion: {
+        ver: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Consulta'],
+        gestionar: ['Administrador', 'Encargado'],
+        registrarSuministros: ['Administrador', 'Encargado', 'Trabajador']
+    },
     camadas: {
         ver: ['Administrador', 'Encargado', 'Veterinario', 'Consulta'],
         gestionar: ['Administrador', 'Encargado', 'Veterinario']

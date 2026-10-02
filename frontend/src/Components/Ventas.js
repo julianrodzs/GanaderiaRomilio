@@ -13,6 +13,7 @@ import {
 import { obtenerRangoMesActual } from '../utils/fechas';
 import SelectorEspecie from './SelectorEspecie';
 import { ContenidoPaginado } from './PaginacionTabla';
+import { obtenerCategoriaVisible } from '../utils/categoriasAnimales';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -31,35 +32,7 @@ const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(valor || 0);
 
-const calcularEdadMeses = (fechaNacimiento) => {
-  if (!fechaNacimiento) return null;
-  const nacimiento = new Date(fechaNacimiento);
-  if (Number.isNaN(nacimiento.getTime())) return null;
-  const hoy = new Date();
-  let meses = (hoy.getFullYear() - nacimiento.getFullYear()) * 12;
-  meses += hoy.getMonth() - nacimiento.getMonth();
-  if (hoy.getDate() < nacimiento.getDate()) meses -= 1;
-  return Math.max(meses, 0);
-};
-
-const obtenerCategoria = (animal) => {
-  const edadMeses = calcularEdadMeses(animal?.fechaNacimiento);
-  if (edadMeses !== null && edadMeses < 12) return 'Ternero';
-  if (animal?.sexo === 'Hembra') return edadMeses !== null && edadMeses >= 24 ? 'Vaca' : 'Novilla';
-  if (animal?.sexo === 'Macho') return edadMeses !== null && edadMeses >= 24 ? 'Toro' : 'Novillo';
-  return '--';
-};
-
-const obtenerCategoriaPorEspecie = (animal, especieActual) => {
-  const especieAnimal = animal?.especie || especieActual || 'Bovino';
-  if (especieAnimal !== 'Porcino') return obtenerCategoria(animal);
-
-  const edadMeses = calcularEdadMeses(animal?.fechaNacimiento);
-  if (edadMeses !== null && edadMeses < 2) return animal?.sexo === 'Macho' ? 'Lechón' : 'Lechona';
-  if (animal?.sexo === 'Hembra') return edadMeses !== null && edadMeses >= 6 ? 'Cerda' : 'Cerda joven';
-  if (animal?.sexo === 'Macho') return edadMeses !== null && edadMeses >= 6 ? 'Verraco' : 'Macho joven';
-  return 'Porcino';
-};
+const obtenerCategoriaPorEspecie = (animal, especieActual) => obtenerCategoriaVisible({ ...animal, especie: animal?.especie || especieActual || 'Bovino' });
 
 const textosPorEspecie = {
   Bovino: {
@@ -129,6 +102,7 @@ const Ventas = ({ soloLectura = false }) => {
   const [errorFormulario, setErrorFormulario] = useState('');
   const [busquedaAnimal, setBusquedaAnimal] = useState('');
   const [modoVentaDetalle, setModoVentaDetalle] = useState('individual');
+  const [preseleccionLote, setPreseleccionLote] = useState(null);
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const etiquetaId = textoEspecie(especie, 'etiquetaId');
 
@@ -161,6 +135,33 @@ const Ventas = ({ soloLectura = false }) => {
   useEffect(() => {
     cargarDatos();
   }, [filtros.fechaInicio, filtros.fechaFin, filtros.comprador, filtros.estado, especie]);
+
+  useEffect(() => {
+    try {
+      const accion = JSON.parse(sessionStorage.getItem('ganaderiaAccionLote') || 'null');
+      if (accion?.modulo !== 'Ventas') return;
+      sessionStorage.removeItem('ganaderiaAccionLote');
+      setEspecie(accion.especie || 'Bovino');
+      setPreseleccionLote(accion);
+    } catch (_) { sessionStorage.removeItem('ganaderiaAccionLote'); }
+  }, []);
+
+  useEffect(() => {
+    if (!preseleccionLote || !animales.length || especie !== preseleccionLote.especie) return;
+    const ids = new Set(preseleccionLote.animales || []);
+    const animalesDelLote = animales.filter((animal) => ids.has(animal._id) && animal.estado === 'Activo');
+    if (ids.size > 0 && animalesDelLote.length === 0) return;
+    setVentaSeleccionada(null);
+    setFormulario({
+      ...estadoInicial,
+      especie: preseleccionLote.especie || especie,
+      observaciones: `Preparada desde el lote ${preseleccionLote.codigoLote}`,
+      animales: animalesDelLote.map((animal) => ({ animal: animal._id, pesoVentaKg: animal.pesoActual || '', precioKg: '' }))
+    });
+    setModoVentaDetalle('individual');
+    setModoFormulario(true);
+    setPreseleccionLote(null);
+  }, [animales, preseleccionLote, especie]);
 
   const animalesDisponibles = useMemo(() => {
     const seleccionados = new Set(formulario.animales.map((item) => item.animal));
@@ -607,7 +608,7 @@ const Ventas = ({ soloLectura = false }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando ventas...</div>}
 
-      <ContenidoPaginado datos={ventas}>
+      <ContenidoPaginado datos={ventas} clavePaginacion="ventas-listado">
         {(ventasPagina) => (
           <div className="tabla-scroll tabla-dinamica">
             <table>
@@ -674,7 +675,7 @@ const Ventas = ({ soloLectura = false }) => {
                 Ver comprobante
               </button>
             )}
-            <ContenidoPaginado datos={detalle.animales || []}>
+            <ContenidoPaginado datos={detalle.animales || []} clavePaginacion={`venta-${detalle._id}-animales`}>
               {(animalesPagina) => (
                 <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
                   <table>
@@ -697,7 +698,7 @@ const Ventas = ({ soloLectura = false }) => {
               )}
             </ContenidoPaginado>
             {(detalle.camadas || []).length > 0 && (
-              <ContenidoPaginado datos={detalle.camadas}>
+              <ContenidoPaginado datos={detalle.camadas} clavePaginacion={`venta-${detalle._id}-camadas`}>
                 {(camadasPagina) => (
                   <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
                     <table>

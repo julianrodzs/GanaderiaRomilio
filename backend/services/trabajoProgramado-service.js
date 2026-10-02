@@ -63,7 +63,8 @@ const ejecutarAlertasProgramadas = async ({ origen = 'manual' } = {}) => {
         const resumen = {
             organizacionesProcesadas: resultados.length,
             notificacionesCreadas: resultados.reduce((total, item) => total + Number(item.notificacionesCreadas || 0), 0),
-            correosEnviados: resultados.reduce((total, item) => total + Number(item.correos?.enviadas || 0), 0)
+            correosEnviados: resultados.reduce((total, item) => total + Number(item.correos?.enviadas || 0), 0),
+            categoriasAnimalesActualizadas: resultados.reduce((total, item) => total + Number(item.categoriasAnimales?.actualizados || 0), 0)
         };
         await finalizarTrabajo(CLAVE_ALERTAS, tokenBloqueo, {
             estado: 'Completado',

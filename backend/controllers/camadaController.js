@@ -20,8 +20,7 @@ const poblarCamada = (query) => query
     .populate('registroReproductivo')
     .populate('asignadoA', 'nombre apellido correo rol estado');
 
-const CATEGORIAS_FINCA = ['Chancha', 'Verraco', 'Reemplazo'];
-const CATEGORIAS_ENGORDE = ['Engorde'];
+const OBJETIVOS_FINCA = ['REPRODUCCION', 'REEMPLAZO'];
 
 const anexarContadoresInventario = async (camadasEntrada) => {
     const lista = Array.isArray(camadasEntrada) ? camadasEntrada : [camadasEntrada];
@@ -40,7 +39,7 @@ const anexarContadoresInventario = async (camadasEntrada) => {
             $group: {
                 _id: {
                     camadaOrigen: '$camadaOrigen',
-                    categoria: '$categoria',
+                    objetivoProductivo: '$objetivoProductivo',
                     estado: '$estado'
                 },
                 cantidad: { $sum: 1 }
@@ -77,12 +76,12 @@ const anexarContadoresInventario = async (camadasEntrada) => {
             registradosTotal: 0
         };
         const cantidad = item.cantidad || 0;
-        const categoria = item._id.categoria;
+        const objetivo = item._id.objetivoProductivo;
         const estado = item._id.estado;
 
         actual.registradosTotal += cantidad;
-        if (CATEGORIAS_FINCA.includes(categoria)) actual.registradosFinca += cantidad;
-        else if (CATEGORIAS_ENGORDE.includes(categoria)) actual.registradosEngorde += cantidad;
+        if (OBJETIVOS_FINCA.includes(objetivo)) actual.registradosFinca += cantidad;
+        else if (objetivo === 'ENGORDE') actual.registradosEngorde += cantidad;
         else actual.registradosOtros += cantidad;
 
         if (estado === 'Vendido') actual.vendidosIndividuales += cantidad;

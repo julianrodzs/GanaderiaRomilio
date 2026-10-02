@@ -5,6 +5,7 @@ const rotacionPotreroSchema = new Schema(
     {
         potrero: { type: Schema.Types.ObjectId, ref: 'Potrero', required: true },
         lote: { type: String, trim: true },
+        loteRef: { type: Schema.Types.ObjectId, ref: 'Lote', default: null },
         fechaEntrada: { type: Date, required: true },
         fechaSalida: { type: Date },
         numeroAnimales: { type: Number, min: 0 },
@@ -23,5 +24,10 @@ const rotacionPotreroSchema = new Schema(
 );
 
 rotacionPotreroSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+rotacionPotreroSchema.index({ loteRef: 1, fechaEntrada: -1 });
+rotacionPotreroSchema.index(
+    { organizacionId: 1, fincaId: 1, loteRef: 1 },
+    { unique: true, partialFilterExpression: { loteRef: { $type: 'objectId' }, estado: 'Activa' } }
+);
 
 module.exports = model('RotacionPotrero', rotacionPotreroSchema);

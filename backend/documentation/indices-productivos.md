@@ -32,7 +32,7 @@ GET /api/reportes/engorde?fechaInicio=&fechaFin=&especie=Todos|Bovino|Porcino
 
 ## Datos productivos explícitos
 
-`Animal.objetivoProductivo` permite identificar Engorde sin inferirlo por sexo. Para porcinos existentes, `categoria = Engorde` se conserva como equivalencia cuando no existe objetivo explícito.
+`Animal.objetivoProductivo = ENGORDE` identifica los animales de engorde sin inferirlo por sexo ni categoría. `REPRODUCCION` reúne el antiguo objetivo `Cría` y `Reproducción`; la categoría describe únicamente edad y sexo.
 
 `Animal.etapaProductiva` registra la etapa porcina actual. `Pesaje.etapaProductiva` conserva la etapa en el momento del pesaje. Esto permite dividir intervalos que atraviesan cambios de etapa. Los datos antiguos sin etapa se apoyan en la etapa actual del animal; si tampoco existe, se reportan como `sinMetaProductiva` y no se normalizan.
 

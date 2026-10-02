@@ -134,7 +134,7 @@ export const DetallePotrero = ({ potrero, rotaciones, onCerrar }) => {
             <article><span>Pasto principal</span><strong>{potrero.pastoPrincipal?.nombre || potrero.descripcionCobertura || '--'}</strong></article>
             <article><span>Descanso objetivo</span><strong>{mostrarNumero(potrero.diasDescansoObjetivo, ' días')}</strong></article>
             {datosCobertura?.historial?.length > 0 && (
-              <ContenidoPaginado datos={datosCobertura.historial}>
+              <ContenidoPaginado datos={datosCobertura.historial} clavePaginacion={`potrero-${potrero._id}-coberturas`}>
                 {(coberturasPagina) => (
                   <div className="tabla-scroll tabla-panel cobertura-historial">
                     <table><thead><tr><th>Desde</th><th>Hasta</th><th>Pasto principal</th><th>Descanso objetivo</th></tr></thead><tbody>{coberturasPagina.map((item) => <tr key={item._id}><td>{mostrarFecha(item.fechaInicio)}</td><td>{item.fechaFin ? mostrarFecha(item.fechaFin) : 'Vigente'}</td><td>{item.pastoPrincipal?.nombre || item.descripcionCobertura || 'Sin registrar'}</td><td>{mostrarNumero(item.diasDescansoObjetivo, ' días')}</td></tr>)}</tbody></table>
@@ -171,7 +171,7 @@ export const DetallePotrero = ({ potrero, rotaciones, onCerrar }) => {
         )}
 
         {tab === 'rotaciones' && (
-          <ContenidoPaginado datos={rotacionesPotrero}>
+          <ContenidoPaginado datos={rotacionesPotrero} clavePaginacion={`potrero-${potrero._id}-rotaciones`}>
             {(rotacionesPagina) => (
               <div className="tabla-scroll tabla-panel rotaciones-detalle">
                 <table><thead><tr><th>Entrada</th><th>Salida</th><th>Animales</th><th>Estado</th></tr></thead><tbody>{rotacionesPagina.map((item) => <tr key={item._id}><td>{mostrarFecha(item.fechaEntrada)}</td><td>{mostrarFecha(item.fechaSalida)}</td><td>{item.numeroAnimales ?? '--'}</td><td>{item.estado}</td></tr>)}</tbody></table>
@@ -226,7 +226,7 @@ const RendimientoPotreros = ({ rangoControlado = null, usarRutaReportes = false 
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Calculando rendimiento...</div>}
       {!cargando && vista === 'potrero' && (
-        <ContenidoPaginado datos={ordenados}>
+        <ContenidoPaginado datos={ordenados} clavePaginacion="rendimiento-potreros">
           {(potrerosPagina) => (
             <div className="tabla-scroll tabla-panel rendimiento-tabla">
               <table><thead><tr><th>Potrero</th><th>Pasto actual</th><th>Área</th><th>Días ocupado</th><th>Ocupación</th><th>Rotaciones</th><th>Animal-días</th><th>Animal-días / ha</th><th>Descanso real / objetivo</th></tr></thead><tbody>{potrerosPagina.map((item) => <tr key={item.id}><td><strong>{item.codigo}</strong><small>{item.nombre}</small></td><td>{item.coberturaActual?.nombre || item.descripcionCobertura || '--'}</td><td>{mostrarNumero(item.area, ' ha')}</td><td>{mostrarNumero(item.diasOcupados)}</td><td>{mostrarNumero(item.porcentajeOcupacion, ' %')}</td><td>{item.numeroRotaciones}</td><td>{mostrarNumero(item.animalDias)}</td><td>{mostrarNumero(item.animalDiasPorHectarea)}</td><td>{mostrarNumero(item.descansoPromedio, ' días')} / {mostrarNumero(item.descansoObjetivo, ' días')}</td></tr>)}</tbody></table>
@@ -236,7 +236,7 @@ const RendimientoPotreros = ({ rangoControlado = null, usarRutaReportes = false 
       )}
       {!cargando && vista === 'pasto' && (
         <>
-          <ContenidoPaginado datos={datosPorPasto}>
+          <ContenidoPaginado datos={datosPorPasto} clavePaginacion={`rendimiento-${agruparPor}`}>
             {(pastosPagina) => (
               <div className="tabla-scroll tabla-panel rendimiento-tabla">
                 <table><thead><tr><th>{agruparPor === 'pasto' ? 'Pasto' : 'Especie base'}</th><th>Potreros</th><th>Área</th><th>Días ocupado</th><th>Rotaciones</th><th>Animales promedio</th><th>Animal-días</th><th>Animal-días / ha</th><th>Descanso real / objetivo</th></tr></thead><tbody>{pastosPagina.map((item) => <tr key={item.clave}><td><strong>{item.nombre}</strong><small>{agruparPor === 'pasto' ? item.especieBase : ''}</small></td><td>{item.cantidadPotreros}</td><td>{mostrarNumero(item.areaHectareas, ' ha')}</td><td>{mostrarNumero(item.diasOcupados)}</td><td>{item.numeroRotaciones}</td><td>{mostrarNumero(item.animalesPromedio)}</td><td>{mostrarNumero(item.animalDias)}</td><td>{mostrarNumero(item.animalDiasPorHectarea)}</td><td>{mostrarNumero(item.descansoPromedio, ' días')} / {mostrarNumero(item.descansoObjetivo, ' días')}</td></tr>)}</tbody></table>

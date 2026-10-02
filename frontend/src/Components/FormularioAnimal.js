@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { obtenerFincas } from '../services/api';
 import CamposRazaBovina from './CamposRazaBovina';
-
-const OBJETIVOS_PRODUCTIVOS = ['Cría', 'Engorde', 'Reemplazo', 'Reproducción', 'Otro'];
+import SelectorAnimalBuscable from './SelectorAnimalBuscable';
+import { obtenerCategoriaAnimal } from '../utils/categoriasAnimales';
+import { etiquetaObjetivoProductivo, normalizarObjetivoProductivo, OBJETIVOS_PRODUCTIVOS } from '../constants/objetivosProductivos';
 
 const estadoInicial = {
   identificadorFinca: '',
   diio: '',
   especie: 'Bovino',
   categoria: '',
-  objetivoProductivo: '',
+  objetivoProductivo: 'SIN_DEFINIR',
   etapaProductiva: '',
   nombre: '',
   sexo: 'Hembra',
@@ -57,6 +58,7 @@ const formatearFechaInput = (fecha) => {
 const normalizarAnimal = (animal) => ({
   ...estadoInicial,
   ...animal,
+  objetivoProductivo: normalizarObjetivoProductivo(animal?.objetivoProductivo) || 'SIN_DEFINIR',
   estado: animal?.estado === 'En tratamiento' ? 'Activo' : animal?.estado || 'Activo',
   padre: animal?.padre?._id || animal?.padre || '',
   madre: animal?.madre?._id || animal?.madre || '',
@@ -80,18 +82,11 @@ const normalizarAnimal = (animal) => ({
 const numeroOpcional = (valor) => (valor === '' || valor === null || valor === undefined ? null : Number(valor));
 const fechaOpcional = (valor) => (valor ? valor : null);
 
-const obtenerEtiquetaAnimal = (animal) => {
-  const codigo = animal.diio || animal.identificadorFinca || 'Sin codigo';
-  return `${codigo}${animal.nombre ? ` - ${animal.nombre}` : ''}`;
-};
-
 const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInicial, modo = 'crear', animales = [], camadas = [] }) => {
   const [formulario, setFormulario] = useState(() => normalizarAnimal(animalInicial));
   const [lineasProductivas, setLineasProductivas] = useState(null);
   const etiquetaId = 'DIIO';
-  const categoriasPorEspecie = formulario.especie === 'Porcino'
-    ? ['Chancha', 'Verraco', 'Lechón', 'Engorde', 'Reemplazo', 'Otro']
-    : ['Ternero', 'Novillo', 'Novilla', 'Toro', 'Vaca', 'Otro'];
+  const categoriaCalculada = obtenerCategoriaAnimal(formulario);
   const especiesDisponibles = useMemo(() => {
     if (!lineasProductivas) return ['Bovino', 'Porcino'];
     const especies = lineasProductivas.map((linea) => linea.especie);
@@ -116,6 +111,25 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       .catch(() => setLineasProductivas(null));
   }, []);
 
+  useEffect(() => {
+    setFormulario((actual) => ({ ...actual, categoria: obtenerCategoriaAnimal(actual) }));
+  }, [formulario.especie, formulario.sexo, formulario.fechaNacimiento]);
+
+  useEffect(() => {
+    if (formulario.madre || !formulario.madreDiio) return;
+    const referencia = String(formulario.madreDiio).trim().toLowerCase();
+    const coincidencias = animales.filter((animal) => animal.sexo === 'Hembra'
+      && (animal.especie || 'Bovino') === formulario.especie
+      && [animal.diio, animal.identificadorFinca].some((valor) => String(valor || '').trim().toLowerCase() === referencia));
+    if (coincidencias.length !== 1) return;
+    setFormulario((actual) => ({
+      ...actual,
+      madre: coincidencias[0]._id,
+      madreExternaNombre: '',
+      origenGenealogico: 'Interno'
+    }));
+  }, [animales, formulario.especie, formulario.madre, formulario.madreDiio]);
+
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
     setFormulario((actual) => ({
@@ -135,7 +149,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
     onGuardar({
       ...formulario,
       identificadorFinca: identificador,
-      objetivoProductivo: formulario.objetivoProductivo || null,
+      objetivoProductivo: formulario.objetivoProductivo || 'SIN_DEFINIR',
       etapaProductiva: formulario.especie === 'Porcino' ? formulario.etapaProductiva || null : null,
       fechaNacimiento: fechaOpcional(formulario.fechaNacimiento),
       fechaDestete: fechaOpcional(formulario.fechaDestete),
@@ -162,8 +176,8 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
     });
   };
 
-  const machos = animales.filter((animal) => animal.sexo === 'Macho' && animal.especie === formulario.especie && animal._id !== animalInicial?._id);
-  const hembras = animales.filter((animal) => animal.sexo === 'Hembra' && animal.especie === formulario.especie && animal._id !== animalInicial?._id);
+  const machos = animales.filter((animal) => animal.sexo === 'Macho' && (animal.especie || 'Bovino') === formulario.especie && animal._id !== animalInicial?._id);
+  const hembras = animales.filter((animal) => animal.sexo === 'Hembra' && (animal.especie || 'Bovino') === formulario.especie && animal._id !== animalInicial?._id);
   const camadasPorcinas = camadas.filter((camada) => camada.estado !== 'Cancelada');
 
   return (
@@ -197,8 +211,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
           <label>
             Objetivo productivo
             <select name="objetivoProductivo" value={formulario.objetivoProductivo || ''} onChange={actualizarCampo}>
-              <option value="">Sin definir</option>
-              {objetivosDisponibles.map((objetivo) => <option key={objetivo} value={objetivo}>{objetivo}</option>)}
+              {objetivosDisponibles.map((objetivo) => <option key={objetivo} value={objetivo}>{etiquetaObjetivoProductivo(objetivo)}</option>)}
             </select>
           </label>
 
@@ -223,12 +236,8 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
 
           <label>
             Categoría
-            <select name="categoria" value={formulario.categoria} onChange={actualizarCampo}>
-              <option value="">Sin categoría</option>
-              {categoriasPorEspecie.map((categoria) => (
-                <option key={categoria} value={categoria}>{categoria}</option>
-              ))}
-            </select>
+            <input value={categoriaCalculada || 'Ingresa sexo y fecha de nacimiento'} disabled />
+            <small>Se calcula automáticamente según especie, sexo y edad.</small>
           </label>
         </div>
 
@@ -284,9 +293,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
               </select>
             </label>
 
-            <p className="form-help">
-              La categoria del porcino define si cuenta como cria retenida, verraco o engorde dentro de la camada.
-            </p>
+            <p className="form-help">El destino de la cría se controla mediante el objetivo productivo; la categoría solo representa edad y sexo.</p>
           </section>
         )}
 
@@ -297,25 +304,9 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
           </div>
 
           <div className="form-grid">
-            <label>
-              Padre registrado en finca
-              <select name="padre" value={formulario.padre} onChange={actualizarCampo}>
-                <option value="">Sin padre registrado</option>
-                {machos.map((animal) => (
-                  <option key={animal._id} value={animal._id}>{obtenerEtiquetaAnimal(animal)}</option>
-                ))}
-              </select>
-            </label>
+            <SelectorAnimalBuscable titulo="Padre registrado en finca" name="padre" value={formulario.padre} onChange={actualizarCampo} animales={machos} textoVacio="Sin padre registrado" />
 
-            <label>
-              Madre registrada en finca
-              <select name="madre" value={formulario.madre} onChange={actualizarCampo}>
-                <option value="">Sin madre registrada</option>
-                {hembras.map((animal) => (
-                  <option key={animal._id} value={animal._id}>{obtenerEtiquetaAnimal(animal)}</option>
-                ))}
-              </select>
-            </label>
+            <SelectorAnimalBuscable titulo="Madre registrada en finca" name="madre" value={formulario.madre} onChange={actualizarCampo} animales={hembras} textoVacio="Sin madre registrada" />
           </div>
 
           <div className="form-grid">

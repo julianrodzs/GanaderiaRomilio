@@ -96,6 +96,45 @@ export const abrirArchivoProtegido = async (ruta) => {
 
 export const obtenerPlanActual = () => request('/plan/actual');
 
+export const obtenerLotes = (filtros = {}) => request(`/lotes${construirQuery(filtros)}`);
+export const obtenerLote = (id) => request(`/lotes/${id}`);
+export const crearLote = (datos) => request('/lotes', { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarLote = (id, datos) => request(`/lotes/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+export const agregarAnimalesLote = (id, datos) => request(`/lotes/${id}/animales`, { method: 'POST', body: JSON.stringify(datos) });
+export const moverAnimalesLote = (id, datos) => request(`/lotes/${id}/mover-animales`, { method: 'POST', body: JSON.stringify(datos) });
+export const retirarAnimalesLote = (id, datos) => request(`/lotes/${id}/retirar-animales`, { method: 'POST', body: JSON.stringify(datos) });
+export const cerrarLote = (id, datos) => request(`/lotes/${id}/cerrar`, { method: 'POST', body: JSON.stringify(datos) });
+export const cambiarEtapaLote = (id, datos) => request(`/lotes/${id}/etapa`, { method: 'PATCH', body: JSON.stringify(datos) });
+export const registrarPesajesLote = (id, datos) => request(`/lotes/${id}/pesajes`, { method: 'POST', body: JSON.stringify(datos) });
+export const programarTareaLote = (id, datos) => request(`/lotes/${id}/tareas`, { method: 'POST', body: JSON.stringify(datos) });
+export const cambiarPotreroLote = (id, datos) => request(`/lotes/${id}/cambiar-potrero`, { method: 'POST', body: JSON.stringify(datos) });
+export const obtenerHistorialLote = (id) => request(`/lotes/${id}/historial`);
+export const obtenerPlanActualLote = (id) => request(`/lotes/${id}/plan-alimentacion`);
+export const asignarPlanLote = (id, datos) => request(`/lotes/${id}/plan-alimentacion`, { method: 'POST', body: JSON.stringify(datos) });
+export const obtenerHistorialAlimentacionLote = (id) => request(`/lotes/${id}/historial-alimentacion`);
+
+export const obtenerPlanesAlimentacion = (filtros = {}) => request(`/alimentacion/planes${construirQuery(filtros)}`);
+export const obtenerPlanAlimentacion = (id) => request(`/alimentacion/planes/${id}`);
+export const crearPlanAlimentacion = (datos) => request('/alimentacion/planes', { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarPlanAlimentacion = (id, datos) => request(`/alimentacion/planes/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+export const asignarLotesPlanAlimentacion = (id, datos) => request(`/alimentacion/planes/${id}/asignar-lotes`, { method: 'POST', body: JSON.stringify(datos) });
+export const obtenerAlimentos = (filtros = {}) => request(`/alimentacion/alimentos${construirQuery(filtros)}`);
+export const crearAlimento = (datos) => request('/alimentacion/alimentos', { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarAlimento = (id, datos) => request(`/alimentacion/alimentos/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+export const obtenerRaciones = (filtros = {}) => request(`/alimentacion/raciones${construirQuery(filtros)}`);
+export const obtenerRacion = (id) => request(`/alimentacion/raciones/${id}`);
+export const crearRacion = (datos) => request('/alimentacion/raciones', { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarRacion = (id, datos) => request(`/alimentacion/raciones/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+export const obtenerRacionLote = (id) => request(`/lotes/${id}/racion`);
+export const asignarRacionLote = (id, datos) => request(`/lotes/${id}/racion`, { method: 'POST', body: JSON.stringify(datos) });
+export const obtenerHistorialRacionesLote = (id) => request(`/lotes/${id}/historial-raciones`);
+export const obtenerSuministrosAlimentacion = (filtros = {}) => request(`/alimentacion/suministros${construirQuery(filtros)}`);
+export const obtenerSuministroAlimentacion = (id) => request(`/alimentacion/suministros/${id}`);
+export const crearSuministroAlimentacion = (datos) => request('/alimentacion/suministros', { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarSuministroAlimentacion = (id, datos) => request(`/alimentacion/suministros/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+export const obtenerCortesAlimentacion = () => request('/alimentacion/origenes/cortes');
+export const obtenerResumenAlimentacionHoy = () => request('/alimentacion/resumen-hoy');
+
 export const seleccionarEspeciePlan = (especiePlan) => request('/plan/especie', {
   method: 'PATCH',
   body: JSON.stringify({ especiePlan })
@@ -858,7 +897,7 @@ const crearFormDataCompra = (compra) => {
   const formData = new FormData();
   Object.entries(compra).forEach(([clave, valor]) => {
     if (clave === 'comprobante') return;
-    if (clave === 'animales') {
+    if (clave === 'animales' || (typeof valor === 'object' && valor !== null)) {
       formData.append(clave, JSON.stringify(valor || []));
       return;
     }
@@ -914,6 +953,8 @@ export const eliminarCompraAnimal = (id) => {
     method: 'DELETE'
   });
 };
+
+export const asignarCompraALote = (id, datos) => request(`/compras/${id}/asignar-lote`, { method: 'POST', body: JSON.stringify(datos) });
 
 export const obtenerResumenReportes = ({ fechaInicio, fechaFin, partosFechaInicio, partosFechaFin, diio, especie } = {}) => {
   const params = new URLSearchParams();
@@ -1090,5 +1131,7 @@ export const obtenerReporteSanidad = (filtros = {}) => {
 export const obtenerReporteComprasAnimales = (filtros = {}) => {
   return request(`/reportes/compras-animales${construirQueryProductos(filtros)}`);
 };
+
+export const obtenerReporteLotes = (filtros = {}, analitica = false) => request(`/reportes/lotes${analitica ? '/analitica' : ''}${construirQuery(filtros)}`);
 
 export { API_URL };

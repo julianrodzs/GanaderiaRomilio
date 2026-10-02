@@ -17,6 +17,7 @@ import { fechaEnRango, obtenerRangoReproduccion } from '../utils/fechas';
 import FormularioCamada from './FormularioCamada';
 import FormularioReproduccion from './FormularioReproduccion';
 import SelectorEspecie from './SelectorEspecie';
+import { etiquetaUsuarioConRol } from '../utils/usuarios';
 import TablaDinamica from './TablaDinamica';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
@@ -37,11 +38,6 @@ const etiquetaAnimal = (animal) => {
   return `${codigo}${animal?.nombre ? ` - ${animal.nombre}` : ''}`;
 };
 
-const etiquetaUsuario = (usuario) => {
-  if (!usuario) return '--';
-  return [usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo || '--';
-};
-
 const estadoTerneroInicial = {
   diio: '',
   identificadorFinca: '',
@@ -57,7 +53,7 @@ const estadoTerneroInicial = {
 const columnas = [
   { id: 'diio', label: 'DIIO', accessor: (registro) => obtenerAnimal(registro).diio || obtenerAnimal(registro).identificadorFinca },
   { id: 'nombre', label: 'Nombre', accessor: (registro) => obtenerAnimal(registro).nombre },
-  { id: 'responsable', label: 'Responsable', accessor: (registro) => etiquetaUsuario(registro.asignadoA) },
+  { id: 'responsable', label: 'Responsable', accessor: (registro) => etiquetaUsuarioConRol(registro.asignadoA) },
   {
     id: 'estado',
     label: 'Estado reproductivo',

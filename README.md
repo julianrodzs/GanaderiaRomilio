@@ -11,6 +11,8 @@ La aplicacion ya cuenta con:
 - Recuperacion segura de contrasena por correo con token temporal.
 - Administracion de usuarios.
 - Inventario de animales con detalle, genealogia basica, datos productivos y bitacora.
+- Lotes como unidad operativa: etapas, pertenencia histórica, pesajes grupales, sanidad, tareas, potreros, compras, ventas y metas de engorde.
+- Planes basicos de alimentacion asignables a lotes compatibles.
 - Selector interno de especie `Bovino` / `Porcino` en modulos animales.
 - Inventario porcino con camadas.
 - Potreros con area, estado, actividades recientes y rotaciones.
@@ -816,6 +818,7 @@ node -e "require('./app'); console.log('backend ok')"
 - Reportes: `backend/documentation/reportes.md`
 - Razas bovinas y descendencia: `backend/documentation/razas-genealogia.md`
 - Modo offline: `backend/documentation/modo-offline.md`
+- Lotes y alimentacion: `backend/documentation/lotes-alimentacion.md`
 - IA drone: `ia-service/README.md`
 - Despliegue Vercel: `DEPLOY_VERCEL.md`
 - Despliegue Render: `DEPLOY_RENDER.md`

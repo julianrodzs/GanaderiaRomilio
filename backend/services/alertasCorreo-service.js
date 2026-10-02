@@ -1,5 +1,6 @@
 const AlertaCorreo = require('../models/AlertaCorreo');
 const { ejecutarConOrganizacion } = require('../context/organizacion-context');
+const { sincronizarCategoriasAnimales } = require('./categoriaAnimal-service');
 const Organizacion = require('../models/Organizacion');
 const { Tarea } = require('../models/Tarea');
 const { crearNotificacion } = require('./notificacion-service');
@@ -211,7 +212,13 @@ const procesarAlertasTodasOrganizaciones = async () => {
     for (const organizacion of organizaciones) {
         const resultado = await ejecutarConOrganizacion(
             organizacion._id,
-            () => procesarAlertasTareas({ nombreOrganizacion: organizacion.nombre })
+            async () => {
+                const [alertas, categoriasAnimales] = await Promise.all([
+                    procesarAlertasTareas({ nombreOrganizacion: organizacion.nombre }),
+                    sincronizarCategoriasAnimales()
+                ]);
+                return { ...alertas, categoriasAnimales };
+            }
         );
         resultados.push({
             organizacionId: organizacion._id,

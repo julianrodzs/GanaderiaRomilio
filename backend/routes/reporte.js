@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const router = Router();
+const { obtenerReporteLotes, obtenerReporteLotesAnalitica } = require('../controllers/reporteLotes-controller');
 const { autorizarPermiso } = require('../middleware/auth');
 const puedeVer = autorizarPermiso('reportes.ver');
 const { requireFeature } = require('../middleware/plan');
@@ -43,6 +44,8 @@ const {
 router.use(puedeVer);
 
 router.get('/resumen', getResumenReportes);
+router.get('/lotes', obtenerReporteLotes);
+router.get('/lotes/analitica', analiticaProductiva, obtenerReporteLotesAnalitica);
 router.get('/productividad', analiticaProductiva, getProductividadCria);
 router.get('/finanzas-cria', analiticaEconomica, getFinanzasCria);
 router.get('/sustentabilidad-cria', analiticaEconomica, getSustentabilidadCria);

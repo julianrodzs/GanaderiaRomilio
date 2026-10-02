@@ -1,26 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   actualizarCompraAnimal,
+  asignarCompraALote,
   anularCompraAnimal,
   crearCompraAnimal,
   eliminarCompraAnimal,
   obtenerCompras,
+  obtenerLotes,
   obtenerResumenCompras,
   abrirArchivoProtegido
 } from '../services/api';
 import { obtenerRangoMesActual } from '../utils/fechas';
 import SelectorEspecie from './SelectorEspecie';
 import { ContenidoPaginado } from './PaginacionTabla';
+import { ETIQUETAS_OBJETIVO_PRODUCTIVO, OBJETIVOS_PRODUCTIVOS, etiquetaObjetivoProductivo } from '../constants/objetivosProductivos';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
 const animalInicial = {
-  identificadorFinca: '',
   diio: '',
   nombre: '',
   sexo: 'Hembra',
+  objetivoProductivo: 'SIN_DEFINIR',
   raza: '',
   fechaNacimiento: '',
   pesoCompraKg: '',
@@ -37,6 +40,9 @@ const estadoInicial = {
   observaciones: '',
   montoFinal: '',
   animales: [{ ...animalInicial }],
+  crearLoteRapido: false,
+  nombreLoteRapido: '',
+  objetivoLoteRapido: 'ENGORDE',
   comprobante: null
 };
 
@@ -87,22 +93,27 @@ const normalizarCompraFormulario = (compra) => ({
   observaciones: compra.observaciones || '',
   montoFinal: compra.montoFinal ?? '',
   animales: (compra.animales || []).map((item) => ({
-    identificadorFinca: item.identificadorFinca || item.animal?.identificadorFinca || '',
-    diio: item.diio || item.animal?.diio || '',
+    diio: item.diio || item.animal?.diio || item.identificadorFinca || item.animal?.identificadorFinca || '',
     nombre: item.nombre || item.animal?.nombre || '',
     sexo: item.sexo || item.animal?.sexo || 'Hembra',
+    objetivoProductivo: item.animal?.objetivoProductivo || item.objetivoProductivo || 'SIN_DEFINIR',
     raza: item.raza || item.animal?.raza || '',
     fechaNacimiento: item.fechaNacimiento ? new Date(item.fechaNacimiento).toISOString().slice(0, 10) : '',
     pesoCompraKg: item.pesoCompraKg || '',
     precioKg: item.precioKg || '',
     observaciones: item.observaciones || ''
   })),
+  crearLoteRapido: false,
+  nombreLoteRapido: '',
+  objetivoLoteRapido: 'ENGORDE',
   comprobante: null
 });
 
 const Compras = ({ soloLectura = false }) => {
   const [compras, setCompras] = useState([]);
   const [resumen, setResumen] = useState(null);
+  const [lotes, setLotes] = useState([]);
+  const [loteDestino, setLoteDestino] = useState('');
   const [filtros, setFiltros] = useState({ ...obtenerRangoMesActual(), proveedor: '', estado: '' });
   const [formulario, setFormulario] = useState(estadoInicial);
   const [compraSeleccionada, setCompraSeleccionada] = useState(null);
@@ -124,12 +135,14 @@ const Compras = ({ soloLectura = false }) => {
     try {
       setCargando(true);
       setError('');
-      const [comprasData, resumenData] = await Promise.all([
+      const [comprasData, resumenData, lotesData] = await Promise.all([
         obtenerCompras({ ...filtros, especie }),
-        obtenerResumenCompras({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie })
+        obtenerResumenCompras({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie }),
+        obtenerLotes({ especie, estado: 'ACTIVO' })
       ]);
       setCompras(comprasData);
       setResumen(resumenData);
+      setLotes(lotesData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -140,6 +153,17 @@ const Compras = ({ soloLectura = false }) => {
   useEffect(() => {
     cargarDatos();
   }, [filtros.fechaInicio, filtros.fechaFin, filtros.proveedor, filtros.estado, especie]);
+
+  const asignarDetalleALote = async () => {
+    if (!detalle?._id || !loteDestino) return;
+    try {
+      const compraActualizada = await asignarCompraALote(detalle._id, { lote: loteDestino, fechaEntrada: detalle.fechaCompra });
+      window.alert('Los animales de la compra fueron asignados al lote.');
+      setDetalle(compraActualizada);
+      setLoteDestino('');
+      await cargarDatos();
+    } catch (err) { setError(err.message); }
+  };
 
   const totalCalculadoFormulario = useMemo(() => {
     return formulario.animales.reduce((total, item) => total + (Number(item.pesoCompraKg || 0) * Number(item.precioKg || 0)), 0);
@@ -186,6 +210,24 @@ const Compras = ({ soloLectura = false }) => {
     }));
   };
 
+  const alternarLoteRapido = (activo) => {
+    setFormulario((actual) => ({
+      ...actual,
+      crearLoteRapido: activo,
+      animales: activo
+        ? actual.animales.map((item) => ({ ...item, objetivoProductivo: actual.objetivoLoteRapido }))
+        : actual.animales
+    }));
+  };
+
+  const actualizarObjetivoLoteRapido = (objetivoProductivo) => {
+    setFormulario((actual) => ({
+      ...actual,
+      objetivoLoteRapido: objetivoProductivo,
+      animales: actual.animales.map((item) => ({ ...item, objetivoProductivo }))
+    }));
+  };
+
   const agregarAnimal = () => {
     setFormulario((actual) => ({ ...actual, animales: [...actual.animales, { ...animalInicial }] }));
   };
@@ -206,11 +248,15 @@ const Compras = ({ soloLectura = false }) => {
         ...formulario,
         animales: formulario.animales.map((item) => ({
           ...item,
-          identificadorFinca: item.identificadorFinca || item.diio,
+          identificadorFinca: item.diio,
           fechaNacimiento: item.fechaNacimiento || null,
           pesoCompraKg: Number(item.pesoCompraKg),
           precioKg: Number(item.precioKg)
         })),
+        loteRapido: formulario.crearLoteRapido ? {
+          nombre: formulario.nombreLoteRapido,
+          objetivoProductivo: formulario.objetivoLoteRapido
+        } : undefined,
         montoFinal: formulario.montoFinal === '' || formulario.montoFinal === null || formulario.montoFinal === undefined
           ? undefined
           : Number(formulario.montoFinal)
@@ -293,14 +339,14 @@ const Compras = ({ soloLectura = false }) => {
               <button className="boton-primario compacto" type="button" onClick={agregarAnimal}>{textoEspecie(formulario.especie, 'botonAgregar')}</button>
             </div>
 
-            <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
+            <div className="tabla-scroll tabla-dinamica venta-detalle-tabla compra-formulario-tabla">
               <table>
                 <thead>
                   <tr>
-                    <th>Identificador</th>
                     <th>{textoEspecie(formulario.especie, 'etiquetaId')}</th>
                     <th>Nombre</th>
                     <th>Sexo</th>
+                    <th>Objetivo productivo</th>
                     <th>{textoEspecie(formulario.especie, 'raza')}</th>
                     <th>Nacimiento</th>
                     <th>Peso compra</th>
@@ -313,14 +359,18 @@ const Compras = ({ soloLectura = false }) => {
                   {formulario.animales.map((item, indice) => {
                     const subtotal = Number(item.pesoCompraKg || 0) * Number(item.precioKg || 0);
                     return (
-                      <tr key={`${indice}-${item.identificadorFinca}`}>
-                        <td><input value={item.identificadorFinca} onChange={(evento) => actualizarAnimal(indice, 'identificadorFinca', evento.target.value)} placeholder="Provisional" required /></td>
-                        <td><input value={item.diio} onChange={(evento) => actualizarAnimal(indice, 'diio', evento.target.value)} /></td>
+                      <tr key={`${indice}-${item.diio}`}>
+                        <td><input value={item.diio} onChange={(evento) => actualizarAnimal(indice, 'diio', evento.target.value)} required /></td>
                         <td><input value={item.nombre} onChange={(evento) => actualizarAnimal(indice, 'nombre', evento.target.value)} /></td>
                         <td>
                           <select value={item.sexo} onChange={(evento) => actualizarAnimal(indice, 'sexo', evento.target.value)} required>
                             <option value="Hembra">Hembra</option>
                             <option value="Macho">Macho</option>
+                          </select>
+                        </td>
+                        <td>
+                          <select value={item.objetivoProductivo} onChange={(evento) => actualizarAnimal(indice, 'objetivoProductivo', evento.target.value)} disabled={formulario.crearLoteRapido} required>
+                            {OBJETIVOS_PRODUCTIVOS.map((objetivo) => <option key={objetivo} value={objetivo}>{ETIQUETAS_OBJETIVO_PRODUCTIVO[objetivo]}</option>)}
                           </select>
                         </td>
                         <td><input value={item.raza} onChange={(evento) => actualizarAnimal(indice, 'raza', evento.target.value)} /></td>
@@ -335,6 +385,21 @@ const Compras = ({ soloLectura = false }) => {
                 </tbody>
               </table>
             </div>
+
+            {!compraSeleccionada && (
+              <section className="compra-lote-rapido">
+                <label className="compra-lote-toggle">
+                  <input type="checkbox" checked={formulario.crearLoteRapido} onChange={(evento) => alternarLoteRapido(evento.target.checked)} />
+                  Crear lote con los animales de esta compra
+                </label>
+                {formulario.crearLoteRapido && (
+                  <div className="form-grid">
+                    <label>Nombre del lote<input value={formulario.nombreLoteRapido} onChange={(evento) => setFormulario((actual) => ({ ...actual, nombreLoteRapido: evento.target.value }))} required /></label>
+                    <label>Objetivo productivo<select value={formulario.objetivoLoteRapido} onChange={(evento) => actualizarObjetivoLoteRapido(evento.target.value)} required>{OBJETIVOS_PRODUCTIVOS.filter((objetivo) => objetivo !== 'SIN_DEFINIR').map((objetivo) => <option key={objetivo} value={objetivo}>{ETIQUETAS_OBJETIVO_PRODUCTIVO[objetivo]}</option>)}</select></label>
+                  </div>
+                )}
+              </section>
+            )}
 
             <div className="venta-totales">
               <article><span>Animales</span><strong>{formulario.animales.length}</strong></article>
@@ -402,7 +467,7 @@ const Compras = ({ soloLectura = false }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando compras...</div>}
 
-      <ContenidoPaginado datos={compras}>
+      <ContenidoPaginado datos={compras} clavePaginacion="compras-listado">
         {(comprasPagina) => (
           <div className="tabla-scroll tabla-dinamica">
             <table>
@@ -468,12 +533,14 @@ const Compras = ({ soloLectura = false }) => {
                 Ver comprobante
               </button>
             )}
-            <ContenidoPaginado datos={detalle.animales || []}>
+            {detalle.loteAsignado && <section className="lote-seccion"><h3>Lote asignado</h3><strong>{detalle.loteAsignado.codigo} · {detalle.loteAsignado.nombre}</strong><span>{etiquetaObjetivoProductivo(detalle.loteAsignado.proposito)}</span></section>}
+            {!soloLectura && detalle.estado === 'Confirmada' && !detalle.loteAsignado && <section className="lote-seccion"><h3>Asignación operativa</h3><div className="acciones-lote-movimiento"><select value={loteDestino} onChange={(e) => setLoteDestino(e.target.value)}><option value="">Dejar sin lote</option>{lotes.map((lote) => <option key={lote._id} value={lote._id}>{lote.codigo} · {lote.nombre} · {etiquetaObjetivoProductivo(lote.proposito)}</option>)}</select><button className="boton-secundario" type="button" disabled={!loteDestino} onClick={asignarDetalleALote}>Asignar al lote</button></div></section>}
+            <ContenidoPaginado datos={detalle.animales || []} clavePaginacion={`compra-${detalle._id}-animales`}>
               {(animalesPagina) => (
                 <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">
                   <table>
                     <thead>
-                      <tr><th>{etiquetaId}</th><th>Animal</th><th>Sexo</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
+                      <tr><th>{etiquetaId}</th><th>Animal</th><th>Sexo</th><th>Objetivo</th><th>Peso</th><th>Precio/kg</th><th>Subtotal</th></tr>
                     </thead>
                     <tbody>
                       {animalesPagina.map((item, indice) => (
@@ -481,6 +548,7 @@ const Compras = ({ soloLectura = false }) => {
                           <td>{item.animal?.diio || item.diio || item.identificadorFinca || '--'}</td>
                           <td>{item.animal?.nombre || item.nombre || '--'}</td>
                           <td>{item.animal?.sexo || item.sexo || '--'}</td>
+                          <td>{etiquetaObjetivoProductivo(item.animal?.objetivoProductivo || item.objetivoProductivo)}</td>
                           <td>{formatearNumero(item.pesoCompraKg)} kg</td>
                           <td>{formatearMoneda(item.precioKg)}</td>
                           <td>{formatearMoneda(item.subtotal)}</td>

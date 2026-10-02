@@ -9,6 +9,7 @@ import {
 } from '../services/api';
 import SelectorEspecie from './SelectorEspecie';
 import { ContenidoPaginado } from './PaginacionTabla';
+import { obtenerCategoriaVisible } from '../utils/categoriasAnimales';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -28,27 +29,9 @@ const obtenerId = (valor) => {
   return typeof valor === 'object' ? valor._id : valor;
 };
 
-const calcularEdadMeses = (fechaNacimiento) => {
-  if (!fechaNacimiento) return null;
-  const nacimiento = new Date(fechaNacimiento);
-  if (Number.isNaN(nacimiento.getTime())) return null;
-
-  const hoy = new Date();
-  let meses = (hoy.getFullYear() - nacimiento.getFullYear()) * 12;
-  meses += hoy.getMonth() - nacimiento.getMonth();
-  if (hoy.getDate() < nacimiento.getDate()) meses -= 1;
-  return Math.max(meses, 0);
-};
-
 const obtenerCategoriaAnimal = (animal) => {
   if (!animal) return '--';
-  if (animal.categoria) return animal.categoria;
-  if (animal.especie === 'Porcino') return animal.sexo === 'Macho' ? 'Verraco' : 'Chancha';
-  const meses = calcularEdadMeses(animal.fechaNacimiento);
-  if (meses !== null && meses < 12) return 'Ternero';
-  if (animal.sexo === 'Hembra') return meses !== null && meses >= 24 ? 'Vaca' : 'Novilla';
-  if (animal.sexo === 'Macho') return meses !== null && meses >= 24 ? 'Toro' : 'Novillo';
-  return '--';
+  return obtenerCategoriaVisible(animal);
 };
 
 const formatearAnimal = (animal) => {
@@ -392,7 +375,7 @@ const Pesajes = ({ soloLectura = false }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando pesajes...</div>}
 
-      <ContenidoPaginado datos={pesajesFiltrados}>
+      <ContenidoPaginado datos={pesajesFiltrados} clavePaginacion="pesajes-listado">
         {(pesajesPagina) => (
           <div className="tabla-scroll tabla-dinamica">
             <table>

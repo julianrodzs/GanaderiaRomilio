@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import SelectorAnimalesSanidad from './SelectorAnimalesSanidad';
+import { etiquetaUsuarioConRol } from '../utils/usuarios';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
-const FormularioAplicacionUnica = ({ especie, animales, usuariosAsignables = [], onGuardar, onCancelar, guardando, error }) => {
+const FormularioAplicacionUnica = ({ especie, animales, animalesIniciales = [], usuariosAsignables = [], onGuardar, onCancelar, guardando, error }) => {
   const [formulario, setFormulario] = useState({
-    animales: [],
+    animales: animalesIniciales,
     especie,
     fechaAplicacion: fechaHoy(),
     producto: '',
@@ -70,7 +71,7 @@ const FormularioAplicacionUnica = ({ especie, animales, usuariosAsignables = [],
               <option value="">Seleccionar responsable</option>
               {usuariosAsignables.map((usuario) => (
                 <option key={usuario._id} value={usuario._id}>
-                  {[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo} - {usuario.rol}
+                  {etiquetaUsuarioConRol(usuario)}
                 </option>
               ))}
             </select>

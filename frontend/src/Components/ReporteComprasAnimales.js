@@ -293,7 +293,7 @@ const ReporteComprasAnimales = ({ fechaInicio, fechaFin, especie }) => {
             <article className="reporte-panel reporte-panel-amplio">
               <p className="eyebrow">Proveedores</p>
               <h2>Costo de entrada y resultado posterior</h2>
-              <ContenidoPaginado datos={reporte.proveedores || []}>
+              <ContenidoPaginado datos={reporte.proveedores || []} clavePaginacion="reporte-compras-proveedores">
                 {(proveedoresPagina) => (
                   <div className="tabla-scroll tabla-dinamica compras-proveedores-tabla">
                     <table>
@@ -351,7 +351,7 @@ const ReporteComprasAnimales = ({ fechaInicio, fechaFin, especie }) => {
             <article className="reporte-panel reporte-panel-amplio">
               <p className="eyebrow">Compras o lotes</p>
               <h2>Seguimiento por compra</h2>
-              <ContenidoPaginado datos={reporte.compras || []}>
+              <ContenidoPaginado datos={reporte.compras || []} clavePaginacion="reporte-compras-detalle">
                 {(comprasPagina) => (
                   <div className="tabla-scroll tabla-dinamica compras-lotes-tabla">
                     <table>

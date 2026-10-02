@@ -2575,6 +2575,59 @@
   background: #fffdf7;
 }
 
+.compra-formulario-tabla table {
+  min-width: 1280px;
+}
+
+.compra-formulario-tabla select {
+  width: 150px;
+  min-width: 150px;
+}
+
+.compra-formulario-tabla td:nth-child(3) select {
+  width: 112px;
+  min-width: 112px;
+}
+
+.selector-animal-buscable {
+  display: grid;
+  gap: 6px;
+}
+
+.selector-animal-buscable small {
+  color: #53635a;
+}
+
+.compra-lote-rapido {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid #d4ddd4;
+  padding-top: 16px;
+}
+
+.compra-lote-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #123d27;
+  font-weight: 900;
+}
+
+.compra-lote-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: #0b4228;
+}
+
+.compra-lote-rapido select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cfd8cf;
+  background: #fbfcf8;
+  color: #09160e;
+  padding: 0 12px;
+}
+
 .venta-totales {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -5019,6 +5072,213 @@
   background: #eef3eb;
 }
 
+.lote-formulario {
+  margin-top: 18px;
+}
+
+.formulario-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.formulario-grid label {
+  display: grid;
+  gap: 7px;
+  color: #25352b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.formulario-grid input,
+.formulario-grid select,
+.formulario-grid textarea,
+.lote-seccion select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cfd8cf;
+  border-radius: 3px;
+  background: #fbfcf8;
+  color: #09160e;
+  padding: 10px 12px;
+  font: inherit;
+  text-transform: none;
+}
+
+.formulario-grid textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.campo-ancho {
+  grid-column: 1 / -1;
+}
+
+.acciones-formulario {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.detalle-lote-panel {
+  width: min(100%, 900px);
+  align-content: start;
+}
+
+.lote-seccion {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #dfe3dc;
+  padding-top: 16px;
+}
+
+.lote-seccion h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.lista-compacta,
+.selector-multiple-lote {
+  display: grid;
+  gap: 0;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid #dfe3dc;
+  background: #fbfcf8;
+}
+
+.lista-compacta:empty {
+  display: none;
+}
+
+.lista-compacta span,
+.selector-multiple-lote label {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e8e2;
+}
+
+.selector-multiple-lote label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.selector-multiple-lote input {
+  width: 18px;
+  height: 18px;
+}
+
+.boton-peligro {
+  min-height: 44px;
+  border: 1px solid #c83a32;
+  border-radius: 4px;
+  background: #fff;
+  color: #a51f1a;
+  padding: 0 16px;
+  font-weight: 900;
+}
+
+.acciones-lote-movimiento {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 10px;
+}
+
+.acciones-lote-movimiento select {
+  min-height: 44px;
+  border: 1px solid #cfd8cf;
+  background: #fbfcf8;
+  padding: 0 12px;
+}
+
+.acciones-lote,
+.resumen-lote-compacto {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.acciones-lote button {
+  min-height: 40px;
+  border: 1px solid #9eafa3;
+  border-radius: 4px;
+  background: #f7faf6;
+  color: #063f25;
+  padding: 0 13px;
+  font-weight: 800;
+}
+
+.acciones-lote button:hover {
+  border-color: #064b2d;
+  background: #e6f0e9;
+}
+
+.resumen-lote-compacto span {
+  min-width: 145px;
+  border-left: 3px solid #1f6b45;
+  background: #f2f5f0;
+  padding: 10px 12px;
+}
+
+.resumen-lote-compacto strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 20px;
+}
+
+.lote-accion-form {
+  width: min(760px, 100%);
+}
+
+.pesajes-lote-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 14px;
+  max-height: 430px;
+  overflow: auto;
+  padding: 2px;
+}
+
+.pesajes-lote-grid label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  align-items: center;
+  gap: 10px;
+}
+
+.pesajes-lote-grid input,
+.lote-accion-form > label input {
+  min-height: 42px;
+  border: 1px solid #b8c5ba;
+  background: #fbfcf8;
+  padding: 8px 10px;
+}
+
+.reporte-lotes td small {
+  display: block;
+  color: #5c6b61;
+  margin-top: 3px;
+}
+
+@media (max-width: 720px) {
+  .formulario-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .campo-ancho {
+    grid-column: auto;
+  }
+
+  .acciones-lote-movimiento {
+    grid-template-columns: 1fr;
+  }
+
+  .pesajes-lote-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .camada-form {
   margin-top: 18px;
 }
@@ -5853,4 +6113,21 @@
   .rendimiento-barra {
     grid-template-columns: 72px minmax(80px, 1fr) 64px;
   }
+}
+.alimentacion-tabs { margin-bottom: 18px; }
+.barra-acciones-alimentacion { display: flex; justify-content: flex-end; margin: 0 0 12px; }
+.catalogo-resumen { border: 1px solid var(--border-color, #d7ddd7); padding: 18px; margin-top: 18px; }
+.catalogo-alimentos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.catalogo-alimentos-grid button { background: #f7f9f6; border: 1px solid #cbd5cc; color: #052f1c; padding: 12px; text-align: left; }
+.catalogo-alimentos-grid button strong, .catalogo-alimentos-grid button span { display: block; }
+.catalogo-alimentos-grid button span { color: #53645a; font-size: .82rem; margin-top: 5px; }
+.subpanel-form { border-top: 1px solid #d7ddd7; padding-top: 16px; }
+.fila-componentes, .detalle-suministro { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(120px, 1fr)) auto; gap: 8px; align-items: end; margin-bottom: 9px; }
+.detalle-suministro { grid-template-columns: minmax(170px, 2fr) repeat(5, minmax(110px, 1fr)) auto; }
+.suministro-contexto { display: flex; justify-content: space-between; gap: 16px; background: #eef5ef; border-left: 4px solid #084d2e; padding: 12px; }
+.texto-ayuda { color: #5c675f; font-size: .86rem; margin: 3px 0 10px; }
+@media (max-width: 850px) {
+  .fila-componentes, .detalle-suministro { grid-template-columns: 1fr 1fr; }
+  .suministro-contexto { flex-direction: column; }
+  .suministro-form .acciones-formulario { position: sticky; bottom: 0; background: #fff; padding: 12px 0; }
 }

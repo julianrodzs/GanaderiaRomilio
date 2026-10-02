@@ -7,6 +7,8 @@ const { eliminarEventosPorReferencia, upsertEventoAnimal } = require('../service
 const { eliminarEventosCamadaPorReferencia, upsertEventoCamada } = require('../services/eventoCamada-service');
 const { DESTINO_USO_MOVIMIENTOS_ANIMALES } = require('../config/catalogosFinancieros');
 const { tieneFeature } = require('../services/plan-service');
+const PertenenciaLote = require('../models/PertenenciaLote');
+const { cerrarPertenencia } = require('../services/lote-service');
 
 const ventaAnimalCtrl = {};
 
@@ -251,6 +253,13 @@ const aplicarVentaConfirmada = async (venta, usuarioId) => {
             ventaId: venta._id
         });
     }));
+
+    const pertenencias = await PertenenciaLote.find({ animal: { $in: idsAnimalesVenta(venta.animales) }, activo: true });
+    await Promise.all(pertenencias.map((pertenencia) => cerrarPertenencia(pertenencia, {
+        fechaSalida: venta.fechaVenta,
+        motivoSalida: 'VENTA',
+        usuarioId
+    })));
 
     await crearEventosVenta(venta, usuarioId);
     await MovimientoFinanciero.findOneAndUpdate(

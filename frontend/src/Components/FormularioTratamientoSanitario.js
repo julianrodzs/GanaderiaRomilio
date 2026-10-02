@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { etiquetaUsuarioConRol } from '../utils/usuarios';
 import SelectorAnimalesSanidad from './SelectorAnimalesSanidad';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
@@ -125,7 +126,7 @@ const FormularioTratamientoSanitario = ({
               <option value="">Seleccionar responsable</option>
               {usuariosAsignables.map((usuario) => (
                 <option key={usuario._id} value={usuario._id}>
-                  {[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo} - {usuario.rol}
+                  {etiquetaUsuarioConRol(usuario)}
                 </option>
               ))}
             </select>

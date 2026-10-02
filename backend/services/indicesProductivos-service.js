@@ -197,10 +197,7 @@ const calcularIcpPorcino = ({ animales = [], pesajes = [], configuracion = {} } 
     };
 };
 
-const esAnimalEngorde = (animal) => (
-    normalizarTexto(animal?.objetivoProductivo) === 'engorde'
-    || (!animal?.objetivoProductivo && normalizarTexto(animal?.categoria) === 'engorde')
-);
+const esAnimalEngorde = (animal) => normalizarTexto(animal?.objetivoProductivo) === 'engorde';
 
 const estuvoActivoEnPeriodo = (animal, fechaInicio, fechaFin) => {
     const ingreso = fechaValida(animal.fechaCompra || animal.createdAt || animal.fechaNacimiento);

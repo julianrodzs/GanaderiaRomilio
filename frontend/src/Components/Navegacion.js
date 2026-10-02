@@ -18,14 +18,14 @@ const Navegacion = ({
   const { plan } = usePlan();
   const navegacionRef = useRef(null);
   const [desplazamiento, setDesplazamiento] = useState({ izquierda: false, derecha: false });
-  const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Pesajes', 'Potreros', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone'];
+  const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Pesajes', 'Potreros', 'Alimentacion', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone'];
   const rol = usuario?.rol || 'Consulta';
   const droneDisponible = !(plan?.plan?.codigo === 'ESENCIAL' && plan?.plan?.especiePlan === 'Porcino');
   const items = [...itemsBase, 'Mis tareas', 'Usuarios']
     .filter((item) => item !== 'Drone' || droneDisponible)
     .filter((item) => puedeAccederModulo(rol, item));
   const esItemActivo = (item) => item === vistaActiva || (item === 'Mis tareas' && vistaActiva === 'Dashboard');
-  const etiquetaItem = (item) => (item === 'Dashboard' ? 'Db' : item);
+  const etiquetaItem = (item) => item === 'Dashboard' ? 'Db' : item === 'Alimentacion' ? 'Alimentación' : item;
 
   useEffect(() => {
     navegacionRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({

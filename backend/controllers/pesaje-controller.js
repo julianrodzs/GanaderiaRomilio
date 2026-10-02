@@ -4,6 +4,7 @@ const Pesaje = require('../models/Pesaje');
 const Animal = require('../models/Animal');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
+const EventoLote = require('../models/EventoLote');
 
 const poblarPesaje = (query) => query
     .populate('animal')
@@ -34,6 +35,14 @@ const registrarEventoPesaje = async (pesaje, usuarioId) => {
             pesoKg: pesaje.peso
         }
     });
+    const animal = await Animal.findById(pesaje.animal).select('loteActual');
+    if (animal?.loteActual) {
+        await EventoLote.findOneAndUpdate(
+            { lote: animal.loteActual, entidadTipo: 'Pesaje', referenciaId: pesaje._id },
+            { $set: { tipo: 'PESAJE_REGISTRADO', fecha: pesaje.fecha, titulo: 'Pesaje registrado', descripcion: `${pesaje.peso} kg`, registradoPor: usuarioId, metadata: { animalId: pesaje.animal, pesoKg: pesaje.peso } } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+    }
 };
 
 const validarPesaje = async ({ animal, peso }) => {
@@ -155,6 +164,7 @@ pesajeCtrl.updatePesaje = async (req, res) => {
 
         if (String(animalAnterior) !== String(pesaje.animal)) {
             await eliminarEventosPorReferencia({ moduloOrigen: 'Pesajes', referenciaId: pesaje._id });
+            await EventoLote.deleteMany({ entidadTipo: 'Pesaje', referenciaId: pesaje._id });
             await actualizarPesoActualAnimal(animalAnterior);
         }
 
@@ -190,6 +200,7 @@ pesajeCtrl.deletePesaje = async (req, res) => {
         }
 
         await eliminarEventosPorReferencia({ moduloOrigen: 'Pesajes', referenciaId: pesaje._id });
+        await EventoLote.deleteMany({ entidadTipo: 'Pesaje', referenciaId: pesaje._id });
         await actualizarPesoActualAnimal(pesaje.animal);
 
         res.json({ mensaje: 'Pesaje eliminado' });
