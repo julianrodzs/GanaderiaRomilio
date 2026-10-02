@@ -63,7 +63,7 @@ reporteCtrl.getConfiguracionProductiva = async (req, res) => {
 
 reporteCtrl.getRazasBovinas = async (req, res) => {
     try {
-        res.json(await obtenerReporteRacial());
+        res.json(await obtenerReporteRacial({ especie: req.query.especie || 'Bovino' }));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener el reporte racial', error: error.message });
     }

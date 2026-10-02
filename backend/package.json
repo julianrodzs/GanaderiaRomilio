@@ -26,6 +26,8 @@
     ,"job:alertas": "node scripts/ejecutarAlertasProgramadas.js"
     ,"migrate:razas:check": "node scripts/normalizarRazasBovinas.js"
     ,"migrate:razas": "node scripts/normalizarRazasBovinas.js --apply"
+    ,"migrate:razas-porcinas:check": "node scripts/normalizarRazasPorcinas.js"
+    ,"migrate:razas-porcinas": "node scripts/normalizarRazasPorcinas.js --apply"
     ,"seed:pastos": "node scripts/inicializarCatalogoPastos.js"
     ,"migrate:tipos-area:check": "node scripts/migrarTiposAreaPotreros.js"
     ,"migrate:tipos-area": "node scripts/migrarTiposAreaPotreros.js --apply"

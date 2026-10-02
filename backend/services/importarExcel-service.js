@@ -14,7 +14,7 @@ const {
 const { asegurarPuedeCrearAnimal, puedeUsarEspecie } = require('./plan-service');
 const { obtenerFincaActual } = require('../context/organizacion-context');
 const { validarObjetivoProductivoFinca } = require('./finca-service');
-const { obtenerCatalogoRacial, prepararDatosRaciales } = require('./raza-service');
+const { normalizarFraccionRacial, obtenerCatalogoRacial, prepararDatosRaciales } = require('./raza-service');
 const HistorialCoberturaPotrero = require('../models/HistorialCoberturaPotrero');
 const { CATALOGO_PASTOS_BASE } = require('../config/catalogoPastos');
 const { guardarCobertura, resolverPastoPorTexto } = require('./potreroCobertura-service');
@@ -44,6 +44,7 @@ const COLUMNAS = {
         opcionales: [
             'NOMBRE', 'RAZA', 'RAZA_PRINCIPAL', 'RAZA_SECUNDARIA', 'DESCRIPCION_RACIAL',
             'GRADO_RACIAL', 'VARIEDAD_RACIAL', 'COMPOSICION_RACIAL',
+            'FRACCION_RAZA_PRINCIPAL', 'FRACCION_RAZA_SECUNDARIA',
             'FECHA_NACIMIENTO', 'MADRE_DIIO', 'PADRE_DIIO',
             'PESO_ACTUAL_KG', 'OBJETIVO_PRODUCTIVO', 'ETAPA_PRODUCTIVA', 'ESTADO',
             'ESTADO_SANITARIO', 'POTRERO_CODIGO', 'CODIGO_LOTE', 'NOMBRE_LOTE', 'PROPOSITO_LOTE', 'OBSERVACIONES'
@@ -279,6 +280,20 @@ const mapearInventario = (hoja, errores, lotesExistentes = []) => {
         const objetivoProductivo = objetivoTexto ? normalizarObjetivoProductivo(objetivoTexto) : 'SIN_DEFINIR';
         const etapaTexto = limpiarTexto(leer('ETAPA_PRODUCTIVA'));
         const etapaProductiva = etapaTexto ? valorCanonico(etapaTexto, ['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde']) : undefined;
+        const fraccionPrincipalTexto = limpiarTexto(leer('FRACCION_RAZA_PRINCIPAL'));
+        const fraccionSecundariaTexto = limpiarTexto(leer('FRACCION_RAZA_SECUNDARIA'));
+        let fraccionRazaPrincipal;
+        let fraccionRazaSecundaria;
+        try {
+            fraccionRazaPrincipal = normalizarFraccionRacial(fraccionPrincipalTexto) || undefined;
+        } catch (error) {
+            agregarError(errores, 'INVENTARIO', numeroFila, 'FRACCION_RAZA_PRINCIPAL', fraccionPrincipalTexto, error.message);
+        }
+        try {
+            fraccionRazaSecundaria = normalizarFraccionRacial(fraccionSecundariaTexto) || undefined;
+        } catch (error) {
+            agregarError(errores, 'INVENTARIO', numeroFila, 'FRACCION_RAZA_SECUNDARIA', fraccionSecundariaTexto, error.message);
+        }
         const codigoLote = limpiarTexto(leer('CODIGO_LOTE'));
         const nombreLote = limpiarTexto(leer('NOMBRE_LOTE'));
         const propositoLoteTexto = limpiarTexto(leer('PROPOSITO_LOTE'));
@@ -327,6 +342,8 @@ const mapearInventario = (hoja, errores, lotesExistentes = []) => {
             gradoRacial: limpiarTexto(leer('GRADO_RACIAL')) || undefined,
             variedadRacial: limpiarTexto(leer('VARIEDAD_RACIAL')) || undefined,
             composicionRacial: limpiarTexto(leer('COMPOSICION_RACIAL')) || undefined,
+            fraccionRazaPrincipal,
+            fraccionRazaSecundaria,
             fechaNacimiento: nacimiento,
             madreDiio: limpiarTexto(leer('MADRE_DIIO')) || undefined,
             padreDiio: limpiarTexto(leer('PADRE_DIIO')) || undefined,
@@ -806,7 +823,7 @@ const generarPlantillaExcel = (catalogos = {}) => {
         ['USO', 'Conserve los nombres de hojas y columnas. Puede eliminar hojas que no vaya a importar.'],
         ['FECHAS', 'Use DD/MM/AAAA.'],
         ['INVENTARIO', 'DIIO, ESPECIE, SEXO y CATEGORIA son obligatorios. Si incluye FECHA_NACIMIENTO, la categoría debe coincidir con edad y sexo. Cría se acepta como formato antiguo y se normaliza a REPRODUCCION.'],
-        ['RAZAS', 'RAZA conserva la descripción libre. RAZA_PRINCIPAL y RAZA_SECUNDARIA permiten normalizar bovinos.'],
+        ['RAZAS', 'RAZA conserva la descripción libre. RAZA_PRINCIPAL y RAZA_SECUNDARIA normalizan bovinos y porcinos. Las fracciones son opcionales e informativas.'],
         ['GENEALOGIA', 'MADRE_DIIO y PADRE_DIIO se enlazan si existen; si no, se conservan para resolverlos después.'],
         ['FINANZAS', 'Las categorías y destinos deben existir y estar activos en Catálogos de Finanzas.'],
         ['PESAJES', 'Hoja opcional. El DIIO debe existir o venir en INVENTARIO.'],
@@ -825,12 +842,13 @@ const generarPlantillaExcel = (catalogos = {}) => {
     XLSX.utils.book_append_sheet(libro, hojaConColumnas([...COLUMNAS.FINANZAS.requeridas, ...COLUMNAS.FINANZAS.opcionales], [16, 14, 24, 22, 42, 16, 12, 28, 14, 14, 18, 26, 22, 20, 22, 22, 45]), 'FINANZAS');
     XLSX.utils.book_append_sheet(libro, hojaConColumnas([...COLUMNAS.PESAJES.requeridas, ...COLUMNAS.PESAJES.opcionales], [18, 16, 14, 45]), 'PESAJES');
 
-    const catalogoRacial = obtenerCatalogoRacial();
+    const catalogoRacialBovino = obtenerCatalogoRacial('Bovino');
+    const catalogoRacialPorcino = obtenerCatalogoRacial('Porcino');
     const pastos = CATALOGO_PASTOS_BASE.filter((item) => item.categoria === 'Pasto').map((item) => item.nombre);
     const forrajesCorte = CATALOGO_PASTOS_BASE.filter((item) => item.categoria === 'Pasto de corte').map((item) => item.nombre);
     const leguminosas = CATALOGO_PASTOS_BASE.filter((item) => item.categoria === 'Leguminosa/Forraje').map((item) => item.nombre);
-    const largo = Math.max(categorias.length, destinos.length, TIPOS_MOVIMIENTO_FINANCIERO.length, catalogoRacial.razas.length, pastos.length, forrajesCorte.length, CATEGORIAS_POR_ESPECIE.Bovino.length, CATEGORIAS_POR_ESPECIE.Porcino.length, OBJETIVOS_PRODUCTIVOS.length, PROPOSITOS_LOTE.length, 8);
-    const filasCatalogos = [['CATEGORIAS_FINANCIERAS', 'DESTINOS_USO', 'TIPOS_MOVIMIENTO', 'NATURALEZAS', 'MONEDAS', 'ESPECIES', 'SEXOS', 'CATEGORIAS_BOVINOS', 'CATEGORIAS_PORCINOS', 'OBJETIVOS_PRODUCTIVOS', 'PROPOSITOS_LOTE', 'ESTADOS_POTRERO', 'TIPOS_AREA', 'RAZAS_BOVINAS', 'GRADOS_RACIALES', 'COMPOSICIONES_RACIALES', 'PASTOS', 'FORRAJES_CORTE', 'LEGUMINOSAS_FORRAJES']];
+    const largo = Math.max(categorias.length, destinos.length, TIPOS_MOVIMIENTO_FINANCIERO.length, catalogoRacialBovino.razas.length, catalogoRacialPorcino.razas.length, pastos.length, forrajesCorte.length, CATEGORIAS_POR_ESPECIE.Bovino.length, CATEGORIAS_POR_ESPECIE.Porcino.length, OBJETIVOS_PRODUCTIVOS.length, PROPOSITOS_LOTE.length, 8);
+    const filasCatalogos = [['CATEGORIAS_FINANCIERAS', 'DESTINOS_USO', 'TIPOS_MOVIMIENTO', 'NATURALEZAS', 'MONEDAS', 'ESPECIES', 'SEXOS', 'CATEGORIAS_BOVINOS', 'CATEGORIAS_PORCINOS', 'OBJETIVOS_PRODUCTIVOS', 'PROPOSITOS_LOTE', 'ESTADOS_POTRERO', 'TIPOS_AREA', 'RAZAS_BOVINAS', 'RAZAS_PORCINAS', 'GRADOS_RACIALES', 'FRACCIONES_RACIALES', 'COMPOSICIONES_RACIALES', 'PASTOS', 'FORRAJES_CORTE', 'LEGUMINOSAS_FORRAJES']];
     for (let indice = 0; indice < largo; indice += 1) {
         filasCatalogos.push([
             categorias[indice] || '',
@@ -846,16 +864,18 @@ const generarPlantillaExcel = (catalogos = {}) => {
             PROPOSITOS_LOTE[indice] || '',
             ['Disponible', 'Ocupado', 'Descanso', 'Mantenimiento'][indice] || '',
             ['PASTOREO', 'BANCO_FORRAJERO'][indice] || '',
-            catalogoRacial.razas[indice] || '',
-            catalogoRacial.gradosRaciales[indice] || '',
-            catalogoRacial.composicionesRaciales[indice] || '',
+            catalogoRacialBovino.razas[indice] || '',
+            catalogoRacialPorcino.razas[indice] || '',
+            catalogoRacialBovino.gradosRaciales[indice] || '',
+            catalogoRacialBovino.fraccionesRaciales[indice] || '',
+            catalogoRacialBovino.composicionesRaciales[indice] || '',
             pastos[indice] || '',
             forrajesCorte[indice] || '',
             leguminosas[indice] || ''
         ]);
     }
     const hojaCatalogos = XLSX.utils.aoa_to_sheet(filasCatalogos);
-    hojaCatalogos['!cols'] = Array.from({ length: 19 }, () => ({ wch: 26 }));
+    hojaCatalogos['!cols'] = Array.from({ length: 21 }, () => ({ wch: 26 }));
     XLSX.utils.book_append_sheet(libro, hojaCatalogos, 'CATALOGOS');
 
     return XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' });

@@ -190,29 +190,32 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
         };
       });
       setTareas(tareasConPendientes);
-      if (!puedeGestionar) {
-        await guardarTareasOffline(tareasConPendientes, { filtros: filtrosActivos }).catch(() => {});
-      }
+      await guardarTareasOffline(tareasConPendientes, { filtros: filtrosActivos }).catch(() => {});
 
       if (puedeGestionar) {
-        const [usuariosData, potrerosData, animalesData] = await Promise.all([
-          obtenerUsuariosAsignables('Tareas'),
-          obtenerPotreros(),
-          obtenerAnimales()
-        ]);
-        setUsuarios(usuariosData.filter((usuarioItem) => usuarioItem.estado !== 'Inactivo'));
-        setPotreros(potrerosData);
-        setAnimales(animalesData);
+        try {
+          const [usuariosData, potrerosData, animalesData] = await Promise.all([
+            obtenerUsuariosAsignables('Tareas'),
+            obtenerPotreros(),
+            obtenerAnimales()
+          ]);
+          setUsuarios(usuariosData.filter((usuarioItem) => usuarioItem.estado !== 'Inactivo'));
+          setPotreros(potrerosData);
+          setAnimales(animalesData);
+        } catch (errorAuxiliar) {
+          setError('Las tareas se cargaron, pero algunas opciones de edición no están disponibles temporalmente.');
+        }
       }
     } catch (err) {
-      if (!puedeGestionar) {
-        const filtrosActivos = Object.fromEntries(Object.entries(filtros).filter(([, valor]) => Boolean(valor)));
-        const tareasOffline = await obtenerTareasOffline({ filtros: filtrosActivos }).catch(() => []);
-        setTareas(tareasOffline);
-        setError(tareasOffline.length ? 'Sin conexion. Mostrando tareas guardadas en este dispositivo.' : err.message);
-      } else {
-        setError(err.message);
-      }
+      const filtrosActivos = Object.fromEntries(Object.entries(filtros).filter(([, valor]) => Boolean(valor)));
+      const tareasOffline = await obtenerTareasOffline({ filtros: filtrosActivos }).catch(() => []);
+      const errorDeConexion = !navigator.onLine || err instanceof TypeError;
+      setTareas(tareasOffline);
+      setError(tareasOffline.length
+        ? `${errorDeConexion ? 'Sin conexión' : 'No se pudieron actualizar las tareas'}. Mostrando datos guardados en este dispositivo.`
+        : errorDeConexion
+          ? 'Sin conexión y sin tareas guardadas para estos filtros.'
+          : err.message);
     } finally {
       setCargando(false);
     }

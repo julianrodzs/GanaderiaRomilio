@@ -59,6 +59,7 @@ const planSanitarioSchema = new Schema(
     {
         grupoGanado: { type: String, required: true, trim: true },
         especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino' },
+        lote: { type: Schema.Types.ObjectId, ref: 'Lote', default: null },
         animales: [{ type: Schema.Types.ObjectId, ref: 'Animal' }],
         animalDiio: { type: String, trim: true },
         actividad: { type: String, required: true, trim: true },
@@ -122,6 +123,7 @@ planSanitarioSchema.index({ estado: 1, proximaAplicacion: 1 });
 planSanitarioSchema.index({ grupoGanado: 1 });
 planSanitarioSchema.index({ especie: 1, estado: 1 });
 planSanitarioSchema.index({ animales: 1 });
+planSanitarioSchema.index({ lote: 1, estado: 1 });
 
 const PlanSanitario = model('PlanSanitario', planSanitarioSchema);
 

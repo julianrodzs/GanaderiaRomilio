@@ -5,24 +5,31 @@ const normalizarIdentificador = (valor) => String(valor || '').trim().toUpperCas
 
 const esBovino = (animal) => !animal.especie || animal.especie === 'Bovino';
 
+const especieAnimal = (animal) => animal.especie || 'Bovino';
+
 const detalleRacial = (animal) => {
-    if (animal.razaPrincipal && animal.razaSecundaria) return `${animal.razaPrincipal} × ${animal.razaSecundaria}`;
+    const principal = `${animal.fraccionRazaPrincipal ? `${animal.fraccionRazaPrincipal} ` : ''}${animal.razaPrincipal || ''}`.trim();
+    const secundaria = `${animal.fraccionRazaSecundaria ? `${animal.fraccionRazaSecundaria} ` : ''}${animal.razaSecundaria || ''}`.trim();
+    if (principal && secundaria) return `${principal} × ${secundaria}`;
     if (animal.razaPrincipal && !['Otra', 'Desconocida'].includes(animal.razaPrincipal)) {
         const variedad = animal.variedadRacial ? ` ${animal.variedadRacial}` : '';
         const cruce = animal.gradoRacial === 'Cruce no definido' ? ' cruzado' : '';
-        return `${animal.razaPrincipal}${variedad}${cruce}`;
+        return `${animal.fraccionRazaPrincipal ? `${animal.fraccionRazaPrincipal} ` : ''}${animal.razaPrincipal}${variedad}${cruce}`;
     }
     return animal.descripcionRacial || animal.raza || animal.razaPrincipal || 'Sin clasificar';
 };
 
-const construirReporteRacial = (animales = []) => {
-    const bovinos = animales.filter(esBovino);
+const construirReporteRacial = (animales = [], especie = 'Bovino') => {
+    const especiesPermitidas = especie === 'Todos' ? ['Bovino', 'Porcino'] : [especie === 'Porcino' ? 'Porcino' : 'Bovino'];
+    const seleccionados = animales.filter((animal) => especiesPermitidas.includes(especieAnimal(animal)));
     const grupos = new Map();
 
-    bovinos.forEach((animal) => {
+    seleccionados.forEach((animal) => {
+        const especieRegistro = especieAnimal(animal);
         const grupo = animal.grupoRacial || 'Desconocido';
-        if (!grupos.has(grupo)) grupos.set(grupo, { grupoRacial: grupo, total: 0, detalles: new Map() });
-        const item = grupos.get(grupo);
+        const clave = `${especieRegistro}:${grupo}`;
+        if (!grupos.has(clave)) grupos.set(clave, { especie: especieRegistro, grupoRacial: grupo, total: 0, detalles: new Map() });
+        const item = grupos.get(clave);
         const detalle = detalleRacial(animal);
         item.total += 1;
         item.detalles.set(detalle, (item.detalles.get(detalle) || 0) + 1);
@@ -30,19 +37,23 @@ const construirReporteRacial = (animales = []) => {
 
     const porGrupo = [...grupos.values()]
         .map((item) => ({
+            especie: item.especie,
             grupoRacial: item.grupoRacial,
             total: item.total,
             detalles: [...item.detalles.entries()]
                 .map(([detalle, total]) => ({ detalle, total }))
                 .sort((a, b) => b.total - a.total || a.detalle.localeCompare(b.detalle))
         }))
-        .sort((a, b) => b.total - a.total || a.grupoRacial.localeCompare(b.grupoRacial));
+        .sort((a, b) => a.especie.localeCompare(b.especie) || b.total - a.total || a.grupoRacial.localeCompare(b.grupoRacial));
 
     return {
         resumen: {
-            totalBovinos: bovinos.length,
+            especie,
+            totalAnimales: seleccionados.length,
+            totalBovinos: seleccionados.filter(esBovino).length,
+            totalPorcinos: seleccionados.filter((animal) => especieAnimal(animal) === 'Porcino').length,
             gruposRepresentados: porGrupo.length,
-            pendientesNormalizacion: bovinos.filter((animal) => !animal.razaPrincipal || !animal.grupoRacial).length
+            pendientesNormalizacion: seleccionados.filter((animal) => !animal.razaPrincipal || !animal.grupoRacial).length
         },
         porGrupo
     };
@@ -190,9 +201,15 @@ const construirReporteDescendencia = ({ animales = [], registros = [], fechaInic
     };
 };
 
-const obtenerReporteRacial = async () => construirReporteRacial(await Animal.find({
-    $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }]
-}).lean());
+const obtenerReporteRacial = async ({ especie = 'Bovino' } = {}) => {
+    const especieCanonica = ['Bovino', 'Porcino', 'Todos'].includes(especie) ? especie : 'Bovino';
+    const filtro = especieCanonica === 'Todos'
+        ? {}
+        : especieCanonica === 'Porcino'
+            ? { especie: 'Porcino' }
+            : { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
+    return construirReporteRacial(await Animal.find(filtro).lean(), especieCanonica);
+};
 
 const obtenerReporteDescendencia = async ({ fechaInicio, fechaFin } = {}) => {
     const [animales, registros] = await Promise.all([

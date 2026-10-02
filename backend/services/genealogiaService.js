@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Animal = require('../models/Animal');
 
-const CAMPOS_ANIMAL = 'diio identificadorFinca nombre sexo especie categoria objetivoProductivo raza razaPrincipal razaSecundaria grupoRacial gradoRacial descripcionRacial padre madre padreDiio madreDiio padreExternoNombre madreExternaNombre registroGenealogico observacionesGenealogicas origenGenealogico fechaNacimiento estado pesoActual';
+const CAMPOS_ANIMAL = 'diio identificadorFinca nombre sexo especie categoria objetivoProductivo raza razaPrincipal razaSecundaria grupoRacial gradoRacial descripcionRacial composicionRacial fraccionRazaPrincipal fraccionRazaSecundaria padre madre padreDiio madreDiio padreExternoNombre madreExternaNombre registroGenealogico observacionesGenealogicas origenGenealogico fechaNacimiento estado pesoActual';
 const MAX_GENERACIONES_VALIDACION = 12;
 
 const normalizarId = (valor) => {

@@ -48,6 +48,8 @@ const animalSchema = new Schema(
         variedadRacial: { type: String, trim: true },
         descripcionRacial: { type: String, trim: true },
         composicionRacial: { type: String, trim: true },
+        fraccionRazaPrincipal: { type: String, trim: true },
+        fraccionRazaSecundaria: { type: String, trim: true },
         madreDiio: { type: String, trim: true },
         padreDiio: { type: String, trim: true },
         padre: { type: Schema.Types.ObjectId, ref: 'Animal' },

@@ -680,6 +680,7 @@ Reglas de bitacora sanitaria:
 - Registrar aplicacion crea primero `AplicacionSanitaria` y luego la bitacora.
 - Si el plan tiene `animalDiio`, crea evento solo en ese animal.
 - Si el plan es `Todo el ganado`, crea evento en todos los animales activos de la especie del plan.
+- Si el plan usa un lote, cada aplicación resuelve las pertenencias activas del lote en ese momento. El plan no congela sus integrantes.
 - Los animales `Muerto` o `Vendido` no reciben eventos de planes grupales.
 - La fecha del evento es la fecha real de aplicacion.
 - El titulo del evento es `Aplicación sanitaria` y su metadata conserva producto, dosis, via y naturaleza.
@@ -702,7 +703,18 @@ Naturalezas:
 
 Una aplicacion puede incluir varios animales en un solo documento. El servicio `aplicacionSanitaria-service.js` crea un `EventoAnimal` independiente para cada animal, todos con el ID de la aplicacion como `referenciaId`.
 
-Las aplicaciones unicas nuevas exigen seleccionar `responsableUsuario` desde los usuarios activos compatibles con Sanidad (`Administrador`, `Encargado` o `Veterinario`). El backend valida que pertenezca a la organizacion actual y conserva tambien el nombre en `responsable` para mostrarlo junto con registros historicos que solo tenian texto libre.
+Plan, tratamiento y aplicación única pueden usar `lote`. La aplicación real siempre conserva tanto el lote de origen como el arreglo exacto de animales alcanzados. También crea `EventoLote` y agrega `loteId`/`loteCodigo` a la metadata de cada `EventoAnimal`.
+
+Reglas temporales del alcance por lote:
+
+- Plan sanitario: alcance dinámico. En cada aplicación toma los miembros activos del lote.
+- Tratamiento: alcance congelado al crear el tratamiento. Si luego un animal cambia de lote, conserva su tratamiento y su historial.
+- Aplicación única: alcance congelado al guardar la aplicación.
+- Un animal que entra posteriormente al lote nunca recibe aplicaciones históricas.
+- Un lote cerrado, de otra especie o sin integrantes activos no se acepta para una operación nueva.
+- El responsable de cada aplicación se selecciona entre usuarios activos, con un rol compatible con Sanidad y acceso a la finca actual. La aplicación conserva la referencia al usuario y su nombre legible en el historial.
+
+Las aplicaciones nuevas exigen seleccionar `responsableUsuario` desde los usuarios activos compatibles con Sanidad (`Administrador`, `Encargado` o `Veterinario`). El backend valida que pertenezca a la organización y finca actuales y conserva también el nombre en `responsable` para mostrarlo junto con registros históricos que solo tenían texto libre.
 
 Base:
 
@@ -729,6 +741,7 @@ Estados:
 Reglas:
 
 - Puede involucrar uno o varios animales activos de una misma especie.
+- Puede crearse seleccionando un lote completo; el backend guarda una instantánea de sus miembros activos.
 - La primera aplicacion es opcional al crear el tratamiento.
 - La proxima fecha se calcula desde la ultima aplicacion real, no desde `fechaInicio`.
 - Al alcanzar `cantidadAplicaciones`, se completa automaticamente, se guarda `fechaFin` y se limpia `proximaAplicacion`.

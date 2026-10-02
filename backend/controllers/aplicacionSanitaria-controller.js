@@ -1,5 +1,5 @@
 const { AplicacionSanitaria, NATURALEZAS_APLICACION } = require('../models/AplicacionSanitaria');
-const { crearAplicacionSanitaria } = require('../services/aplicacionSanitaria-service');
+const { crearAplicacionSanitaria, resolverAlcanceSanitario } = require('../services/aplicacionSanitaria-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
 
@@ -7,6 +7,7 @@ const aplicacionSanitariaCtrl = {};
 
 const poblarAplicacion = (query) => query
     .populate('animales', 'diio identificadorFinca nombre especie categoria estado')
+    .populate('lote', 'codigo nombre especie estado')
     .populate('planSanitario', 'actividad producto grupoGanado')
     .populate('tratamiento', 'motivo producto estado')
     .populate('responsableUsuario', 'nombre apellido correo estado')
@@ -14,9 +15,10 @@ const poblarAplicacion = (query) => query
 
 aplicacionSanitariaCtrl.getAplicaciones = async (req, res) => {
     try {
-        const { animal, naturaleza, fechaInicio, fechaFin, producto, responsable, especie } = req.query;
+        const { animal, lote, naturaleza, fechaInicio, fechaFin, producto, responsable, especie } = req.query;
         const filtro = {};
         if (animal) filtro.animales = animal;
+        if (lote) filtro.lote = lote;
         if (naturaleza && NATURALEZAS_APLICACION.includes(naturaleza)) filtro.naturaleza = naturaleza;
         if (especie) filtro.especie = especie;
         if (producto) filtro.producto = { $regex: producto, $options: 'i' };
@@ -54,9 +56,16 @@ aplicacionSanitariaCtrl.createAplicacionUnica = async (req, res) => {
     try {
         const responsable = await validarUsuarioAsignable(req.body.responsableUsuario, 'Sanidad');
         const responsableNombre = [responsable.nombre, responsable.apellido].filter(Boolean).join(' ') || responsable.correo;
-        const aplicacion = await crearAplicacionSanitaria({
+        const alcance = await resolverAlcanceSanitario({
             animales: req.body.animales,
-            especie: req.body.especie,
+            lote: req.body.lote,
+            especie: req.body.especie
+        }, { soloActivos: true });
+        const aplicacion = await crearAplicacionSanitaria({
+            animales: alcance.ids,
+            especie: alcance.especie,
+            lote: alcance.lote?._id || null,
+            loteCodigo: alcance.lote?.codigo,
             fechaAplicacion: req.body.fechaAplicacion,
             producto: req.body.producto,
             tipo: req.body.tipo,
@@ -79,7 +88,7 @@ aplicacionSanitariaCtrl.createAplicacionUnica = async (req, res) => {
             entidadTipo: 'AplicacionSanitaria',
             entidadId: aplicacion._id,
             url: `/sanidad/aplicaciones/${aplicacion._id}`,
-            metadata: { naturaleza: 'Aplicacion unica' }
+            metadata: { naturaleza: 'Aplicacion unica', loteId: alcance.lote?._id }
         });
 
         res.status(201).json(await poblarAplicacion(AplicacionSanitaria.findById(aplicacion._id)));

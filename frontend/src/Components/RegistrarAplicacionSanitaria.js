@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
+import { etiquetaUsuarioConRol } from '../utils/usuarios';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
-const RegistrarAplicacionSanitaria = ({ plan, onCancelar, onRegistrar, guardando, error }) => {
+const RegistrarAplicacionSanitaria = ({ plan, usuariosAsignables = [], onCancelar, onRegistrar, guardando, error }) => {
+  const asignadoActual = plan?.asignadoA?._id || plan?.asignadoA || '';
+  const responsableInicial = usuariosAsignables.some((usuario) => usuario._id === asignadoActual) ? asignadoActual : '';
   const [formulario, setFormulario] = useState({
     fechaAplicacion: fechaHoy(),
-    responsable: plan?.responsable || '',
+    responsableUsuario: responsableInicial,
     dosis: plan?.dosis || '',
     viaAplicacion: plan?.viaAplicacion || '',
     observaciones: ''
@@ -33,7 +36,7 @@ const RegistrarAplicacionSanitaria = ({ plan, onCancelar, onRegistrar, guardando
         </div>
 
         <div className="aplicacion-sanitaria-resumen">
-          <span>{plan?.grupoGanado || '--'}</span>
+          <span>{plan?.lote ? `Lote ${plan.lote.codigo} · miembros activos al aplicar` : plan?.grupoGanado || '--'}</span>
           <strong>{plan?.actividad || '--'} / {plan?.producto || '--'}</strong>
         </div>
 
@@ -54,12 +57,12 @@ const RegistrarAplicacionSanitaria = ({ plan, onCancelar, onRegistrar, guardando
 
             <label>
               Responsable
-              <input
-                name="responsable"
-                value={formulario.responsable}
-                onChange={actualizarCampo}
-                placeholder="Encargado de finca"
-              />
+              <select name="responsableUsuario" value={formulario.responsableUsuario} onChange={actualizarCampo} required>
+                <option value="">Seleccionar responsable</option>
+                {usuariosAsignables.map((usuario) => (
+                  <option key={usuario._id} value={usuario._id}>{etiquetaUsuarioConRol(usuario)}</option>
+                ))}
+              </select>
             </label>
 
             <label>
@@ -96,7 +99,7 @@ const RegistrarAplicacionSanitaria = ({ plan, onCancelar, onRegistrar, guardando
 
           <div className="form-actions">
             <button className="boton-link" type="button" onClick={onCancelar}>Cancelar</button>
-            <button className="boton-primario compacto" type="submit" disabled={guardando}>
+            <button className="boton-primario compacto" type="submit" disabled={guardando || !formulario.responsableUsuario}>
               {guardando ? 'Registrando...' : 'Registrar aplicación'}
             </button>
           </div>

@@ -11,7 +11,7 @@ import {
   obtenerReporteProductosResumen,
   obtenerReporteCrecimientoPesajes,
   obtenerReporteReproductivoPorcino,
-  obtenerReporteRazasBovinas,
+  obtenerReporteRazas,
   obtenerReporteDescendenciaBovina,
   obtenerReporteSanidad,
   obtenerReporteLotes,
@@ -293,7 +293,7 @@ const Reportes = ({ usuario }) => {
         incluirReportesPorcinos ? obtenerReporteTareasCamadas(filtrosGenerales) : Promise.resolve(null),
         incluirReportesPorcinos && tieneFeature('analiticaEconomica') ? obtenerReporteEconomicoCamadas(filtrosGenerales) : Promise.resolve(null),
         obtenerReporteSanidad(filtrosGenerales),
-        tieneFeature('analiticaProductiva') && especie !== 'Porcino' ? obtenerReporteRazasBovinas() : Promise.resolve(null),
+        tieneFeature('analiticaProductiva') ? obtenerReporteRazas({ especie }) : Promise.resolve(null),
         tieneFeature('analiticaProductiva') && especie !== 'Porcino' ? obtenerReporteDescendenciaBovina(filtrosGenerales) : Promise.resolve(null)
       ]);
       setReporte(data);
@@ -470,7 +470,8 @@ const Reportes = ({ usuario }) => {
               <UpgradeMessage feature="analiticaProductiva" titulo="Análisis de pesajes históricos" pregunta="¿Qué animales están creciendo mejor y cuáles necesitan seguimiento de peso?" etiqueta="Reporte de crecimiento" />
               <UpgradeMessage feature="analiticaProductiva" titulo="Vacas a revisar" pregunta="¿Qué vacas llevan demasiado tiempo sin parto, gestación o resultados de destete?" etiqueta="Reporte reproductivo" />
               <UpgradeMessage feature="analiticaProductiva" titulo="Partos por vaca y año" pregunta="¿Cuántos partos registra cada vaca y cuáles están bajo el objetivo anual?" etiqueta="Reporte reproductivo" />
-              {especie !== 'Porcino' && <UpgradeMessage feature="analiticaProductiva" titulo="Razas y descendencia bovina" pregunta="¿Cómo se distribuyen las razas y qué resultados reproductivos tiene cada progenitor?" etiqueta="Reporte genealógico" />}
+              <UpgradeMessage feature="analiticaProductiva" titulo="Composición racial" pregunta="¿Cómo se distribuyen las razas bovinas y porcinas de la finca?" etiqueta="Reporte racial" />
+              {especie !== 'Porcino' && <UpgradeMessage feature="analiticaProductiva" titulo="Descendencia bovina" pregunta="¿Qué resultados reproductivos tiene cada progenitor bovino?" etiqueta="Reporte genealógico" />}
               {especie !== 'Bovino' && puedeUsarEspecie('Porcino') && <UpgradeMessage feature="analiticaProductiva" titulo="Reproductivo porcino" pregunta="¿Qué resultados tienen los ciclos, partos y destetes de las madres porcinas?" etiqueta="Reporte porcino" />}
             </section>
           )}
@@ -1270,16 +1271,16 @@ const Reportes = ({ usuario }) => {
             <section className="reporte-panel reporte-panel-amplio reporte-racial-panel">
               <div className="partos-panel-header">
                 <div>
-                  <p className="eyebrow">Bovinos · Inventario</p>
+                  <p className="eyebrow">{especie === 'Todos' ? 'Bovinos y porcinos' : especie} · Inventario</p>
                   <h2>Composición racial de la finca</h2>
                 </div>
-                <span>{formatearNumero(razasBovinas.resumen?.totalBovinos)} bovinos</span>
+                <span>{formatearNumero(razasBovinas.resumen?.totalAnimales)} animales</span>
               </div>
               <div className="reporte-racial-grid">
                 {(razasBovinas.porGrupo || []).map((grupo) => (
-                  <article key={grupo.grupoRacial}>
+                  <article key={`${grupo.especie}-${grupo.grupoRacial}`}>
                     <div className="reporte-racial-titulo">
-                      <strong>{grupo.grupoRacial}</strong>
+                      <strong>{especie === 'Todos' ? `${grupo.especie} · ${grupo.grupoRacial}` : grupo.grupoRacial}</strong>
                       <span>{formatearNumero(grupo.total)}</span>
                     </div>
                     {(grupo.detalles || []).slice(0, 6).map((detalle) => (

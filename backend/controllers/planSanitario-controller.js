@@ -8,6 +8,7 @@ const { AplicacionSanitaria } = require('../models/AplicacionSanitaria');
 const {
     crearAplicacionSanitaria,
     eliminarAplicacionSanitariaCreada,
+    resolverAlcanceSanitario,
     validarAnimalesSanidad
 } = require('../services/aplicacionSanitaria-service');
 const { crearFiltroEspecie, obtenerAnimalesParaPlan } = require('../services/planSanitario-service');
@@ -21,7 +22,26 @@ const { validarUsuarioAsignable } = require('../services/usuarioAsignable-servic
 
 const poblarPlan = (query) => query
     .populate('animales', 'diio identificadorFinca nombre especie estado')
+    .populate('lote', 'codigo nombre especie estado')
     .populate('asignadoA', 'nombre apellido correo rol estado');
+
+const prepararAlcancePlan = async (datos, especiePredeterminada = 'Bovino') => {
+    const preparados = { ...datos };
+    const especie = preparados.especie || especiePredeterminada;
+    if (preparados.lote) {
+        const alcance = await resolverAlcanceSanitario({ lote: preparados.lote, especie }, { soloActivos: true });
+        preparados.lote = alcance.lote._id;
+        preparados.grupoGanado = `Lote ${alcance.lote.codigo}`;
+        preparados.animales = [];
+        preparados.animalDiio = '';
+    } else {
+        if (Object.prototype.hasOwnProperty.call(preparados, 'lote')) preparados.lote = null;
+        if (preparados.animales?.length) {
+            await validarAnimalesSanidad(preparados.animales, especie, { soloActivos: true });
+        }
+    }
+    return preparados;
+};
 
 const refrescarEstado = async (plan) => {
     const estadoCalculado = calcularEstadoPlanSanitario(plan.proximaAplicacion);
@@ -57,11 +77,9 @@ planSanitarioCtrl.getPlanesSanitarios = async (req, res) => {
 planSanitarioCtrl.createPlanSanitario = async (req, res) => {
     try {
         await validarUsuarioAsignable(req.body.asignadoA, 'Sanidad');
-        if (req.body.animales?.length) {
-            await validarAnimalesSanidad(req.body.animales, req.body.especie || 'Bovino', { soloActivos: true });
-        }
+        const datos = await prepararAlcancePlan(req.body, 'Bovino');
         const nuevoPlan = new PlanSanitario({
-            ...req.body,
+            ...datos,
             creadoPor: req.usuario?.id
         });
         const planGuardado = await nuevoPlan.save();
@@ -99,13 +117,11 @@ planSanitarioCtrl.updatePlanSanitario = async (req, res) => {
             return res.status(404).json({ mensaje: 'Plan sanitario no encontrado' });
         }
 
-        if (req.body.animales?.length) {
-            await validarAnimalesSanidad(req.body.animales, req.body.especie || plan.especie, { soloActivos: true });
-        }
+        const datos = await prepararAlcancePlan(req.body, plan.especie);
         if (Object.prototype.hasOwnProperty.call(req.body, 'asignadoA')) {
             await validarUsuarioAsignable(req.body.asignadoA, 'Sanidad');
         }
-        Object.assign(plan, req.body);
+        Object.assign(plan, datos);
         const planActualizado = await plan.save();
         await sincronizarTareaPlanSanitario(planActualizado, req.usuario?.id);
 
@@ -139,10 +155,13 @@ planSanitarioCtrl.registrarAplicacionPlan = async (req, res) => {
             return res.status(404).json({ mensaje: 'Plan sanitario no encontrado' });
         }
 
+        const responsable = await validarUsuarioAsignable(req.body.responsableUsuario, 'Sanidad');
+        const responsableNombre = [responsable.nombre, responsable.apellido].filter(Boolean).join(' ') || responsable.correo;
+
         const animales = await obtenerAnimalesParaPlan(plan);
         if (!animales.length) {
             return res.status(400).json({
-                mensaje: 'El plan no tiene animales identificables. Seleccione animales o use Todo el ganado.'
+                mensaje: 'El plan no tiene animales identificables. Seleccione un lote con animales, animales específicos o use Todo el ganado.'
             });
         }
 
@@ -153,10 +172,6 @@ planSanitarioCtrl.registrarAplicacionPlan = async (req, res) => {
             viaAplicacion: plan.viaAplicacion
         };
         plan.fechaAplicacion = req.body.fechaAplicacion || new Date();
-
-        if (req.body.responsable) {
-            plan.responsable = req.body.responsable;
-        }
 
         if (req.body.observaciones) {
             plan.observaciones = req.body.observaciones;
@@ -182,11 +197,13 @@ planSanitarioCtrl.registrarAplicacionPlan = async (req, res) => {
                 tipo: plan.actividad,
                 dosis: req.body.dosis || plan.dosis,
                 viaAplicacion: req.body.viaAplicacion || plan.viaAplicacion,
-                responsable: req.body.responsable || plan.responsable,
+                responsable: responsableNombre,
+                responsableUsuario: responsable._id,
                 motivo: `Aplicación programada para ${plan.grupoGanado}`,
                 observaciones: req.body.observaciones || plan.observaciones,
                 naturaleza: 'Plan sanitario',
                 planSanitario: plan._id,
+                lote: plan.lote?._id || plan.lote,
                 numeroAplicacion
             }, req.usuario?.id, { soloActivos: true });
         } catch (error) {
@@ -208,7 +225,7 @@ planSanitarioCtrl.registrarAplicacionPlan = async (req, res) => {
             entidadTipo: 'AplicacionSanitaria',
             entidadId: aplicacion._id,
             url: `/sanidad/aplicaciones/${aplicacion._id}`,
-            metadata: { naturaleza: 'Plan sanitario', planSanitarioId: plan._id }
+            metadata: { naturaleza: 'Plan sanitario', planSanitarioId: plan._id, loteId: plan.lote?._id || plan.lote }
         });
 
         const respuesta = (await poblarPlan(PlanSanitario.findById(planActualizado._id))).toObject();

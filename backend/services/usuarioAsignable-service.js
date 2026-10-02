@@ -1,4 +1,4 @@
-const { obtenerOrganizacionActual } = require('../context/organizacion-context');
+const { obtenerFincaActual, obtenerOrganizacionActual } = require('../context/organizacion-context');
 const { Membresia } = require('../models/Membresia');
 
 const ROLES_ASIGNABLES = {
@@ -9,13 +9,20 @@ const ROLES_ASIGNABLES = {
 
 const obtenerRolesAsignables = (modulo) => ROLES_ASIGNABLES[modulo] || [];
 
+const filtroAccesoFinca = (fincaId = obtenerFincaActual()) => (
+    fincaId
+        ? { $or: [{ accesoTodasFincas: true }, { fincas: fincaId }] }
+        : {}
+);
+
 const listarUsuariosAsignables = async (modulo, organizacionId = obtenerOrganizacionActual()) => {
     const roles = obtenerRolesAsignables(modulo);
     if (!roles.length) return [];
     const membresias = await Membresia.find({
         organizacionId,
         estado: 'Activo',
-        rol: { $in: roles }
+        rol: { $in: roles },
+        ...filtroAccesoFinca()
     }).populate({
         path: 'usuario',
         match: { estado: 'Activo' },
@@ -43,11 +50,12 @@ const validarUsuarioAsignable = async (usuarioId, modulo) => {
         organizacionId: obtenerOrganizacionActual(),
         usuario: usuarioId,
         estado: 'Activo',
-        rol: { $in: obtenerRolesAsignables(modulo) }
+        rol: { $in: obtenerRolesAsignables(modulo) },
+        ...filtroAccesoFinca()
     }).populate({
         path: 'usuario',
         match: { estado: 'Activo' },
-        select: '_id nombre apellido estado'
+        select: '_id nombre apellido correo estado'
     });
 
     if (!membresia?.usuario) {

@@ -8,7 +8,7 @@ El modo offline es deliberadamente acotado. No intenta replicar toda la aplicaci
 | --- | --- | --- |
 | Inventario | Lista previamente descargada, separada por especie | No |
 | Potreros | Lista previamente descargada | No |
-| Tareas asignadas | Lista del periodo y filtros previamente descargados | Completar tarea, observaciones y evidencia |
+| Tareas | Lista visible para el rol, periodo y filtros previamente descargados | Completar tarea, observaciones y evidencia |
 
 Reproduccion, Sanidad, Pesajes, Compras, Ventas, Finanzas, Reportes, Importacion, Drone y Usuarios requieren conexion. Cuando la aplicacion detecta que no hay red, los formularios que ya soportan modo consulta se bloquean.
 
@@ -20,7 +20,7 @@ IndexedDB separa cada coleccion y operacion pendiente mediante:
 organizacionId + fincaId + usuarioId + recurso + variante
 ```
 
-Inventario agrega la especie a la variante. Tareas agrega los filtros y periodo consultado. Los datos de otra organizacion, finca o usuario no se devuelven aunque compartan el mismo navegador.
+Inventario agrega la especie a la variante. Tareas agrega los filtros y periodo consultado y se conserva para cualquier rol con acceso al módulo, incluidos Administrador y Encargado. Los datos de otra organizacion, finca o usuario no se devuelven aunque compartan el mismo navegador.
 
 El cierre de sesion voluntario elimina el contexto local completo. Si existen operaciones pendientes, el usuario debe confirmar que desea descartarlas. Un token JWT vencido no permite abrir la sesion offline, pero conserva la cola aislada para recuperarla cuando el mismo usuario vuelva a autenticarse.
 

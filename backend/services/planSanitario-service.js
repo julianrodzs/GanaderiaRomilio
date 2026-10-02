@@ -1,4 +1,5 @@
 const Animal = require('../models/Animal');
+const { resolverAlcanceSanitario } = require('./aplicacionSanitaria-service');
 
 const crearFiltroEspecie = (especie) => {
     if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
@@ -7,6 +8,14 @@ const crearFiltroEspecie = (especie) => {
 };
 
 const obtenerAnimalesParaPlan = async (plan) => {
+    if (plan.lote) {
+        const alcance = await resolverAlcanceSanitario({
+            lote: plan.lote?._id || plan.lote,
+            especie: plan.especie || 'Bovino'
+        }, { soloActivos: true });
+        return alcance.animales;
+    }
+
     if (plan.animales?.length) {
         return Animal.find({
             _id: { $in: plan.animales.map((animal) => animal?._id || animal) },

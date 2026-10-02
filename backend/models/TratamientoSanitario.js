@@ -14,6 +14,7 @@ const tratamientoSanitarioSchema = new Schema(
             }
         },
         especie: { type: String, enum: ['Bovino', 'Porcino'], required: true, index: true },
+        lote: { type: Schema.Types.ObjectId, ref: 'Lote', default: null },
         motivo: { type: String, required: true, trim: true },
         diagnostico: { type: String, trim: true },
         producto: { type: String, required: true, trim: true },
@@ -57,6 +58,7 @@ tratamientoSanitarioSchema.plugin(aplicarAislamientoOrganizacion, { finca: true 
 tratamientoSanitarioSchema.index({ especie: 1, estado: 1, proximaAplicacion: 1 });
 tratamientoSanitarioSchema.index({ animales: 1, fechaInicio: -1 });
 tratamientoSanitarioSchema.index({ producto: 1, fechaInicio: -1 });
+tratamientoSanitarioSchema.index({ lote: 1, fechaInicio: -1 });
 
 const TratamientoSanitario = model('TratamientoSanitario', tratamientoSanitarioSchema);
 

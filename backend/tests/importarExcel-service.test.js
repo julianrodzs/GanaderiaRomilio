@@ -75,6 +75,19 @@ test('acepta columnas raciales y genealógicas opcionales', async () => {
     assert.equal(resultado.registros.Animal[0].madreDiio, '1001');
 });
 
+test('acepta razas y fracciones porcinas en el importador', async () => {
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([['VERSION_PLANTILLA', '1']]), 'INSTRUCCIONES');
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([
+        ['DIIO', 'ESPECIE', 'SEXO', 'CATEGORIA', 'RAZA_PRINCIPAL', 'RAZA_SECUNDARIA', 'FRACCION_RAZA_PRINCIPAL', 'FRACCION_RAZA_SECUNDARIA'],
+        ['P-301', 'Porcino', 'Hembra', 'Chancha', 'Duroc', 'Landrace', '3/8', '10/16']
+    ]), 'INVENTARIO');
+    const resultado = await procesarExcelPreview(XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }));
+    assert.equal(resultado.valido, true);
+    assert.equal(resultado.registros.Animal[0].fraccionRazaPrincipal, '3/8');
+    assert.equal(resultado.registros.Animal[0].fraccionRazaSecundaria, '5/8');
+});
+
 test('reconoce pasto principal y conserva nombres no catalogados para revision', async () => {
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([['VERSION_PLANTILLA', '1']]), 'INSTRUCCIONES');

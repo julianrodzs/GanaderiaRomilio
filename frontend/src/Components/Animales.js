@@ -825,22 +825,22 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
                 <span>Edad reproductiva</span>
                 <strong>{obtenerEstadoMontaEdad(animalDetalle)}</strong>
               </article>
-              {animalDetalle.especie !== 'Porcino' && (
-                <>
-                  <article>
-                    <span>Raza en la finca</span>
-                    <strong>{animalDetalle.descripcionRacial || animalDetalle.raza || '--'}</strong>
-                  </article>
-                  <article>
-                    <span>Clasificación racial</span>
-                    <strong>{animalDetalle.razaPrincipal || '--'}{animalDetalle.razaSecundaria ? ` × ${animalDetalle.razaSecundaria}` : ''}</strong>
-                  </article>
-                  <article>
-                    <span>Grupo racial</span>
-                    <strong>{animalDetalle.grupoRacial || 'Pendiente de normalizar'}</strong>
-                  </article>
-                </>
-              )}
+              <article>
+                <span>Raza en la finca</span>
+                <strong>{animalDetalle.descripcionRacial || animalDetalle.raza || '--'}</strong>
+              </article>
+              <article>
+                <span>Clasificación racial</span>
+                <strong>
+                  {animalDetalle.fraccionRazaPrincipal ? `${animalDetalle.fraccionRazaPrincipal} ` : ''}
+                  {animalDetalle.razaPrincipal || '--'}
+                  {animalDetalle.razaSecundaria ? ` × ${animalDetalle.fraccionRazaSecundaria ? `${animalDetalle.fraccionRazaSecundaria} ` : ''}${animalDetalle.razaSecundaria}` : ''}
+                </strong>
+              </article>
+              <article>
+                <span>Grupo racial</span>
+                <strong>{animalDetalle.grupoRacial || 'Pendiente de normalizar'}</strong>
+              </article>
               {animalDetalle.especie === 'Porcino' && (
                 <article>
                   <span>Camada origen</span>

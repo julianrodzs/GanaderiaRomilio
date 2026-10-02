@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { obtenerCatalogoRacial } from '../services/api';
 
-const CamposRazaBovina = ({ formulario, setFormulario }) => {
+const CamposRazaBovina = ({ formulario, setFormulario, especie = 'Bovino' }) => {
   const [catalogo, setCatalogo] = useState({
     razas: [],
     gradosRaciales: [],
     variedadesPorRaza: {},
-    composicionesRaciales: []
+    composicionesRaciales: [],
+    fraccionesRaciales: []
   });
   const [error, setError] = useState('');
 
@@ -18,10 +19,11 @@ const CamposRazaBovina = ({ formulario, setFormulario }) => {
   }, [formulario.gradoRacial, formulario.razaSecundaria]);
 
   useEffect(() => {
-    obtenerCatalogoRacial()
+    setError('');
+    obtenerCatalogoRacial(especie)
       .then(setCatalogo)
       .catch((err) => setError(err.message));
-  }, []);
+  }, [especie]);
 
   const actualizar = (cambios) => setFormulario((actual) => ({ ...actual, ...cambios }));
 
@@ -35,9 +37,9 @@ const CamposRazaBovina = ({ formulario, setFormulario }) => {
   };
 
   const cambiarCruce = (valor) => {
-    if (valor === 'No') actualizar({ razaSecundaria: '', gradoRacial: 'Predominante', composicionRacial: '' });
+    if (valor === 'No') actualizar({ razaSecundaria: '', gradoRacial: 'Predominante', composicionRacial: '', fraccionRazaPrincipal: '', fraccionRazaSecundaria: '' });
     if (valor === 'Si') actualizar({ razaSecundaria: '', gradoRacial: 'Cruce conocido' });
-    if (valor === 'No se') actualizar({ razaSecundaria: '', gradoRacial: 'Cruce no definido', composicionRacial: '' });
+    if (valor === 'No se') actualizar({ razaSecundaria: '', gradoRacial: 'Cruce no definido', composicionRacial: '', fraccionRazaPrincipal: '', fraccionRazaSecundaria: '' });
   };
 
   const variedades = catalogo.variedadesPorRaza?.[formulario.razaPrincipal] || [];
@@ -45,7 +47,7 @@ const CamposRazaBovina = ({ formulario, setFormulario }) => {
   return (
     <section className="form-section raza-bovina-form">
       <div>
-        <p className="eyebrow">Raza bovina</p>
+        <p className="eyebrow">Raza {especie === 'Porcino' ? 'porcina' : 'bovina'}</p>
         <h3>Clasificación racial</h3>
       </div>
 
@@ -83,7 +85,10 @@ const CamposRazaBovina = ({ formulario, setFormulario }) => {
           <select
             name="razaSecundaria"
             value={formulario.razaSecundaria || ''}
-            onChange={(evento) => actualizar({ razaSecundaria: evento.target.value })}
+            onChange={(evento) => actualizar({
+              razaSecundaria: evento.target.value,
+              fraccionRazaSecundaria: evento.target.value ? formulario.fraccionRazaSecundaria : ''
+            })}
             required
           >
             <option value="">Seleccionar raza</option>
@@ -100,7 +105,7 @@ const CamposRazaBovina = ({ formulario, setFormulario }) => {
           name="descripcionRacial"
           value={formulario.descripcionRacial || ''}
           onChange={(evento) => actualizar({ descripcionRacial: evento.target.value, raza: evento.target.value })}
-          placeholder="Ej. Brahman cruzado"
+          placeholder={especie === 'Porcino' ? 'Ej. Duroc con Landrace' : 'Ej. Brahman cruzado'}
         />
       </label>
 
@@ -128,13 +133,43 @@ const CamposRazaBovina = ({ formulario, setFormulario }) => {
         </div>
 
         {tipoCruce === 'Si' && (
-          <label>
-            Composición conocida
-            <select name="composicionRacial" value={formulario.composicionRacial || ''} onChange={(evento) => actualizar({ composicionRacial: evento.target.value })}>
-              <option value="">No indicada</option>
-              {catalogo.composicionesRaciales.map((composicion) => <option key={composicion} value={composicion}>{composicion}</option>)}
-            </select>
-          </label>
+          <div className="form-grid">
+            <label>
+              Fracción de la raza principal
+              <input
+                name="fraccionRazaPrincipal"
+                value={formulario.fraccionRazaPrincipal || ''}
+                onChange={(evento) => actualizar({ fraccionRazaPrincipal: evento.target.value })}
+                list={`fracciones-raciales-${especie}-principal`}
+                placeholder="Ej. 3/8"
+                pattern="[0-9]+\s*/\s*[0-9]+"
+              />
+              <small>Opcional e informativa.</small>
+              <datalist id={`fracciones-raciales-${especie}-principal`}>
+                {catalogo.fraccionesRaciales.map((fraccion) => <option key={fraccion} value={fraccion} />)}
+              </datalist>
+            </label>
+
+            <label>
+              Fracción de la otra raza
+              <input
+                name="fraccionRazaSecundaria"
+                value={formulario.fraccionRazaSecundaria || ''}
+                onChange={(evento) => actualizar({ fraccionRazaSecundaria: evento.target.value })}
+                list={`fracciones-raciales-${especie}-secundaria`}
+                placeholder="Ej. 5/8"
+                pattern="[0-9]+\s*/\s*[0-9]+"
+              />
+              <small>La app no deduce ni completa la fracción faltante.</small>
+              <datalist id={`fracciones-raciales-${especie}-secundaria`}>
+                {catalogo.fraccionesRaciales.map((fraccion) => <option key={fraccion} value={fraccion} />)}
+              </datalist>
+            </label>
+          </div>
+        )}
+
+        {formulario.composicionRacial && !formulario.fraccionRazaPrincipal && !formulario.fraccionRazaSecundaria && (
+          <p className="form-help">Composición histórica registrada: {formulario.composicionRacial}</p>
         )}
       </details>
     </section>

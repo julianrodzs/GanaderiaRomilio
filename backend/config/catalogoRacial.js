@@ -1,4 +1,4 @@
-const GRUPOS_RACIALES = [
+const GRUPOS_RACIALES_BOVINOS = [
     'Cebuino',
     'Europeo de carne',
     'Tropical adaptado',
@@ -19,7 +19,7 @@ const GRADOS_RACIALES = [
     'Desconocido'
 ];
 
-const RAZAS = [
+const RAZAS_BOVINAS = [
     'Brahman',
     'Nelore',
     'Angus',
@@ -56,6 +56,31 @@ const RAZAS = [
     'Desconocida'
 ];
 
+const GRUPOS_RACIALES_PORCINOS = [
+    'Comercial internacional',
+    'Criollo / Mestizo',
+    'Línea comercial / Híbrido',
+    'Otro',
+    'Desconocido'
+];
+
+const RAZAS_PORCINAS = [
+    'Large White (Yorkshire)',
+    'Landrace',
+    'Duroc',
+    'Hampshire',
+    'Pietrain',
+    'Berkshire',
+    'Chester White',
+    'Poland China',
+    'Spotted',
+    'Criollo',
+    'Línea comercial / Híbrido',
+    'Mestizo / Cruce no definido',
+    'Otra',
+    'Desconocida'
+];
+
 const VARIEDADES_POR_RAZA = {
     Brahman: ['Gris', 'Rojo'],
     Angus: ['Negro', 'Rojo'],
@@ -63,6 +88,7 @@ const VARIEDADES_POR_RAZA = {
 };
 
 const COMPOSICIONES_RACIALES = ['50/50', '3/4 - 1/4', '5/8 - 3/8', '7/8 - 1/8', 'Otra'];
+const FRACCIONES_RACIALES = ['1/8', '1/4', '3/8', '1/2', '5/8', '3/4', '7/8'];
 
 const RAZAS_POR_TIPO = {
     cebuino: ['Brahman', 'Nelore', 'Gyr', 'Guzerat', 'Indubrasil', 'Sardo Negro', 'Sindi'],
@@ -77,9 +103,14 @@ const RAZAS_POR_TIPO = {
 
 module.exports = {
     COMPOSICIONES_RACIALES,
+    FRACCIONES_RACIALES,
     GRADOS_RACIALES,
-    GRUPOS_RACIALES,
-    RAZAS,
+    GRUPOS_RACIALES: GRUPOS_RACIALES_BOVINOS,
+    GRUPOS_RACIALES_BOVINOS,
+    GRUPOS_RACIALES_PORCINOS,
+    RAZAS: RAZAS_BOVINAS,
+    RAZAS_BOVINAS,
+    RAZAS_PORCINAS,
     RAZAS_POR_TIPO,
     VARIEDADES_POR_RAZA
 };

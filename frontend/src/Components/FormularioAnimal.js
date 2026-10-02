@@ -22,6 +22,8 @@ const estadoInicial = {
   variedadRacial: '',
   descripcionRacial: '',
   composicionRacial: '',
+  fraccionRazaPrincipal: '',
+  fraccionRazaSecundaria: '',
   madreDiio: '',
   padreDiio: '',
   padre: '',
@@ -137,7 +139,17 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       [name]: value,
       ...(name === 'especie' ? {
         categoria: '',
-        etapaProductiva: value === 'Porcino' ? actual.etapaProductiva : ''
+        etapaProductiva: value === 'Porcino' ? actual.etapaProductiva : '',
+        raza: '',
+        razaPrincipal: '',
+        razaSecundaria: '',
+        grupoRacial: '',
+        gradoRacial: '',
+        variedadRacial: '',
+        descripcionRacial: '',
+        composicionRacial: '',
+        fraccionRazaPrincipal: '',
+        fraccionRazaSecundaria: ''
       } : {})
     }));
   };
@@ -250,17 +262,10 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
             </select>
           </label>
 
-          {formulario.especie === 'Porcino' && (
-            <label>
-              Raza
-              <input name="raza" value={formulario.raza} onChange={actualizarCampo} />
-            </label>
-          )}
+          <span />
         </div>
 
-        {formulario.especie === 'Bovino' && (
-          <CamposRazaBovina formulario={formulario} setFormulario={setFormulario} />
-        )}
+        <CamposRazaBovina formulario={formulario} setFormulario={setFormulario} especie={formulario.especie} />
 
         <div className="form-grid">
           <label>

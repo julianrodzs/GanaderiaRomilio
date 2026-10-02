@@ -1,4 +1,4 @@
-# Razas bovinas y descendencia
+# Razas bovinas, porcinas y descendencia
 
 ## Principios
 
@@ -16,9 +16,12 @@ La cantidad de crías nunca se guarda como contador en `Animal`. Se deriva de `m
 - `variedadRacial`: variedad opcional, por ejemplo Brahman gris o rojo.
 - `descripcionRacial`: descripción libre conservada.
 - `composicionRacial`: composición opcional cuando el productor la conoce.
+- `fraccionRazaPrincipal` y `fraccionRazaSecundaria`: fracciones opcionales por raza, por ejemplo `3/8` y `5/8`. Son informativas y no cambian ninguna regla productiva.
 
 El catálogo vive en `backend/config/catalogoRacial.js` y las reglas en `backend/services/raza-service.js`.
-El frontend obtiene el catálogo mediante `GET /api/animales/catalogos/razas`; no replica la lista en cada formulario.
+El frontend obtiene el catálogo mediante `GET /api/animales/catalogos/razas?especie=Bovino|Porcino`; no replica la lista en cada formulario.
+
+El catálogo porcino incluye como núcleo `Large White (Yorkshire)`, `Landrace`, `Duroc`, `Hampshire` y `Pietrain`, además de `Berkshire`, `Chester White`, `Poland China`, `Spotted`, `Criollo`, líneas comerciales y valores de compatibilidad. La selección se basó en la distribución internacional descrita por FAO y en los catálogos educativos de razas porcinas de Oklahoma State University Extension.
 
 ### Reglas importantes
 
@@ -28,6 +31,8 @@ El frontend obtiene el catálogo mediante `GET /api/animales/catalogos/razas`; n
 - Brahman con Senepol se clasifica como `Cebú × Tropical adaptado`.
 - Brangus, Simbrah, Beefmaster, Charbray y Santa Gertrudis se clasifican como `Sintético`.
 - Un texto no reconocido se conserva y queda con raza principal `Otra`; no se adivina.
+- `Yorkshire` y `Large White` se normalizan a `Large White (Yorkshire)`.
+- Las fracciones se reducen a su forma canónica (`10/16` pasa a `5/8`), pero la app no deduce la fracción faltante ni exige que ambas sumen uno.
 
 ## Migración segura
 
@@ -36,6 +41,8 @@ La migración solo completa campos estructurados faltantes. Nunca modifica `Anim
 ```bash
 npm run migrate:razas:check
 npm run migrate:razas
+npm run migrate:razas-porcinas:check
+npm run migrate:razas-porcinas
 ```
 
 Ejecutar primero el modo de revisión. Los casos ambiguos y no reconocidos aparecen separados en el resumen para revisión manual.
@@ -57,7 +64,7 @@ El endpoint histórico `/api/genealogia/animal/:animalId/descendencia` se conser
 
 ## Reportes
 
-`GET /api/reportes/bovinos/razas` entrega distribución por grupo y detalle racial.
+`GET /api/reportes/razas?especie=Bovino|Porcino|Todos` entrega distribución por especie, grupo y detalle racial. `GET /api/reportes/bovinos/razas` se conserva por compatibilidad.
 
 `GET /api/reportes/bovinos/descendencia?fechaInicio=&fechaFin=` entrega:
 
@@ -77,6 +84,8 @@ La hoja `INVENTARIO` acepta opcionalmente:
 - `GRADO_RACIAL`
 - `VARIEDAD_RACIAL`
 - `COMPOSICION_RACIAL`
+- `FRACCION_RAZA_PRINCIPAL`
+- `FRACCION_RAZA_SECUNDARIA`
 - `MADRE_DIIO`
 - `PADRE_DIIO`
 
@@ -85,3 +94,8 @@ Si el padre o la madre existen, la segunda pasada crea la relación interna. Si 
 ## Índices MongoDB
 
 Los índices de parentesco incluyen organización y finca, junto con `madre`, `padre`, `madreDiio`, `padreDiio` y `fechaNacimiento`. La consulta racial usa un índice por organización, finca, especie y grupo racial.
+
+## Referencias del catálogo porcino
+
+- FAO, *The State of the World's Animal Genetic Resources for Food and Agriculture*: https://www.fao.org/4/a1250e/a1250e.pdf
+- Oklahoma State University Extension, *Marshall County Fair Livestock Exhibits*: https://extension.okstate.edu/county/marshall/county-fair/marshall-county-fair-livestock-exhibits

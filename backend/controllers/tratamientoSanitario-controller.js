@@ -4,7 +4,7 @@ const {
     crearAplicacionSanitaria,
     eliminarAplicacionSanitariaCreada,
     normalizarIds,
-    validarAnimalesSanidad
+    resolverAlcanceSanitario
 } = require('../services/aplicacionSanitaria-service');
 const { actualizarEstadoSanitarioAnimales } = require('../services/estadoSanitario-service');
 const {
@@ -32,6 +32,7 @@ const notificarTratamiento = (req, tratamiento, tipo, titulo, mensaje, metadata 
 
 const poblarTratamiento = (query) => query
     .populate('animales', 'diio identificadorFinca nombre especie estado estadoSanitario categoria')
+    .populate('lote', 'codigo nombre especie estado')
     .populate('registradoPor', 'nombre apellido correo')
     .populate('asignadoA', 'nombre apellido correo rol estado');
 
@@ -81,6 +82,11 @@ const registrarAplicacion = async (tratamiento, datos, usuarioId) => {
 
     const fechaAplicacion = datos.fechaAplicacion || new Date();
     const numeroAplicacion = tratamiento.aplicacionesRealizadas + 1;
+    const responsable = await validarUsuarioAsignable(
+        datos.responsableUsuario || tratamiento.asignadoA?._id || tratamiento.asignadoA,
+        'Sanidad'
+    );
+    const responsableNombre = [responsable.nombre, responsable.apellido].filter(Boolean).join(' ') || responsable.correo;
     const aplicacion = await crearAplicacionSanitaria({
         animales: tratamiento.animales,
         especie: tratamiento.especie,
@@ -89,11 +95,13 @@ const registrarAplicacion = async (tratamiento, datos, usuarioId) => {
         tipo: 'Tratamiento veterinario',
         dosis: datos.dosis || tratamiento.dosis,
         viaAplicacion: datos.viaAplicacion || tratamiento.viaAplicacion,
-        responsable: datos.responsable || tratamiento.responsable,
+        responsable: responsableNombre,
+        responsableUsuario: responsable._id,
         motivo: tratamiento.motivo,
         observaciones: datos.observaciones,
         naturaleza: 'Tratamiento',
         tratamiento: tratamiento._id,
+        lote: tratamiento.lote?._id || tratamiento.lote,
         numeroAplicacion,
         totalAplicaciones: tratamiento.cantidadAplicaciones
     }, usuarioId, { soloActivos: true });
@@ -153,11 +161,16 @@ tratamientoSanitarioCtrl.createTratamiento = async (req, res) => {
 
     try {
         await validarUsuarioAsignable(req.body.asignadoA, 'Sanidad');
-        const validacion = await validarAnimalesSanidad(req.body.animales, req.body.especie, { soloActivos: true });
+        const validacion = await resolverAlcanceSanitario({
+            animales: req.body.animales,
+            lote: req.body.lote,
+            especie: req.body.especie
+        }, { soloActivos: true });
         tratamiento = new TratamientoSanitario({
             ...req.body,
             animales: validacion.ids,
             especie: validacion.especie,
+            lote: validacion.lote?._id || null,
             aplicacionesRealizadas: 0,
             proximaAplicacion: null,
             fechaFin: null,
@@ -172,7 +185,7 @@ tratamientoSanitarioCtrl.createTratamiento = async (req, res) => {
                 fechaAplicacion: req.body.fechaPrimeraAplicacion || req.body.fechaInicio,
                 dosis: req.body.dosis,
                 viaAplicacion: req.body.viaAplicacion,
-                responsable: req.body.responsable,
+                responsableUsuario: req.body.asignadoA,
                 observaciones: req.body.observacionesPrimeraAplicacion
             }, req.usuario?.id);
         }
@@ -225,7 +238,7 @@ tratamientoSanitarioCtrl.updateTratamiento = async (req, res) => {
         }
 
         const campos = [
-            'animales', 'motivo', 'diagnostico', 'producto', 'dosis', 'viaAplicacion',
+            'animales', 'lote', 'motivo', 'diagnostico', 'producto', 'dosis', 'viaAplicacion',
             'fechaInicio', 'cantidadAplicaciones', 'intervaloDias', 'responsable',
             'veterinario', 'observaciones', 'asignadoA'
         ];
@@ -234,16 +247,26 @@ tratamientoSanitarioCtrl.updateTratamiento = async (req, res) => {
             await validarUsuarioAsignable(req.body.asignadoA, 'Sanidad');
         }
 
-        if (req.body.animales) {
+        const modificaAlcance = Object.prototype.hasOwnProperty.call(req.body, 'animales')
+            || Object.prototype.hasOwnProperty.call(req.body, 'lote');
+        if (modificaAlcance && tratamiento.aplicacionesRealizadas > 0) {
             const idsActuales = normalizarIds(tratamiento.animales).sort().join(',');
-            const idsNuevos = normalizarIds(req.body.animales).sort().join(',');
-            if (tratamiento.aplicacionesRealizadas > 0 && idsActuales !== idsNuevos) {
+            const idsNuevos = normalizarIds(req.body.animales || tratamiento.animales).sort().join(',');
+            const loteActual = String(tratamiento.lote || '');
+            const loteNuevo = String(req.body.lote || '');
+            if (idsActuales !== idsNuevos || loteActual !== loteNuevo) {
                 return res.status(400).json({
-                    mensaje: 'No se pueden cambiar los animales después de registrar aplicaciones'
+                    mensaje: 'No se puede cambiar el lote ni los animales después de registrar aplicaciones'
                 });
             }
-            const validacion = await validarAnimalesSanidad(req.body.animales, tratamiento.especie, { soloActivos: true });
+        } else if (modificaAlcance) {
+            const validacion = await resolverAlcanceSanitario({
+                animales: req.body.animales || tratamiento.animales,
+                lote: req.body.lote,
+                especie: tratamiento.especie
+            }, { soloActivos: true });
             req.body.animales = validacion.ids;
+            req.body.lote = validacion.lote?._id || null;
         }
 
         campos.forEach((campo) => {

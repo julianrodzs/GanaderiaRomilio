@@ -448,7 +448,7 @@ export const obtenerDescendenciaAnimal = (animalId) => {
   return request(`/animales/${animalId}/descendencia`);
 };
 
-export const obtenerCatalogoRacial = () => request('/animales/catalogos/razas');
+export const obtenerCatalogoRacial = (especie = 'Bovino') => request(`/animales/catalogos/razas?especie=${encodeURIComponent(especie)}`);
 
 export const obtenerParentesco = ({ animalA, animalB }) => {
   const params = new URLSearchParams();
@@ -1051,6 +1051,8 @@ export const obtenerEficienciaEngorde = ({ fechaInicio, fechaFin, especie } = {}
 };
 
 export const obtenerReporteRazasBovinas = () => request('/reportes/bovinos/razas');
+
+export const obtenerReporteRazas = ({ especie = 'Todos' } = {}) => request(`/reportes/razas?especie=${encodeURIComponent(especie)}`);
 
 export const obtenerReporteDescendenciaBovina = ({ fechaInicio, fechaFin } = {}) => {
   const params = new URLSearchParams();

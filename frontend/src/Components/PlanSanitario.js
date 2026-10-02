@@ -11,6 +11,7 @@ import {
   eliminarPlanSanitario,
   obtenerAplicacionesSanitarias,
   obtenerAnimales,
+  obtenerLotes,
   obtenerPlanesSanitarios,
   obtenerTratamientoSanitario,
   obtenerTratamientosSanitarios,
@@ -65,6 +66,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
   const [tratamientos, setTratamientos] = useState([]);
   const [aplicaciones, setAplicaciones] = useState([]);
   const [animales, setAnimales] = useState([]);
+  const [lotes, setLotes] = useState([]);
   const [usuariosAsignables, setUsuariosAsignables] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -80,6 +82,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
   const [tratamientoCompletar, setTratamientoCompletar] = useState(null);
   const [mostrarCambioEstadoSanitario, setMostrarCambioEstadoSanitario] = useState(false);
   const [animalesPreseleccionados, setAnimalesPreseleccionados] = useState([]);
+  const [lotePreseleccionado, setLotePreseleccionado] = useState('');
   const [filtrosHistorial, setFiltrosHistorial] = useState(() => ({
     ...obtenerRangoMesActual(),
     animal: '',
@@ -93,17 +96,19 @@ const PlanSanitario = ({ soloLectura = false }) => {
     try {
       setCargando(true);
       setError('');
-      const [planesData, tratamientosData, aplicacionesData, animalesData, usuariosData] = await Promise.all([
+      const [planesData, tratamientosData, aplicacionesData, animalesData, lotesData, usuariosData] = await Promise.all([
         obtenerPlanesSanitarios({ especie }),
         obtenerTratamientosSanitarios({ especie }),
         obtenerAplicacionesSanitarias({ ...filtrosAplicados, especie }),
         obtenerAnimales({ especie }),
+        obtenerLotes({ especie, estado: 'ACTIVO' }),
         soloLectura ? Promise.resolve([]) : obtenerUsuariosAsignables('Sanidad')
       ]);
       setPlanes(planesData || []);
       setTratamientos(tratamientosData || []);
       setAplicaciones(aplicacionesData || []);
       setAnimales(animalesData || []);
+      setLotes(lotesData || []);
       setUsuariosAsignables(usuariosData || []);
     } catch (err) {
       setError(err.message);
@@ -123,6 +128,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
       sessionStorage.removeItem('ganaderiaAccionLote');
       setEspecie(accion.especie || 'Bovino');
       setAnimalesPreseleccionados(accion.animales || []);
+      setLotePreseleccionado(accion.loteId || '');
       setVistaFormulario('unica');
     } catch (_) { sessionStorage.removeItem('ganaderiaAccionLote'); }
   }, []);
@@ -133,12 +139,16 @@ const PlanSanitario = ({ soloLectura = false }) => {
     setVistaFormulario(null);
     setPlanSeleccionado(null);
     setTratamientoSeleccionado(null);
+    setAnimalesPreseleccionados([]);
+    setLotePreseleccionado('');
   };
 
   const cerrarFormulario = () => {
     setVistaFormulario(null);
     setPlanSeleccionado(null);
     setTratamientoSeleccionado(null);
+    setAnimalesPreseleccionados([]);
+    setLotePreseleccionado('');
     setErrorFormulario('');
   };
 
@@ -253,9 +263,10 @@ const PlanSanitario = ({ soloLectura = false }) => {
           error={errorFormulario}
           especie={especie}
           animalesOpciones={animalesActivos}
+          lotes={lotes}
           usuariosAsignables={usuariosAsignables}
         />
-        {planAplicacion && <RegistrarAplicacionSanitaria plan={planAplicacion} onCancelar={() => setPlanAplicacion(null)} onRegistrar={registrarPlan} guardando={guardando} error={errorFormulario} />}
+        {planAplicacion && <RegistrarAplicacionSanitaria plan={planAplicacion} usuariosAsignables={usuariosAsignables} onCancelar={() => setPlanAplicacion(null)} onRegistrar={registrarPlan} guardando={guardando} error={errorFormulario} />}
       </>
     );
   }
@@ -266,6 +277,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
         tratamientoInicial={tratamientoSeleccionado}
         especie={especie}
         animales={animalesActivos}
+        lotes={lotes}
         usuariosAsignables={usuariosAsignables}
         onGuardar={guardarTratamiento}
         onCancelar={cerrarFormulario}
@@ -280,7 +292,9 @@ const PlanSanitario = ({ soloLectura = false }) => {
       <FormularioAplicacionUnica
         especie={especie}
         animales={animalesActivos}
+        lotes={lotes}
         animalesIniciales={animalesPreseleccionados}
+        loteInicial={lotePreseleccionado}
         usuariosAsignables={usuariosAsignables}
         onGuardar={guardarAplicacionUnica}
         onCancelar={cerrarFormulario}
@@ -339,7 +353,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
             <thead><tr><th>Grupo</th><th>DIIO</th><th>Actividad</th><th>Producto</th><th>Responsable</th><th>Última aplicación</th><th>Frecuencia</th><th>Próxima aplicación</th><th>Estado</th>{!soloLectura && <th>Acciones</th>}</tr></thead>
             <tbody>{planesPagina.map((plan) => (
               <tr key={plan._id}>
-                <td>{plan.grupoGanado}</td><td>{plan.animales?.length ? nombresAnimales(plan.animales) : plan.animalDiio || '--'}</td><td>{plan.actividad}</td><td>{plan.producto}</td><td>{etiquetaUsuarioConRol(plan.asignadoA)}</td>
+                <td>{plan.lote ? `Lote ${plan.lote.codigo}` : plan.grupoGanado}</td><td>{plan.lote ? `${plan.lote.nombre} · alcance dinámico` : plan.animales?.length ? nombresAnimales(plan.animales) : plan.animalDiio || '--'}</td><td>{plan.actividad}</td><td>{plan.producto}</td><td>{etiquetaUsuarioConRol(plan.asignadoA)}</td>
                 <td>{formatearFecha(plan.ultimaAplicacionReal)}</td><td>{plan.frecuenciaCantidad} {plan.frecuenciaUnidad}</td><td>{formatearFecha(plan.proximaAplicacion)}</td>
                 <td><span className={`estado-badge estado-${plan.estado}`}>{plan.estado}</span></td>
                 {!soloLectura && (
@@ -369,7 +383,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
               const visual = estadoVisualTratamiento(tratamiento);
               return (
                 <tr key={tratamiento._id}>
-                  <td>{tratamiento.motivo}</td><td title={nombresAnimales(tratamiento.animales)}>{tratamiento.animales?.length || 0} · {nombresAnimales(tratamiento.animales)}</td><td>{tratamiento.producto}</td><td>{etiquetaUsuarioConRol(tratamiento.asignadoA)}</td><td>{formatearFecha(tratamiento.fechaInicio)}</td><td>{tratamiento.aplicacionesRealizadas} / {tratamiento.cantidadAplicaciones}</td><td>{formatearFecha(tratamiento.proximaAplicacion)}</td>
+                  <td>{tratamiento.motivo}</td><td title={nombresAnimales(tratamiento.animales)}>{tratamiento.lote ? `Lote ${tratamiento.lote.codigo} · ` : ''}{tratamiento.animales?.length || 0} · {nombresAnimales(tratamiento.animales)}</td><td>{tratamiento.producto}</td><td>{etiquetaUsuarioConRol(tratamiento.asignadoA)}</td><td>{formatearFecha(tratamiento.fechaInicio)}</td><td>{tratamiento.aplicacionesRealizadas} / {tratamiento.cantidadAplicaciones}</td><td>{formatearFecha(tratamiento.proximaAplicacion)}</td>
                   <td><span className={`estado-badge estado-${tratamiento.estado} ${visual.includes('pendiente') || visual.includes('hoy') ? 'estado-atencion' : ''}`}>{visual}</span></td>
                   <td>
                     <div className="acciones-tabla acciones-iconos-sanidad">
@@ -406,7 +420,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
                 <table>
               <thead><tr><th>Fecha</th><th>Animal(es)</th><th>Producto</th><th>Tipo</th><th>Dosis</th><th>Naturaleza</th><th>Responsable</th><th>Origen</th><th>Acciones</th></tr></thead>
               <tbody>{aplicacionesPagina.map((aplicacion) => (
-                <tr key={aplicacion._id}><td>{formatearFecha(aplicacion.fechaAplicacion)}</td><td title={nombresAnimales(aplicacion.animales)}>{nombresAnimales(aplicacion.animales)}</td><td>{aplicacion.producto}</td><td>{aplicacion.tipo || '--'}</td><td>{aplicacion.dosis || '--'}</td><td><span className="naturaleza-sanitaria-badge">{etiquetaNaturaleza(aplicacion.naturaleza)}</span></td><td>{aplicacion.responsable || '--'}</td><td>{aplicacion.planSanitario ? 'Plan sanitario' : aplicacion.tratamiento ? 'Tratamiento' : 'Registro directo'}</td><td><div className="acciones-tabla acciones-iconos-sanidad"><button type="button" title="Ver detalle" aria-label="Ver detalle" onClick={() => setDetalleAplicacion(aplicacion)}>⊙</button></div></td></tr>
+                <tr key={aplicacion._id}><td>{formatearFecha(aplicacion.fechaAplicacion)}</td><td title={nombresAnimales(aplicacion.animales)}>{aplicacion.lote ? `Lote ${aplicacion.lote.codigo} · ` : ''}{nombresAnimales(aplicacion.animales)}</td><td>{aplicacion.producto}</td><td>{aplicacion.tipo || '--'}</td><td>{aplicacion.dosis || '--'}</td><td><span className="naturaleza-sanitaria-badge">{etiquetaNaturaleza(aplicacion.naturaleza)}</span></td><td>{aplicacion.responsable || '--'}</td><td>{aplicacion.planSanitario ? 'Plan sanitario' : aplicacion.tratamiento ? 'Tratamiento' : 'Registro directo'}</td><td><div className="acciones-tabla acciones-iconos-sanidad"><button type="button" title="Ver detalle" aria-label="Ver detalle" onClick={() => setDetalleAplicacion(aplicacion)}>⊙</button></div></td></tr>
               ))}</tbody>
                 </table>
               </div>
@@ -415,14 +429,14 @@ const PlanSanitario = ({ soloLectura = false }) => {
         </>
       )}
 
-      {planAplicacion && <RegistrarAplicacionSanitaria plan={planAplicacion} onCancelar={() => setPlanAplicacion(null)} onRegistrar={registrarPlan} guardando={guardando} error={errorFormulario} />}
-      {tratamientoAplicacion && <RegistrarAplicacionTratamiento tratamiento={tratamientoAplicacion} onCancelar={() => setTratamientoAplicacion(null)} onRegistrar={registrarTratamiento} guardando={guardando} error={errorFormulario} />}
+      {planAplicacion && <RegistrarAplicacionSanitaria plan={planAplicacion} usuariosAsignables={usuariosAsignables} onCancelar={() => setPlanAplicacion(null)} onRegistrar={registrarPlan} guardando={guardando} error={errorFormulario} />}
+      {tratamientoAplicacion && <RegistrarAplicacionTratamiento tratamiento={tratamientoAplicacion} usuariosAsignables={usuariosAsignables} onCancelar={() => setTratamientoAplicacion(null)} onRegistrar={registrarTratamiento} guardando={guardando} error={errorFormulario} />}
       {tratamientoCompletar && <CompletarTratamientoSanitario tratamiento={tratamientoCompletar} onCancelar={() => setTratamientoCompletar(null)} onGuardar={completarTratamiento} guardando={guardando} error={errorFormulario} />}
       {mostrarCambioEstadoSanitario && <FormularioEstadoSanitario animales={animalesActivos} onCancelar={() => setMostrarCambioEstadoSanitario(false)} onGuardar={guardarCambioEstadoSanitario} guardando={guardando} error={errorFormulario} />}
       {detalleTratamiento && (
         <div className="modal-backdrop"><section className="modal-panel detalle-sanidad-modal">
           <div className="panel-title"><div><p className="eyebrow">Tratamiento</p><h2>{detalleTratamiento.tratamiento.producto}</h2></div><button className="boton-link" type="button" onClick={() => setDetalleTratamiento(null)}>Cerrar</button></div>
-          <div className="detalle-sanidad-grid"><article><span>Motivo</span><strong>{detalleTratamiento.tratamiento.motivo}</strong></article><article><span>Estado</span><strong>{detalleTratamiento.tratamiento.estado}</strong></article><article><span>Animales</span><strong>{nombresAnimales(detalleTratamiento.tratamiento.animales)}</strong></article><article><span>Progreso</span><strong>{detalleTratamiento.tratamiento.aplicacionesRealizadas} / {detalleTratamiento.tratamiento.cantidadAplicaciones}</strong></article></div>
+          <div className="detalle-sanidad-grid"><article><span>Motivo</span><strong>{detalleTratamiento.tratamiento.motivo}</strong></article><article><span>Estado</span><strong>{detalleTratamiento.tratamiento.estado}</strong></article>{detalleTratamiento.tratamiento.lote && <article><span>Lote de origen</span><strong>{detalleTratamiento.tratamiento.lote.codigo} · {detalleTratamiento.tratamiento.lote.nombre}</strong></article>}<article><span>Animales</span><strong>{nombresAnimales(detalleTratamiento.tratamiento.animales)}</strong></article><article><span>Progreso</span><strong>{detalleTratamiento.tratamiento.aplicacionesRealizadas} / {detalleTratamiento.tratamiento.cantidadAplicaciones}</strong></article></div>
           <ContenidoPaginado datos={detalleTratamiento.aplicaciones || []} clavePaginacion={`tratamiento-${detalleTratamiento.tratamiento._id}-aplicaciones`}>
             {(aplicacionesPagina) => (
               <div className="tabla-scroll tabla-dinamica detalle-aplicaciones-tabla"><table><thead><tr><th>Número</th><th>Fecha real</th><th>Dosis</th><th>Responsable</th></tr></thead><tbody>{aplicacionesPagina.map((aplicacion) => <tr key={aplicacion._id}><td>{aplicacion.numeroAplicacion}</td><td>{formatearFecha(aplicacion.fechaAplicacion)}</td><td>{aplicacion.dosis || '--'}</td><td>{aplicacion.responsable || '--'}</td></tr>)}</tbody></table></div>
@@ -433,7 +447,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
       {detalleAplicacion && (
         <div className="modal-backdrop"><section className="modal-panel detalle-sanidad-modal">
           <div className="panel-title"><div><p className="eyebrow">{etiquetaNaturaleza(detalleAplicacion.naturaleza)}</p><h2>{detalleAplicacion.producto}</h2></div><button className="boton-link" type="button" onClick={() => setDetalleAplicacion(null)}>Cerrar</button></div>
-          <div className="detalle-sanidad-grid"><article><span>Fecha</span><strong>{formatearFecha(detalleAplicacion.fechaAplicacion)}</strong></article><article><span>Animales</span><strong>{nombresAnimales(detalleAplicacion.animales)}</strong></article><article><span>Dosis</span><strong>{detalleAplicacion.dosis || '--'}</strong></article><article><span>Vía</span><strong>{detalleAplicacion.viaAplicacion || '--'}</strong></article><article><span>Responsable</span><strong>{detalleAplicacion.responsable || '--'}</strong></article><article><span>Motivo</span><strong>{detalleAplicacion.motivo || '--'}</strong></article></div>
+          <div className="detalle-sanidad-grid"><article><span>Fecha</span><strong>{formatearFecha(detalleAplicacion.fechaAplicacion)}</strong></article>{detalleAplicacion.lote && <article><span>Lote</span><strong>{detalleAplicacion.lote.codigo} · {detalleAplicacion.lote.nombre}</strong></article>}<article><span>Animales</span><strong>{nombresAnimales(detalleAplicacion.animales)}</strong></article><article><span>Dosis</span><strong>{detalleAplicacion.dosis || '--'}</strong></article><article><span>Vía</span><strong>{detalleAplicacion.viaAplicacion || '--'}</strong></article><article><span>Responsable</span><strong>{detalleAplicacion.responsable || '--'}</strong></article><article><span>Motivo</span><strong>{detalleAplicacion.motivo || '--'}</strong></article></div>
         </section></div>
       )}
     </section>

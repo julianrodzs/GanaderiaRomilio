@@ -258,6 +258,8 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             razaSecundaria: req.body.razaSecundaria,
             gradoRacial: req.body.gradoRacial,
             descripcionRacial: req.body.descripcionRacial || req.body.raza,
+            fraccionRazaPrincipal: req.body.fraccionRazaPrincipal,
+            fraccionRazaSecundaria: req.body.fraccionRazaSecundaria,
             especie: madre.especie || 'Bovino',
             madre: madre._id,
             madreDiio: madre.diio || madre.identificadorFinca,

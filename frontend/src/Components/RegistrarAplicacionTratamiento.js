@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
+import { etiquetaUsuarioConRol } from '../utils/usuarios';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
-const RegistrarAplicacionTratamiento = ({ tratamiento, onCancelar, onRegistrar, guardando, error }) => {
+const RegistrarAplicacionTratamiento = ({ tratamiento, usuariosAsignables = [], onCancelar, onRegistrar, guardando, error }) => {
   const esUltimaAplicacion = Number(tratamiento?.aplicacionesRealizadas || 0) + 1 >= Number(tratamiento?.cantidadAplicaciones || 1);
+  const asignadoActual = tratamiento?.asignadoA?._id || tratamiento?.asignadoA || '';
+  const responsableInicial = usuariosAsignables.some((usuario) => usuario._id === asignadoActual) ? asignadoActual : '';
   const [formulario, setFormulario] = useState({
     fechaAplicacion: fechaHoy(),
     dosis: tratamiento?.dosis || '',
     viaAplicacion: tratamiento?.viaAplicacion || '',
-    responsable: tratamiento?.responsable || '',
+    responsableUsuario: responsableInicial,
     observaciones: '',
     estadoSanitarioFinal: 'No modificar',
     motivoCambioEstadoSanitario: ''
@@ -30,7 +33,7 @@ const RegistrarAplicacionTratamiento = ({ tratamiento, onCancelar, onRegistrar, 
           <button className="boton-link" type="button" onClick={onCancelar}>Cerrar</button>
         </div>
         <div className="aplicacion-sanitaria-resumen">
-          <span>{tratamiento.animales?.length || 0} animal(es)</span>
+          <span>{tratamiento.lote ? `Lote ${tratamiento.lote.codigo} · ` : ''}{tratamiento.animales?.length || 0} animal(es)</span>
           <strong>{tratamiento.producto} · {tratamiento.motivo}</strong>
         </div>
         <form className="form-card" onSubmit={(evento) => { evento.preventDefault(); onRegistrar(formulario); }}>
@@ -42,7 +45,12 @@ const RegistrarAplicacionTratamiento = ({ tratamiento, onCancelar, onRegistrar, 
             </label>
             <label>
               Responsable
-              <input name="responsable" value={formulario.responsable} onChange={actualizar} />
+              <select name="responsableUsuario" value={formulario.responsableUsuario} onChange={actualizar} required>
+                <option value="">Seleccionar responsable</option>
+                {usuariosAsignables.map((usuario) => (
+                  <option key={usuario._id} value={usuario._id}>{etiquetaUsuarioConRol(usuario)}</option>
+                ))}
+              </select>
             </label>
             <label>
               Dosis
@@ -82,7 +90,7 @@ const RegistrarAplicacionTratamiento = ({ tratamiento, onCancelar, onRegistrar, 
           )}
           <div className="form-actions">
             <button className="boton-link" type="button" onClick={onCancelar}>Cancelar</button>
-            <button className="boton-primario compacto" type="submit" disabled={guardando}>
+            <button className="boton-primario compacto" type="submit" disabled={guardando || !formulario.responsableUsuario}>
               {guardando ? 'Registrando...' : 'Confirmar aplicación'}
             </button>
           </div>

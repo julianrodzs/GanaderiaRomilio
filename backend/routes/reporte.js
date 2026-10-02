@@ -57,6 +57,7 @@ router.get('/potreros/rendimiento', analiticaProductiva, getRendimientoPotreros)
 router.get('/potreros/por-pasto', analiticaProductiva, getRendimientoPorPasto);
 router.get('/forrajes/rendimiento', analiticaProductiva, getRendimientoForrajes);
 router.get('/bovinos/razas', analiticaProductiva, getRazasBovinas);
+router.get('/razas', analiticaProductiva, getRazasBovinas);
 router.get('/bovinos/descendencia', analiticaProductiva, getDescendenciaBovina);
 router.get('/configuracion-productiva', analiticaProductiva, getConfiguracionProductiva);
 router.put('/configuracion-productiva', analiticaProductiva, autorizarPermiso('reportes.configurar'), updateConfiguracionProductiva);

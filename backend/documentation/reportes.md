@@ -2523,13 +2523,14 @@ La asignacion es historica: si una rotacion cruza un cambio de cobertura, el ser
 
 Estos reportes describen desempeno observado. No califican un pasto como mejor, no atribuyen causalidad y no mezclan GMD con la evaluacion de cobertura.
 
-## Razas bovinas
+## Razas bovinas y porcinas
 
 ```text
+GET /api/reportes/razas?especie=Bovino|Porcino|Todos
 GET /api/reportes/bovinos/razas
 ```
 
-Fuente: inventario bovino. Usa `grupoRacial` para el primer nivel y la combinación `razaPrincipal × razaSecundaria` para el detalle. Los animales históricos sin estructura aparecen como pendientes de normalización y no se reinterpretan destructivamente.
+Fuente: inventario animal. Usa especie y `grupoRacial` para el primer nivel, y la combinación de fracción, `razaPrincipal` y `razaSecundaria` para el detalle. Los animales históricos sin estructura aparecen como pendientes de normalización y no se reinterpretan destructivamente. La ruta bovina se mantiene por compatibilidad.
 
 ## Descendencia bovina
 

@@ -6,6 +6,8 @@ const fechaHoy = () => new Date().toISOString().slice(0, 10);
 const fechaInput = (fecha) => fecha ? new Date(fecha).toISOString().slice(0, 10) : '';
 
 const crearEstado = (tratamiento, especie) => ({
+  tipoAlcance: tratamiento?.lote ? 'lote' : 'animales',
+  lote: tratamiento?.lote?._id || tratamiento?.lote || '',
   animales: (tratamiento?.animales || []).map((animal) => animal?._id || animal),
   especie: tratamiento?.especie || especie,
   motivo: tratamiento?.motivo || '',
@@ -31,6 +33,7 @@ const FormularioTratamientoSanitario = ({
   tratamientoInicial,
   especie,
   animales,
+  lotes = [],
   usuariosAsignables = [],
   onGuardar,
   onCancelar,
@@ -43,13 +46,26 @@ const FormularioTratamientoSanitario = ({
 
   const actualizar = (evento) => {
     const { name, value, type, checked } = evento.target;
-    setFormulario((actual) => ({ ...actual, [name]: type === 'checkbox' ? checked : value }));
+    setFormulario((actual) => {
+      if (name === 'tipoAlcance') {
+        return {
+          ...actual,
+          tipoAlcance: value,
+          lote: value === 'lote' ? actual.lote : '',
+          animales: value === 'animales' ? actual.animales : []
+        };
+      }
+      return { ...actual, [name]: type === 'checkbox' ? checked : value };
+    });
   };
 
   const enviar = (evento) => {
     evento.preventDefault();
+    const { tipoAlcance, ...datos } = formulario;
     onGuardar({
-      ...formulario,
+      ...datos,
+      lote: tipoAlcance === 'lote' ? formulario.lote : null,
+      animales: tipoAlcance === 'animales' ? formulario.animales : [],
       cantidadAplicaciones: Number(formulario.cantidadAplicaciones),
       intervaloDias: formulario.intervaloDias ? Number(formulario.intervaloDias) : undefined
     });
@@ -68,16 +84,37 @@ const FormularioTratamientoSanitario = ({
       <form className="form-card tratamiento-form" onSubmit={enviar}>
         {error && <div className="alerta-formulario">{error}</div>}
 
-        <label>
-          Animales
-          <SelectorAnimalesSanidad
-            animales={animales}
-            seleccionados={formulario.animales}
-            onChange={(seleccionados) => setFormulario((actual) => ({ ...actual, animales: seleccionados }))}
-            disabled={bloquearAnimales}
-          />
-          {bloquearAnimales && <small className="texto-ayuda-formulario">Los animales quedan fijos después de la primera aplicación.</small>}
-        </label>
+        <div className="form-grid">
+          <label>
+            Alcance del tratamiento
+            <select name="tipoAlcance" value={formulario.tipoAlcance} onChange={actualizar} disabled={bloquearAnimales}>
+              <option value="animales">Animales específicos</option>
+              <option value="lote">Lote completo</option>
+            </select>
+          </label>
+          {formulario.tipoAlcance === 'lote' && (
+            <label>
+              Lote
+              <select name="lote" value={formulario.lote} onChange={actualizar} required disabled={bloquearAnimales}>
+                <option value="">Seleccionar lote activo</option>
+                {lotes.map((lote) => <option key={lote._id} value={lote._id}>{lote.codigo} · {lote.nombre} · {lote.cantidadAnimales || 0} animales</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+
+        {formulario.tipoAlcance === 'animales' && (
+          <label>
+            Animales
+            <SelectorAnimalesSanidad
+              animales={animales}
+              seleccionados={formulario.animales}
+              onChange={(seleccionados) => setFormulario((actual) => ({ ...actual, animales: seleccionados }))}
+              disabled={bloquearAnimales}
+            />
+          </label>
+        )}
+        {bloquearAnimales && <small className="texto-ayuda-formulario">El alcance queda fijo después de la primera aplicación.</small>}
 
         <div className="form-grid">
           <label>
@@ -205,7 +242,7 @@ const FormularioTratamientoSanitario = ({
 
         <div className="form-actions">
           <button className="boton-link" type="button" onClick={onCancelar}>Cancelar</button>
-          <button className="boton-primario compacto" type="submit" disabled={guardando || formulario.animales.length === 0}>
+          <button className="boton-primario compacto" type="submit" disabled={guardando || (formulario.tipoAlcance === 'animales' ? formulario.animales.length === 0 : !formulario.lote)}>
             {guardando ? 'Guardando...' : editando ? 'Actualizar tratamiento' : 'Guardar tratamiento'}
           </button>
         </div>

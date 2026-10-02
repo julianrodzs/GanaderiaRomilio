@@ -4,8 +4,10 @@ import { etiquetaUsuarioConRol } from '../utils/usuarios';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 
-const FormularioAplicacionUnica = ({ especie, animales, animalesIniciales = [], usuariosAsignables = [], onGuardar, onCancelar, guardando, error }) => {
+const FormularioAplicacionUnica = ({ especie, animales, lotes = [], animalesIniciales = [], loteInicial = '', usuariosAsignables = [], onGuardar, onCancelar, guardando, error }) => {
   const [formulario, setFormulario] = useState({
+    tipoAlcance: loteInicial ? 'lote' : 'animales',
+    lote: loteInicial,
     animales: animalesIniciales,
     especie,
     fechaAplicacion: fechaHoy(),
@@ -20,7 +22,26 @@ const FormularioAplicacionUnica = ({ especie, animales, animalesIniciales = [], 
 
   const actualizar = (evento) => {
     const { name, value } = evento.target;
-    setFormulario((actual) => ({ ...actual, [name]: value }));
+    setFormulario((actual) => {
+      if (name === 'tipoAlcance') {
+        return {
+          ...actual,
+          tipoAlcance: value,
+          lote: value === 'lote' ? actual.lote : '',
+          animales: value === 'animales' ? actual.animales : []
+        };
+      }
+      return { ...actual, [name]: value };
+    });
+  };
+
+  const guardar = () => {
+    const { tipoAlcance, ...datos } = formulario;
+    onGuardar({
+      ...datos,
+      lote: tipoAlcance === 'lote' ? formulario.lote : null,
+      animales: tipoAlcance === 'animales' ? formulario.animales : []
+    });
   };
 
   return (
@@ -33,16 +54,37 @@ const FormularioAplicacionUnica = ({ especie, animales, animalesIniciales = [], 
         <button className="boton-link" type="button" onClick={onCancelar}>Volver</button>
       </div>
 
-      <form className="form-card" onSubmit={(evento) => { evento.preventDefault(); onGuardar(formulario); }}>
+      <form className="form-card" onSubmit={(evento) => { evento.preventDefault(); guardar(); }}>
         {error && <div className="alerta-formulario">{error}</div>}
-        <label>
-          Animales
-          <SelectorAnimalesSanidad
-            animales={animales}
-            seleccionados={formulario.animales}
-            onChange={(seleccionados) => setFormulario((actual) => ({ ...actual, animales: seleccionados }))}
-          />
-        </label>
+        <div className="form-grid">
+          <label>
+            Alcance de la aplicación
+            <select name="tipoAlcance" value={formulario.tipoAlcance} onChange={actualizar}>
+              <option value="animales">Animales específicos</option>
+              <option value="lote">Lote completo</option>
+            </select>
+          </label>
+          {formulario.tipoAlcance === 'lote' && (
+            <label>
+              Lote
+              <select name="lote" value={formulario.lote} onChange={actualizar} required>
+                <option value="">Seleccionar lote activo</option>
+                {lotes.map((lote) => <option key={lote._id} value={lote._id}>{lote.codigo} · {lote.nombre} · {lote.cantidadAnimales || 0} animales</option>)}
+              </select>
+              <small>Se registrará en la bitácora de cada integrante actual del lote.</small>
+            </label>
+          )}
+        </div>
+        {formulario.tipoAlcance === 'animales' && (
+          <label>
+            Animales
+            <SelectorAnimalesSanidad
+              animales={animales}
+              seleccionados={formulario.animales}
+              onChange={(seleccionados) => setFormulario((actual) => ({ ...actual, animales: seleccionados }))}
+            />
+          </label>
+        )}
 
         <div className="form-grid">
           <label>
@@ -89,7 +131,7 @@ const FormularioAplicacionUnica = ({ especie, animales, animalesIniciales = [], 
 
         <div className="form-actions">
           <button className="boton-link" type="button" onClick={onCancelar}>Cancelar</button>
-          <button className="boton-primario compacto" type="submit" disabled={guardando || formulario.animales.length === 0}>
+          <button className="boton-primario compacto" type="submit" disabled={guardando || (formulario.tipoAlcance === 'animales' ? formulario.animales.length === 0 : !formulario.lote)}>
             {guardando ? 'Registrando...' : 'Registrar aplicación'}
           </button>
         </div>

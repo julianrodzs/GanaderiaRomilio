@@ -14,6 +14,8 @@ const aplicacionSanitariaSchema = new Schema(
             }
         },
         especie: { type: String, enum: ['Bovino', 'Porcino'], required: true, index: true },
+        lote: { type: Schema.Types.ObjectId, ref: 'Lote', default: null },
+        loteCodigo: { type: String, trim: true },
         fechaAplicacion: { type: Date, required: true },
         producto: { type: String, required: true, trim: true },
         tipo: { type: String, trim: true },
@@ -67,6 +69,7 @@ aplicacionSanitariaSchema.index({ organizacionId: 1, tratamiento: 1, numeroAplic
 });
 aplicacionSanitariaSchema.index({ planSanitario: 1, fechaAplicacion: -1 });
 aplicacionSanitariaSchema.index({ responsableUsuario: 1, fechaAplicacion: -1 });
+aplicacionSanitariaSchema.index({ lote: 1, fechaAplicacion: -1 });
 
 const AplicacionSanitaria = model('AplicacionSanitaria', aplicacionSanitariaSchema);
 

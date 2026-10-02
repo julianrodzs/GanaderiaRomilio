@@ -35,3 +35,20 @@ test('deriva partos y crías por separado con compatibilidad DIIO', () => {
     assert.equal(reporte.toros[0].madresDiferentes, 1);
     assert.equal(reporte.toros[0].criasRegistradas, 2);
 });
+
+test('incluye porcinos y fracciones en el reporte racial por especie', () => {
+    const reporte = construirReporteRacial([
+        { especie: 'Bovino', razaPrincipal: 'Brahman', grupoRacial: 'Cebuino' },
+        {
+            especie: 'Porcino',
+            razaPrincipal: 'Duroc',
+            razaSecundaria: 'Landrace',
+            fraccionRazaPrincipal: '3/8',
+            fraccionRazaSecundaria: '5/8',
+            grupoRacial: 'Comercial internacional'
+        }
+    ], 'Porcino');
+    assert.equal(reporte.resumen.totalAnimales, 1);
+    assert.equal(reporte.resumen.totalPorcinos, 1);
+    assert.equal(reporte.porGrupo[0].detalles[0].detalle, '3/8 Duroc × 5/8 Landrace');
+});

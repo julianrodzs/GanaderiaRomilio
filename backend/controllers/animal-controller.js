@@ -412,7 +412,7 @@ animalCtrl.updateAnimal = async (req, res) => {
 };
 
 animalCtrl.getCatalogoRacial = (req, res) => {
-    res.json(obtenerCatalogoRacial());
+    res.json(obtenerCatalogoRacial(req.query.especie));
 };
 
 animalCtrl.updateEstadoSanitario = async (req, res) => {

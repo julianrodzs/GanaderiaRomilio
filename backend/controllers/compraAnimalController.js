@@ -14,6 +14,7 @@ const { respuestaErrorPlan } = require('../middleware/plan');
 const { agregarAnimalesAlLote, crearLoteRapido } = require('../services/lote-service');
 const { obtenerCategoriaAnimal } = require('../services/categoriaAnimal-service');
 const { prepararObjetivoProductivo } = require('../config/objetivosProductivos');
+const { prepararDatosRaciales } = require('../services/raza-service');
 
 const compraAnimalCtrl = {};
 
@@ -155,7 +156,7 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
         }
 
         const identificador = normalizarTexto(item.identificadorFinca || item.diio);
-        const animal = await Animal.create({
+        const animal = await Animal.create(prepararDatosRaciales({
             identificadorFinca: identificador,
             diio: normalizarTexto(item.diio) || undefined,
             especie: compra.especie || 'Bovino',
@@ -175,7 +176,7 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
             estado: 'Activo',
             origenGenealogico: 'Externo',
             observaciones: item.observaciones
-        });
+        }));
 
         item.animal = animal._id;
         animalesActualizados.push(item);
