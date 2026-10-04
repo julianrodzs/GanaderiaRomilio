@@ -10,16 +10,20 @@ const {
     obtenerDetalleLote,
     registrarEventoOperativoLote,
     registrarPesajesLote,
-    retirarAnimalesDelLote
+    retirarAnimalesDelLote,
+    proyectarDetalleLotePorPlan
 } = require('../services/lote-service');
 const HistorialEtapaLote = require('../models/HistorialEtapaLote');
 const { ejecutarNotificacionSegura, notificarTareaAsignada } = require('../services/tarea-notificacion-service');
 const { normalizarPropositoLote } = require('../config/lotes');
+const { asegurarPuedeUsarEspecie, tieneFeature } = require('../services/plan-service');
+const { respuestaErrorPlan } = require('../middleware/plan');
 
 const responderError = (res, error) => res.status(error.status || 400).json({ mensaje: error.message, codigo: error.codigo });
 
 const listar = async (req, res) => {
     try {
+        const incluirAnalitica = await tieneFeature('analiticaProductiva', req.organizacionId);
         const filtro = {};
         if (req.query.especie) filtro.especie = req.query.especie;
         if (req.query.estado) filtro.estado = req.query.estado;
@@ -37,15 +41,17 @@ const listar = async (req, res) => {
                 AsignacionPlanAlimentacion.findOne({ lote: lote._id, activo: true }).populate('plan', 'nombre etapa activo').lean(),
                 obtenerDetalleLote(lote._id)
             ]);
-            return { ...lote, cantidadAnimales, resumen: detalle.resumen, planAlimentacionActual: asignacion?.plan || null };
+            const visible = proyectarDetalleLotePorPlan(detalle, incluirAnalitica);
+            return { ...lote, gmdObjetivoKgDia: visible.gmdObjetivoKgDia, cantidadAnimales, resumen: visible.resumen, planAlimentacionActual: asignacion?.plan || null };
         }));
         res.json(enriquecidos);
-    } catch (error) { responderError(res, error); }
+    } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
 
 const crear = async (req, res) => {
     try {
         const { ubicacionActual, animales, ...datos } = req.body;
+        await asegurarPuedeUsarEspecie(datos.especie, req.organizacionId);
         if (datos.proposito) datos.proposito = normalizarPropositoLote(datos.proposito) || datos.proposito;
         const lote = await Lote.create({ ...datos, creadoPor: req.usuario?.id });
         if (lote.etapaOperativa) await HistorialEtapaLote.create({ lote: lote._id, etapa: lote.etapaOperativa, fechaInicio: lote.fechaInicio, registradoPor: req.usuario?.id });
@@ -55,11 +61,14 @@ const crear = async (req, res) => {
         }
         if (ubicacionActual) await moverLoteAPotrero(lote._id, { potrero: ubicacionActual, fechaEntrada: lote.fechaInicio }, req.usuario?.id);
         res.status(201).json(await obtenerDetalleLote(lote._id));
-    } catch (error) { responderError(res, error); }
+    } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
 
 const obtener = async (req, res) => {
-    try { res.json(await obtenerDetalleLote(req.params.id)); } catch (error) { responderError(res, error); }
+    try {
+        const incluirAnalitica = await tieneFeature('analiticaProductiva', req.organizacionId);
+        res.json(proyectarDetalleLotePorPlan(await obtenerDetalleLote(req.params.id), incluirAnalitica));
+    } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
 
 const actualizar = async (req, res) => {
@@ -67,6 +76,7 @@ const actualizar = async (req, res) => {
         if (req.body.proposito) req.body.proposito = normalizarPropositoLote(req.body.proposito) || req.body.proposito;
         const lote = await Lote.findById(req.params.id);
         if (!lote) return res.status(404).json({ mensaje: 'Lote no encontrado.' });
+        await asegurarPuedeUsarEspecie(req.body.especie || lote.especie, req.organizacionId);
         if (lote.estado !== 'ACTIVO' && (req.body.especie || req.body.proposito)) {
             return res.status(409).json({ mensaje: 'No se puede cambiar especie o propósito de un lote cerrado.' });
         }
@@ -87,7 +97,7 @@ const actualizar = async (req, res) => {
         await lote.save();
         if (etapaNueva !== undefined && etapaNueva !== lote.etapaOperativa) await cambiarEtapa(lote._id, etapaNueva || null, req.usuario?.id);
         res.json(await obtenerDetalleLote(lote._id));
-    } catch (error) { responderError(res, error); }
+    } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
 
 const agregarAnimales = async (req, res) => {

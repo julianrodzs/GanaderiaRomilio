@@ -64,6 +64,7 @@ const animalSchema = new Schema(
         registroGenealogico: { type: String, trim: true },
         observacionesGenealogicas: { type: String, trim: true },
         fechaNacimiento: { type: Date },
+        fechaDesteteEstimada: { type: Date },
         fechaDestete: { type: Date },
         pesoNacimiento: { type: Number, min: 0 },
         pesoDestete: { type: Number, min: 0 },
@@ -94,7 +95,6 @@ const animalSchema = new Schema(
         },
         potreroActual: { type: Schema.Types.ObjectId, ref: 'Potrero' },
         loteActual: { type: Schema.Types.ObjectId, ref: 'Lote' },
-        fotoUrl: { type: String, trim: true },
         observaciones: { type: String, trim: true }
     },
     {

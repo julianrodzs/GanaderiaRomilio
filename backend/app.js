@@ -12,6 +12,11 @@ app.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     credentials: true
 }));
+app.use(
+    '/api/facturacion/webhook/stripe',
+    express.raw({ type: 'application/json' }),
+    require('./routes/facturacionWebhookRoutes')
+);
 app.use(express.json());
 app.use(auditoriaPeticiones);
 
@@ -24,11 +29,13 @@ app.get('/', (req, res)=>{
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/cron', require('./routes/cronRoutes'));
 app.use('/api/usuarios', require('./routes/usuario'));
+app.use('/api/usuario', auth, require('./routes/configuracionEmailRoutes'));
 app.use('/api/admin/organizaciones', authPlataforma, require('./routes/adminOrganizacionRoutes'));
 app.use('/api/auditoria', auth, require('./routes/auditoriaRoutes'));
 app.use('/api/notificaciones', auth, require('./routes/notificacionRoutes'));
 app.use('/api/archivos', auth, require('./routes/archivoRoutes'));
 app.use('/api/plan', auth, require('./routes/plan'));
+app.use('/api/facturacion', auth, require('./routes/facturacionRoutes'));
 app.use('/api/fincas', auth, require('./routes/finca'));
 app.use('/api/tareas', require('./routes/tareaRoutes'));
 app.use('/api/animales', auth, require('./routes/animal'));

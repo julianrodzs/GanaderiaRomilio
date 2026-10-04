@@ -12,13 +12,18 @@ const presentarPlan = (estado) => ({
         nombre: estado.actual.configuracion.nombre,
         precioMensualUSD: estado.actual.configuracion.precioMensualUSD,
         estado: estado.actual.estado,
+        vigente: estado.actual.vigente,
         especiePlan: estado.actual.especiePlan,
-        modoEspecies: estado.actual.configuracion.especies.modo
+        modoEspecies: estado.actual.configuracion.especies.modo,
+        proveedorPago: estado.actual.organizacion?.plan?.proveedorPago || null,
+        fechaRenovacion: estado.actual.organizacion?.plan?.fechaRenovacion || null,
+        fechaExpiracion: estado.actual.organizacion?.plan?.fechaExpiracion || null
     },
     limites: estado.limites,
     uso: estado.uso,
     sobreLimite: estado.sobreLimite,
-    funcionalidades: estado.actual.configuracion.funcionalidades,
+    funcionalidades: Object.fromEntries(Object.keys(estado.actual.configuracion.funcionalidades)
+        .map((feature) => [feature, estado.actual.vigente && estado.actual.configuracion.funcionalidades[feature]])),
     rolesPermitidos: estado.actual.configuracion.rolesPermitidos,
     caracteristicasComerciales: estado.actual.configuracion.caracteristicasComerciales || {}
 });

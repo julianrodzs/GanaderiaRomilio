@@ -16,27 +16,32 @@
     "migrate:saas:check": "node scripts/migrarSaasOrganizacion.js",
     "migrate:saas": "node scripts/migrarSaasOrganizacion.js --apply",
     "verify:saas": "node scripts/verificarAislamientoSaas.js",
-    "verify:saas:api": "node scripts/verificarApiSaas.js"
-    ,"migrate:plan-premium:check": "node scripts/asignarPlanPremiumClienteActual.js"
-    ,"migrate:plan-premium": "node scripts/asignarPlanPremiumClienteActual.js --apply"
-    ,"superadmin:check": "node scripts/asignarSuperAdministrador.js"
-    ,"superadmin:apply": "node scripts/asignarSuperAdministrador.js --apply"
-    ,"migrate:objetivos-bovinos:check": "node scripts/actualizarObjetivosCategoriasBovinos.js"
-    ,"migrate:objetivos-bovinos": "node scripts/actualizarObjetivosCategoriasBovinos.js --apply"
-    ,"job:alertas": "node scripts/ejecutarAlertasProgramadas.js"
-    ,"migrate:razas:check": "node scripts/normalizarRazasBovinas.js"
-    ,"migrate:razas": "node scripts/normalizarRazasBovinas.js --apply"
-    ,"migrate:razas-porcinas:check": "node scripts/normalizarRazasPorcinas.js"
-    ,"migrate:razas-porcinas": "node scripts/normalizarRazasPorcinas.js --apply"
-    ,"seed:pastos": "node scripts/inicializarCatalogoPastos.js"
-    ,"migrate:tipos-area:check": "node scripts/migrarTiposAreaPotreros.js"
-    ,"migrate:tipos-area": "node scripts/migrarTiposAreaPotreros.js --apply"
-    ,"migrate:categorias-animales:check": "node scripts/migrarCategoriasAnimales.js"
-    ,"migrate:categorias-animales": "node scripts/migrarCategoriasAnimales.js --apply"
-    ,"migrate:cria-reproduccion:check": "node scripts/migrarCriaAReproduccion.js --dry-run"
-    ,"migrate:cria-reproduccion": "node scripts/migrarCriaAReproduccion.js"
-    ,"migrate:madres-internas:check": "node scripts/vincularMadresInternas.js"
-    ,"migrate:madres-internas": "node scripts/vincularMadresInternas.js --apply"
+    "verify:saas:api": "node scripts/verificarApiSaas.js",
+    "migrate:plan-premium:check": "node scripts/asignarPlanPremiumClienteActual.js",
+    "migrate:plan-premium": "node scripts/asignarPlanPremiumClienteActual.js --apply",
+    "superadmin:check": "node scripts/asignarSuperAdministrador.js",
+    "superadmin:apply": "node scripts/asignarSuperAdministrador.js --apply",
+    "migrate:objetivos-bovinos:check": "node scripts/actualizarObjetivosCategoriasBovinos.js",
+    "migrate:objetivos-bovinos": "node scripts/actualizarObjetivosCategoriasBovinos.js --apply",
+    "job:alertas": "node scripts/ejecutarAlertasProgramadas.js",
+    "job:resumenes-email": "node scripts/ejecutarResumenesEmail.js",
+    "migrate:razas:check": "node scripts/normalizarRazasBovinas.js",
+    "migrate:razas": "node scripts/normalizarRazasBovinas.js --apply",
+    "migrate:razas-porcinas:check": "node scripts/normalizarRazasPorcinas.js",
+    "migrate:razas-porcinas": "node scripts/normalizarRazasPorcinas.js --apply",
+    "seed:pastos": "node scripts/inicializarCatalogoPastos.js",
+    "migrate:tipos-area:check": "node scripts/migrarTiposAreaPotreros.js",
+    "migrate:tipos-area": "node scripts/migrarTiposAreaPotreros.js --apply",
+    "migrate:categorias-animales:check": "node scripts/migrarCategoriasAnimales.js",
+    "migrate:categorias-animales": "node scripts/migrarCategoriasAnimales.js --apply",
+    "migrate:cria-reproduccion:check": "node scripts/migrarCriaAReproduccion.js --dry-run",
+    "migrate:cria-reproduccion": "node scripts/migrarCriaAReproduccion.js",
+    "migrate:madres-internas:check": "node scripts/vincularMadresInternas.js",
+    "migrate:madres-internas": "node scripts/vincularMadresInternas.js --apply",
+    "migrate:archivos-obsoletos:check": "node scripts/limpiarArchivosObsoletos.js",
+    "migrate:archivos-obsoletos": "node scripts/limpiarArchivosObsoletos.js --apply",
+    "migrate:historial-fincas:check": "node scripts/inicializarHistorialFincasAnimales.js",
+    "migrate:historial-fincas": "node scripts/inicializarHistorialFincasAnimales.js --apply"
   },
   "keywords": [],
   "author": "",
@@ -45,9 +50,11 @@
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "mongoose": "^8.12.1",
-    "multer": "^2.1.1",
+    "express": "^4.22.3",
+    "mongoose": "^8.24.1",
+    "multer": "^2.4.0",
+    "pdfkit": "^0.20.2",
+    "stripe": "^23.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -13,7 +13,6 @@ import {
   obtenerTareas,
   obtenerUsuariosAsignables
 } from '../services/api';
-import useArchivoProtegido from '../hooks/useArchivoProtegido';
 import {
   guardarCambiosPendientes,
   guardarTareasOffline,
@@ -165,7 +164,6 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
   const [detalle, setDetalle] = useState(null);
   const [formulario, setFormulario] = useState(estadoInicial);
   const [comentario, setComentario] = useState('');
-  const [evidencia, setEvidencia] = useState(null);
   const [observacionesCompletar, setObservacionesCompletar] = useState('');
   const [reprogramacion, setReprogramacion] = useState(null);
 
@@ -386,7 +384,6 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
           titulo: tarea.titulo,
           payload: {
             observaciones: observacionesCompletar,
-            evidencia,
             versionEsperada: tarea.updatedAt
           }
         });
@@ -399,10 +396,9 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
         setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, estado: 'Completada', pendienteSincronizar: true } : actual));
         setError('Sin conexion. La tarea queda pendiente de sincronizar.');
       } else {
-        await completarTarea({ id: tarea._id, observaciones: observacionesCompletar, evidencia });
+        await completarTarea({ id: tarea._id, observaciones: observacionesCompletar });
         await cargarDatos();
       }
-      setEvidencia(null);
       setObservacionesCompletar('');
     } catch (err) {
       setError(err.message);
@@ -436,8 +432,6 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       setError(err.message);
     }
   };
-
-  const evidenciaProtegidaUrl = useArchivoProtegido(detalle?.evidenciaUrl);
 
   return (
     <section className="tareas-page">
@@ -664,12 +658,9 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
             </div>
             {detalle.descripcion && <div className="detalle-observaciones"><span>Descripcion</span><p>{detalle.descripcion}</p></div>}
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
-            {evidenciaProtegidaUrl && <img className="tarea-evidencia" src={evidenciaProtegidaUrl} alt="Evidencia de tarea" />}
-
             {!soloLectura && detalle.estado !== 'Completada' && (
               <div className="form-card tarea-completar-card">
                 <label>Observaciones al completar<textarea rows="3" value={observacionesCompletar} onChange={(evento) => setObservacionesCompletar(evento.target.value)} /></label>
-                <label>Evidencia<input type="file" accept="image/*" onChange={(evento) => setEvidencia(evento.target.files?.[0] || null)} /></label>
                 <button className="boton-primario compacto" type="button" onClick={() => completar(detalle)} disabled={guardando}>{guardando ? 'Completando...' : 'Completar tarea'}</button>
               </div>
             )}

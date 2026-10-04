@@ -12,6 +12,7 @@ Variables de entorno:
 MONGODB_URI=
 FRONTEND_URL=
 IA_SERVICE_URL=
+IA_INTERNAL_TOKEN=
 JWT_SECRET=
 RESEND_API_KEY=
 EMAIL_FROM=Ganaderia Romilio <onboarding@resend.dev>
@@ -19,6 +20,13 @@ EMAIL_ADMIN=
 CRON_MODE=external
 CRON_SECRET=
 CRON_LOCK_MS=1800000
+EMAIL_DIGEST_INTERVAL_MS=3600000
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_ESENCIAL=
+STRIPE_PRICE_GESTION=
+STRIPE_PRICE_PRO=
+STRIPE_PRICE_PREMIUM=
 ```
 
 Precios configurables de planes (opcionales):
@@ -34,7 +42,8 @@ Valores esperados:
 
 - `MONGODB_URI`: cadena de conexion de MongoDB Atlas.
 - `FRONTEND_URL`: URL final de Vercel, por ejemplo `https://tu-frontend.vercel.app`.
-- `IA_SERVICE_URL`: URL del servicio IA si se despliega; puede quedar vacia mientras el conteo use simulacion.
+- `IA_SERVICE_URL`: URL privada o restringida del servicio IA. En producción es obligatoria para procesar conteos.
+- `IA_INTERNAL_TOKEN`: secreto largo compartido únicamente entre el backend Node y el servicio IA.
 - `JWT_SECRET`: clave larga y privada para firmar tokens.
 - `RESEND_API_KEY`: API key creada en Resend.
 - `EMAIL_FROM`: remitente de correos. Para pruebas puede ser `Ganaderia Romilio <onboarding@resend.dev>`.
@@ -42,6 +51,9 @@ Valores esperados:
 - `CRON_MODE`: usar `external` en el Web Service cuando exista un Cron Job independiente.
 - `CRON_SECRET`: secreto largo para invocar el endpoint HTTP de cron. No es necesario para el Cron Job CLI de Render, pero conviene configurarlo.
 - `CRON_LOCK_MS`: duracion maxima del bloqueo distribuido; por defecto 30 minutos.
+- `STRIPE_SECRET_KEY`: clave privada del entorno Stripe correspondiente.
+- `STRIPE_WEBHOOK_SECRET`: secreto de firma entregado por Stripe para el endpoint del backend.
+- `STRIPE_PRICE_*`: identificadores `price_...` de cada suscripción mensual.
 
 Pasos:
 
@@ -81,6 +93,27 @@ Authorization: Bearer TU_CRON_SECRET
 ```
 
 El endpoint no usa credenciales de usuario. Requiere exclusivamente `CRON_SECRET`. No configurar simultaneamente el Cron Job CLI, el cron HTTP y `CRON_MODE=internal`, aunque el bloqueo evita ejecuciones concurrentes.
+
+## Resúmenes Premium por correo
+
+Crear un segundo Render Cron Job con la misma base de código:
+
+- Root Directory: `backend`
+- Build Command: `npm install`
+- Command: `npm run job:resumenes-email`
+- Schedule: `0 * * * *`
+
+El job revisa cada hora la zona horaria, frecuencia y hora preferida de cada usuario Premium. `ultimoPeriodo` evita enviar dos veces el mismo resumen aunque Render reintente la ejecución. Como alternativa puede invocarse `POST /api/cron/resumenes-email` con `Authorization: Bearer TU_CRON_SECRET`.
+
+## Facturación Stripe
+
+1. Crear un producto y precio mensual para cada plan y configurar los cuatro `STRIPE_PRICE_*`.
+2. Configurar el Customer Portal de Stripe para cambios de plan, cancelaciones y métodos de pago.
+3. Registrar el webhook `https://TU_BACKEND.onrender.com/api/facturacion/webhook/stripe`.
+4. Suscribir al menos estos eventos: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted` e `invoice.payment_failed`.
+5. Copiar el secreto de firma del endpoint a `STRIPE_WEBHOOK_SECRET`.
+
+El webhook recibe el cuerpo crudo antes de `express.json`, valida la firma e impide procesar dos veces un mismo evento. Las tarjetas se capturan únicamente en Checkout o Customer Portal; la aplicación no almacena datos de pago.
 
 ## Migracion SaaS inicial
 

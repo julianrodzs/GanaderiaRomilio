@@ -42,6 +42,16 @@ pip install -r requirements.txt
 
 ## Ejecutar
 
+Configura primero una credencial compartida con el backend:
+
+```env
+IA_INTERNAL_TOKEN=un-secreto-largo-y-aleatorio
+ENVIRONMENT=production
+ALLOWED_ORIGINS=
+```
+
+En producción, `/detectar-vacas` y `/outputs/*` rechazan solicitudes sin `X-Internal-Token`. Usa el mismo valor de `IA_INTERNAL_TOKEN` en Render para el backend Node y para este servicio; no lo publiques en Vercel.
+
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8001
 ```
@@ -68,7 +78,8 @@ Body:
 En `backend/.env`:
 
 ```env
-IA_CONTEO_URL=http://localhost:8001
+IA_SERVICE_URL=http://localhost:8001
+IA_INTERNAL_TOKEN=un-secreto-largo-y-aleatorio
 ```
 
 El backend Node enviara la imagen al endpoint:

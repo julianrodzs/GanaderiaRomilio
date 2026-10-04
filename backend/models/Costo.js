@@ -8,7 +8,6 @@ const costoSchema = new Schema(
         descripcion: { type: String, required: true, trim: true },
         monto: { type: Number, required: true, min: 0 },
         proveedor: { type: String, trim: true },
-        comprobante: { type: String, trim: true },
         observaciones: { type: String, trim: true }
     },
     {

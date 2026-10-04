@@ -18,7 +18,8 @@ export const permisosPorModulo = {
   Drone: ['Administrador', 'Encargado'],
   Usuarios: ['Administrador'],
   'Mi plan': ['Administrador'],
-  Notificaciones: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta']
+  Notificaciones: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta'],
+  'Configuración': ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta']
 };
 
 export const rolesGestionPorModulo = {

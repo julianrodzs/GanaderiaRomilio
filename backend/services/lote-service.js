@@ -511,6 +511,15 @@ const obtenerDetalleLote = async (loteId) => {
     };
 };
 
+const proyectarDetalleLotePorPlan = (detalle, incluirAnalitica) => {
+    if (incluirAnalitica || !detalle) return detalle;
+    const resumen = { ...(detalle.resumen || {}) };
+    delete resumen.gmdPromedioLote;
+    delete resumen.cumplimientoGmd;
+    delete resumen.alcanzaronPesoObjetivo;
+    return { ...detalle, gmdObjetivoKgDia: undefined, resumen };
+};
+
 module.exports = {
     agregarAnimalesAlLote,
     cerrarLote,
@@ -527,5 +536,6 @@ module.exports = {
     crearTareaLote,
     moverLoteAPotrero,
     construirPrefijoCodigoLote,
-    crearLoteRapido
+    crearLoteRapido,
+    proyectarDetalleLotePorPlan
 };

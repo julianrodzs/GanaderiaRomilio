@@ -1,4 +1,5 @@
 import os
+import secrets
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -7,6 +8,7 @@ import cv2
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from ultralytics import YOLO
 
 
@@ -15,21 +17,36 @@ MODEL_PATH = BASE_DIR / "models" / "best.pt"
 UPLOADS_DIR = BASE_DIR / "uploads"
 OUTPUTS_DIR = BASE_DIR / "outputs"
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.25"))
+INTERNAL_TOKEN = os.getenv("IA_INTERNAL_TOKEN", "")
+ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("NODE_ENV", "development")).lower()
 
 UPLOADS_DIR.mkdir(exist_ok=True)
 OUTPUTS_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(title="IA Conteo Ganaderia Romilio", version="1.0.0")
+allowed_origins = [item.strip() for item in os.getenv("ALLOWED_ORIGINS", "").split(",") if item.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
 
 model = None
+
+
+@app.middleware("http")
+async def autenticar_servicio_interno(request: Request, call_next):
+    protegida = request.url.path == "/detectar-vacas" or request.url.path.startswith("/outputs/")
+    if protegida:
+        if not INTERNAL_TOKEN and ENVIRONMENT == "production":
+            return JSONResponse(status_code=503, content={"detail": "IA_INTERNAL_TOKEN no configurado"})
+        recibido = request.headers.get("x-internal-token", "")
+        if not INTERNAL_TOKEN or not secrets.compare_digest(recibido, INTERNAL_TOKEN):
+            return JSONResponse(status_code=401, content={"detail": "Credencial interna inválida"})
+    return await call_next(request)
 
 
 def get_model():

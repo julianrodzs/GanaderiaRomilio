@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 
-const CATEGORIAS_ARCHIVO = new Set(['compras', 'ventas', 'tareas', 'conteo-drone']);
+const CATEGORIAS_ARCHIVO = new Set(['conteo-drone']);
 
 const validarCategoria = (categoria) => {
     if (!CATEGORIAS_ARCHIVO.has(categoria)) {

@@ -28,7 +28,28 @@ La creación de animales se valida desde inventario, compras, importación y nac
 
 Una reducción de plan nunca elimina información. Si la cuenta queda sobre el nuevo límite, conserva lectura e historial y no puede crear más recursos de ese tipo hasta volver al cupo o mejorar el plan.
 
-La validación de fincas está preparada en `PlanService`. No se expone una administración multi-finca nueva porque ese flujo todavía no existe completo.
+La administración multi-finca valida el límite del plan al crear o reactivar una finca. Una reducción de plan tampoco elimina fincas: las fincas existentes se conservan y la organización debe volver al límite antes de crear o reactivar otra.
+
+Desde Gestión se habilita `operacionMultiFinca`: traslado de animales, pertenencia histórica y operaciones financieras entre fincas. La consolidación gerencial simultánea, metas, cierres y exportación requieren `reportesMultiFinca` y permanecen en Premium.
+
+## Operación multi-finca
+
+Cada solicitud autenticada puede enviar `X-Finca-Id`. El middleware comprueba que la finca esté activa, pertenezca a la organización y esté autorizada por la membresía antes de establecer el contexto de consulta. Si no se envía el encabezado se utiliza la finca principal como compatibilidad.
+
+La membresía puede conceder acceso a todas las fincas mediante `accesoTodasFincas`, o solamente a las incluidas en `fincas`. El selector global muestra únicamente las fincas activas autorizadas. Cambiar la finca activa no emite un JWT nuevo: la identidad y la organización permanecen en el token, mientras cada petición vuelve a validar el contexto solicitado.
+
+Endpoints de finca para administradores:
+
+- `GET /api/fincas`: fincas autorizadas; para administradores incluye las inactivas.
+- `POST /api/fincas`: crea una finca respetando el cupo del plan.
+- `PUT /api/fincas/:id`: actualiza sus datos generales.
+- `PATCH /api/fincas/:id/estado`: activa o desactiva una finca.
+- `PATCH /api/fincas/:id/principal`: cambia la finca principal.
+- `PATCH /api/fincas/:id/lineas-productivas`: configura especies y objetivos.
+
+No se puede desactivar la finca activa ni la principal. Primero se debe seleccionar otra finca y, en el segundo caso, marcarla como principal. Esta regla evita dejar sesiones y procesos sin un contexto válido.
+
+Gestión y Pro pueden operar más de una finca según su cupo, pero sus reportes normales continúan siendo por finca activa. Premium agrega `GET /api/reportes/multi-finca`, que acepta `fincaIds`, `fechaInicio`, `fechaFin` y `especie`, siempre limitado a fincas autorizadas de la misma organización. El comparativo presenta inventario, peso actual, finanzas, partos, destetes y sanidad por finca y consolidados. Los promedios consolidados se recalculan desde totales y cantidades, no promediando promedios de fincas. Las monedas se mantienen separadas y las transferencias internas quedan fuera del resultado consolidado.
 
 ## Funciones protegidas
 
@@ -50,6 +71,10 @@ Antes de procesar una imagen se reserva capacidad mensual. Solo un conteo guarda
 - `SelectorEspecie` oculta especies no contratadas en Esencial.
 - `FeatureGate`, `PlanLimit` y `UpgradeMessage` son reutilizables.
 - `Mi plan` muestra precio, consumo, límites, capacidades y selección de especie.
+- El encabezado permite cambiar la finca activa sin cerrar sesión.
+- `Mi plan` administra fincas, estado, principal y líneas productivas.
+- `Usuarios` permite acceso a todas las fincas o a una selección explícita.
+- `Reportes` muestra el comparativo multi-finca únicamente cuando el plan incluye `reportesMultiFinca`.
 - Drone se oculta en Esencial configurado para porcinos.
 
 ## Operación
@@ -84,7 +109,7 @@ El alta se ejecuta dentro de una transacción de MongoDB. En una sola operación
 
 Si falla cualquier escritura, la transacción revierte el alta completa. El correo se intenta después de confirmar la transacción: un fallo del proveedor no pierde el cliente creado. En desarrollo se devuelve un enlace de invitación para pruebas; en producción nunca se devuelve ese token en la respuesta.
 
-Un correo que ya tenga una membresía en otra organización se rechaza durante esta primera fase. Esto evita cambiar silenciosamente la organización principal del usuario mientras se implementa el selector de organizaciones.
+Un correo puede pertenecer a varias organizaciones. El alta reutiliza la identidad existente sin cambiar su contraseña, nombre ni recuperación, y crea una membresía administrativa independiente para el cliente nuevo.
 
 Para revisar y habilitar de forma explícita al operador de plataforma:
 
@@ -127,11 +152,23 @@ Después de habilitarlo, el usuario debe volver a iniciar sesión o recargar una
 }
 ```
 
+## Suscripciones y facturación
+
+Stripe Checkout crea suscripciones nuevas y Customer Portal administra cambios posteriores. Solo los webhooks firmados cambian `Organizacion.plan.estado`, fechas de renovación/expiración y referencias externas. `EventoFacturacion` hace idempotente el procesamiento.
+
+- `GET /api/facturacion/estado`: catálogo, estado y vigencia para administradores.
+- `POST /api/facturacion/checkout`: crea una sesión alojada de Stripe.
+- `POST /api/facturacion/portal`: abre la administración de una suscripción existente.
+- `POST /api/facturacion/webhook/stripe`: webhook público protegido por firma Stripe.
+
+## Correos Premium
+
+`ConfiguracionEmail` guarda frecuencia diaria/semanal, horario, día y módulos por usuario y organización. `GET/PUT /api/usuario/configuracion-emails` exigen `configuracionEmailAvanzada`. El trabajo `npm run job:resumenes-email` procesa solamente organizaciones Premium vigentes y usa una clave de período para no duplicar envíos.
+
+## Usuarios multi-organización
+
+La identidad `Usuario` es global y cada vínculo se representa con `Membresia`, por lo que el mismo correo puede tener roles y fincas diferentes en distintas organizaciones. El selector superior aparece cuando hay más de una membresía activa. `POST /api/usuarios/cambiar-organizacion-activa` comprueba la membresía, elige una finca autorizada y emite un JWT nuevo con la organización y rol seleccionados.
+
 ## Pendiente deliberadamente
 
-- Pagos, cobros y facturación.
-- Cambio automático de plan por suscripción.
-- Administración completa de varias fincas.
 - Política de uso justo y límite técnico de dron Premium.
-- Configuración avanzada y resumen diario de correos Premium.
-- Cambio de organización para usuarios que pertenezcan a más de un cliente.

@@ -38,7 +38,6 @@ const ventaAnimalSchema = new Schema(
         montoFinal: { type: Number, min: 0, default: null },
         montoTotal: { type: Number, default: 0, min: 0 },
         ajusteMonto: { type: Number, default: 0 },
-        comprobanteUrl: { type: String, trim: true },
         estado: {
             type: String,
             enum: ['Pendiente', 'Confirmada', 'Anulada'],

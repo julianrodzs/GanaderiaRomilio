@@ -34,7 +34,7 @@ Esta es una auditoría estática del modelo `Animal`, las vistas de inventario/d
 
 ## Datos que no deben forzarse a un KPI
 
-`observaciones`, `observacionesGenealogicas`, nombres externos y fotografías son evidencia contextual. Deben conservarse, buscarse y eventualmente exportarse, pero agregarlos como conteos no produciría una decisión productiva confiable.
+`observaciones`, `observacionesGenealogicas` y nombres externos son contexto cualitativo. Deben conservarse, buscarse y eventualmente exportarse, pero agregarlos como conteos no produciría una decisión productiva confiable.
 
 ## Siguiente orden recomendado
 

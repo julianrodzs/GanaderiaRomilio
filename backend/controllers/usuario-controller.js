@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { Membresia } = require('../models/Membresia');
 const Usuario = require('../models/Usuario');
+const Finca = require('../models/Finca');
 const {
     crearTokenRecuperacion,
     enviarCorreoRecuperacion
@@ -9,8 +10,9 @@ const {
 const { generarToken } = require('../middleware/auth');
 const { rolTienePermiso } = require('../config/permisosRoles');
 const { listarUsuariosAsignables } = require('../services/usuarioAsignable-service');
-const { asegurarPuedeCrearUsuario, puedeUsarRol } = require('../services/plan-service');
+const { asegurarPuedeCrearUsuario, ejecutarConReservaCuota, puedeUsarRol } = require('../services/plan-service');
 const { respuestaErrorPlan } = require('../middleware/plan');
+const { listarFincasAccesibles } = require('../services/accesoFinca-service');
 
 const usuarioCtrl = {};
 const MENSAJE_RECUPERACION = 'Si el correo existe, se enviarán instrucciones para recuperar la contraseña.';
@@ -33,6 +35,21 @@ const esHashBcrypt = (valor = '') => /^\$2[aby]\$/.test(valor);
 
 const normalizarCorreo = (correo = '') => correo.trim().toLowerCase();
 
+const listarOrganizacionesUsuario = async (usuarioId) => {
+    const membresias = await Membresia.find({ usuario: usuarioId, estado: 'Activo' })
+        .populate('organizacionId', 'nombre slug estado zonaHoraria fincaPrincipal')
+        .sort({ esPrincipal: -1, createdAt: 1 });
+    return membresias
+        .filter((item) => item.organizacionId?.estado === 'Activa')
+        .map((item) => ({
+            id: item.organizacionId._id,
+            nombre: item.organizacionId.nombre,
+            slug: item.organizacionId.slug,
+            rol: item.rol,
+            esPrincipal: item.esPrincipal
+        }));
+};
+
 const validarCorreoDuplicado = async (correo, usuarioId = null) => {
     const filtro = { correo: normalizarCorreo(correo) };
 
@@ -54,7 +71,9 @@ const presentarMembresia = (membresia) => {
         rol: membresia.rol,
         estado: membresia.estado,
         membresiaId: membresia._id,
-        organizacionId: membresia.organizacionId?._id || membresia.organizacionId
+        organizacionId: membresia.organizacionId?._id || membresia.organizacionId,
+        accesoTodasFincas: membresia.accesoTodasFincas === true,
+        fincas: membresia.fincas || []
     });
 };
 
@@ -62,6 +81,23 @@ const obtenerMembresiaUsuario = (organizacionId, usuarioId) => Membresia.findOne
     organizacionId,
     usuario: usuarioId
 }).populate('usuario');
+
+const validarAccesoFincas = async ({ accesoTodasFincas, fincas, organizacionId }) => {
+    if (accesoTodasFincas !== false) return { accesoTodasFincas: true, fincas: [] };
+    const ids = [...new Set((fincas || []).map(String).filter(Boolean))];
+    if (!ids.length) {
+        const error = new Error('Selecciona al menos una finca o habilita el acceso a todas.');
+        error.status = 400;
+        throw error;
+    }
+    const cantidad = await Finca.countDocuments({ _id: { $in: ids }, organizacionId });
+    if (cantidad !== ids.length) {
+        const error = new Error('La selección contiene una finca que no pertenece a la organización.');
+        error.status = 400;
+        throw error;
+    }
+    return { accesoTodasFincas: false, fincas: ids };
+};
 
 usuarioCtrl.getUsuarios = async (req, res) => {
     try {
@@ -111,47 +147,54 @@ usuarioCtrl.getUsuarioById = async (req, res) => {
 
 usuarioCtrl.crearUsuario = async (req, res) => {
     try {
-        const { nombre, apellido, correo, contrasena, telefono, rol, estado } = req.body;
+        const { nombre, apellido, correo, contrasena, telefono, rol, estado, accesoTodasFincas, fincas } = req.body;
 
-        if (!nombre || !correo || !contrasena) {
+        if (!correo) return res.status(400).json({ mensaje: 'El correo es requerido' });
+        const correoNormalizado = normalizarCorreo(correo);
+        const usuarioExistente = await Usuario.findOne({ correo: correoNormalizado });
+
+        if (!usuarioExistente && (!nombre || !contrasena)) {
             return res.status(400).json({ mensaje: 'Nombre, correo y contrasena son requeridos' });
         }
-
-        if (await validarCorreoDuplicado(correo)) {
-            return res.status(400).json({ mensaje: 'Ya existe un usuario con ese correo' });
+        if (usuarioExistente?.estado !== 'Activo') {
+            return res.status(409).json({ mensaje: 'La cuenta asociada a este correo está inactiva.' });
         }
-        await asegurarPuedeCrearUsuario({
+        if (usuarioExistente && await Membresia.exists({ organizacionId: req.organizacionId, usuario: usuarioExistente._id })) {
+            return res.status(409).json({ mensaje: 'Este usuario ya pertenece a la organización.' });
+        }
+        const permisoCreacion = await asegurarPuedeCrearUsuario({
             organizacionId: req.organizacionId,
             rol: rol || 'Encargado',
             estado: estado || 'Activo'
         });
+        const accesoFincas = await validarAccesoFincas({ accesoTodasFincas, fincas, organizacionId: req.organizacionId });
 
-        const nuevoUsuario = new Usuario({
-            nombre,
-            apellido,
-            correo: normalizarCorreo(correo),
-            contrasena: await hashContrasena(contrasena),
-            telefono,
-            rol: rol || 'Encargado',
-            estado: estado || 'Activo'
+        const { usuarioGuardado, membresia } = await ejecutarConReservaCuota({
+            permiso: permisoCreacion,
+            recurso: 'usuarios',
+            organizacionId: req.organizacionId,
+            operacion: async () => {
+                const usuarioGuardado = usuarioExistente || await new Usuario({
+                    nombre, apellido, correo: correoNormalizado,
+                    contrasena: await hashContrasena(contrasena), telefono,
+                    rol: rol || 'Encargado', estado: 'Activo'
+                }).save();
+                try {
+                    const membresia = await Membresia.create({
+                        organizacionId: req.organizacionId,
+                        usuario: usuarioGuardado._id,
+                        rol: rol || 'Encargado', estado: estado || 'Activo', ...accesoFincas
+                    });
+                    return { usuarioGuardado, membresia };
+                } catch (error) {
+                    if (!usuarioExistente) await Usuario.deleteOne({ _id: usuarioGuardado._id });
+                    throw error;
+                }
+            }
         });
 
-        const usuarioGuardado = await nuevoUsuario.save();
-        let membresia;
-        try {
-            membresia = await Membresia.create({
-                organizacionId: req.organizacionId,
-                usuario: usuarioGuardado._id,
-                rol: rol || 'Encargado',
-                estado: estado || 'Activo'
-            });
-        } catch (error) {
-            await Usuario.deleteOne({ _id: usuarioGuardado._id });
-            throw error;
-        }
-
         res.status(201).json({
-            mensaje: 'Usuario creado',
+            mensaje: usuarioExistente ? 'Usuario vinculado a la organización' : 'Usuario creado',
             usuario: presentarMembresia({
                 ...membresia.toObject(),
                 usuario: usuarioGuardado
@@ -172,7 +215,7 @@ usuarioCtrl.actualizarUsuario = async (req, res) => {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
         }
 
-        const { nombre, apellido, correo, contrasena, telefono, rol, estado } = req.body;
+        const { nombre, apellido, correo, contrasena, telefono, rol, estado, accesoTodasFincas, fincas } = req.body;
 
         if (correo && await validarCorreoDuplicado(correo, req.params.id)) {
             return res.status(400).json({ mensaje: 'Ya existe un usuario con ese correo' });
@@ -188,12 +231,27 @@ usuarioCtrl.actualizarUsuario = async (req, res) => {
                 throw error;
             }
         }
+        let permisoReactivacion = null;
         if (estado === 'Activo' && membresia.estado !== 'Activo') {
-            await asegurarPuedeCrearUsuario({
+            permisoReactivacion = await asegurarPuedeCrearUsuario({
                 organizacionId: req.organizacionId,
                 rol: rol || membresia.rol,
                 estado
             });
+        }
+        if (accesoTodasFincas !== undefined || fincas !== undefined) {
+            const acceso = await validarAccesoFincas({
+                accesoTodasFincas: accesoTodasFincas !== undefined ? accesoTodasFincas : membresia.accesoTodasFincas,
+                fincas: fincas !== undefined ? fincas : membresia.fincas,
+                organizacionId: req.organizacionId
+            });
+            if (String(req.params.id) === String(req.usuario.id)
+                && !acceso.accesoTodasFincas
+                && !acceso.fincas.map(String).includes(String(req.fincaId))) {
+                return res.status(409).json({ mensaje: 'No puedes quitarte el acceso a la finca que estás utilizando.' });
+            }
+            membresia.accesoTodasFincas = acceso.accesoTodasFincas;
+            membresia.fincas = acceso.fincas;
         }
 
         if (nombre !== undefined) usuario.nombre = nombre;
@@ -205,8 +263,14 @@ usuarioCtrl.actualizarUsuario = async (req, res) => {
         if (rol !== undefined) membresia.rol = rol;
         if (estado !== undefined) membresia.estado = estado;
 
-        const usuarioActualizado = await usuario.save();
-        await membresia.save();
+        const guardarUsuario = async () => {
+            const usuarioActualizado = await usuario.save();
+            await membresia.save();
+            return usuarioActualizado;
+        };
+        const usuarioActualizado = permisoReactivacion
+            ? await ejecutarConReservaCuota({ permiso: permisoReactivacion, recurso: 'usuarios', organizacionId: req.organizacionId, operacion: guardarUsuario })
+            : await guardarUsuario();
 
         res.json({
             mensaje: 'Usuario actualizado',
@@ -234,16 +298,21 @@ usuarioCtrl.cambiarEstadoUsuario = async (req, res) => {
         if (!membresia?.usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
         }
+        let permisoReactivacion = null;
         if (estado === 'Activo' && membresia.estado !== 'Activo') {
-            await asegurarPuedeCrearUsuario({
+            permisoReactivacion = await asegurarPuedeCrearUsuario({
                 organizacionId: req.organizacionId,
                 rol: membresia.rol,
                 estado
             });
         }
 
-        membresia.estado = estado;
-        await membresia.save();
+        const guardarEstado = async () => { membresia.estado = estado; return membresia.save(); };
+        if (permisoReactivacion) {
+            await ejecutarConReservaCuota({ permiso: permisoReactivacion, recurso: 'usuarios', organizacionId: req.organizacionId, operacion: guardarEstado });
+        } else {
+            await guardarEstado();
+        }
 
         res.json({
             mensaje: 'Estado de usuario actualizado',
@@ -329,6 +398,8 @@ usuarioCtrl.loginUsuario = async (req, res) => {
             rol: membresia.rol,
             organizacionId: membresia.organizacionId._id.toString()
         });
+        const fincas = await listarFincasAccesibles(membresia);
+        const finca = fincas.find((item) => String(item._id) === String(membresia.organizacionId.fincaPrincipal)) || fincas[0];
 
         res.json({
             token,
@@ -339,13 +410,10 @@ usuarioCtrl.loginUsuario = async (req, res) => {
                 organizacionId: membresia.organizacionId._id
             },
             organizacion: membresia.organizacionId,
-            organizaciones: membresiasActivas.map((item) => ({
-                id: item.organizacionId._id,
-                nombre: item.organizacionId.nombre,
-                slug: item.organizacionId.slug,
-                rol: item.rol,
-                esPrincipal: item.esPrincipal
-            }))
+            finca,
+            fincaId: finca?._id,
+            fincas,
+            organizaciones: await listarOrganizacionesUsuario(usuario._id)
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al iniciar sesion', error: error.message });
@@ -365,12 +433,68 @@ usuarioCtrl.getPerfil = async (req, res) => {
             return res.status(403).json({ mensaje: 'Usuario inactivo' });
         }
 
+        const fincas = await listarFincasAccesibles(membresia);
         res.json({
             usuario: presentarMembresia(membresia),
-            organizacion: req.organizacion
+            organizacion: req.organizacion,
+            finca: req.finca,
+            fincaId: req.fincaId,
+            fincas,
+            organizaciones: await listarOrganizacionesUsuario(usuario._id)
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener perfil', error: error.message });
+    }
+};
+
+usuarioCtrl.getMisOrganizaciones = async (req, res) => {
+    try {
+        res.json(await listarOrganizacionesUsuario(req.usuario.id));
+    } catch (error) {
+        res.status(500).json({ mensaje: 'No se pudieron consultar las organizaciones.', error: error.message });
+    }
+};
+
+usuarioCtrl.cambiarOrganizacionActiva = async (req, res) => {
+    try {
+        const organizacionId = req.body.organizacionId;
+        const membresia = await Membresia.findOne({
+            organizacionId,
+            usuario: req.usuario.id,
+            estado: 'Activo'
+        }).populate('organizacionId', 'nombre slug estado zonaHoraria fincaPrincipal');
+        if (!membresia || membresia.organizacionId?.estado !== 'Activa') {
+            return res.status(403).json({ mensaje: 'No tienes acceso activo a esta organización.' });
+        }
+
+        const usuario = await Usuario.findById(req.usuario.id);
+        const fincas = await listarFincasAccesibles(membresia);
+        const finca = fincas.find((item) => String(item._id) === String(membresia.organizacionId.fincaPrincipal)) || fincas[0];
+        if (!finca) return res.status(409).json({ mensaje: 'La organización no tiene una finca activa disponible.' });
+
+        const token = generarToken({
+            id: usuario._id.toString(),
+            correo: usuario.correo,
+            nombre: usuario.nombre,
+            rol: membresia.rol,
+            organizacionId: membresia.organizacionId._id.toString()
+        });
+        res.json({
+            token,
+            usuario: {
+                ...limpiarUsuario(usuario),
+                rol: membresia.rol,
+                estado: membresia.estado,
+                organizacionId: membresia.organizacionId._id
+            },
+            organizacion: membresia.organizacionId,
+            finca,
+            fincaId: finca._id,
+            fincas,
+            organizaciones: await listarOrganizacionesUsuario(usuario._id)
+        });
+    } catch (error) {
+        res.status(400).json({ mensaje: 'No se pudo cambiar de organización.', error: error.message });
     }
 };
 

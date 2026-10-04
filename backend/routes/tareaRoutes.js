@@ -1,6 +1,5 @@
 const { Router } = require('express');
 const { auth } = require('../middleware/auth');
-const { crearUploadOrganizacion } = require('../middleware/uploadOrganizacion');
 const {
     actualizarTarea,
     agregarComentario,
@@ -14,12 +13,6 @@ const {
 } = require('../controllers/tareaController');
 
 const router = Router();
-const upload = crearUploadOrganizacion({
-    categoria: 'tareas',
-    limiteMb: 8,
-    tiposPermitidos: (file) => file.mimetype.startsWith('image/')
-});
-
 router.use(auth);
 
 router.get('/', getTareas);
@@ -28,7 +21,7 @@ router.get('/:id', getTareaById);
 router.post('/', crearTarea);
 router.put('/:id', actualizarTarea);
 router.patch('/:id/estado', cambiarEstadoTarea);
-router.patch('/:id/completar', upload.single('evidencia'), completarTarea);
+router.patch('/:id/completar', completarTarea);
 router.post('/:id/comentarios', agregarComentario);
 router.delete('/:id', eliminarTarea);
 

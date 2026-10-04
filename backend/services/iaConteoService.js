@@ -26,6 +26,33 @@ const calcularConfianzaPromedio = (detecciones) => {
     return Number((total / detecciones.length).toFixed(2));
 };
 
+const solicitarBuffer = (url) => new Promise((resolve, reject) => {
+    const endpoint = new URL(url);
+    const cliente = endpoint.protocol === 'https:' ? https : http;
+    const req = cliente.get(endpoint, {
+        headers: { 'X-Internal-Token': process.env.IA_INTERNAL_TOKEN || '' }
+    }, (res) => {
+        const partes = [];
+        res.on('data', (chunk) => partes.push(chunk));
+        res.on('end', () => {
+            if (res.statusCode >= 400) return reject(new Error(`No se pudo descargar la imagen procesada (${res.statusCode})`));
+            resolve(Buffer.concat(partes));
+        });
+    });
+    req.on('error', reject);
+});
+
+const guardarImagenProcesada = async ({ imagenProcesadaUrl, imagenPath, imagenUrl }) => {
+    const baseServicio = new URL(process.env.IA_SERVICE_URL);
+    const salida = new URL(imagenProcesadaUrl, baseServicio);
+    if (salida.origin !== baseServicio.origin) throw new Error('El servicio IA devolvió una URL de salida no permitida.');
+    const extension = path.extname(imagenPath) || '.jpg';
+    const nombre = `${path.basename(imagenPath, extension)}-procesada${extension}`;
+    const destino = path.join(path.dirname(imagenPath), nombre);
+    fs.writeFileSync(destino, await solicitarBuffer(salida));
+    return `${imagenUrl.slice(0, imagenUrl.lastIndexOf('/') + 1)}${nombre}`;
+};
+
 const llamarServicioFastAPI = ({ imagenPath }) => {
     return new Promise((resolve, reject) => {
         const baseUrl = process.env.IA_SERVICE_URL;
@@ -55,7 +82,8 @@ const llamarServicioFastAPI = ({ imagenPath }) => {
                 path: endpoint.pathname,
                 headers: {
                     'Content-Type': `multipart/form-data; boundary=${boundary}`,
-                    'Content-Length': body.length
+                    'Content-Length': body.length,
+                    'X-Internal-Token': process.env.IA_INTERNAL_TOKEN || ''
                 }
             },
             (res) => {
@@ -90,18 +118,31 @@ const procesarImagenConteo = async ({ imagenPath, imagenUrl }) => {
     if (process.env.IA_SERVICE_URL) {
         try {
             const resultadoIA = await llamarServicioFastAPI({ imagenPath });
+            const imagenProcesadaUrl = await guardarImagenProcesada({
+                imagenProcesadaUrl: resultadoIA.imagenProcesadaUrl,
+                imagenPath,
+                imagenUrl
+            });
 
             return {
                 cantidadDetectada: resultadoIA.cantidadDetectada,
                 confianzaPromedio: resultadoIA.confianzaPromedio,
                 detecciones: resultadoIA.detecciones,
-                imagenProcesadaUrl: resultadoIA.imagenProcesadaUrl,
+                imagenProcesadaUrl,
                 proveedor: 'fastapi-yolo',
                 imagenPath
             };
         } catch (error) {
-            console.error('Error llamando servicio IA, usando simulacion:', error.message);
+            console.error('Error llamando servicio IA:', error.message);
+            if (process.env.NODE_ENV === 'production' || process.env.IA_ALLOW_SIMULATION !== 'true') throw error;
         }
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('El servicio de IA no está configurado. No se generó ningún conteo.');
+    }
+    if (process.env.IA_ALLOW_SIMULATION !== 'true') {
+        throw new Error('IA_SERVICE_URL no configurado y la simulación está deshabilitada.');
     }
 
     const cantidadDetectada = 8 + Math.floor(Math.random() * 9);
@@ -118,5 +159,6 @@ const procesarImagenConteo = async ({ imagenPath, imagenUrl }) => {
 };
 
 module.exports = {
-    procesarImagenConteo
+    procesarImagenConteo,
+    simulacionPermitida: () => process.env.NODE_ENV !== 'production' && process.env.IA_ALLOW_SIMULATION === 'true'
 };

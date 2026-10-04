@@ -1,6 +1,7 @@
 const { Tarea } = require('../models/Tarea');
+const Animal = require('../models/Animal');
+const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const { rolTienePermiso } = require('../config/permisosRoles');
-const { urlArchivoOrganizacion } = require('../middleware/uploadOrganizacion');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const { upsertEventoCamada, eliminarEventosCamadaPorReferencia } = require('../services/eventoCamada-service');
 const {
@@ -12,6 +13,28 @@ const {
 const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
 
 const tareaCtrl = {};
+
+const aplicarEfectosTareaCompletada = async (tarea) => {
+    if (tarea.estado !== 'Completada'
+        || tarea.moduloOrigen !== 'Reproduccion'
+        || tarea.especie !== 'Bovino'
+        || tarea.claveAutomatica !== 'destete'
+        || !tarea.animal
+        || !tarea.referenciaId) return;
+
+    const animalId = tarea.animal?._id || tarea.animal;
+    const ciclo = await RegistroReproductivo.findById(tarea.referenciaId).select('animal fechaPartoReal');
+    if (!ciclo?.animal || String(ciclo.animal) === String(animalId)) return;
+
+    await Animal.updateOne(
+        {
+            _id: animalId,
+            madre: ciclo.animal,
+            $or: [{ fechaDestete: null }, { fechaDestete: { $exists: false } }]
+        },
+        { $set: { fechaDestete: tarea.fechaCompletada || new Date() } }
+    );
+};
 const POPULATE_TAREA = [
     { path: 'asignadoA', select: 'nombre apellido correo rol estado' },
     { path: 'creadoPor', select: 'nombre apellido correo rol' },
@@ -145,8 +168,7 @@ const sincronizarBitacoraTarea = async (tarea, usuarioId) => {
                 tarea: tarea._id,
                 tipo: tarea.tipo,
                 claveAutomatica: tarea.claveAutomatica,
-                categoriaAutomatica: tarea.categoriaAutomatica,
-                evidenciaUrl: tarea.evidenciaUrl
+                categoriaAutomatica: tarea.categoriaAutomatica
             }
         });
         return;
@@ -166,8 +188,7 @@ const sincronizarBitacoraTarea = async (tarea, usuarioId) => {
                 tarea: tarea._id,
                 tipo: tarea.tipo,
                 claveAutomatica: tarea.claveAutomatica,
-                categoriaAutomatica: tarea.categoriaAutomatica,
-                evidenciaUrl: tarea.evidenciaUrl
+                categoriaAutomatica: tarea.categoriaAutomatica
             }
         });
     }
@@ -275,6 +296,7 @@ tareaCtrl.actualizarTarea = async (req, res) => {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
         }
 
+        await aplicarEfectosTareaCompletada(tarea);
         await sincronizarBitacoraTarea(tarea, req.usuario?.id);
         const cambioAsignado = String(tareaAnterior?.asignadoA || '') !== String(tarea.asignadoA?._id || tarea.asignadoA || '');
         if (cambioAsignado) {
@@ -324,6 +346,7 @@ tareaCtrl.cambiarEstadoTarea = async (req, res) => {
         }
 
         const tareaActualizada = await tarea.save();
+        await aplicarEfectosTareaCompletada(tareaActualizada);
         await sincronizarBitacoraTarea(tareaActualizada, req.usuario?.id);
         await ejecutarNotificacionSegura(() => (
             estado === 'Completada' && estadoAnterior !== 'Completada'
@@ -386,10 +409,6 @@ tareaCtrl.completarTarea = async (req, res) => {
         tarea.estado = 'Completada';
         tarea.fechaCompletada = new Date();
 
-        if (req.file) {
-            tarea.evidenciaUrl = urlArchivoOrganizacion('tareas', req.file);
-        }
-
         if (req.body.observaciones) {
             tarea.observaciones = req.body.observaciones;
         }
@@ -407,6 +426,7 @@ tareaCtrl.completarTarea = async (req, res) => {
         }
 
         const tareaActualizada = await tarea.save();
+        await aplicarEfectosTareaCompletada(tareaActualizada);
         await sincronizarBitacoraTarea(tareaActualizada, req.usuario?.id);
         await ejecutarNotificacionSegura(() => notificarTareaCompletada(tareaActualizada, req.usuario));
         res.json(await obtenerTareaPoblada(tareaActualizada._id));

@@ -9,10 +9,12 @@ const {
     crearUsuario,
     eliminarUsuario,
     getPerfil,
+    getMisOrganizaciones,
     getUsuarioById,
     getUsuarios,
     getUsuariosAsignables,
     loginUsuario,
+    cambiarOrganizacionActiva,
     restablecerContrasena,
     solicitarRecuperacionContrasena
 } = require('../controllers/usuario-controller');
@@ -23,6 +25,8 @@ router.post('/login', rateLimitLogin, loginUsuario);
 router.post('/recuperar-contrasena', rateLimitRecuperacion, solicitarRecuperacionContrasena);
 router.post('/restablecer-contrasena', rateLimitRecuperacion, restablecerContrasena);
 router.get('/perfil', auth, getPerfil);
+router.get('/mis-organizaciones', auth, getMisOrganizaciones);
+router.post('/cambiar-organizacion-activa', auth, cambiarOrganizacionActiva);
 router.get('/asignables', auth, getUsuariosAsignables);
 
 router.route('/')

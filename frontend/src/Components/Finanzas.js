@@ -18,6 +18,8 @@ import {
 import FormularioMovimientoFinanciero from './FormularioMovimientoFinanciero';
 import TablaDinamica from './TablaDinamica';
 import { ContenidoPaginado } from './PaginacionTabla';
+import OperacionesFinancierasMultiFinca from './OperacionesFinancierasMultiFinca';
+import { usePlan } from '../context/PlanContext';
 
 const tipos = ['Todos', 'Planilla', 'Inversion', 'Compra'];
 
@@ -391,6 +393,7 @@ const EditorCatalogosFinancieros = ({ onCerrar }) => {
 };
 
 const Finanzas = () => {
+  const { tieneFeature } = usePlan();
   const [movimientos, setMovimientos] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [consumo, setConsumo] = useState([]);
@@ -404,6 +407,7 @@ const Finanzas = () => {
   const [movimientoSeleccionado, setMovimientoSeleccionado] = useState(null);
   const [modoFormulario, setModoFormulario] = useState(false);
   const [modoCatalogos, setModoCatalogos] = useState(false);
+  const [modoMultiFinca, setModoMultiFinca] = useState(false);
   const [rangoFechas, setRangoFechas] = useState(rangoMesActual);
 
   const cargarFinanzas = async () => {
@@ -588,6 +592,10 @@ const Finanzas = () => {
     return <EditorCatalogosFinancieros onCerrar={() => setModoCatalogos(false)} />;
   }
 
+  if (modoMultiFinca) {
+    return <OperacionesFinancierasMultiFinca onCerrar={() => setModoMultiFinca(false)} onActualizado={cargarFinanzas} />;
+  }
+
   return (
     <section className="finanzas-page">
       <div className="panel-title">
@@ -596,6 +604,11 @@ const Finanzas = () => {
           <h2>Movimientos financieros</h2>
         </div>
         <div className="acciones-encabezado">
+          {tieneFeature('operacionMultiFinca') && (
+            <button className="boton-secundario compacto" type="button" onClick={() => setModoMultiFinca(true)}>
+              Multi-finca
+            </button>
+          )}
           <button className="boton-secundario compacto boton-catalogos-finanzas" type="button" onClick={() => setModoCatalogos(true)}>
             Catálogos
           </button>

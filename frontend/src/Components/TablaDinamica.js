@@ -43,6 +43,8 @@ const TablaDinamica = ({
   filtros = [],
   textoAgregar = 'Nuevo registro',
   onAgregar,
+  agregarDeshabilitado = false,
+  agregarTitulo = '',
   onEditar,
   onEliminar,
   accionesExtra,
@@ -112,7 +114,7 @@ const TablaDinamica = ({
           <h2>{titulo}</h2>
         </div>
         {onAgregar && (
-          <button className="boton-primario compacto" type="button" onClick={onAgregar}>+ {textoAgregar}</button>
+          <button className="boton-primario compacto" type="button" onClick={onAgregar} disabled={agregarDeshabilitado} title={agregarTitulo}>+ {textoAgregar}</button>
         )}
       </div>
 

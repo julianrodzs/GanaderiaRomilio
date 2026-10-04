@@ -22,7 +22,8 @@ const obtenerSesionGuardada = () => {
 export const obtenerContextoOffline = (sesion = obtenerSesionGuardada()) => {
   const organizacionId = normalizarId(sesion?.organizacion?._id || sesion?.usuario?.organizacionId);
   const fincaId = normalizarId(
-    sesion?.finca?._id
+    sesion?.fincaActiva?._id
+    || sesion?.finca?._id
     || sesion?.fincaId
     || sesion?.organizacion?.fincaPrincipal?._id
     || sesion?.organizacion?.fincaPrincipal

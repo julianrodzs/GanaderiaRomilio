@@ -11,7 +11,7 @@ const {
     NATURALEZAS_FINANCIERAS,
     TIPOS_MOVIMIENTO_FINANCIERO
 } = require('../config/catalogosFinancieros');
-const { asegurarPuedeCrearAnimal, puedeUsarEspecie } = require('./plan-service');
+const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota, puedeUsarEspecie } = require('./plan-service');
 const { obtenerFincaActual } = require('../context/organizacion-context');
 const { validarObjetivoProductivoFinca } = require('./finca-service');
 const { normalizarFraccionRacial, obtenerCatalogoRacial, prepararDatosRaciales } = require('./raza-service');
@@ -54,7 +54,7 @@ const COLUMNAS = {
         requeridas: ['FECHA', 'NATURALEZA', 'TIPO_MOVIMIENTO', 'CATEGORIA', 'DESCRIPCION', 'MONTO', 'MONEDA'],
         opcionales: [
             'PRODUCTO', 'CANTIDAD', 'UNIDAD', 'PRECIO_UNITARIO', 'PROVEEDOR', 'DESTINO_USO',
-            'METODO_PAGO', 'COMPROBANTE', 'EMPLEADO', 'FINCA', 'OBSERVACIONES'
+            'METODO_PAGO', 'EMPLEADO', 'FINCA', 'OBSERVACIONES'
         ]
     },
     PESAJES: {
@@ -416,7 +416,6 @@ const mapearFinanzas = (hoja, errores, catalogos) => {
             proveedor: limpiarTexto(leer('PROVEEDOR')) || undefined,
             destinoUso,
             metodoPago,
-            comprobante: limpiarTexto(leer('COMPROBANTE')) || undefined,
             empleado: limpiarTexto(leer('EMPLEADO')) || undefined,
             finca: limpiarTexto(leer('FINCA')) || undefined,
             observaciones: limpiarTexto(leer('OBSERVACIONES')) || undefined
@@ -644,7 +643,18 @@ const importarAnimales = async (registros, modo, resultado, usuarioId) => {
                     const permisoEspecie = await puedeUsarEspecie(datos.especie || existente.especie || 'Bovino');
                     if (!permisoEspecie.permitido) throw new Error(permisoEspecie.message);
                     if (existente.estado !== 'Activo') {
-                        await asegurarPuedeCrearAnimal({ especie: datos.especie || existente.especie || 'Bovino' });
+                        const permiso = await asegurarPuedeCrearAnimal({ especie: datos.especie || existente.especie || 'Bovino' });
+                        datos = prepararDatosRaciales(datos, existente.toObject());
+                        await ejecutarConReservaCuota({
+                            permiso,
+                            recurso: 'animales',
+                            operacion: async () => {
+                                Object.assign(existente, datos);
+                                await existente.save();
+                            }
+                        });
+                        resultado.actualizados += 1;
+                        continue;
                     }
                     if (existente.loteActual) {
                         const loteActual = await Lote.findById(existente.loteActual);
@@ -664,16 +674,24 @@ const importarAnimales = async (registros, modo, resultado, usuarioId) => {
                 resultado.actualizados += 1;
                 continue;
             }
-            if ((datos.estado || 'Activo') === 'Activo') {
-                await asegurarPuedeCrearAnimal({ especie: datos.especie || 'Bovino' });
-            }
+            const permiso = (datos.estado || 'Activo') === 'Activo'
+                ? await asegurarPuedeCrearAnimal({ especie: datos.especie || 'Bovino' })
+                : null;
             await validarObjetivoProductivoFinca({
                 fincaId: obtenerFincaActual(),
                 especie: datos.especie || 'Bovino',
                 objetivoProductivo: datos.objetivoProductivo
             });
             datos = prepararDatosRaciales(datos);
-            await Animal.create(datos);
+            if (permiso) {
+                await ejecutarConReservaCuota({
+                    permiso,
+                    recurso: 'animales',
+                    operacion: () => Animal.create(datos)
+                });
+            } else {
+                await Animal.create(datos);
+            }
             resultado.creados += 1;
         } catch (error) {
             registrarErrorConfirmacion(resultado, registro, error);

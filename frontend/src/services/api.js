@@ -1,14 +1,25 @@
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:4000/api' : '');
 
-const obtenerTokenSesion = () => {
+const obtenerSesion = () => {
   const sesionGuardada = localStorage.getItem('ganaderiaSesion');
-  if (!sesionGuardada) return '';
+  if (!sesionGuardada) return null;
 
   try {
-    return JSON.parse(sesionGuardada)?.token || '';
+    return JSON.parse(sesionGuardada);
   } catch (error) {
-    return '';
+    return null;
   }
+};
+
+const obtenerTokenSesion = () => obtenerSesion()?.token || '';
+const obtenerFincaSesion = () => {
+  const sesion = obtenerSesion();
+  return sesion?.fincaActiva?._id
+    || sesion?.finca?._id
+    || sesion?.fincaId
+    || sesion?.organizacion?.fincaPrincipal?._id
+    || sesion?.organizacion?.fincaPrincipal
+    || '';
 };
 
 const request = async (ruta, opciones = {}) => {
@@ -28,6 +39,8 @@ const request = async (ruta, opciones = {}) => {
 
   if (token) {
     headersBase.Authorization = `Bearer ${token}`;
+    const fincaId = obtenerFincaSesion();
+    if (fincaId) headersBase['X-Finca-Id'] = fincaId;
   }
 
   const respuesta = await fetch(`${API_URL}${ruta}`, {
@@ -57,6 +70,11 @@ const request = async (ruta, opciones = {}) => {
     throw error;
   }
 
+  const metodo = String(fetchOpciones.method || 'GET').toUpperCase();
+  if (metodo !== 'GET' && /^(\/animales|\/compras|\/ventas|\/usuarios|\/fincas|\/plan\/especie|\/conteo-drone)/.test(ruta)) {
+    window.dispatchEvent(new CustomEvent('ganaderiaPlanActualizado', { detail: { ruta, metodo } }));
+  }
+
   return data;
 };
 
@@ -67,9 +85,13 @@ export const obtenerArchivoProtegido = async (ruta) => {
     ? ruta.replace('/uploads/', '/archivos/')
     : ruta;
   const rutaApi = rutaProtegida.startsWith('/api/') ? rutaProtegida.slice(4) : rutaProtegida;
+  const fincaId = obtenerFincaSesion();
   const respuesta = await fetch(`${API_URL}${rutaApi}`, {
     cache: 'no-store',
-    headers: token ? { Authorization: `Bearer ${token}` } : {}
+    headers: token ? {
+      Authorization: `Bearer ${token}`,
+      ...(fincaId ? { 'X-Finca-Id': fincaId } : {})
+    } : {}
   });
 
   if (!respuesta.ok) {
@@ -80,21 +102,19 @@ export const obtenerArchivoProtegido = async (ruta) => {
   return respuesta.blob();
 };
 
-export const abrirArchivoProtegido = async (ruta) => {
-  const ventana = window.open('about:blank', '_blank');
-  if (ventana) ventana.opener = null;
-  try {
-    const blob = await obtenerArchivoProtegido(ruta);
-    const url = URL.createObjectURL(blob);
-    if (ventana) ventana.location.href = url;
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (error) {
-    if (ventana) ventana.close();
-    throw error;
-  }
-};
-
 export const obtenerPlanActual = () => request('/plan/actual');
+
+export const obtenerEstadoFacturacion = () => request('/facturacion/estado');
+export const crearCheckoutFacturacion = (codigoPlan) => request('/facturacion/checkout', {
+  method: 'POST',
+  body: JSON.stringify({ codigoPlan })
+});
+export const crearPortalFacturacion = () => request('/facturacion/portal', { method: 'POST' });
+export const obtenerConfiguracionEmails = () => request('/usuario/configuracion-emails');
+export const actualizarConfiguracionEmails = (datos) => request('/usuario/configuracion-emails', {
+  method: 'PUT',
+  body: JSON.stringify(datos)
+});
 
 export const obtenerLotes = (filtros = {}) => request(`/lotes${construirQuery(filtros)}`);
 export const obtenerLote = (id) => request(`/lotes/${id}`);
@@ -142,10 +162,108 @@ export const seleccionarEspeciePlan = (especiePlan) => request('/plan/especie', 
 
 export const obtenerFincas = () => request('/fincas');
 
+export const crearFinca = (datos) => request('/fincas', {
+  method: 'POST',
+  body: JSON.stringify(datos)
+});
+
+export const actualizarFinca = (fincaId, datos) => request(`/fincas/${fincaId}`, {
+  method: 'PUT',
+  body: JSON.stringify(datos)
+});
+
+export const cambiarEstadoFinca = (fincaId, estado) => request(`/fincas/${fincaId}/estado`, {
+  method: 'PATCH',
+  body: JSON.stringify({ estado })
+});
+
+export const marcarFincaPrincipal = (fincaId) => request(`/fincas/${fincaId}/principal`, {
+  method: 'PATCH'
+});
+
 export const actualizarLineasProductivasFinca = (fincaId, lineasProductivas) => request(`/fincas/${fincaId}/lineas-productivas`, {
   method: 'PATCH',
   body: JSON.stringify({ lineasProductivas })
 });
+
+export const obtenerReporteMultiFinca = (filtros = {}) => request(`/reportes/multi-finca${construirQuery(filtros)}`);
+
+export const obtenerTrasladosFinca = (filtros = {}) => request(`/fincas/traslados${construirQuery(filtros)}`);
+
+export const trasladarAnimalesFinca = (datos) => request('/fincas/traslados', {
+  method: 'POST',
+  body: JSON.stringify(datos)
+});
+
+export const obtenerHistorialFincaAnimal = (animalId) => request(`/fincas/animales/${animalId}/historial`);
+
+export const obtenerOperacionesFinancierasMultiFinca = (filtros = {}) => request(`/finanzas/multi-finca${construirQuery(filtros)}`);
+
+export const crearTransferenciaFinancieraInterna = (datos) => request('/finanzas/multi-finca/transferencias', {
+  method: 'POST',
+  body: JSON.stringify(datos)
+});
+
+export const crearGastoCompartido = (datos) => request('/finanzas/multi-finca/gastos-compartidos', {
+  method: 'POST',
+  body: JSON.stringify(datos)
+});
+
+export const obtenerMetasMultiFinca = () => request('/reportes/multi-finca/metas');
+
+export const guardarMetaMultiFinca = (datos) => request('/reportes/multi-finca/metas', {
+  method: 'POST',
+  body: JSON.stringify(datos)
+});
+
+export const eliminarMetaMultiFinca = (id) => request(`/reportes/multi-finca/metas/${id}`, { method: 'DELETE' });
+
+export const obtenerCierresMultiFinca = () => request('/reportes/multi-finca/cierres');
+
+export const crearCierreMultiFinca = (datos) => request('/reportes/multi-finca/cierres', {
+  method: 'POST',
+  body: JSON.stringify(datos)
+});
+
+export const obtenerCierreMultiFinca = (id) => request(`/reportes/multi-finca/cierres/${id}`);
+
+export const descargarCierreMultiFinca = async (id, formato = 'xlsx') => {
+  if (!API_URL) throw new Error('VITE_API_URL no configurado');
+  const token = obtenerTokenSesion();
+  const fincaId = obtenerFincaSesion();
+  const respuesta = await fetch(`${API_URL}/reportes/multi-finca/cierres/${id}/exportar?formato=${encodeURIComponent(formato)}`, {
+    cache: 'no-store',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(fincaId ? { 'X-Finca-Id': fincaId } : {})
+    }
+  });
+  if (!respuesta.ok) {
+    const data = await respuesta.json().catch(() => ({}));
+    throw new Error(data.mensaje || 'No se pudo exportar el cierre histórico');
+  }
+  return respuesta.blob();
+};
+
+export const obtenerDetalleMultiFinca = (filtros = {}) => request(`/reportes/multi-finca/detalle${construirQuery(filtros)}`);
+
+export const descargarReporteMultiFinca = async (filtros = {}) => {
+  if (!API_URL) throw new Error('VITE_API_URL no configurado');
+  const token = obtenerTokenSesion();
+  const fincaId = obtenerFincaSesion();
+  const respuesta = await fetch(`${API_URL}/reportes/multi-finca/exportar${construirQuery(filtros)}`, {
+    cache: 'no-store',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(fincaId ? { 'X-Finca-Id': fincaId } : {})
+    }
+  });
+  if (!respuesta.ok) {
+    const data = await respuesta.json().catch(() => ({}));
+    throw new Error(data.mensaje || 'No se pudo exportar el consolidado');
+  }
+  return respuesta.blob();
+};
 
 export const loginUsuario = ({ correo, contrasena }) => {
   return request('/usuarios/login', {
@@ -176,6 +294,12 @@ export const crearUsuario = (usuario) => {
 };
 
 export const obtenerPerfilUsuario = () => request('/usuarios/perfil');
+
+export const obtenerMisOrganizaciones = () => request('/usuarios/mis-organizaciones');
+export const cambiarOrganizacionActiva = (organizacionId) => request('/usuarios/cambiar-organizacion-activa', {
+  method: 'POST',
+  body: JSON.stringify({ organizacionId })
+});
 
 export const obtenerUsuarios = () => request('/usuarios');
 
@@ -286,15 +410,10 @@ export const cambiarEstadoTarea = (id, estado, observaciones = '') => {
   });
 };
 
-export const completarTarea = ({ id, observaciones, evidencia, idempotencyKey, versionEsperada }) => {
-  const formData = new FormData();
-  if (observaciones) formData.append('observaciones', observaciones);
-  if (evidencia) formData.append('evidencia', evidencia);
-  if (versionEsperada) formData.append('versionEsperada', versionEsperada);
-
+export const completarTarea = ({ id, observaciones, idempotencyKey, versionEsperada }) => {
   return request(`/tareas/${id}/completar`, {
     method: 'PATCH',
-    body: formData,
+    body: JSON.stringify({ observaciones, versionEsperada }),
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
   });
 };
@@ -832,22 +951,6 @@ export const eliminarMovimientoFinanciero = (id) => {
   });
 };
 
-const crearFormDataVenta = (venta) => {
-  const formData = new FormData();
-  Object.entries(venta).forEach(([clave, valor]) => {
-    if (clave === 'comprobante') return;
-    if (clave === 'animales' || clave === 'camadas') {
-      formData.append(clave, JSON.stringify(valor || []));
-      return;
-    }
-    if (valor !== undefined && valor !== null) {
-      formData.append(clave, valor);
-    }
-  });
-  if (venta.comprobante) formData.append('comprobante', venta.comprobante);
-  return formData;
-};
-
 export const obtenerVentas = (filtros = {}) => {
   const params = new URLSearchParams();
   Object.entries(filtros).forEach(([clave, valor]) => {
@@ -869,14 +972,14 @@ export const obtenerResumenVentas = ({ fechaInicio, fechaFin, especie } = {}) =>
 export const crearVentaAnimal = (venta) => {
   return request('/ventas', {
     method: 'POST',
-    body: crearFormDataVenta(venta)
+    body: JSON.stringify(venta)
   });
 };
 
 export const actualizarVentaAnimal = (id, venta) => {
   return request(`/ventas/${id}`, {
     method: 'PUT',
-    body: crearFormDataVenta(venta)
+    body: JSON.stringify(venta)
   });
 };
 
@@ -891,22 +994,6 @@ export const eliminarVentaAnimal = (id) => {
   return request(`/ventas/${id}`, {
     method: 'DELETE'
   });
-};
-
-const crearFormDataCompra = (compra) => {
-  const formData = new FormData();
-  Object.entries(compra).forEach(([clave, valor]) => {
-    if (clave === 'comprobante') return;
-    if (clave === 'animales' || (typeof valor === 'object' && valor !== null)) {
-      formData.append(clave, JSON.stringify(valor || []));
-      return;
-    }
-    if (valor !== undefined && valor !== null) {
-      formData.append(clave, valor);
-    }
-  });
-  if (compra.comprobante) formData.append('comprobante', compra.comprobante);
-  return formData;
 };
 
 export const obtenerCompras = (filtros = {}) => {
@@ -930,14 +1017,14 @@ export const obtenerResumenCompras = ({ fechaInicio, fechaFin, especie } = {}) =
 export const crearCompraAnimal = (compra) => {
   return request('/compras', {
     method: 'POST',
-    body: crearFormDataCompra(compra)
+    body: JSON.stringify(compra)
   });
 };
 
 export const actualizarCompraAnimal = (id, compra) => {
   return request(`/compras/${id}`, {
     method: 'PUT',
-    body: crearFormDataCompra(compra)
+    body: JSON.stringify(compra)
   });
 };
 
@@ -1061,6 +1148,14 @@ export const obtenerReporteDescendenciaBovina = ({ fechaInicio, fechaFin } = {})
   const query = params.toString();
   return request(`/reportes/bovinos/descendencia${query ? `?${query}` : ''}`);
 };
+
+export const obtenerReportePesoDestete = (filtros = {}) => (
+  request(`/reportes/destete/peso${construirQuery(filtros)}`)
+);
+
+export const obtenerReportePesoDesteteAvanzado = (filtros = {}) => (
+  request(`/reportes/destete/peso/analitica${construirQuery(filtros)}`)
+);
 
 export const obtenerConfiguracionProductiva = () => request('/reportes/configuracion-productiva');
 

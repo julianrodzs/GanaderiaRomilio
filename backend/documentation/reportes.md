@@ -10,6 +10,8 @@ ICP e IEE se documentan en `indices-productivos.md`. Ambos son indicadores de fi
 
 La analitica economica requiere Pro o superior: finanzas y sustentabilidad de cria, compras avanzadas, economia por camada, ventas por origen y rotacion del inventario vendido. Los endpoints protegidos responden `403 PLAN_FEATURE_NOT_AVAILABLE` cuando el plan no incluye la capacidad.
 
+Los reportes comunes se calculan siempre para la finca activa recibida en `X-Finca-Id`. Premium habilita además el panel comparativo y consolidado multi-finca descrito al final de este documento.
+
 Este documento explica de donde salen los datos de los reportes de GanaderiaRomilio, que variables usa cada uno y como se transforman.
 
 ## Convenciones generales
@@ -2461,6 +2463,8 @@ obtenerReporteCamadas(filtrosGenerales)
 obtenerReporteReproductivoPorcino(filtrosGenerales)
 obtenerReporteTareasCamadas(filtrosGenerales)
 obtenerReporteEconomicoCamadas(filtrosGenerales)
+obtenerReportePesoDestete(filtrosGenerales)
+obtenerReportePesoDesteteAvanzado(filtrosGenerales)
 ```
 
 Filtros generales:
@@ -2541,6 +2545,58 @@ GET /api/reportes/bovinos/descendencia?fechaInicio=&fechaFin=
 Las crías se derivan de `Animal.madre` y `Animal.padre`. Cuando no hay referencia interna se usa `madreDiio` o `padreDiio` como respaldo. Los partos se cuentan separadamente desde `RegistroReproductivo.fechaPartoReal`.
 
 El período filtra la fecha real del parto y la fecha de nacimiento de la cría. Una vaca puede mostrar más crías que partos si hubo un parto múltiple. El reporte de toros muestra utilización registrada (`crías` y `madres diferentes`), no una calificación genética.
+
+## Peso al destete bovino y porcino
+
+```text
+GET /api/reportes/destete/peso?fechaInicio=&fechaFin=&especie=
+GET /api/reportes/destete/peso/analitica?fechaInicio=&fechaFin=&especie=
+```
+
+El primer endpoint es un reporte basico disponible en todos los planes. Usa únicamente datos reales registrados:
+
+- Bovinos: `Animal.fechaNacimiento`, `fechaDestete`, `pesoNacimiento`, `pesoDestete`, `sexo` y `madre`.
+- Porcinos: `Camada.fechaNacimiento`, `fechaDesteteReal`, `nacidosVivos`, `destetados`, `pesoPromedioNacimiento`, `pesoPromedioDestete`, `pesoTotalDestete` y `madre`.
+- El periodo se aplica sobre la fecha real de destete.
+- Los pesos ausentes no se convierten en cero; se informan mediante la cobertura del dato.
+- El promedio porcino por lechon se pondera por la cantidad de destetados, para que una camada pequena no pese igual que una numerosa.
+
+El segundo endpoint requiere `analiticaProductiva` y agrega comparabilidad por edad:
+
+- Bovinos: calcula peso equivalente a 205 dias con `((pesoDestete - pesoNacimiento) / edadDias) * 205 + pesoNacimiento`, únicamente para destetes entre 160 y 250 dias. También calcula ganancia media diaria predestete.
+- Porcinos: ajusta el peso total de la camada a 21 dias con factores para edades reales de 14 a 28 dias. También calcula peso promedio ajustado por lechon, ganancia media diaria y supervivencia al destete.
+- Los registros fuera de rango o incompletos se conservan en el detalle, pero no entran al indicador normalizado.
+
+Los resultados por madre son comparaciones operativas y no evaluaciones geneticas completas. En bovinos no se corrige todavía por edad de la madre, raza o grupo contemporaneo. En porcinos no se corrige por paridad ni transferencias de lechones entre camadas.
+
+Fuentes metodologicas:
+
+- Beef Improvement Federation, `Guidelines for Uniform Beef Improvement Programs`, seccion de peso al destete.
+- Pork Information Gateway, `Swine Nutrition Guide`, factores de ajuste del peso de camada a 21 dias.
+
+## Comparativo y consolidado multi-finca
+
+```text
+GET /api/reportes/multi-finca?fechaInicio=&fechaFin=&especie=&fincaIds=
+```
+
+Requiere la función Premium `reportesMultiFinca`. `fincaIds` es una lista separada por comas; si se omite, se incluyen todas las fincas activas autorizadas para la membresía. El backend rechaza IDs ajenos, inactivos o no asignados al usuario.
+
+El reporte responde una pregunta concreta: cómo se comparan el inventario, las finanzas, la reproducción y la sanidad entre las fincas seleccionadas. Entrega por finca:
+
+- animales activos, bovinos y porcinos;
+- peso actual promedio y cantidad de animales con peso;
+- ingresos, egresos y balance del período;
+- partos reales, destetes reales y peso promedio al destete;
+- aplicaciones sanitarias del período y tratamientos activos.
+
+También entrega un consolidado. Las cantidades y montos se suman; el peso promedio consolidado se recalcula como `pesoTotal / animalesConPeso`. No se promedian los promedios de cada finca, porque eso daría el mismo peso estadístico a fincas con tamaños diferentes.
+
+Los reportes restantes continúan operando sobre la finca activa. Gestión y Pro pueden cambiar de finca y analizarlas individualmente; el cruce simultáneo permanece reservado a Premium.
+
+La consolidación ampliada también distingue transferencias internas, gastos compartidos, traslados de animales y monedas. CRC y USD se muestran por separado; no se aplica un tipo de cambio inferido. Los destetes se atribuyen a la finca vigente en la fecha real mediante `HistorialFincaAnimal`.
+
+Premium permite guardar metas por finca u organización, cerrar una fotografía inmutable del período, consultar el detalle que forma cada indicador y exportar un libro XLSX con resumen, fincas, evolución mensual y metas. La especificación operativa completa está en `consolidacion-multifinca.md`.
 
 Filtros porcinos:
 

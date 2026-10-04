@@ -202,7 +202,6 @@ Los campos sensibles se reemplazan por `[protegido]`, por ejemplo:
 - `token`
 - `authorization`
 - `resetPasswordToken`
-- `comprobante`
 
 Vista en frontend:
 
@@ -811,10 +810,10 @@ Reglas:
 
 - Si hay fecha monta y no hay parto estimado, suma 283 dias.
 - Si hay parto real, calcula destete a 7 meses si falta.
-- Calcula proximo celo estimado desde parto real:
-  - parto + 60 dias.
-  - ciclos de 21 dias.
-  - no muestra celos pasados.
+- Calcula la revision de retorno a celo desde el parto real: inicia a los 60 dias posparto y, mientras no exista un dato real nuevo, avanza la proyeccion en intervalos de 21 dias.
+- Calcula el destete bovino estimado a 7 meses del parto real. Al registrar el ternero desde el ciclo, esta fecha se copia a `Animal.fechaDesteteEstimada`; no se confunde con el destete realmente ejecutado.
+- Al completar la tarea automatica `Destetar ternero`, se registra la fecha de finalizacion en `Animal.fechaDestete`, siempre que la tarea este vinculada a una cria de la madre del ciclo. La fecha real tambien puede corregirse manualmente desde la ficha del animal.
+- Un ciclo bovino `Cerrado` con parto real conserva las tareas posparto de revisar celo y destetar el ternero. `Cancelado` y `No preñada` cancelan el seguimiento.
 - Calcula estado reproductivo.
 - Permite crear ternero desde parto y asociarlo a la madre.
 
@@ -1330,7 +1329,6 @@ Endpoints:
 - Asociar gastos bovinos a animal, potrero o tarea cuando aplique.
 - Definir reglas de impuestos, descuentos y ajustes en compras/ventas para reportes contables mas formales.
 - Separar mejor inversiones capitalizables de gasto operativo en interfaz y reportes.
-- Implementar control opcional de comprobantes/facturas por proveedor.
 - Agregar exportacion de finanzas/reportes a Excel o PDF.
 - Definir si `GALON` debe convertirse a litros o mantenerse como unidad separada.
 - Estandarizar monedas y tipo de cambio si se mezclan `CRC` y `USD`.
@@ -1607,6 +1605,15 @@ Reportes principales:
 - reproduccion porcina.
 - tareas por camada.
 - economia por camada.
+- peso real al destete bovino y porcino.
+- comparacion avanzada del destete a una edad comun.
+
+Endpoints de destete:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| GET | `/destete/peso` | Pesos reales, cobertura y detalle; disponible en todos los planes |
+| GET | `/destete/peso/analitica` | Equivalente bovino a 205 dias y porcino a 21 dias; requiere analitica productiva |
 
 Endpoints porcinos:
 
@@ -1658,6 +1665,17 @@ Endpoints:
 - cantidadEsperada.
 
 Se comunica con servicio IA si esta configurado.
+
+El conteo por dron es el unico flujo que almacena imagenes. Compras, ventas, finanzas, animales y tareas no aceptan comprobantes, fotografias ni evidencias adjuntas. La importacion Excel conserva su carga de `.xlsx`, pero el archivo se procesa en memoria y no se trata como imagen operativa.
+
+Limpieza de campos legados:
+
+```bash
+npm run migrate:archivos-obsoletos:check
+npm run migrate:archivos-obsoletos
+```
+
+El primer comando solo informa cantidades. El segundo elimina de los documentos los campos antiguos de comprobantes, fotos y evidencia, sin borrar documentos ni tocar las imagenes de dron.
 
 ## Servicios internos
 
@@ -1909,14 +1927,22 @@ npm run migrate:objetivos-bovinos:check
 npm run migrate:objetivos-bovinos
 ```
 
-El contexto autenticado incluye la finca principal. Los modelos operativos asignan ese `fincaId` al crear documentos y filtran lecturas, actualizaciones, eliminaciones y agregaciones por organizacion y finca. Procesos internos sin contexto de finca pueden recorrer toda la organizacion de forma controlada.
+El contexto autenticado incluye una finca activa. El frontend la envía en `X-Finca-Id`; el middleware comprueba en cada solicitud que pertenezca a la organización, esté activa y sea accesible para la membresía. Si el encabezado no está presente se utiliza la finca principal. Los modelos operativos asignan ese `fincaId` al crear documentos y filtran lecturas, actualizaciones, eliminaciones y agregaciones por organización y finca.
+
+Los procesos internos que necesitan atravesar fincas deben omitir únicamente el filtro de finca y conservar obligatoriamente el de organización. El reporte Premium multi-finca sigue esta regla y además restringe los IDs consultados a la lista autorizada de la membresía.
 
 Endpoints de configuracion:
 
 | Metodo | Ruta | Descripcion |
 | --- | --- | --- |
-| GET | `/api/fincas` | Lista las fincas de la organizacion e identifica la principal |
+| GET | `/api/fincas` | Lista las fincas autorizadas e identifica la activa y la principal |
+| POST | `/api/fincas` | Crea una finca dentro del límite del plan |
+| PUT | `/api/fincas/:id` | Actualiza los datos generales de una finca |
+| PATCH | `/api/fincas/:id/estado` | Activa o desactiva una finca |
+| PATCH | `/api/fincas/:id/principal` | Define la finca principal de la organización |
 | PATCH | `/api/fincas/:id/lineas-productivas` | Actualiza especies y objetivos; requiere administrador |
+
+La membresía define el alcance mediante `accesoTodasFincas` o el arreglo `fincas`. El administrador puede modificar ese alcance desde Usuarios. Gestión y Pro conservan reportes por finca activa; Premium habilita `GET /api/reportes/multi-finca` para comparación y consolidación autorizada entre fincas.
 
 Comandos idempotentes:
 

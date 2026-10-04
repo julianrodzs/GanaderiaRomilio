@@ -7,8 +7,7 @@ import {
   obtenerAnimales,
   obtenerCamadas,
   obtenerResumenVentas,
-  obtenerVentas,
-  abrirArchivoProtegido
+  obtenerVentas
 } from '../services/api';
 import { obtenerRangoMesActual } from '../utils/fechas';
 import SelectorEspecie from './SelectorEspecie';
@@ -82,8 +81,7 @@ const estadoInicial = {
   observaciones: '',
   animales: [],
   camadas: [],
-  montoFinal: '',
-  comprobante: null
+  montoFinal: ''
 };
 
 const Ventas = ({ soloLectura = false }) => {
@@ -246,8 +244,7 @@ const Ventas = ({ soloLectura = false }) => {
         pesoTotalKg: item.pesoTotalKg,
         precioKg: item.precioKg
       })),
-      montoFinal: venta.montoFinal ?? '',
-      comprobante: null
+      montoFinal: venta.montoFinal ?? ''
     });
     setErrorFormulario('');
     setBusquedaAnimal('');
@@ -402,8 +399,6 @@ const Ventas = ({ soloLectura = false }) => {
             <label>Teléfono<input name="telefonoComprador" value={formulario.telefonoComprador} onChange={actualizarCampo} /></label>
           </div>
           <label>Observaciones<textarea rows="3" name="observaciones" value={formulario.observaciones} onChange={actualizarCampo} /></label>
-          <label>Comprobante<input type="file" name="comprobante" accept="image/*,.pdf" onChange={actualizarCampo} /></label>
-
           <section className="venta-selector">
             {formulario.especie === 'Porcino' && (
               <div className="inventario-tabs venta-tabs">
@@ -670,11 +665,6 @@ const Ventas = ({ soloLectura = false }) => {
               <article><span>Ajuste</span><strong>{formatearMoneda(detalle.ajusteMonto)}</strong></article>
             </div>
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
-            {detalle.comprobanteUrl && (
-              <button className="boton-primario compacto venta-comprobante-link" type="button" onClick={() => abrirArchivoProtegido(detalle.comprobanteUrl)}>
-                Ver comprobante
-              </button>
-            )}
             <ContenidoPaginado datos={detalle.animales || []} clavePaginacion={`venta-${detalle._id}-animales`}>
               {(animalesPagina) => (
                 <div className="tabla-scroll tabla-dinamica venta-detalle-tabla">

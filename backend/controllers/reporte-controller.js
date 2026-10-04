@@ -26,6 +26,7 @@ const {
     obtenerReporteDescendencia,
     obtenerReporteRacial
 } = require('../services/reportesRazaGenealogia-service');
+const { obtenerReportePesoDestete } = require('../services/reportePesoDestete-service');
 
 const reporteCtrl = {};
 const { obtenerRendimientoForrajes } = require('../services/forrajeRendimiento-service');
@@ -78,6 +79,31 @@ reporteCtrl.getDescendenciaBovina = async (req, res) => {
         });
     } catch (error) {
         res.status(error.status || 500).json({ mensaje: error.message || 'Error al obtener el reporte de descendencia' });
+    }
+};
+
+reporteCtrl.getPesoDestete = async (req, res) => {
+    try {
+        res.json(await obtenerReportePesoDestete({
+            fechaInicio: req.query.fechaInicio,
+            fechaFin: req.query.fechaFin,
+            especie: req.query.especie || 'Todos'
+        }));
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener el reporte de peso al destete', error: error.message });
+    }
+};
+
+reporteCtrl.getPesoDesteteAvanzado = async (req, res) => {
+    try {
+        res.json(await obtenerReportePesoDestete({
+            fechaInicio: req.query.fechaInicio,
+            fechaFin: req.query.fechaFin,
+            especie: req.query.especie || 'Todos',
+            avanzado: true
+        }));
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener el análisis avanzado de destete', error: error.message });
     }
 };
 

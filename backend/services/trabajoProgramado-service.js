@@ -1,9 +1,12 @@
 const crypto = require('crypto');
 const TrabajoProgramado = require('../models/TrabajoProgramado');
 const { procesarAlertasTodasOrganizaciones } = require('./alertasCorreo-service');
+const { procesarResumenesTodasOrganizaciones } = require('./resumenEmail-service');
 
 const CLAVE_ALERTAS = 'alertas-operativas';
+const CLAVE_RESUMENES = 'resumenes-email-premium';
 let intervaloInterno = null;
+let intervaloResumenes = null;
 
 const adquirirBloqueo = async (clave, origen) => {
     const ahora = new Date();
@@ -82,6 +85,23 @@ const ejecutarAlertasProgramadas = async ({ origen = 'manual' } = {}) => {
     }
 };
 
+const ejecutarResumenesEmailProgramados = async ({ origen = 'manual' } = {}) => {
+    const tokenBloqueo = await adquirirBloqueo(CLAVE_RESUMENES, origen);
+    if (!tokenBloqueo) return { ejecutado: false, omitido: true, motivo: 'Ya existe una ejecución de resúmenes en curso.' };
+    try {
+        const resultados = await procesarResumenesTodasOrganizaciones();
+        const resumen = {
+            organizacionesProcesadas: resultados.length,
+            correosEnviados: resultados.reduce((total, item) => total + item.envios.filter((envio) => envio.enviado).length, 0)
+        };
+        await finalizarTrabajo(CLAVE_RESUMENES, tokenBloqueo, { estado: 'Completado', ultimoResultado: resumen, ultimoError: '' });
+        return { ejecutado: true, ...resumen, resultados };
+    } catch (error) {
+        await finalizarTrabajo(CLAVE_RESUMENES, tokenBloqueo, { estado: 'Error', ultimoError: error.message, ultimoResultado: null });
+        throw error;
+    }
+};
+
 const iniciarProgramadorAlertas = () => {
     const modo = (process.env.CRON_MODE || 'internal').toLowerCase();
     if (modo !== 'internal') {
@@ -96,9 +116,16 @@ const iniciarProgramadorAlertas = () => {
 
     ejecutar();
     intervaloInterno = setInterval(ejecutar, intervaloMs);
+
+    const ejecutarResumenes = () => ejecutarResumenesEmailProgramados({ origen: 'programador-interno' })
+        .then((resultado) => console.log('Revisión de resúmenes Premium completada:', resultado))
+        .catch((error) => console.error('Error enviando resúmenes Premium:', error.message));
+    ejecutarResumenes();
+    intervaloResumenes = setInterval(ejecutarResumenes, Number(process.env.EMAIL_DIGEST_INTERVAL_MS) || 60 * 60 * 1000);
 };
 
 module.exports = {
     ejecutarAlertasProgramadas,
+    ejecutarResumenesEmailProgramados,
     iniciarProgramadorAlertas
 };

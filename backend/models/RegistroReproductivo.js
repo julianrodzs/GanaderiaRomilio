@@ -1,6 +1,7 @@
 const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 const reproduccionPorcinaConfig = require('../config/reproduccionPorcinaConfig');
+const reproduccionBovinaConfig = require('../config/reproduccionBovinaConfig');
 
 const ESTADOS_REPRODUCTIVOS = [
     'Vacía',
@@ -79,10 +80,10 @@ const calcularProximoCelo = (fechaPartoReal) => {
     if (!parto) return undefined;
 
     const hoy = normalizarDiaUtc(new Date());
-    const proximoCelo = sumarDias(parto, 60);
+    const proximoCelo = sumarDias(parto, reproduccionBovinaConfig.diasRevisionCeloPostParto);
 
     while (proximoCelo < hoy) {
-        proximoCelo.setUTCDate(proximoCelo.getUTCDate() + 21);
+        proximoCelo.setUTCDate(proximoCelo.getUTCDate() + reproduccionBovinaConfig.diasCicloEstralEstimado);
     }
 
     return proximoCelo;
@@ -231,7 +232,7 @@ const completarFechasYEstado = (datos, opciones = {}) => {
     }
 
     if (especie !== 'Porcino' && datos.fechaPartoReal && (opciones.recalcularDesdePartoReal || !datos.fechaDestete)) {
-        datos.fechaDestete = sumarMeses(datos.fechaPartoReal, 7);
+        datos.fechaDestete = sumarMeses(datos.fechaPartoReal, reproduccionBovinaConfig.mesesDestetePostParto);
     }
 
     datos.estado = calcularEstadoReproductivo(datos);

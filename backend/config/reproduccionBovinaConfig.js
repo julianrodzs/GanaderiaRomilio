@@ -1,4 +1,7 @@
 module.exports = {
+    diasRevisionCeloPostParto: 60,
+    diasCicloEstralEstimado: 21,
+    mesesDestetePostParto: 7,
     tareasAutomaticas: {
         partoEstimado: {
             clave: 'parto-estimado',
@@ -18,7 +21,7 @@ module.exports = {
         },
         destete: {
             clave: 'destete',
-            titulo: 'Revisar destete',
+            titulo: 'Destetar ternero',
             tipo: 'Reproducción',
             prioridad: 'Media',
             categoriaAutomatica: 'Reproducción bovina',

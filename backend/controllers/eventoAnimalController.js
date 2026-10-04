@@ -1,11 +1,18 @@
 const EventoAnimal = require('../models/EventoAnimal');
 const Animal = require('../models/Animal');
+const { Membresia } = require('../models/Membresia');
+const { listarFincasAccesibles } = require('../services/accesoFinca-service');
 
 const eventoAnimalCtrl = {};
 
 eventoAnimalCtrl.getEventosPorAnimal = async (req, res) => {
     try {
-        const eventos = await EventoAnimal.find({ animal: req.params.animalId })
+        const animal = await Animal.findById(req.params.animalId).select('_id').lean();
+        if (!animal) return res.status(404).json({ mensaje: 'Animal no encontrado en la finca activa' });
+        const membresia = await Membresia.findById(req.usuario.membresiaId);
+        const fincas = await listarFincasAccesibles(membresia);
+        const eventos = await EventoAnimal.find({ animal: req.params.animalId, fincaId: { $in: fincas.map((finca) => finca._id) } })
+            .setOptions({ omitirAislamientoFinca: true })
             .populate('creadoPor', 'nombre apellido correo rol')
             .sort({ fecha: -1, createdAt: -1 });
 

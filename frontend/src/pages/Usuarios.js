@@ -5,6 +5,7 @@ import {
   crearUsuario,
   eliminarUsuario,
   obtenerAuditorias,
+  obtenerFincas,
   obtenerUsuarios
 } from '../services/api';
 import { ROLES } from '../constants/permisosRoles';
@@ -22,6 +23,8 @@ const estadoInicial = {
   telefono: '',
   rol: 'Encargado',
   estado: 'Activo',
+  accesoTodasFincas: true,
+  fincas: [],
   contrasena: '',
   confirmarContrasena: ''
 };
@@ -56,12 +59,15 @@ const normalizarUsuario = (usuario) => ({
   ...estadoInicial,
   ...usuario,
   contrasena: '',
-  confirmarContrasena: ''
+  confirmarContrasena: '',
+  accesoTodasFincas: usuario?.accesoTodasFincas !== false,
+  fincas: (usuario?.fincas || []).map((finca) => finca?._id || finca)
 });
 
 const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => {
-  const { plan, tieneFeature } = usePlan();
+  const { capacidadDisponible, plan, tieneFeature } = usePlan();
   const [usuarios, setUsuarios] = useState([]);
+  const [fincas, setFincas] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -96,7 +102,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
   };
 
   useEffect(() => {
-    cargarUsuarios();
+    Promise.all([cargarUsuarios(), obtenerFincas().then(setFincas)]).catch(() => {});
   }, []);
 
   const cargarAuditorias = async () => {
@@ -139,6 +145,10 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
       usuario.estado
     ].filter(Boolean).join(' ').toLowerCase().includes(texto));
   }, [busqueda, usuarios]);
+  const requiereCupoUsuario = formulario.estado === 'Activo'
+    && (!usuarioSeleccionado || usuarioSeleccionado.estado !== 'Activo');
+  const cuotaUsuarios = capacidadDisponible('usuarios');
+  const usuarioBloqueadoPorCuota = requiereCupoUsuario && !cuotaUsuarios.permitido;
 
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
@@ -151,6 +161,10 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
   };
 
   const abrirNuevo = () => {
+    if (!capacidadDisponible('usuarios').permitido) {
+      setError(capacidadDisponible('usuarios').mensaje);
+      return;
+    }
     setUsuarioSeleccionado(null);
     setFormulario(estadoInicial);
     setErrorFormulario('');
@@ -173,6 +187,10 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
   const guardarUsuario = async (evento) => {
     evento.preventDefault();
     setErrorFormulario('');
+    if (usuarioBloqueadoPorCuota) {
+      setErrorFormulario(`${cuotaUsuarios.mensaje} Inactiva otro usuario o mejora el plan.`);
+      return;
+    }
 
     if (formulario.contrasena || formulario.confirmarContrasena) {
       if (formulario.contrasena !== formulario.confirmarContrasena) {
@@ -181,18 +199,15 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
       }
     }
 
-    if (!usuarioSeleccionado && !formulario.contrasena) {
-      setErrorFormulario('La contrasena es requerida para crear usuario');
-      return;
-    }
-
     const datos = {
       nombre: formulario.nombre,
       apellido: formulario.apellido,
       correo: formulario.correo,
       telefono: formulario.telefono,
       rol: formulario.rol,
-      estado: formulario.estado
+      estado: formulario.estado,
+      accesoTodasFincas: formulario.accesoTodasFincas,
+      fincas: formulario.accesoTodasFincas ? [] : formulario.fincas
     };
 
     if (formulario.contrasena) {
@@ -268,7 +283,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
             </button>
           )}
           <button className="boton-secundario compacto" type="button" onClick={onAbrirPlan}>Mi plan</button>
-          {vista === 'usuarios' && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nuevo Usuario</button>}
+          {vista === 'usuarios' && <button className="boton-primario compacto" type="button" onClick={abrirNuevo} disabled={!capacidadDisponible('usuarios').permitido} title={capacidadDisponible('usuarios').mensaje}>+ Nuevo Usuario</button>}
         </div>
       </div>
 
@@ -303,6 +318,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
                 <th>Telefono</th>
                 <th>Rol</th>
                 <th>Estado</th>
+                <th>Fincas</th>
                 <th>Ultimo acceso</th>
                 <th>Acciones</th>
               </tr>
@@ -319,6 +335,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
                       {usuario.estado}
                     </span>
                   </td>
+                  <td>{usuario.accesoTodasFincas !== false ? 'Todas' : `${(usuario.fincas || []).length} asignada(s)`}</td>
                   <td>{formatearFecha(usuario.ultimoAcceso)}</td>
                   <td>
                     <div className="acciones-tabla acciones-tabla-amplia">
@@ -464,14 +481,13 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
               </label>
 
               <label>
-                Contrasena
+                Contrasena {usuarioSeleccionado ? '(opcional)' : '(solo para una cuenta nueva)'}
                 <input
                   name="contrasena"
                   type="password"
                   value={formulario.contrasena}
                   onChange={actualizarCampo}
-                  required={!usuarioSeleccionado}
-                  placeholder={usuarioSeleccionado ? 'Opcional al editar' : ''}
+                  placeholder={usuarioSeleccionado ? 'Opcional al editar' : 'No se usa si el correo ya tiene una cuenta'}
                 />
               </label>
 
@@ -482,14 +498,45 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
                   type="password"
                   value={formulario.confirmarContrasena}
                   onChange={actualizarCampo}
-                  required={!usuarioSeleccionado}
                 />
               </label>
             </div>
 
+            <fieldset className="usuario-acceso-fincas">
+              <legend>Acceso a fincas</legend>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={formulario.accesoTodasFincas}
+                  onChange={(evento) => setFormulario((actual) => ({ ...actual, accesoTodasFincas: evento.target.checked }))}
+                />
+                Puede acceder a todas las fincas
+              </label>
+              {!formulario.accesoTodasFincas && (
+                <div>
+                  {fincas.filter((finca) => finca.estado === 'Activa').map((finca) => (
+                    <label key={finca._id}>
+                      <input
+                        type="checkbox"
+                        checked={formulario.fincas.includes(finca._id)}
+                        onChange={(evento) => setFormulario((actual) => ({
+                          ...actual,
+                          fincas: evento.target.checked
+                            ? [...new Set([...actual.fincas, finca._id])]
+                            : actual.fincas.filter((id) => id !== finca._id)
+                        }))}
+                      />
+                      {finca.codigo} · {finca.nombre}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
+
             <div className="form-actions">
+              {usuarioBloqueadoPorCuota && <span className="texto-ayuda limite-plan-aviso">{cuotaUsuarios.mensaje} Inactiva otro usuario o mejora el plan.</span>}
               <button className="boton-link" type="button" onClick={cancelarFormulario}>Cancelar</button>
-              <button className="boton-primario compacto" type="submit" disabled={guardando}>
+              <button className="boton-primario compacto" type="submit" disabled={guardando || usuarioBloqueadoPorCuota} title={usuarioBloqueadoPorCuota ? cuotaUsuarios.mensaje : ''}>
                 {guardando ? 'Guardando...' : 'Guardar usuario'}
               </button>
             </div>

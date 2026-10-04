@@ -8,6 +8,7 @@ const TIPOS_EVENTO = [
     'Muerte',
     'Cambio de potrero',
     'Cambio de lote',
+    'Traslado de finca',
     'Pesaje',
     'Sanidad',
     'Tratamiento',
@@ -31,6 +32,7 @@ const MODULOS_ORIGEN = [
     'Tareas',
     'Lotes',
     'Alimentacion',
+    'Fincas',
     'Manual'
 ];
 

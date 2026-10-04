@@ -1,6 +1,7 @@
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const { Tarea } = require('../models/Tarea');
 const { upsertEventoAnimal } = require('./eventoAnimal-service');
+const { sincronizarTareasBovinas } = require('./reproduccionBovina-service');
 
 const ESTADOS_CIERRE = ['Cerrado', 'Cancelado', 'No preñada'];
 
@@ -87,7 +88,7 @@ const cambiarEstadoCiclo = async ({ cicloId, estadoCiclo, motivo, usuarioId }) =
         throw new Error('Estado de ciclo no válido');
     }
 
-    const ciclo = await RegistroReproductivo.findById(cicloId);
+    const ciclo = await RegistroReproductivo.findById(cicloId).populate('animal');
 
     if (!ciclo) {
         const error = new Error('Registro reproductivo no encontrado');
@@ -105,7 +106,19 @@ const cambiarEstadoCiclo = async ({ cicloId, estadoCiclo, motivo, usuarioId }) =
     );
 
     const cicloGuardado = await ciclo.save();
-    await cancelarTareasAutomaticasDelCiclo(cicloGuardado._id, cicloGuardado.motivoCierre);
+    const cierreBovinoConParto = estadoCiclo === 'Cerrado'
+        && (cicloGuardado.especie || cicloGuardado.animal?.especie || 'Bovino') === 'Bovino'
+        && Boolean(cicloGuardado.fechaPartoReal);
+
+    if (cierreBovinoConParto) {
+        await sincronizarTareasBovinas({
+            registro: cicloGuardado,
+            animal: cicloGuardado.animal,
+            usuarioId
+        });
+    } else {
+        await cancelarTareasAutomaticasDelCiclo(cicloGuardado._id, cicloGuardado.motivoCierre);
+    }
     await registrarEventoCierre({ ciclo: cicloGuardado, estadoCiclo, motivo: cicloGuardado.motivoCierre, usuarioId });
 
     return cicloGuardado;

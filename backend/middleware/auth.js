@@ -4,6 +4,7 @@ const { ejecutarConOrganizacion } = require('../context/organizacion-context');
 const { Membresia } = require('../models/Membresia');
 require('../models/Organizacion');
 const Usuario = require('../models/Usuario');
+const { resolverFincaActiva } = require('../services/accesoFinca-service');
 
 const base64UrlDecode = (valor) => {
     const base64 = valor.replace(/-/g, '+').replace(/_/g, '/');
@@ -98,7 +99,7 @@ const auth = async (req, res, next) => {
 
         const membresia = await Membresia.findOne(filtroMembresia)
             .sort({ esPrincipal: -1, createdAt: 1 })
-            .populate('organizacionId', 'nombre slug estado zonaHoraria fincaPrincipal');
+            .populate('organizacionId', 'nombre slug estado zonaHoraria fincaPrincipal plan');
 
         if (!membresia) {
             return res.status(403).json({ mensaje: 'El usuario no tiene acceso activo a una organización.' });
@@ -108,6 +109,11 @@ const auth = async (req, res, next) => {
         if (!organizacion || organizacion.estado !== 'Activa') {
             return res.status(403).json({ mensaje: 'La organización no está activa.' });
         }
+        const finca = await resolverFincaActiva({
+            membresia,
+            organizacion,
+            fincaSolicitada: req.get('X-Finca-Id')
+        });
 
         req.usuario = {
             id: usuario._id.toString(),
@@ -118,16 +124,21 @@ const auth = async (req, res, next) => {
             estado: membresia.estado,
             esSuperAdministrador: usuario.esSuperAdministrador === true,
             membresiaId: membresia._id.toString(),
-            organizacionId: organizacion._id.toString()
+            organizacionId: organizacion._id.toString(),
+            accesoTodasFincas: membresia.accesoTodasFincas === true,
+            fincas: membresia.fincas || []
         };
         req.organizacionId = organizacion._id.toString();
         req.organizacion = organizacion;
-        req.fincaId = organizacion.fincaPrincipal?.toString() || null;
-        req.fincaPrincipalId = req.fincaId;
+        req.finca = finca;
+        req.fincaId = finca._id.toString();
+        req.fincaPrincipalId = organizacion.fincaPrincipal?.toString() || null;
+        req.planSuscripcion = organizacion.plan || {};
+        req.planVigente = ['Activo', 'Prueba'].includes(organizacion.plan?.estado || 'Activo');
 
         return ejecutarConOrganizacion(req.organizacionId, next, req.fincaId);
     } catch (error) {
-        res.status(401).json({ mensaje: 'No autorizado', error: error.message });
+        res.status(error.status || 401).json({ mensaje: 'No autorizado', error: error.message, code: error.code });
     }
 };
 

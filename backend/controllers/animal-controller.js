@@ -14,7 +14,7 @@ const {
     prepararDatosGenealogia,
     validarRelacionGenealogica
 } = require('../services/genealogiaService');
-const { asegurarPuedeCrearAnimal, puedeUsarEspecie } = require('../services/plan-service');
+const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota, puedeUsarEspecie } = require('../services/plan-service');
 const { validarObjetivoProductivoFinca } = require('../services/finca-service');
 const { obtenerCatalogoRacial, prepararDatosRaciales } = require('../services/raza-service');
 const { respuestaErrorPlan } = require('../middleware/plan');
@@ -23,6 +23,7 @@ const { cerrarPertenencia, validarAnimalParaLote } = require('../services/lote-s
 const Lote = require('../models/Lote');
 const { obtenerCategoriaAnimal, validarYPrepararCategoriaAnimal } = require('../services/categoriaAnimal-service');
 const { prepararObjetivoProductivo } = require('../config/objetivosProductivos');
+const { sanitizarAnimal } = require('../services/animal-dto');
 
 const limpiarDiio = (diio) => {
     if (diio === undefined) return undefined;
@@ -239,12 +240,13 @@ animalCtrl.getAnimales = async (req, res) => {
 
 animalCtrl.createAnimal = async (req, res) => {
     try {
-        if (req.body.estado === 'En tratamiento') {
+        const payload = sanitizarAnimal(req.body, { crear: true });
+        if (payload.estado === 'En tratamiento') {
             return res.status(400).json({ mensaje: 'Use estadoSanitario y TratamientoSanitario; En tratamiento ya no es un estado de inventario' });
         }
         let datos = prepararDatosGenealogia({
-            ...req.body,
-            diio: limpiarDiio(req.body.diio)
+            ...payload,
+            diio: limpiarDiio(payload.diio)
         });
         datos = prepararDatosRaciales(datos);
         datos = await prepararRelacionCamada(datos);
@@ -257,12 +259,13 @@ animalCtrl.createAnimal = async (req, res) => {
         });
         await validarDiioDisponible(datos.diio);
         await validarRelacionGenealogica(null, datos.padre, datos.madre);
-        if ((datos.estado || 'Activo') === 'Activo') {
-            await asegurarPuedeCrearAnimal({ organizacionId: req.organizacionId, especie: datos.especie || 'Bovino' });
-        }
-
-        const nuevoAnimal = new Animal(datos);
-        const animalGuardado = await nuevoAnimal.save();
+        const guardar = async () => new Animal(datos).save();
+        const animalGuardado = (datos.estado || 'Activo') === 'Activo'
+            ? await ejecutarConReservaCuota({
+                permiso: await asegurarPuedeCrearAnimal({ organizacionId: req.organizacionId, especie: datos.especie || 'Bovino' }),
+                recurso: 'animales', organizacionId: req.organizacionId, operacion: guardar
+            })
+            : await guardar();
         await crearEventosInventario({ animal: animalGuardado, usuarioId: req.usuario?.id });
         res.status(201).json(animalGuardado);
     } catch (error) {
@@ -314,9 +317,10 @@ animalCtrl.getAnimal = async (req, res) => {
 
 animalCtrl.updateAnimal = async (req, res) => {
     try {
+        const payload = sanitizarAnimal(req.body);
         let datos = prepararDatosGenealogia({
-            ...req.body,
-            diio: req.body.diio !== undefined ? limpiarDiio(req.body.diio) : req.body.diio
+            ...payload,
+            diio: payload.diio !== undefined ? limpiarDiio(payload.diio) : payload.diio
         });
         const animalAnterior = await Animal.findById(req.params.id).lean();
 
@@ -355,6 +359,7 @@ animalCtrl.updateAnimal = async (req, res) => {
                 objetivoProductivo: objetivoFinal
             });
         }
+        let permisoReactivacion = null;
         if (estadoFinal === 'Activo') {
             const especieDisponible = await puedeUsarEspecie(especieFinal, req.organizacionId);
             if (!especieDisponible.permitido) {
@@ -366,7 +371,7 @@ animalCtrl.updateAnimal = async (req, res) => {
                 throw error;
             }
             if (animalAnterior.estado !== 'Activo') {
-                await asegurarPuedeCrearAnimal({ organizacionId: req.organizacionId, especie: especieFinal });
+                permisoReactivacion = await asegurarPuedeCrearAnimal({ organizacionId: req.organizacionId, especie: especieFinal });
             }
         }
         if (animalAnterior.loteActual && estadoFinal === 'Activo'
@@ -376,15 +381,16 @@ animalCtrl.updateAnimal = async (req, res) => {
         }
         await validarRelacionGenealogica(req.params.id, datos.padre, datos.madre);
 
-        const animal = await Animal.findByIdAndUpdate(req.params.id, datos, {
-            new: true,
-            runValidators: true
-        })
-            .populate('potreroActual')
+        const actualizar = () => Animal.findByIdAndUpdate(req.params.id, { $set: datos }, {
+            new: true, runValidators: true
+        }).populate('potreroActual')
             .populate('loteActual', 'codigo nombre proposito estado')
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo')
             .populate('madre', 'diio identificadorFinca nombre sexo');
+        const animal = permisoReactivacion
+            ? await ejecutarConReservaCuota({ permiso: permisoReactivacion, recurso: 'animales', organizacionId: req.organizacionId, operacion: actualizar })
+            : await actualizar();
 
         if (!animal) {
             return res.status(404).json({ mensaje: 'Animal no encontrado' });

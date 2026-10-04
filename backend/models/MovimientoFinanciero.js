@@ -7,7 +7,7 @@ const movimientoFinancieroSchema = new Schema(
         fecha: { type: Date, required: true },
         tipoMovimiento: {
             type: String,
-            enum: ['Planilla', 'Inversion', 'Compra', 'Venta de animales', 'Compra de animales'],
+            enum: ['Planilla', 'Inversion', 'Compra', 'Venta de animales', 'Compra de animales', 'Transferencia interna'],
             required: true,
             trim: true
         },
@@ -60,7 +60,16 @@ const movimientoFinancieroSchema = new Schema(
         animal: { type: Schema.Types.ObjectId, ref: 'Animal' },
         referenciaId: { type: Schema.Types.ObjectId },
         referenciaModelo: { type: String, trim: true },
-        comprobante: { type: String, trim: true },
+        alcanceFinanciero: {
+            type: String,
+            enum: ['EXTERNO', 'TRANSFERENCIA_INTERNA', 'GASTO_COMPARTIDO'],
+            default: 'EXTERNO',
+            index: true
+        },
+        grupoConsolidacion: { type: Schema.Types.ObjectId, index: true },
+        fincaContraparte: { type: Schema.Types.ObjectId, ref: 'Finca' },
+        excluirConsolidacion: { type: Boolean, default: false, index: true },
+        porcentajeDistribucion: { type: Number, min: 0, max: 100 },
         observaciones: { type: String, trim: true }
     },
     {
@@ -136,5 +145,6 @@ movimientoFinancieroSchema.index({ destinoUso: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ tipoMovimiento: 1, tipoTrabajo: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ tipoMovimiento: 1, tipoInversion: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ referenciaModelo: 1, referenciaId: 1 });
+movimientoFinancieroSchema.index({ organizacionId: 1, grupoConsolidacion: 1, fincaId: 1 });
 
 module.exports = model('MovimientoFinanciero', movimientoFinancieroSchema);

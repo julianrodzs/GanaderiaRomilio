@@ -1,14 +1,13 @@
 const Animal = require('../models/Animal');
 const CompraAnimal = require('../models/CompraAnimal');
 const PertenenciaLote = require('../models/PertenenciaLote');
-const { urlArchivoOrganizacion } = require('../middleware/uploadOrganizacion');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const { eliminarEventosPorReferencia, upsertEventoAnimal } = require('../services/eventoAnimal-service');
 const {
     DESTINO_USO_MOVIMIENTOS_ANIMALES,
     obtenerCategoriaCompraAnimales
 } = require('../config/catalogosFinancieros');
-const { asegurarPuedeCrearAnimal } = require('../services/plan-service');
+const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota } = require('../services/plan-service');
 const { validarObjetivoProductivoFinca } = require('../services/finca-service');
 const { respuestaErrorPlan } = require('../middleware/plan');
 const { agregarAnimalesAlLote, crearLoteRapido } = require('../services/lote-service');
@@ -139,14 +138,15 @@ const validarObjetivosCompraEnFinca = async ({ fincaId, especie, animales }) => 
 const crearAnimalesCompra = async (compra, usuarioId) => {
     const animalesActualizados = [];
     const cantidadNuevos = (compra.animales || []).filter((item) => !item.animal).length;
+    let permiso = null;
     if (cantidadNuevos > 0) {
-        await asegurarPuedeCrearAnimal({
+        permiso = await asegurarPuedeCrearAnimal({
             especie: compra.especie || 'Bovino',
             cantidad: cantidadNuevos
         });
     }
-
-    for (const item of compra.animales || []) {
+    const crear = async () => {
+      for (const item of compra.animales || []) {
         const proporcion = compra.montoCalculado ? Number(item.subtotal || 0) / compra.montoCalculado : 0;
         const montoAsignado = compra.montoTotal ? compra.montoTotal * proporcion : item.subtotal;
 
@@ -202,10 +202,15 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
                 objetivoProductivo: item.objetivoProductivo
             }
         });
+      }
+      compra.animales = animalesActualizados;
+      await compra.save();
+    };
+    if (permiso) {
+        await ejecutarConReservaCuota({ permiso, recurso: 'animales', cantidad: cantidadNuevos, operacion: crear });
+    } else {
+        await crear();
     }
-
-    compra.animales = animalesActualizados;
-    await compra.save();
 };
 
 const crearMovimientoCompra = async (compra) => {
@@ -227,7 +232,6 @@ const crearMovimientoCompra = async (compra) => {
             moneda: 'CRC',
             proveedor: compra.proveedor,
             destinoUso: DESTINO_USO_MOVIMIENTOS_ANIMALES,
-            comprobante: compra.comprobanteUrl,
             observaciones: compra.observaciones,
             referenciaId: compra._id,
             referenciaModelo: 'CompraAnimal'
@@ -346,7 +350,6 @@ compraAnimalCtrl.crearCompra = async (req, res) => {
         const compra = new CompraAnimal({
             ...req.body,
             animales,
-            comprobanteUrl: urlArchivoOrganizacion('compras', req.file),
             registradoPor: req.usuario?.id
         });
         const compraGuardada = await compra.save();
@@ -381,8 +384,7 @@ compraAnimalCtrl.actualizarCompra = async (req, res) => {
         await revertirCompra(compraAnterior);
         const datos = {
             ...req.body,
-            animales,
-            comprobanteUrl: urlArchivoOrganizacion('compras', req.file) || compraAnterior.comprobanteUrl
+            animales
         };
         const compra = await CompraAnimal.findByIdAndUpdate(req.params.id, datos, { new: true, runValidators: true });
         await aplicarCompraConfirmada(compra, req.usuario?.id);

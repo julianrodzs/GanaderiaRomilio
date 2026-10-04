@@ -8,6 +8,12 @@ const Navegacion = ({
   vistaActiva = 'Dashboard',
   onCambiarVista,
   usuario,
+  fincas = [],
+  fincaActiva,
+  onCambiarFinca,
+  organizaciones = [],
+  organizacionActiva,
+  onCambiarOrganizacion,
   onAbrirNotificaciones,
   onNavegarNotificacion,
   estadoConexion,
@@ -21,9 +27,9 @@ const Navegacion = ({
   const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Pesajes', 'Potreros', 'Alimentacion', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone'];
   const rol = usuario?.rol || 'Consulta';
   const droneDisponible = !(plan?.plan?.codigo === 'ESENCIAL' && plan?.plan?.especiePlan === 'Porcino');
-  const items = [...itemsBase, 'Mis tareas', 'Usuarios']
+  const items = [...itemsBase, 'Mis tareas', 'Usuarios', 'Configuración']
     .filter((item) => item !== 'Drone' || droneDisponible)
-    .filter((item) => puedeAccederModulo(rol, item));
+    .filter((item) => item === 'Configuración' || puedeAccederModulo(rol, item));
   const esItemActivo = (item) => item === vistaActiva || (item === 'Mis tareas' && vistaActiva === 'Dashboard');
   const etiquetaItem = (item) => item === 'Dashboard' ? 'Db' : item === 'Alimentacion' ? 'Alimentación' : item;
 
@@ -59,6 +65,34 @@ const Navegacion = ({
     <header className="app-header">
       <div className="app-brand">
         <span className="brand-icon">GR</span>
+        {organizaciones.length > 1 && (
+          <label className="selector-finca-header selector-organizacion-header">
+            <span>Organización</span>
+            <select
+              value={organizacionActiva?._id || ''}
+              onChange={(evento) => onCambiarOrganizacion?.(evento.target.value)}
+              aria-label="Organización activa"
+            >
+              {organizaciones.map((organizacion) => (
+                <option key={organizacion.id} value={organizacion.id}>{organizacion.nombre} · {organizacion.rol}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="selector-finca-header">
+          <span>Finca</span>
+          <select
+            value={fincaActiva?._id || ''}
+            onChange={(evento) => onCambiarFinca?.(evento.target.value)}
+            disabled={fincas.length <= 1}
+            aria-label="Finca activa"
+          >
+            {!fincas.length && fincaActiva && <option value={fincaActiva._id}>{fincaActiva.codigo} · {fincaActiva.nombre}</option>}
+            {fincas.filter((finca) => finca.estado === 'Activa').map((finca) => (
+              <option key={finca._id} value={finca._id}>{finca.codigo} · {finca.nombre}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="app-nav-shell">

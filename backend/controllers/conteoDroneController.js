@@ -26,6 +26,7 @@ conteoDroneCtrl.getConteos = async (req, res) => {
 
 conteoDroneCtrl.procesarConteo = async (req, res) => {
     let reservaActiva = false;
+    let periodoReserva = null;
     try {
         const { potrero, cantidadEsperada, observaciones } = req.body;
 
@@ -58,7 +59,8 @@ conteoDroneCtrl.procesarConteo = async (req, res) => {
             return res.status(200).json(conteoExistente);
         }
 
-        await reservarUsoDrone({ organizacionId: req.organizacionId });
+        const reserva = await reservarUsoDrone({ organizacionId: req.organizacionId });
+        periodoReserva = reserva.permiso.periodo;
         reservaActiva = true;
 
         const imagenOriginalUrl = urlArchivoOrganizacion('conteo-drone', req.file);
@@ -83,13 +85,13 @@ conteoDroneCtrl.procesarConteo = async (req, res) => {
         });
 
         const conteoGuardado = await nuevoConteo.save();
-        await incrementarUsoDrone({ conteoId: conteoGuardado._id, liberarReserva: true });
+        await incrementarUsoDrone({ periodo: periodoReserva, conteoId: conteoGuardado._id, liberarReserva: true });
         reservaActiva = false;
         const conteoConPotrero = await ConteoDrone.findById(conteoGuardado._id).populate('potrero');
 
         res.status(201).json(conteoConPotrero);
     } catch (error) {
-        if (reservaActiva) await liberarReservaDrone().catch(() => null);
+        if (reservaActiva) await liberarReservaDrone({ periodo: periodoReserva }).catch(() => null);
         if (error?.code === 11000) {
             const claveOperacion = String(req.get('Idempotency-Key') || req.body.claveOperacion || '').trim();
             const existente = claveOperacion

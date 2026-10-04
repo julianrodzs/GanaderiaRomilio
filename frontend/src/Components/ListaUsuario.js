@@ -16,6 +16,7 @@ import Tareas from '../pages/Tareas';
 import CentroNotificaciones from '../pages/CentroNotificaciones';
 import MiPlan from '../pages/MiPlan';
 import AdministracionSaas from '../pages/AdministracionSaas';
+import ConfiguracionCuenta from '../pages/ConfiguracionCuenta';
 import Ventas from './Ventas';
 import { puedeAccederModulo, puedeGestionarModulo } from '../constants/permisosRoles';
 import {
@@ -83,7 +84,7 @@ const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
   maximumFractionDigits: 0
 }).format(valor || 0);
 
-const ListaUsuario = ({ usuario, onLogout }) => {
+const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, onLogout }) => {
   const { tieneFeature } = usePlan();
   const rol = usuario?.rol || 'Consulta';
   const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Alimentacion', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
@@ -290,6 +291,12 @@ const ListaUsuario = ({ usuario, onLogout }) => {
     onCambiarVista: cambiarVista,
     onLogout,
     usuario,
+    fincas: sesion?.fincas || [],
+    fincaActiva: sesion?.fincaActiva || sesion?.finca,
+    onCambiarFinca,
+    organizaciones: sesion?.organizaciones || [],
+    organizacionActiva: sesion?.organizacion,
+    onCambiarOrganizacion,
     onAbrirNotificaciones: () => setVistaActiva('Notificaciones'),
     onNavegarNotificacion: navegarNotificacion,
     estadoConexion,
@@ -325,6 +332,15 @@ const ListaUsuario = ({ usuario, onLogout }) => {
       <main className="dashboard-shell">
         {navegacion}
         <CentroNotificaciones onNavegar={navegarNotificacion} />
+      </main>
+    );
+  }
+
+  if (vistaActiva === 'Configuración') {
+    return (
+      <main className="dashboard-shell">
+        {navegacion}
+        <ConfiguracionCuenta usuario={usuario} />
       </main>
     );
   }

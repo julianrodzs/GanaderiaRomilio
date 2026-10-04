@@ -17,6 +17,7 @@ import {
   obtenerDescendenciaAnimal,
   obtenerEventosAnimal,
   obtenerEventosCamada,
+  obtenerHistorialFincaAnimal,
   obtenerPesajesPorAnimal,
   registrarDesteteCamada
 } from '../services/api';
@@ -24,12 +25,14 @@ import { guardarInventarioOffline, obtenerInventarioOffline } from '../services/
 import FormularioAnimal from './FormularioAnimal';
 import FormularioCamada from './FormularioCamada';
 import FormularioEstadoSanitario from './FormularioEstadoSanitario';
+import FormularioTrasladoFinca from './FormularioTrasladoFinca';
 import SelectorEspecie from './SelectorEspecie';
 import TablaDinamica from './TablaDinamica';
 import { ContenidoPaginado } from './PaginacionTabla';
 import Lotes from './Lotes';
 import { calcularEdadMeses, obtenerAptitudReproductivaPorEdad, obtenerCategoriaVisible } from '../utils/categoriasAnimales';
 import { etiquetaObjetivoProductivo } from '../constants/objetivosProductivos';
+import { usePlan } from '../context/PlanContext';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -227,6 +230,7 @@ const filtrosCamadas = [
 ];
 
 const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavegar }) => {
+  const { capacidadDisponible, tieneFeature } = usePlan();
   const [animales, setAnimales] = useState([]);
   const [camadas, setCamadas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -243,6 +247,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
   const [eventosCamada, setEventosCamada] = useState([]);
   const [animalDetalle, setAnimalDetalle] = useState(null);
   const [eventosAnimal, setEventosAnimal] = useState([]);
+  const [historialFincasAnimal, setHistorialFincasAnimal] = useState([]);
   const [pesajesAnimal, setPesajesAnimal] = useState([]);
   const [arbolGenealogico, setArbolGenealogico] = useState(null);
   const [descendenciaAnimal, setDescendenciaAnimal] = useState(null);
@@ -260,7 +265,9 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
   const [errorEstadoSanitario, setErrorEstadoSanitario] = useState('');
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const [vistaInventario, setVistaInventario] = useState('Animales');
+  const [modoTrasladoFinca, setModoTrasladoFinca] = useState(false);
   const etiquetaId = 'DIIO';
+  const cuotaAnimales = capacidadDisponible('animales');
 
   const cambiarEspecie = (valor) => {
     localStorage.setItem('ganaderiaEspecie', valor);
@@ -472,11 +479,15 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
     setPesajesAnimal([]);
     setArbolGenealogico(null);
     setDescendenciaAnimal(null);
+    setHistorialFincasAnimal([]);
     const [detalle] = await Promise.all([
       obtenerAnimal(animal._id),
       cargarEventosAnimal(animal._id),
       cargarPesajesAnimal(animal._id),
-      cargarGenealogiaAnimal(animal._id)
+      cargarGenealogiaAnimal(animal._id),
+      tieneFeature('operacionMultiFinca')
+        ? obtenerHistorialFincaAnimal(animal._id).then((respuesta) => setHistorialFincasAnimal(respuesta.historial || [])).catch(() => setHistorialFincasAnimal([]))
+        : Promise.resolve()
     ]);
     setAnimalDetalle(detalle);
   };
@@ -487,6 +498,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
     setPesajesAnimal([]);
     setArbolGenealogico(null);
     setDescendenciaAnimal(null);
+    setHistorialFincasAnimal([]);
     setObservacionManual('');
     setErrorEventos('');
     setErrorPesajes('');
@@ -659,6 +671,9 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
           {especie === 'Porcino' && <button className={vistaInventario === 'Camadas' ? 'activo' : ''} type="button" onClick={() => setVistaInventario('Camadas')}>
             Camadas
           </button>}
+          {!soloLectura && tieneFeature('operacionMultiFinca') && vistaInventario === 'Animales' && (
+            <button type="button" onClick={() => setModoTrasladoFinca(true)}>Trasladar</button>
+          )}
       </div>
 
       {vistaInventario === 'Lotes' ? (
@@ -697,10 +712,16 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
           filtros={filtros}
           textoAgregar="Nuevo animal"
           onAgregar={soloLectura ? undefined : abrirNuevoAnimal}
+          agregarDeshabilitado={!cuotaAnimales.permitido}
+          agregarTitulo={!cuotaAnimales.permitido ? cuotaAnimales.mensaje : ''}
           onEditar={soloLectura ? undefined : abrirEdicionAnimal}
           onEliminar={soloLectura ? undefined : borrarAnimal}
           mostrarAcciones={!soloLectura}
         />
+      )}
+
+      {modoTrasladoFinca && (
+        <FormularioTrasladoFinca animales={animales} onCerrar={() => setModoTrasladoFinca(false)} onGuardado={cargarAnimales} />
       )}
 
       {camadaDetalle && (
@@ -864,7 +885,11 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
                 <strong>{formatearPeso(animalDetalle.pesoNacimiento)}</strong>
               </article>
               <article>
-                <span>Fecha destete</span>
+                <span>Destete estimado</span>
+                <strong>{formatearFecha(animalDetalle.fechaDesteteEstimada)}</strong>
+              </article>
+              <article>
+                <span>Destete real</span>
                 <strong>{formatearFecha(animalDetalle.fechaDestete)}</strong>
               </article>
               <article>
@@ -1063,6 +1088,19 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
                 </>
               )}
             </section>
+
+            {tieneFeature('operacionMultiFinca') && (
+              <section className="historial-fincas-animal">
+                <div className="panel-title"><div><p className="eyebrow">Multi-finca</p><h2>Historial de pertenencia</h2></div></div>
+                {historialFincasAnimal.length === 0 ? <p className="reporte-vacio">El animal no registra traslados entre fincas.</p> : (
+                  <div className="tabla-scroll tabla-dinamica">
+                    <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Origen</th><th>Destino</th><th>Peso</th><th>Motivo</th></tr></thead>
+                      <tbody>{historialFincasAnimal.map((item) => <tr key={item._id}><td>{formatearFecha(item.fecha)}</td><td>{item.tipo}</td><td>{item.fincaOrigen ? `${item.fincaOrigen.codigo} · ${item.fincaOrigen.nombre}` : '--'}</td><td>{item.fincaDestino ? `${item.fincaDestino.codigo} · ${item.fincaDestino.nombre}` : '--'}</td><td>{formatearPeso(item.pesoTraslado)}</td><td>{item.motivo || '--'}</td></tr>)}</tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            )}
 
             <section className="historial-pesajes-animal">
               <div className="panel-title">

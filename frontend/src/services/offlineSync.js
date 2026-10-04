@@ -36,7 +36,6 @@ const sincronizarCambio = async (cambio) => {
     await completarTarea({
       id: cambio.referenciaId,
       observaciones: cambio.payload?.observaciones || '',
-      evidencia: cambio.payload?.evidencia || null,
       idempotencyKey: cambio.idempotencyKey,
       versionEsperada: cambio.payload?.versionEsperada || ''
     });

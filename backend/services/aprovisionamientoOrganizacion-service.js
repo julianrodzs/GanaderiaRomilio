@@ -146,16 +146,15 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
             }
 
             let usuario = await Usuario.findOne({ correo: datos.administrador.correo }).session(session);
-            if (usuario) {
-                const tieneMembresias = await Membresia.exists({ usuario: usuario._id }).session(session);
-                if (tieneMembresias) {
-                    throw new ErrorAprovisionamiento(
-                        'El correo del administrador ya pertenece a otra organización. Usa un correo diferente.',
-                        409,
-                        'ADMIN_EMAIL_ALREADY_ASSIGNED'
-                    );
-                }
-            } else {
+            const usuarioExistente = Boolean(usuario);
+            if (usuario && usuario.estado !== 'Activo') {
+                throw new ErrorAprovisionamiento(
+                    'La cuenta asociada al correo del administrador está inactiva.',
+                    409,
+                    'ADMIN_ACCOUNT_INACTIVE'
+                );
+            }
+            if (!usuario) {
                 const contrasenaTemporal = crypto.randomBytes(32).toString('hex');
                 [usuario] = await Usuario.create([{
                     ...datos.administrador,
@@ -163,16 +162,11 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
                     rol: 'Administrador',
                     estado: 'Activo'
                 }], { session });
+                usuario.resetPasswordToken = tokenHash;
+                usuario.resetPasswordExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                usuario.resetPasswordRequestedAt = new Date();
+                await usuario.save({ session });
             }
-
-            usuario.nombre = datos.administrador.nombre;
-            usuario.apellido = datos.administrador.apellido;
-            usuario.telefono = datos.administrador.telefono;
-            usuario.estado = 'Activo';
-            usuario.resetPasswordToken = tokenHash;
-            usuario.resetPasswordExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-            usuario.resetPasswordRequestedAt = new Date();
-            await usuario.save({ session });
 
             const [organizacion] = await Organizacion.create([{
                 ...datos.organizacion,
@@ -213,22 +207,24 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
             }], { session });
             await crearCatalogosIniciales(organizacion._id, session);
 
-            resultado = { organizacion, finca, usuario, membresia };
+            resultado = { organizacion, finca, usuario, membresia, usuarioExistente };
         });
     } finally {
         await session.endSession();
     }
 
-    let invitacion;
-    try {
-        invitacion = await enviarCorreoInvitacion({
-            correo: resultado.usuario.correo,
-            nombre: resultado.usuario.nombre,
-            organizacion: resultado.organizacion.nombre,
-            token: tokenInvitacion
-        });
-    } catch (error) {
-        invitacion = { enviado: false, modo: 'error', mensaje: error.message };
+    let invitacion = { enviado: false, modo: 'cuenta-existente' };
+    if (!resultado.usuarioExistente) {
+        try {
+            invitacion = await enviarCorreoInvitacion({
+                correo: resultado.usuario.correo,
+                nombre: resultado.usuario.nombre,
+                organizacion: resultado.organizacion.nombre,
+                token: tokenInvitacion
+            });
+        } catch (error) {
+            invitacion = { enviado: false, modo: 'error', mensaje: error.message };
+        }
     }
 
     return {
@@ -244,11 +240,13 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
         invitacion: {
             enviado: invitacion.enviado === true,
             modo: invitacion.modo || invitacion.proveedor || 'desconocido',
-            mensaje: invitacion.enviado
-                ? 'La invitación fue enviada al administrador.'
-                : 'El cliente fue creado, pero la invitación no se envió. Puedes compartir el enlace de prueba.'
+            mensaje: resultado.usuarioExistente
+                ? 'La cuenta existente fue vinculada como administradora.'
+                : invitacion.enviado
+                    ? 'La invitación fue enviada al administrador.'
+                    : 'El cliente fue creado, pero la invitación no se envió. Puedes compartir el enlace de prueba.'
         },
-        enlaceInvitacion: process.env.NODE_ENV === 'production' ? undefined : invitacion.enlaceInvitacion
+        enlaceInvitacion: process.env.NODE_ENV === 'production' || resultado.usuarioExistente ? undefined : invitacion.enlaceInvitacion
     };
 };
 

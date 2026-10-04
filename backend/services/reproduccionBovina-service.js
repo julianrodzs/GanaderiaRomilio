@@ -1,5 +1,6 @@
 const { Tarea } = require('../models/Tarea');
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
+const Animal = require('../models/Animal');
 const reproduccionBovinaConfig = require('../config/reproduccionBovinaConfig');
 const { ejecutarNotificacionSegura, notificarTareaAsignada } = require('./tarea-notificacion-service');
 
@@ -39,7 +40,42 @@ const crearTareaBase = ({ registro, animal, usuarioId, asignadoA, config, fechaP
     tipoEventoBitacora: config.tipoEventoBitacora || 'Observacion'
 });
 
-const crearDefinicionesTareasBovinas = ({ registro, animal, usuarioId }) => {
+const esSeguimientoBovinoVigente = (registro = {}) => {
+    const estadoCiclo = registro.estadoCiclo || 'Activo';
+    if (estadoCiclo === 'Activo') return registro.activoParaAlertas !== false;
+    return estadoCiclo === 'Cerrado' && Boolean(registro.fechaPartoReal);
+};
+
+const rangoDiaUtc = (fecha) => {
+    const inicio = new Date(fecha);
+    if (Number.isNaN(inicio.getTime())) return null;
+    inicio.setUTCHours(0, 0, 0, 0);
+    const fin = new Date(inicio);
+    fin.setUTCDate(fin.getUTCDate() + 1);
+    return { inicio, fin };
+};
+
+const encontrarTerneroDelCiclo = async (registro, madre) => {
+    if (!registro?.fechaPartoReal || !madre?._id) return null;
+    const rango = rangoDiaUtc(registro.fechaPartoReal);
+    if (!rango) return null;
+
+    return Animal.findOne({
+        madre: madre._id,
+        especie: 'Bovino',
+        fechaNacimiento: { $gte: rango.inicio, $lt: rango.fin }
+    }).sort({ createdAt: 1 });
+};
+
+const sincronizarFechaDesteteTernero = async ({ registro, madre, ternero }) => {
+    const cria = ternero || await encontrarTerneroDelCiclo(registro, madre);
+    if (!cria || !registro.fechaDestete || cria.fechaDesteteEstimada) return cria;
+    cria.fechaDesteteEstimada = registro.fechaDestete;
+    await cria.save();
+    return cria;
+};
+
+const crearDefinicionesTareasBovinas = ({ registro, animal, ternero, usuarioId }) => {
     const config = reproduccionBovinaConfig.tareasAutomaticas;
     const tareas = [];
     const asignadoA = registro.asignadoA?._id || registro.asignadoA;
@@ -69,14 +105,15 @@ const crearDefinicionesTareasBovinas = ({ registro, animal, usuarioId }) => {
     }
 
     if (registro.fechaDestete) {
+        const animalDestete = ternero || animal;
         tareas.push(crearTareaBase({
             registro,
-            animal,
+            animal: animalDestete,
             usuarioId,
             asignadoA,
             config: config.destete,
             fechaProgramada: registro.fechaDestete,
-            descripcion: `Destete estimado para ${formatearFecha(registro.fechaDestete)}. Confirmar condición de la cría y de la madre.`
+            descripcion: `Destete estimado para ${formatearFecha(registro.fechaDestete)}. Confirmar el destete de ${ternero ? obtenerCodigoAnimal(ternero) : 'la cría'} y la condición de la madre.`
         }));
     }
 
@@ -85,13 +122,14 @@ const crearDefinicionesTareasBovinas = ({ registro, animal, usuarioId }) => {
 
 const sincronizarTareasBovinas = async ({ registro, animal, usuarioId }) => {
     const especie = registro.especie || animal?.especie || 'Bovino';
-    const cicloActivo = (registro.estadoCiclo || 'Activo') === 'Activo' && registro.activoParaAlertas !== false;
+    const seguimientoVigente = esSeguimientoBovinoVigente(registro);
 
-    if (especie !== 'Bovino' || !usuarioId || !registro.asignadoA || !cicloActivo) {
+    if (especie !== 'Bovino' || !usuarioId || !registro.asignadoA || !seguimientoVigente) {
         return { creadas: 0, actualizadas: 0, canceladas: 0 };
     }
 
-    const definiciones = crearDefinicionesTareasBovinas({ registro, animal, usuarioId });
+    const ternero = await sincronizarFechaDesteteTernero({ registro, madre: animal });
+    const definiciones = crearDefinicionesTareasBovinas({ registro, animal, ternero, usuarioId });
     const clavesVigentes = definiciones.map((tarea) => tarea.claveAutomatica);
     const existentes = await Tarea.find({
         moduloOrigen: 'Reproduccion',
@@ -116,6 +154,19 @@ const sincronizarTareasBovinas = async ({ registro, animal, usuarioId }) => {
             const responsableActual = existente.asignadoA;
             Object.assign(existente, definicion);
             if (existente.asignacionModificadaManualmente) existente.asignadoA = responsableActual;
+            await existente.save();
+            actualizadas += 1;
+            continue;
+        }
+
+        const observacionCancelacion = existente.observaciones || '';
+        const canceladaPorAutomatizacion = existente.estado === 'Cancelada'
+            && (
+                /ciclo reproductivo|cambio del ciclo/i.test(observacionCancelacion)
+                || Boolean(registro.motivoCierre && observacionCancelacion === registro.motivoCierre)
+            );
+        if (canceladaPorAutomatizacion && registro.fechaPartoReal) {
+            Object.assign(existente, definicion, { estado: 'Pendiente', observaciones: undefined });
             await existente.save();
             actualizadas += 1;
         }
@@ -158,5 +209,8 @@ const sincronizarTareasBovinas = async ({ registro, animal, usuarioId }) => {
 
 module.exports = {
     crearDefinicionesTareasBovinas,
+    encontrarTerneroDelCiclo,
+    esSeguimientoBovinoVigente,
+    sincronizarFechaDesteteTernero,
     sincronizarTareasBovinas
 };

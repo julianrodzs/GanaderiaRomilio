@@ -13,6 +13,8 @@ import {
   obtenerReporteReproductivoPorcino,
   obtenerReporteRazas,
   obtenerReporteDescendenciaBovina,
+  obtenerReportePesoDestete,
+  obtenerReportePesoDesteteAvanzado,
   obtenerReporteSanidad,
   obtenerReporteLotes,
   obtenerReporteTareasCamadas,
@@ -29,7 +31,9 @@ import UpgradeMessage from './UpgradeMessage';
 import { usePlan } from '../context/PlanContext';
 import ReporteIndicesProductivos from './ReporteIndicesProductivos';
 import RendimientoPotreros from './RendimientoPotreros';
+import { ReportePesoDesteteAvanzado, ReportePesoDesteteBasico } from './ReportePesoDestete';
 import PaginacionTabla, { ContenidoPaginado, usePaginacionControlada } from './PaginacionTabla';
+import ReporteMultiFinca from './ReporteMultiFinca';
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR').format(Math.round(valor || 0));
 
@@ -201,6 +205,8 @@ const Reportes = ({ usuario }) => {
   const [razasBovinas, setRazasBovinas] = useState(null);
   const [descendenciaBovina, setDescendenciaBovina] = useState(null);
   const [lotesReporte, setLotesReporte] = useState(null);
+  const [pesoDesteteReporte, setPesoDesteteReporte] = useState(null);
+  const [pesoDesteteAvanzado, setPesoDesteteAvanzado] = useState(null);
   const {
     pagina: paginaProductos,
     setPagina: setPaginaProductos,
@@ -264,7 +270,9 @@ const Reportes = ({ usuario }) => {
         economiaCamadasData,
         sanidadData,
         razasBovinasData,
-        descendenciaBovinaData
+        descendenciaBovinaData,
+        pesoDesteteData,
+        pesoDesteteAvanzadoData
       ] = await Promise.all([
         obtenerResumenReportes({
           ...filtrosGenerales,
@@ -294,7 +302,9 @@ const Reportes = ({ usuario }) => {
         incluirReportesPorcinos && tieneFeature('analiticaEconomica') ? obtenerReporteEconomicoCamadas(filtrosGenerales) : Promise.resolve(null),
         obtenerReporteSanidad(filtrosGenerales),
         tieneFeature('analiticaProductiva') ? obtenerReporteRazas({ especie }) : Promise.resolve(null),
-        tieneFeature('analiticaProductiva') && especie !== 'Porcino' ? obtenerReporteDescendenciaBovina(filtrosGenerales) : Promise.resolve(null)
+        tieneFeature('analiticaProductiva') && especie !== 'Porcino' ? obtenerReporteDescendenciaBovina(filtrosGenerales) : Promise.resolve(null),
+        obtenerReportePesoDestete(filtrosGenerales),
+        tieneFeature('analiticaProductiva') ? obtenerReportePesoDesteteAvanzado(filtrosGenerales) : Promise.resolve(null)
       ]);
       setReporte(data);
       setProductividad(productividadData);
@@ -325,6 +335,8 @@ const Reportes = ({ usuario }) => {
       setSanidadReporte(sanidadData);
       setRazasBovinas(razasBovinasData);
       setDescendenciaBovina(descendenciaBovinaData);
+      setPesoDesteteReporte(pesoDesteteData);
+      setPesoDesteteAvanzado(pesoDesteteAvanzadoData);
       setLotesReporte(await obtenerReporteLotes(filtrosGenerales, tieneFeature('analiticaProductiva')));
     } catch (err) {
       setError(err.message);
@@ -429,6 +441,15 @@ const Reportes = ({ usuario }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando reportes...</div>}
 
+      <FeatureGate
+        feature="reportesMultiFinca"
+        titulo="Comparativo y consolidado de fincas"
+        pregunta="¿Cómo se comparan el inventario, las finanzas, la reproducción y la sanidad entre fincas?"
+        etiqueta="Analítica multi-finca"
+      >
+        <ReporteMultiFinca fechaInicio={filtros.fechaInicio} fechaFin={filtros.fechaFin} especie={especie} puedeConfigurar={usuario?.rol === 'Administrador'} />
+      </FeatureGate>
+
       {reporte && (
         <>
           <section className="reportes-metricas">
@@ -463,6 +484,17 @@ const Reportes = ({ usuario }) => {
               <small>{formatearNumero(reporte.reproduccion?.partos?.resumen?.vacasCumplen)} vacas cumplen</small>
             </article>
           </section>
+
+          <ReportePesoDesteteBasico datos={pesoDesteteReporte} />
+
+          <FeatureGate
+            feature="analiticaProductiva"
+            titulo="Comparación normalizada del destete"
+            pregunta="¿Qué animales y camadas crecen mejor antes del destete al compararlos a una edad común?"
+            etiqueta="Reporte avanzado de destete"
+          >
+            <ReportePesoDesteteAvanzado datos={pesoDesteteAvanzado} />
+          </FeatureGate>
 
           {!tieneFeature('analiticaProductiva') && (
             <section className="reportes-bloqueados" aria-label="Reportes de analítica productiva disponibles en otros planes">

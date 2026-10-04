@@ -15,7 +15,8 @@ const FEATURES = Object.freeze({
     AUDITORIA_AVANZADA: 'auditoriaAvanzada',
     BANCOS_FORRAJEROS: 'bancosForrajeros',
     LOTES: 'lotes',
-    PLANES_ALIMENTACION: 'planesAlimentacion'
+    PLANES_ALIMENTACION: 'planesAlimentacion',
+    OPERACION_MULTI_FINCA: 'operacionMultiFinca'
 });
 
 const todosLosRoles = ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador', 'Consulta'];
@@ -49,7 +50,8 @@ const planesConfig = Object.freeze({
             auditoriaAvanzada: false,
             bancosForrajeros: true,
             lotes: true,
-            planesAlimentacion: true
+            planesAlimentacion: true,
+            operacionMultiFinca: false
         }
     },
     GESTION: {
@@ -77,7 +79,8 @@ const planesConfig = Object.freeze({
             auditoriaAvanzada: false,
             bancosForrajeros: true,
             lotes: true,
-            planesAlimentacion: true
+            planesAlimentacion: true,
+            operacionMultiFinca: true
         }
     },
     PRO: {
@@ -105,7 +108,8 @@ const planesConfig = Object.freeze({
             auditoriaAvanzada: true,
             bancosForrajeros: true,
             lotes: true,
-            planesAlimentacion: true
+            planesAlimentacion: true,
+            operacionMultiFinca: true
         }
     },
     PREMIUM: {
@@ -133,7 +137,8 @@ const planesConfig = Object.freeze({
             auditoriaAvanzada: true,
             bancosForrajeros: true,
             lotes: true,
-            planesAlimentacion: true
+            planesAlimentacion: true,
+            operacionMultiFinca: true
         },
         caracteristicasComerciales: {
             soportePrioritario: true
@@ -147,7 +152,8 @@ const PLAN_MINIMO_POR_FEATURE = Object.freeze({
     emailsOperativos: 'PRO',
     configuracionEmailAvanzada: 'PREMIUM',
     reportesMultiFinca: 'PREMIUM',
-    auditoriaAvanzada: 'PRO'
+    auditoriaAvanzada: 'PRO',
+    operacionMultiFinca: 'GESTION'
 });
 
 const obtenerPlanConfig = (codigo = 'ESENCIAL') => planesConfig[codigo] || planesConfig.ESENCIAL;

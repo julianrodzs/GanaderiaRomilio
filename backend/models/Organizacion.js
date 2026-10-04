@@ -31,7 +31,13 @@ const organizacionSchema = new Schema(
                 default: 'Activo'
             },
             fechaAsignacion: { type: Date, default: Date.now },
-            referenciaExterna: { type: String, trim: true }
+            referenciaExterna: { type: String, trim: true },
+            proveedorPago: { type: String, enum: ['Stripe', null], default: null },
+            clientePagoId: { type: String, trim: true },
+            suscripcionPagoId: { type: String, trim: true },
+            fechaRenovacion: { type: Date, default: null },
+            fechaExpiracion: { type: Date, default: null },
+            ultimoPagoFallido: { type: Date, default: null }
         },
         configuracion: { type: Schema.Types.Mixed, default: {} }
     },

@@ -7,13 +7,13 @@ import {
   eliminarCompraAnimal,
   obtenerCompras,
   obtenerLotes,
-  obtenerResumenCompras,
-  abrirArchivoProtegido
+  obtenerResumenCompras
 } from '../services/api';
 import { obtenerRangoMesActual } from '../utils/fechas';
 import SelectorEspecie from './SelectorEspecie';
 import { ContenidoPaginado } from './PaginacionTabla';
 import { ETIQUETAS_OBJETIVO_PRODUCTIVO, OBJETIVOS_PRODUCTIVOS, etiquetaObjetivoProductivo } from '../constants/objetivosProductivos';
+import { usePlan } from '../context/PlanContext';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -42,8 +42,7 @@ const estadoInicial = {
   animales: [{ ...animalInicial }],
   crearLoteRapido: false,
   nombreLoteRapido: '',
-  objetivoLoteRapido: 'ENGORDE',
-  comprobante: null
+  objetivoLoteRapido: 'ENGORDE'
 };
 
 const formatearFecha = (fecha) => {
@@ -105,11 +104,11 @@ const normalizarCompraFormulario = (compra) => ({
   })),
   crearLoteRapido: false,
   nombreLoteRapido: '',
-  objetivoLoteRapido: 'ENGORDE',
-  comprobante: null
+  objetivoLoteRapido: 'ENGORDE'
 });
 
 const Compras = ({ soloLectura = false }) => {
+  const { capacidadDisponible } = usePlan();
   const [compras, setCompras] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [lotes, setLotes] = useState([]);
@@ -125,6 +124,8 @@ const Compras = ({ soloLectura = false }) => {
   const [errorFormulario, setErrorFormulario] = useState('');
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const etiquetaId = textoEspecie(especie, 'etiquetaId');
+  const cuotaCompra = capacidadDisponible('animales', formulario.animales.length);
+  const compraNuevaBloqueada = !compraSeleccionada && !cuotaCompra.permitido;
 
   const cambiarEspecie = (valor) => {
     localStorage.setItem('ganaderiaEspecie', valor);
@@ -182,6 +183,11 @@ const Compras = ({ soloLectura = false }) => {
   }, [formulario.animales]);
 
   const abrirNuevo = () => {
+    const cuota = capacidadDisponible('animales');
+    if (!cuota.permitido) {
+      setError(cuota.mensaje);
+      return;
+    }
     setCompraSeleccionada(null);
     setFormulario({ ...estadoInicial, especie });
     setErrorFormulario('');
@@ -241,6 +247,10 @@ const Compras = ({ soloLectura = false }) => {
 
   const guardarCompra = async (evento) => {
     evento.preventDefault();
+    if (compraNuevaBloqueada) {
+      setErrorFormulario(`${cuotaCompra.mensaje} Disponibles: ${cuotaCompra.restante ?? 'sin límite'}.`);
+      return;
+    }
     try {
       setGuardando(true);
       setErrorFormulario('');
@@ -328,7 +338,6 @@ const Compras = ({ soloLectura = false }) => {
             <label>Teléfono<input name="telefonoProveedor" value={formulario.telefonoProveedor} onChange={actualizarCampo} /></label>
           </div>
           <label>Observaciones<textarea rows="3" name="observaciones" value={formulario.observaciones} onChange={actualizarCampo} /></label>
-          <label>Comprobante<input type="file" name="comprobante" accept="image/*,.pdf" onChange={actualizarCampo} /></label>
 
           <section className="venta-selector">
             <div className="panel-title">
@@ -422,8 +431,9 @@ const Compras = ({ soloLectura = false }) => {
           </section>
 
           <div className="form-actions">
+            {compraNuevaBloqueada && <span className="texto-ayuda limite-plan-aviso">{cuotaCompra.mensaje} Disponibles: {cuotaCompra.restante ?? 'sin límite'}.</span>}
             <button className="boton-link" type="button" onClick={() => setModoFormulario(false)}>Cancelar</button>
-            <button className="boton-primario compacto" type="submit" disabled={guardando || formulario.animales.length === 0}>
+            <button className="boton-primario compacto" type="submit" disabled={guardando || formulario.animales.length === 0 || compraNuevaBloqueada} title={compraNuevaBloqueada ? cuotaCompra.mensaje : ''}>
               {guardando ? 'Guardando...' : 'Guardar compra'}
             </button>
           </div>
@@ -439,7 +449,7 @@ const Compras = ({ soloLectura = false }) => {
           <p className="eyebrow">Compras</p>
           <h2>{textoEspecie(especie, 'titulo')}</h2>
         </div>
-        {!soloLectura && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva compra</button>}
+        {!soloLectura && <button className="boton-primario compacto" type="button" onClick={abrirNuevo} disabled={!capacidadDisponible('animales').permitido} title={capacidadDisponible('animales').mensaje}>+ Nueva compra</button>}
       </div>
 
       <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
@@ -528,11 +538,6 @@ const Compras = ({ soloLectura = false }) => {
               <article><span>Ajuste</span><strong>{formatearMoneda(detalle.ajusteMonto)}</strong></article>
             </div>
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
-            {detalle.comprobanteUrl && (
-              <button className="boton-primario compacto venta-comprobante-link" type="button" onClick={() => abrirArchivoProtegido(detalle.comprobanteUrl)}>
-                Ver comprobante
-              </button>
-            )}
             {detalle.loteAsignado && <section className="lote-seccion"><h3>Lote asignado</h3><strong>{detalle.loteAsignado.codigo} · {detalle.loteAsignado.nombre}</strong><span>{etiquetaObjetivoProductivo(detalle.loteAsignado.proposito)}</span></section>}
             {!soloLectura && detalle.estado === 'Confirmada' && !detalle.loteAsignado && <section className="lote-seccion"><h3>Asignación operativa</h3><div className="acciones-lote-movimiento"><select value={loteDestino} onChange={(e) => setLoteDestino(e.target.value)}><option value="">Dejar sin lote</option>{lotes.map((lote) => <option key={lote._id} value={lote._id}>{lote.codigo} · {lote.nombre} · {etiquetaObjetivoProductivo(lote.proposito)}</option>)}</select><button className="boton-secundario" type="button" disabled={!loteDestino} onClick={asignarDetalleALote}>Asignar al lote</button></div></section>}
             <ContenidoPaginado datos={detalle.animales || []} clavePaginacion={`compra-${detalle._id}-animales`}>

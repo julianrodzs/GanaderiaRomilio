@@ -49,7 +49,7 @@ const notificarTareaCompletada = (tarea, actor) => notificarAccion({
     entidadTipo: 'Tarea',
     entidadId: tarea._id,
     url: `/tareas/${tarea._id}`,
-    metadata: { fechaCompletada: tarea.fechaCompletada, evidenciaUrl: tarea.evidenciaUrl }
+    metadata: { fechaCompletada: tarea.fechaCompletada }
 });
 
 const ejecutarNotificacionSegura = async (accion) => {

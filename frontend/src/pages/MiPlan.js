@@ -2,33 +2,51 @@ import React, { useEffect, useState } from 'react';
 import PlanLimit from '../Components/PlanLimit';
 import { usePlan } from '../context/PlanContext';
 import {
+  actualizarFinca,
   actualizarLineasProductivasFinca,
+  cambiarEstadoFinca,
+  crearFinca,
+  marcarFincaPrincipal,
   obtenerFincas,
   seleccionarEspeciePlan
 } from '../services/api';
 import { etiquetaObjetivoProductivo, OBJETIVOS_LINEA_PRODUCTIVA } from '../constants/objetivosProductivos';
+import FacturacionPlan from '../Components/FacturacionPlan';
 
 const especiesProductivas = ['Bovino', 'Porcino'];
 const objetivosProductivos = OBJETIVOS_LINEA_PRODUCTIVA;
 
 const funcionesPlan = [
-  ['Centro de alertas', 'centroAlertas', 'Esencial'],
-  ['Analítica productiva', 'analiticaProductiva', 'Gestión'],
-  ['Correos operativos', 'emailsOperativos', 'Pro'],
-  ['Analítica económica', 'analiticaEconomica', 'Pro'],
-  ['Configuración avanzada de correos', 'configuracionEmailAvanzada', 'Premium']
+  { etiqueta: 'Centro de alertas', feature: 'centroAlertas', planMinimo: 'Esencial' },
+  { etiqueta: 'Analítica productiva', feature: 'analiticaProductiva', planMinimo: 'Gestión' },
+  { etiqueta: 'Correos operativos', feature: 'emailsOperativos', planMinimo: 'Pro' },
+  { etiqueta: 'Analítica económica', feature: 'analiticaEconomica', planMinimo: 'Pro' },
+  { etiqueta: 'Reportes multi-finca', feature: 'reportesMultiFinca', planMinimo: 'Premium' },
+  { etiqueta: 'Configuración avanzada de correos', feature: 'configuracionEmailAvanzada', planMinimo: 'Premium' }
 ];
 
 const MiPlan = () => {
-  const { plan, cargando, error, recargarPlan } = usePlan();
+  const { capacidadDisponible, plan, cargando, error, recargarPlan, puedeUsarEspecie } = usePlan();
   const [guardando, setGuardando] = useState(false);
   const [guardandoFinca, setGuardandoFinca] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [fincas, setFincas] = useState([]);
+  const [mostrarNuevaFinca, setMostrarNuevaFinca] = useState(false);
+  const [nuevaFinca, setNuevaFinca] = useState({ nombre: '', codigo: '', ubicacion: '', descripcion: '' });
+
+  const publicarFincas = (items) => {
+    setFincas(items);
+    window.dispatchEvent(new CustomEvent('ganaderiaFincasActualizadas', { detail: { fincas: items } }));
+  };
+
+  const cargarFincas = async () => {
+    const items = await obtenerFincas();
+    publicarFincas(items);
+    return items;
+  };
 
   useEffect(() => {
-    obtenerFincas()
-      .then(setFincas)
+    cargarFincas()
       .catch((err) => setMensaje(err.message));
   }, []);
 
@@ -94,17 +112,88 @@ const MiPlan = () => {
     }
   };
 
+  const crearNuevaFinca = async (evento) => {
+    evento.preventDefault();
+    setGuardandoFinca('nueva');
+    setMensaje('');
+    try {
+      const lineasProductivas = esEsencial
+        ? [{ especie: plan.plan.especiePlan, objetivos: [...objetivosProductivos], activa: true }]
+        : especiesProductivas.map((especie) => ({ especie, objetivos: [...objetivosProductivos], activa: true }));
+      await crearFinca({ ...nuevaFinca, lineasProductivas });
+      await Promise.all([cargarFincas(), recargarPlan()]);
+      setNuevaFinca({ nombre: '', codigo: '', ubicacion: '', descripcion: '' });
+      setMostrarNuevaFinca(false);
+      setMensaje('Finca creada. Ya puede seleccionarse desde el encabezado.');
+    } catch (err) {
+      setMensaje(err.message);
+    } finally {
+      setGuardandoFinca('');
+    }
+  };
+
+  const guardarDatosFinca = async (finca) => {
+    setGuardandoFinca(finca._id);
+    setMensaje('');
+    try {
+      await actualizarFinca(finca._id, {
+        nombre: finca.nombre,
+        codigo: finca.codigo,
+        ubicacion: finca.ubicacion,
+        descripcion: finca.descripcion
+      });
+      await cargarFincas();
+      setMensaje('Datos de finca actualizados.');
+    } catch (err) {
+      setMensaje(err.message);
+    } finally {
+      setGuardandoFinca('');
+    }
+  };
+
+  const alternarEstadoFinca = async (finca) => {
+    const estado = finca.estado === 'Activa' ? 'Inactiva' : 'Activa';
+    if (estado === 'Inactiva' && !window.confirm(`¿Desactivar ${finca.nombre}? Sus datos se conservarán.`)) return;
+    setGuardandoFinca(finca._id);
+    setMensaje('');
+    try {
+      await cambiarEstadoFinca(finca._id, estado);
+      await Promise.all([cargarFincas(), recargarPlan()]);
+      setMensaje(`Finca ${estado.toLowerCase()}.`);
+    } catch (err) {
+      setMensaje(err.message);
+    } finally {
+      setGuardandoFinca('');
+    }
+  };
+
+  const hacerPrincipal = async (finca) => {
+    setGuardandoFinca(finca._id);
+    setMensaje('');
+    try {
+      await marcarFincaPrincipal(finca._id);
+      await cargarFincas();
+      setMensaje(`${finca.nombre} es ahora la finca principal.`);
+    } catch (err) {
+      setMensaje(err.message);
+    } finally {
+      setGuardandoFinca('');
+    }
+  };
+
   if (cargando) return <section className="vista-tabla"><p>Cargando plan...</p></section>;
   if (!plan) return <section className="vista-tabla"><p>{error || 'No se pudo cargar el plan.'}</p></section>;
 
   const esEsencial = plan.plan.codigo === 'ESENCIAL';
+  const cuotaFincas = capacidadDisponible('fincas');
   return (
     <section className="vista-tabla mi-plan-page">
       <p className="eyebrow">Suscripción</p>
       <div className="mi-plan-header">
         <div><h1>Mi plan</h1><p>{plan.plan.nombre} · ${plan.plan.precioMensualUSD} USD al mes</p></div>
-        <span className="estado-badge activo">{plan.plan.estado}</span>
+        <span className={`estado-badge ${plan.plan.vigente ? 'activo' : 'estado-Aplicado'}`}>{plan.plan.estado}</span>
       </div>
+      <FacturacionPlan codigoActual={plan.plan.codigo} />
 
       {esEsencial && (
         <section className="mi-plan-especie">
@@ -130,21 +219,44 @@ const MiPlan = () => {
       <section className="mi-plan-fincas">
         <div className="panel-title">
           <div><p className="eyebrow">Operación</p><h2>Fincas y líneas productivas</h2></div>
+          {plan.limites.fincas > 1 && (
+            <button className="boton-primario compacto" type="button" onClick={() => setMostrarNuevaFinca((actual) => !actual)} disabled={!mostrarNuevaFinca && !cuotaFincas.permitido} title={!cuotaFincas.permitido ? cuotaFincas.mensaje : ''}>
+              {mostrarNuevaFinca ? 'Cancelar' : 'Nueva finca'}
+            </button>
+          )}
         </div>
+        {mostrarNuevaFinca && (
+          <form className="finca-nueva-form" onSubmit={crearNuevaFinca}>
+            <label>Nombre<input required value={nuevaFinca.nombre} onChange={(e) => setNuevaFinca((actual) => ({ ...actual, nombre: e.target.value }))} /></label>
+            <label>Código<input required value={nuevaFinca.codigo} onChange={(e) => setNuevaFinca((actual) => ({ ...actual, codigo: e.target.value.toUpperCase() }))} /></label>
+            <label>Ubicación<input value={nuevaFinca.ubicacion} onChange={(e) => setNuevaFinca((actual) => ({ ...actual, ubicacion: e.target.value }))} /></label>
+            <label>Descripción<input value={nuevaFinca.descripcion} onChange={(e) => setNuevaFinca((actual) => ({ ...actual, descripcion: e.target.value }))} /></label>
+            <button className="boton-primario" type="submit" disabled={guardandoFinca === 'nueva' || !cuotaFincas.permitido} title={!cuotaFincas.permitido ? cuotaFincas.mensaje : ''}>{guardandoFinca === 'nueva' ? 'Creando...' : 'Crear finca'}</button>
+          </form>
+        )}
         <div className="fincas-config-grid">
           {fincas.map((finca) => (
             <article className="finca-config" key={finca._id}>
               <header>
-                <div><h3>{finca.nombre}</h3><span>{finca.codigo}</span></div>
-                {finca.esPrincipal && <span className="estado-badge activo">Principal</span>}
+                <div><h3>{finca.nombre}</h3><span>{finca.codigo} · {finca.estado}</span></div>
+                <div className="finca-badges">
+                  {finca.esActiva && <span className="estado-badge activo">En uso</span>}
+                  {finca.esPrincipal && <span className="estado-badge activo">Principal</span>}
+                </div>
               </header>
+              <div className="finca-datos-grid">
+                <label>Nombre<input value={finca.nombre || ''} onChange={(e) => setFincas((actuales) => actuales.map((item) => item._id === finca._id ? { ...item, nombre: e.target.value } : item))} /></label>
+                <label>Código<input value={finca.codigo || ''} onChange={(e) => setFincas((actuales) => actuales.map((item) => item._id === finca._id ? { ...item, codigo: e.target.value.toUpperCase() } : item))} /></label>
+                <label>Ubicación<input value={finca.ubicacion || ''} onChange={(e) => setFincas((actuales) => actuales.map((item) => item._id === finca._id ? { ...item, ubicacion: e.target.value } : item))} /></label>
+                <label>Descripción<input value={finca.descripcion || ''} onChange={(e) => setFincas((actuales) => actuales.map((item) => item._id === finca._id ? { ...item, descripcion: e.target.value } : item))} /></label>
+              </div>
               <div className="lineas-productivas-grid">
                 {especiesProductivas.map((especie) => {
                   const linea = (finca.lineasProductivas || []).find((item) => item.especie === especie);
                   return (
                     <fieldset key={especie} className="linea-productiva">
                       <label className="linea-productiva-especie">
-                        <input type="checkbox" checked={Boolean(linea)} onChange={(evento) => cambiarEspecieFinca(finca._id, especie, evento.target.checked)} />
+                        <input type="checkbox" checked={Boolean(linea)} disabled={!linea && !puedeUsarEspecie(especie)} title={!puedeUsarEspecie(especie) ? 'Esta especie no está incluida en el plan.' : ''} onChange={(evento) => cambiarEspecieFinca(finca._id, especie, evento.target.checked)} />
                         {especie === 'Bovino' ? 'Bovinos' : 'Porcinos'}
                       </label>
                       {linea && (
@@ -166,9 +278,12 @@ const MiPlan = () => {
                 })}
               </div>
               <div className="form-actions">
+                <button type="button" disabled={guardandoFinca === finca._id} onClick={() => guardarDatosFinca(finca)}>Guardar datos</button>
                 <button className="boton-primario compacto" type="button" disabled={guardandoFinca === finca._id} onClick={() => guardarLineasFinca(finca)}>
                   {guardandoFinca === finca._id ? 'Guardando...' : 'Guardar líneas'}
                 </button>
+                {!finca.esPrincipal && finca.estado === 'Activa' && <button type="button" disabled={guardandoFinca === finca._id} onClick={() => hacerPrincipal(finca)}>Hacer principal</button>}
+                {!finca.esPrincipal && !finca.esActiva && <button className={finca.estado === 'Activa' ? 'boton-peligro' : ''} type="button" disabled={guardandoFinca === finca._id || (finca.estado !== 'Activa' && !cuotaFincas.permitido)} title={finca.estado !== 'Activa' && !cuotaFincas.permitido ? cuotaFincas.mensaje : ''} onClick={() => alternarEstadoFinca(finca)}>{finca.estado === 'Activa' ? 'Desactivar' : 'Reactivar'}</button>}
               </div>
             </article>
           ))}
@@ -176,10 +291,10 @@ const MiPlan = () => {
       </section>
       <section className="mi-plan-funciones">
         <h2>Funciones</h2>
-        {funcionesPlan.map(([etiqueta, feature, planMinimo]) => (
+        {funcionesPlan.map(({ etiqueta, feature, planMinimo, proximamente }) => (
           <div key={feature}>
             <span>{etiqueta}</span>
-            <strong>{plan.funcionalidades[feature] ? 'Activo' : `Disponible desde ${planMinimo}`}</strong>
+            <strong>{proximamente ? `Próximamente · ${planMinimo}` : plan.funcionalidades[feature] ? 'Activo' : `Disponible desde ${planMinimo}`}</strong>
           </div>
         ))}
       </section>

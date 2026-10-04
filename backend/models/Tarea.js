@@ -47,7 +47,6 @@ const tareaSchema = new Schema(
         claveAutomatica: { type: String, trim: true },
         generaBitacora: { type: Boolean, default: false },
         tipoEventoBitacora: { type: String, trim: true },
-        evidenciaUrl: { type: String, trim: true },
         observaciones: { type: String, trim: true },
         comentarios: [
             {

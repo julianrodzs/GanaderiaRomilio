@@ -3,8 +3,12 @@ const Finca = require('../models/Finca');
 const { Membresia } = require('../models/Membresia');
 const Organizacion = require('../models/Organizacion');
 const UsoPlan = require('../models/UsoPlan');
+const ReservaCuotaPlan = require('../models/ReservaCuotaPlan');
+const { randomUUID } = require('crypto');
 const { obtenerOrganizacionActual } = require('../context/organizacion-context');
 const { PLAN_MINIMO_POR_FEATURE, obtenerPlanConfig } = require('../config/planes');
+
+const ESTADOS_PLAN_VIGENTES = Object.freeze(['Activo', 'Prueba']);
 
 const crearErrorPlan = (code, message, detalles = {}, status = 403) => {
     const error = new Error(message);
@@ -21,9 +25,112 @@ const resolverOrganizacionId = (organizacionId) => {
     return id.toString();
 };
 
+const evaluarVigenciaPlan = ({ estadoOrganizacion, estadoPlan }) => ({
+    vigente: estadoOrganizacion === 'Activa' && ESTADOS_PLAN_VIGENTES.includes(estadoPlan),
+    estadoOrganizacion,
+    estadoPlan,
+    code: estadoOrganizacion !== 'Activa' ? 'PLAN_ORGANIZATION_INACTIVE' : 'PLAN_SUBSCRIPTION_INACTIVE'
+});
+
+const asegurarPlanVigente = (actual) => {
+    if (actual?.vigente) return actual;
+    throw crearErrorPlan(
+        actual?.vigencia?.code || 'PLAN_SUBSCRIPTION_INACTIVE',
+        actual?.vigencia?.estadoOrganizacion !== 'Activa'
+            ? 'La organización no está activa.'
+            : 'La suscripción está suspendida o cancelada. Regulariza el plan para continuar.',
+        { estadoPlan: actual?.estado }
+    );
+};
+
 const periodoMensual = (fecha = new Date()) => {
     const fechaValida = new Date(fecha);
     return `${fechaValida.getUTCFullYear()}-${String(fechaValida.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
+const obtenerConsumoActualReserva = async ({ recurso, organizacionId, permiso, actual }) => {
+    if (recurso === 'usuarios') return contarUsuariosActivos(organizacionId);
+    if (recurso === 'fincas') return contarFincasActivas();
+    if (recurso === 'animales') {
+        const uso = await contarAnimalesActivos();
+        return permiso?.configuracion?.especies?.modo === 'UNA_ESPECIE'
+            ? (permiso.especiePlan === 'Porcino' ? uso.porcinos : uso.bovinos)
+            : uso.total;
+    }
+    return Number(actual || 0);
+};
+
+const reservarCuotaPlan = async ({ organizacionId, recurso, cantidad = 1, actual, limite, permiso, duracionMs = 15 * 60 * 1000 }) => {
+    const id = resolverOrganizacionId(organizacionId);
+    const solicitada = Math.max(Number(cantidad) || 1, 1);
+    if (limite === null || limite === undefined) return null;
+    const consumoActual = await obtenerConsumoActualReserva({ recurso, organizacionId: id, permiso, actual });
+    const ahora = new Date();
+    const token = randomUUID();
+    try {
+        await ReservaCuotaPlan.findOneAndUpdate(
+            { organizacionId: id, recurso },
+            { $setOnInsert: { organizacionId: id, recurso } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+    } catch (error) {
+        // Otra petición pudo crear el contador entre la consulta y el upsert.
+        if (error?.code !== 11000) throw error;
+    }
+    await ReservaCuotaPlan.updateOne(
+        { organizacionId: id, recurso },
+        { $pull: { reservas: { expiraEn: { $lte: ahora } } } }
+    );
+    const reservada = await ReservaCuotaPlan.findOneAndUpdate(
+        {
+            organizacionId: id,
+            recurso,
+            $expr: {
+                $lte: [
+                    {
+                        $add: [
+                            Number(consumoActual || 0),
+                            solicitada,
+                            { $sum: { $map: { input: { $ifNull: ['$reservas', []] }, as: 'reserva', in: '$$reserva.cantidad' } } }
+                        ]
+                    },
+                    Number(limite)
+                ]
+            }
+        },
+        { $push: { reservas: { token, cantidad: solicitada, expiraEn: new Date(ahora.getTime() + duracionMs) } } },
+        { new: true }
+    );
+    if (!reservada) {
+        throw crearErrorPlan(`PLAN_${recurso.toUpperCase()}_LIMIT_REACHED`, `No hay cupo disponible para ${recurso}.`, {
+            recurso, actual: consumoActual, limite, cantidadSolicitada: solicitada
+        });
+    }
+    return { token, recurso, organizacionId: id, cantidad: solicitada };
+};
+
+const liberarReservaCuotaPlan = async (reserva) => {
+    if (!reserva?.token) return;
+    await ReservaCuotaPlan.updateOne(
+        { organizacionId: reserva.organizacionId, recurso: reserva.recurso },
+        { $pull: { reservas: { token: reserva.token } } }
+    );
+};
+
+const ejecutarConReservaCuota = async ({ permiso, recurso, organizacionId, cantidad = 1, operacion }) => {
+    const reserva = permiso.consumeLimite === false ? null : await reservarCuotaPlan({
+        organizacionId,
+        recurso,
+        cantidad,
+        actual: permiso.actual,
+        limite: permiso.limite,
+        permiso
+    });
+    try {
+        return await operacion();
+    } finally {
+        await liberarReservaCuotaPlan(reserva);
+    }
 };
 
 const obtenerPlanActual = async (organizacionId) => {
@@ -33,24 +140,29 @@ const obtenerPlanActual = async (organizacionId) => {
 
     const codigo = organizacion.plan?.codigo || 'ESENCIAL';
     const configuracion = obtenerPlanConfig(codigo);
+    const estado = organizacion.plan?.estado || 'Activo';
+    const vigencia = evaluarVigenciaPlan({ estadoOrganizacion: organizacion.estado, estadoPlan: estado });
     return {
         organizacion,
         codigo: configuracion.codigo,
         especiePlan: organizacion.plan?.especiePlan || null,
-        estado: organizacion.plan?.estado || 'Activo',
+        estado,
+        vigente: vigencia.vigente,
+        vigencia,
         configuracion
     };
 };
 
-const obtenerConfiguracionPlan = async (organizacionId) => (await obtenerPlanActual(organizacionId)).configuracion;
+const obtenerConfiguracionPlan = async (organizacionId) => asegurarPlanVigente(await obtenerPlanActual(organizacionId)).configuracion;
 
 const tieneFeature = async (feature, organizacionId) => {
     const actual = await obtenerPlanActual(organizacionId);
-    return Boolean(actual.configuracion.funcionalidades?.[feature]);
+    return actual.vigente && Boolean(actual.configuracion.funcionalidades?.[feature]);
 };
 
 const puedeUsarEspecie = async (especie, organizacionId) => {
     const actual = await obtenerPlanActual(organizacionId);
+    if (!actual.vigente) asegurarPlanVigente(actual);
     if (!['Bovino', 'Porcino'].includes(especie)) {
         return { permitido: false, code: 'PLAN_INVALID_SPECIES', message: 'La especie indicada no es válida.', ...actual };
     }
@@ -73,6 +185,14 @@ const puedeUsarEspecie = async (especie, organizacionId) => {
         };
     }
     return { permitido: true, ...actual };
+};
+
+const asegurarPuedeUsarEspecie = async (especie, organizacionId) => {
+    const resultado = await puedeUsarEspecie(especie, organizacionId);
+    if (!resultado.permitido) {
+        throw crearErrorPlan(resultado.code, resultado.message, { especiePermitida: resultado.especiePermitida });
+    }
+    return resultado;
 };
 
 const contarAnimalesActivos = async () => {
@@ -146,6 +266,7 @@ const contarUsuariosActivos = (organizacionId) => Membresia.countDocuments({
 
 const puedeUsarRol = async (rol, organizacionId) => {
     const actual = await obtenerPlanActual(organizacionId);
+    asegurarPlanVigente(actual);
     const permitido = actual.configuracion.rolesPermitidos.includes(rol);
     return {
         permitido,
@@ -170,7 +291,8 @@ const puedeCrearUsuario = async ({ organizacionId, rol = 'Encargado', estado = '
         message: permitido ? null : 'Has alcanzado el límite de usuarios activos de tu plan.',
         actual,
         limite,
-        sobreLimite: actual > limite
+        sobreLimite: actual > limite,
+        consumeLimite
     };
 };
 
@@ -188,6 +310,7 @@ const contarFincasActivas = () => Finca.countDocuments({ estado: 'Activa' });
 
 const puedeCrearFinca = async ({ organizacionId, estado = 'Activa' } = {}) => {
     const actualPlan = await obtenerPlanActual(organizacionId);
+    asegurarPlanVigente(actualPlan);
     const actual = await contarFincasActivas();
     const limite = actualPlan.configuracion.limites.fincas;
     const consumeLimite = estado !== 'Inactiva';
@@ -237,6 +360,7 @@ const obtenerLimiteDrone = (actual) => {
 
 const puedeProcesarConteoDrone = async ({ organizacionId, periodo = periodoMensual() } = {}) => {
     const actualPlan = await obtenerPlanActual(organizacionId);
+    asegurarPlanVigente(actualPlan);
     if (actualPlan.configuracion.codigo === 'ESENCIAL' && !actualPlan.especiePlan) {
         return {
             permitido: false,
@@ -333,6 +457,7 @@ const incrementarUsoDrone = async ({ periodo = periodoMensual(), conteoId, liber
 };
 
 const incrementarEmailsOperativos = async ({ periodo = periodoMensual(), cantidad = 1 } = {}) => {
+    asegurarPlanVigente(await obtenerPlanActual());
     if (cantidad <= 0) return obtenerUsoMensual({ periodo });
     return UsoPlan.findOneAndUpdate(
         { periodo },
@@ -385,6 +510,7 @@ const obtenerEstadoLimites = async (organizacionId) => {
 const cambiarEspeciePlanEsencial = async ({ organizacionId, especie }) => {
     const id = resolverOrganizacionId(organizacionId);
     const actual = await obtenerPlanActual(id);
+    asegurarPlanVigente(actual);
     if (actual.codigo !== 'ESENCIAL') {
         throw crearErrorPlan('PLAN_SPECIES_SELECTION_NOT_REQUIRED', 'Tu plan permite utilizar ambas especies.', {}, 400);
     }
@@ -413,17 +539,23 @@ const obtenerMensajeFeature = (feature) => {
 };
 
 module.exports = {
+    ESTADOS_PLAN_VIGENTES,
+    asegurarPlanVigente,
     asegurarPuedeCrearAnimal,
     asegurarPuedeCrearFinca,
     asegurarPuedeCrearUsuario,
     asegurarPuedeProcesarConteoDrone,
+    asegurarPuedeUsarEspecie,
     cambiarEspeciePlanEsencial,
     contarAnimalesActivos,
     contarFincasActivas,
     contarUsuariosActivos,
     crearErrorPlan,
+    evaluarVigenciaPlan,
+    ejecutarConReservaCuota,
     incrementarEmailsOperativos,
     incrementarUsoDrone,
+    liberarReservaCuotaPlan,
     liberarReservaDrone,
     obtenerConfiguracionPlan,
     obtenerEstadoLimites,
@@ -438,5 +570,6 @@ module.exports = {
     puedeUsarRol,
     periodoMensual,
     reservarUsoDrone,
+    reservarCuotaPlan,
     tieneFeature
 };

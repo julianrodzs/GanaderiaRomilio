@@ -3,7 +3,10 @@ const Animal = require('../models/Animal');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const { prepararDatosGenealogia, validarRelacionGenealogica } = require('../services/genealogiaService');
 const { sincronizarTareasPorcinas } = require('../services/reproduccionPorcina-service');
-const { sincronizarTareasBovinas } = require('../services/reproduccionBovina-service');
+const {
+    esSeguimientoBovinoVigente,
+    sincronizarTareasBovinas
+} = require('../services/reproduccionBovina-service');
 const {
     crearNuevoCicloReproductivo,
     cerrarCicloReproductivo,
@@ -14,7 +17,7 @@ const {
 } = require('../services/reproduccion-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
-const { asegurarPuedeCrearAnimal } = require('../services/plan-service');
+const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota } = require('../services/plan-service');
 const { validarObjetivoProductivoFinca } = require('../services/finca-service');
 const { prepararDatosRaciales } = require('../services/raza-service');
 const { validarYPrepararCategoriaAnimal } = require('../services/categoriaAnimal-service');
@@ -146,7 +149,7 @@ const sincronizarAutomatizacionReproductiva = async ({ registro, animal, usuario
 
     if (especie === 'Porcino' && cicloActivo) {
         await sincronizarTareasPorcinas({ registro, animal, usuarioId });
-    } else if (especie === 'Bovino' && cicloActivo) {
+    } else if (especie === 'Bovino' && esSeguimientoBovinoVigente(registro)) {
         await sincronizarTareasBovinas({ registro, animal, usuarioId });
     } else {
         await cancelarTareasAutomaticasDelCiclo(registro._id);
@@ -157,7 +160,16 @@ reproduccionCtrl.getRegistros = async (req, res) => {
     try {
         const filtro = await obtenerFiltroRegistros(req.query.especie);
         const registrosSinPoblar = await RegistroReproductivo.find(filtro).sort({ fechaPartoEstimada: 1, createdAt: -1 });
-        await Promise.all(registrosSinPoblar.map(refrescarRegistro));
+        await Promise.all(registrosSinPoblar.map(async (registro) => {
+            await refrescarRegistro(registro);
+            if ((registro.especie || 'Bovino') === 'Bovino' && registro.fechaPartoReal) {
+                await sincronizarAutomatizacionReproductiva({
+                    registro,
+                    animal: await Animal.findById(registro.animal),
+                    usuarioId: req.usuario?.id
+                });
+            }
+        }));
         const registros = await poblarAnimal(
             RegistroReproductivo.find(filtro).sort({ fechaPartoEstimada: 1, createdAt: -1 })
         );
@@ -270,6 +282,7 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             origenGenealogico: 'Interno',
             objetivoProductivo: prepararObjetivoProductivo(req.body.objetivoProductivo || 'SIN_DEFINIR'),
             fechaNacimiento: registro.fechaPartoReal,
+            fechaDesteteEstimada: registro.fechaDestete,
             pesoNacimiento: req.body.pesoNacimiento,
             estado: 'Activo',
             observaciones: req.body.observaciones
@@ -277,7 +290,7 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
         datosTernero = validarYPrepararCategoriaAnimal(datosTernero);
 
         await validarRelacionGenealogica(null, datosTernero.padre, datosTernero.madre);
-        await asegurarPuedeCrearAnimal({
+        const permisoCreacion = await asegurarPuedeCrearAnimal({
             organizacionId: req.organizacionId,
             especie: datosTernero.especie
         });
@@ -286,11 +299,21 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             especie: datosTernero.especie,
             objetivoProductivo: datosTernero.objetivoProductivo
         });
-        const nuevoTernero = new Animal(datosTernero);
-        const terneroGuardado = await nuevoTernero.save();
+        const terneroGuardado = await ejecutarConReservaCuota({
+            permiso: permisoCreacion,
+            recurso: 'animales',
+            organizacionId: req.organizacionId,
+            operacion: () => new Animal(datosTernero).save()
+        });
         if (!terneroGuardado.madre) {
             throw new Error('No se pudo asociar la madre registrada al ternero.');
         }
+
+        await sincronizarTareasBovinas({
+            registro,
+            animal: madre,
+            usuarioId: req.usuario?.id
+        });
 
         await upsertEventoAnimal({
             animal: terneroGuardado._id,

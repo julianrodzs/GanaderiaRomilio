@@ -5,7 +5,7 @@ import IniciarSesion from './Components/IniciarSesion';
 import ListaUsuario from './Components/ListaUsuario';
 import OlvideContrasena from './Components/OlvideContrasena';
 import RestablecerContrasena from './Components/RestablecerContrasena';
-import { obtenerPerfilUsuario } from './services/api';
+import { cambiarOrganizacionActiva, obtenerPerfilUsuario } from './services/api';
 import { PlanProvider } from './context/PlanContext';
 import {
   limpiarCacheApiLegado,
@@ -76,6 +76,11 @@ function App() {
           ...sesionLocal,
           usuario: data.usuario,
           organizacion: data.organizacion || sesionLocal.organizacion,
+          finca: data.finca || sesionLocal.finca,
+          fincaActiva: data.finca || sesionLocal.fincaActiva || sesionLocal.finca,
+          fincaId: data.fincaId || data.finca?._id || sesionLocal.fincaId,
+          fincas: data.fincas || sesionLocal.fincas || [],
+          organizaciones: data.organizaciones || sesionLocal.organizaciones || [],
           validadaEn: new Date().toISOString()
         };
 
@@ -104,12 +109,81 @@ function App() {
     return () => window.removeEventListener('ganaderiaSesionExpirada', manejarSesionExpirada);
   }, []);
 
+  useEffect(() => {
+    const actualizarFincasSesion = (evento) => {
+      const fincas = evento.detail?.fincas;
+      if (!Array.isArray(fincas)) return;
+      setSesion((actual) => {
+        if (!actual) return actual;
+        const fincaActivaId = actual.fincaActiva?._id || actual.finca?._id || actual.fincaId;
+        const fincaActiva = fincas.find((finca) => finca._id === fincaActivaId) || actual.fincaActiva || actual.finca;
+        const principal = fincas.find((finca) => finca.esPrincipal);
+        const siguiente = {
+          ...actual,
+          fincas,
+          finca: fincaActiva,
+          fincaActiva,
+          organizacion: principal
+            ? { ...actual.organizacion, fincaPrincipal: principal._id }
+            : actual.organizacion
+        };
+        localStorage.setItem('ganaderiaSesion', JSON.stringify(siguiente));
+        return siguiente;
+      });
+    };
+    window.addEventListener('ganaderiaFincasActualizadas', actualizarFincasSesion);
+    return () => window.removeEventListener('ganaderiaFincasActualizadas', actualizarFincasSesion);
+  }, []);
+
   const iniciarSesion = (data) => {
-    const sesionNueva = { ...data, validadaEn: new Date().toISOString() };
+    const sesionNueva = {
+      ...data,
+      fincaActiva: data.finca,
+      fincaId: data.finca?._id || data.fincaId,
+      validadaEn: new Date().toISOString()
+    };
     localStorage.setItem('ganaderiaSesion', JSON.stringify(sesionNueva));
     setSesion(sesionNueva);
     setVista('dashboard');
     setMensaje('');
+  };
+
+  const cambiarFincaActiva = async (fincaId) => {
+    const finca = (sesion?.fincas || []).find((item) => item._id === fincaId);
+    if (!finca || finca.estado !== 'Activa') return;
+    const pendientes = await obtenerCambiosPendientes().catch(() => []);
+    if (pendientes.length > 0) {
+      const continuar = window.confirm(
+        `Hay ${pendientes.length} cambio(s) pendiente(s) en ${sesion?.fincaActiva?.nombre || sesion?.finca?.nombre || 'la finca actual'}. Se conservarán separados. ¿Cambiar de finca?`
+      );
+      if (!continuar) return;
+    }
+    const actualizada = { ...sesion, finca, fincaActiva: finca, fincaId: finca._id };
+    localStorage.setItem('ganaderiaSesion', JSON.stringify(actualizada));
+    setSesion(actualizada);
+    window.dispatchEvent(new CustomEvent('ganaderiaFincaCambiada', { detail: { finca } }));
+  };
+
+  const cambiarOrganizacion = async (organizacionId) => {
+    if (!organizacionId || organizacionId === String(sesion?.organizacion?._id || '')) return;
+    const pendientes = await obtenerCambiosPendientes().catch(() => []);
+    if (pendientes.length > 0 && !window.confirm(
+      `Hay ${pendientes.length} cambio(s) pendiente(s) en la organización actual. Se conservarán separados. ¿Cambiar de organización?`
+    )) return;
+    try {
+      const data = await cambiarOrganizacionActiva(organizacionId);
+      const siguiente = {
+        ...data,
+        fincaActiva: data.finca,
+        fincaId: data.finca?._id || data.fincaId,
+        validadaEn: new Date().toISOString()
+      };
+      localStorage.setItem('ganaderiaSesion', JSON.stringify(siguiente));
+      setSesion(siguiente);
+      window.dispatchEvent(new CustomEvent('ganaderiaOrganizacionCambiada', { detail: { organizacion: data.organizacion } }));
+    } catch (error) {
+      window.alert(error.message);
+    }
   };
 
   const cerrarSesion = async () => {
@@ -142,9 +216,17 @@ function App() {
   }
 
   if (vista === 'dashboard') {
+    const claveFinca = `${sesion?.organizacion?._id || 'organizacion'}:${sesion?.fincaActiva?._id || sesion?.finca?._id || sesion?.fincaId || 'principal'}`;
     return (
-      <PlanProvider>
-        <ListaUsuario usuario={sesion?.usuario} onLogout={cerrarSesion} />
+      <PlanProvider key={claveFinca}>
+        <ListaUsuario
+          key={claveFinca}
+          usuario={sesion?.usuario}
+          sesion={sesion}
+          onCambiarFinca={cambiarFincaActiva}
+          onCambiarOrganizacion={cambiarOrganizacion}
+          onLogout={cerrarSesion}
+        />
       </PlanProvider>
     );
   }

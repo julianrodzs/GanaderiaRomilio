@@ -6,6 +6,19 @@ const puedeVer = autorizarPermiso('reportes.ver');
 const { requireFeature } = require('../middleware/plan');
 const analiticaProductiva = requireFeature('analiticaProductiva');
 const analiticaEconomica = requireFeature('analiticaEconomica');
+const reportesMultiFinca = requireFeature('reportesMultiFinca');
+const { getReporteMultiFinca } = require('../controllers/reporteMultiFinca-controller');
+const {
+    crearCierre,
+    eliminarMeta,
+    exportarCierre,
+    exportarReporte,
+    getCierre,
+    getCierres,
+    getDetalleMetrica,
+    getMetas,
+    guardarMeta
+} = require('../controllers/consolidacionMultiFinca-controller');
 const {
     getRendimientoPotreros,
     getRendimientoPorPasto
@@ -37,13 +50,25 @@ const {
     getConfiguracionProductiva,
     updateConfiguracionProductiva,
     getRazasBovinas,
-    getDescendenciaBovina
-    ,getRendimientoForrajes
+    getDescendenciaBovina,
+    getPesoDestete,
+    getPesoDesteteAvanzado,
+    getRendimientoForrajes
 } = require('../controllers/reporte-controller');
 
 router.use(puedeVer);
 
 router.get('/resumen', getResumenReportes);
+router.get('/multi-finca', reportesMultiFinca, getReporteMultiFinca);
+router.get('/multi-finca/exportar', reportesMultiFinca, exportarReporte);
+router.get('/multi-finca/detalle', reportesMultiFinca, getDetalleMetrica);
+router.get('/multi-finca/metas', reportesMultiFinca, getMetas);
+router.post('/multi-finca/metas', reportesMultiFinca, autorizarPermiso('reportes.configurar'), guardarMeta);
+router.delete('/multi-finca/metas/:id', reportesMultiFinca, autorizarPermiso('reportes.configurar'), eliminarMeta);
+router.get('/multi-finca/cierres', reportesMultiFinca, getCierres);
+router.post('/multi-finca/cierres', reportesMultiFinca, autorizarPermiso('reportes.configurar'), crearCierre);
+router.get('/multi-finca/cierres/:id/exportar', reportesMultiFinca, exportarCierre);
+router.get('/multi-finca/cierres/:id', reportesMultiFinca, getCierre);
 router.get('/lotes', obtenerReporteLotes);
 router.get('/lotes/analitica', analiticaProductiva, obtenerReporteLotesAnalitica);
 router.get('/productividad', analiticaProductiva, getProductividadCria);
@@ -59,6 +84,8 @@ router.get('/forrajes/rendimiento', analiticaProductiva, getRendimientoForrajes)
 router.get('/bovinos/razas', analiticaProductiva, getRazasBovinas);
 router.get('/razas', analiticaProductiva, getRazasBovinas);
 router.get('/bovinos/descendencia', analiticaProductiva, getDescendenciaBovina);
+router.get('/destete/peso', getPesoDestete);
+router.get('/destete/peso/analitica', analiticaProductiva, getPesoDesteteAvanzado);
 router.get('/configuracion-productiva', analiticaProductiva, getConfiguracionProductiva);
 router.put('/configuracion-productiva', analiticaProductiva, autorizarPermiso('reportes.configurar'), updateConfiguracionProductiva);
 router.get('/productos/resumen', getProductosResumen);

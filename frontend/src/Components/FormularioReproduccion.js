@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { etiquetaUsuarioConRol } from '../utils/usuarios';
 import SelectorAnimalBuscable from './SelectorAnimalBuscable';
 
+const DIAS_REVISION_CELO_POSTPARTO = 60;
+const DIAS_CICLO_ESTRAL_ESTIMADO = 21;
+const MESES_DESTETE_POSTPARTO = 7;
+
 const estadoInicial = {
   animal: '',
   asignadoA: '',
@@ -42,10 +46,10 @@ const calcularProximoCeloInput = (fechaPartoReal) => {
   const hoy = new Date();
   const hoyUtc = new Date(Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()));
   const proximoCelo = new Date(`${fechaPartoReal}T00:00:00.000Z`);
-  proximoCelo.setUTCDate(proximoCelo.getUTCDate() + 60);
+  proximoCelo.setUTCDate(proximoCelo.getUTCDate() + DIAS_REVISION_CELO_POSTPARTO);
 
   while (proximoCelo < hoyUtc) {
-    proximoCelo.setUTCDate(proximoCelo.getUTCDate() + 21);
+    proximoCelo.setUTCDate(proximoCelo.getUTCDate() + DIAS_CICLO_ESTRAL_ESTIMADO);
   }
 
   return proximoCelo.toISOString().slice(0, 10);
@@ -161,7 +165,7 @@ const FormularioReproduccion = ({
           actualizado.fechaProximoCelo = value ? calcularProximoCeloPorcinoInput(actualizado.fechaDestete, actualizado.diasCeloPostDestetePorcino) : '';
         } else {
           actualizado.fechaProximoCelo = value ? calcularProximoCeloInput(value) : '';
-          actualizado.fechaDestete = value ? sumarMesesInput(value, 7) : '';
+          actualizado.fechaDestete = value ? sumarMesesInput(value, MESES_DESTETE_POSTPARTO) : '';
         }
       }
 

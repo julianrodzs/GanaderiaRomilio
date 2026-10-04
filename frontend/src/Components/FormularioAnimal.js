@@ -4,6 +4,7 @@ import CamposRazaBovina from './CamposRazaBovina';
 import SelectorAnimalBuscable from './SelectorAnimalBuscable';
 import { obtenerCategoriaAnimal } from '../utils/categoriasAnimales';
 import { etiquetaObjetivoProductivo, normalizarObjetivoProductivo, OBJETIVOS_PRODUCTIVOS } from '../constants/objetivosProductivos';
+import { usePlan } from '../context/PlanContext';
 
 const estadoInicial = {
   identificadorFinca: '',
@@ -34,6 +35,7 @@ const estadoInicial = {
   registroGenealogico: '',
   observacionesGenealogicas: '',
   fechaNacimiento: '',
+  fechaDesteteEstimada: '',
   fechaDestete: '',
   pesoNacimiento: '',
   pesoDestete: '',
@@ -66,6 +68,7 @@ const normalizarAnimal = (animal) => ({
   madre: animal?.madre?._id || animal?.madre || '',
   camadaOrigen: animal?.camadaOrigen?._id || animal?.camadaOrigen || '',
   fechaNacimiento: formatearFechaInput(animal?.fechaNacimiento),
+  fechaDesteteEstimada: formatearFechaInput(animal?.fechaDesteteEstimada),
   fechaDestete: formatearFechaInput(animal?.fechaDestete),
   pesoNacimiento: animal?.pesoNacimiento ?? '',
   pesoDestete: animal?.pesoDestete ?? '',
@@ -85,10 +88,13 @@ const numeroOpcional = (valor) => (valor === '' || valor === null || valor === u
 const fechaOpcional = (valor) => (valor ? valor : null);
 
 const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInicial, modo = 'crear', animales = [], camadas = [] }) => {
+  const { capacidadDisponible } = usePlan();
   const [formulario, setFormulario] = useState(() => normalizarAnimal(animalInicial));
   const [lineasProductivas, setLineasProductivas] = useState(null);
   const etiquetaId = 'DIIO';
   const categoriaCalculada = obtenerCategoriaAnimal(formulario);
+  const cuotaAnimales = capacidadDisponible('animales');
+  const creacionBloqueada = modo === 'crear' && !cuotaAnimales.permitido;
   const especiesDisponibles = useMemo(() => {
     if (!lineasProductivas) return ['Bovino', 'Porcino'];
     const especies = lineasProductivas.map((linea) => linea.especie);
@@ -156,6 +162,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
 
   const enviarFormulario = (evento) => {
     evento.preventDefault();
+    if (creacionBloqueada) return;
     const identificador = formulario.identificadorFinca || formulario.diio;
 
     onGuardar({
@@ -164,6 +171,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       objetivoProductivo: formulario.objetivoProductivo || 'SIN_DEFINIR',
       etapaProductiva: formulario.especie === 'Porcino' ? formulario.etapaProductiva || null : null,
       fechaNacimiento: fechaOpcional(formulario.fechaNacimiento),
+      fechaDesteteEstimada: fechaOpcional(formulario.fechaDesteteEstimada),
       fechaDestete: fechaOpcional(formulario.fechaDestete),
       pesoNacimiento: numeroOpcional(formulario.pesoNacimiento),
       pesoDestete: numeroOpcional(formulario.pesoDestete),
@@ -356,15 +364,22 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
           </label>
 
           <label>
-            Fecha destete
-            <input name="fechaDestete" type="date" value={formulario.fechaDestete} onChange={actualizarCampo} />
+            Fecha destete estimada
+            <input name="fechaDesteteEstimada" type="date" value={formulario.fechaDesteteEstimada} onChange={actualizarCampo} />
           </label>
         </div>
 
-        <label>
-          Peso al destete
-          <input name="pesoDestete" type="number" min="0" value={formulario.pesoDestete} onChange={actualizarCampo} />
-        </label>
+        <div className="form-grid">
+          <label>
+            Fecha destete real
+            <input name="fechaDestete" type="date" value={formulario.fechaDestete} onChange={actualizarCampo} />
+          </label>
+
+          <label>
+            Peso al destete
+            <input name="pesoDestete" type="number" min="0" value={formulario.pesoDestete} onChange={actualizarCampo} />
+          </label>
+        </div>
 
         <div className="form-grid">
           <label>
@@ -446,8 +461,9 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
         </label>
 
         <div className="form-actions">
+          {creacionBloqueada && <span className="texto-ayuda limite-plan-aviso">{cuotaAnimales.mensaje} Revisa Mi plan para ampliar la capacidad.</span>}
           <button className="boton-link" type="button" onClick={onCancelar}>Cancelar</button>
-          <button className="boton-primario compacto" type="submit" disabled={guardando}>
+          <button className="boton-primario compacto" type="submit" disabled={guardando || creacionBloqueada} title={creacionBloqueada ? cuotaAnimales.mensaje : ''}>
             {guardando ? 'Guardando...' : modo === 'editar' ? 'Actualizar animal' : 'Guardar animal'}
           </button>
         </div>

@@ -90,9 +90,6 @@ const MODELOS_FINCA = [
 ];
 
 const MIGRACIONES_ARCHIVOS = [
-    { categoria: 'compras', modelo: CompraAnimal, campo: 'comprobanteUrl' },
-    { categoria: 'ventas', modelo: VentaAnimal, campo: 'comprobanteUrl' },
-    { categoria: 'tareas', modelo: Tarea, campo: 'evidenciaUrl' },
     { categoria: 'conteo-drone', modelo: ConteoDrone, campo: 'imagenOriginalUrl' },
     { categoria: 'conteo-drone', modelo: ConteoDrone, campo: 'imagenProcesadaUrl' }
 ];

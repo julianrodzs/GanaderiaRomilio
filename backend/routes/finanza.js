@@ -5,6 +5,13 @@ const puedeVer = autorizarPermiso('finanzas.ver');
 const puedeGestionar = autorizarPermiso('finanzas.gestionar');
 const puedeAdministrarCatalogos = autorizarPermiso('finanzas.administrarCatalogos');
 const puedeVerReportes = autorizarPermiso('reportes.ver');
+const { requireFeature } = require('../middleware/plan');
+const operacionMultiFinca = requireFeature('operacionMultiFinca');
+const {
+    crearTransferenciaInterna,
+    getOperacionesFinancierasMultiFinca,
+    registrarGastoCompartido
+} = require('../controllers/consolidacionMultiFinca-controller');
 
 const {
     getMovimientos,
@@ -35,6 +42,9 @@ router.route('/')
     .post(puedeGestionar, createMovimiento);
 
 router.get('/resumen', puedeVer, getResumen);
+router.get('/multi-finca', operacionMultiFinca, puedeVer, getOperacionesFinancierasMultiFinca);
+router.post('/multi-finca/transferencias', operacionMultiFinca, puedeGestionar, crearTransferenciaInterna);
+router.post('/multi-finca/gastos-compartidos', operacionMultiFinca, puedeGestionar, registrarGastoCompartido);
 router.get('/consumo', puedeVer, getResumenConsumo);
 router.get('/planilla-resumen', puedeVer, getResumenPlanilla);
 router.get('/inversiones-resumen', puedeVer, getResumenInversiones);

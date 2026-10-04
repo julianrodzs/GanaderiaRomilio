@@ -34,7 +34,6 @@ const estadoInicial = {
   proveedor: '',
   empleado: '',
   finca: '',
-  comprobante: '',
   observaciones: ''
 };
 
@@ -84,7 +83,6 @@ const camposTextoMayuscula = new Set([
   'empleado',
   'finca',
   'metodoPago',
-  'comprobante',
   'observaciones'
 ]);
 
@@ -411,11 +409,6 @@ const FormularioMovimientoFinanciero = ({
             <OpcionesDatalist id="metodos-pago-financieros" opciones={catalogos.metodosPago} />
           </label>
         </div>
-
-        <label>
-          Comprobante
-          <input name="comprobante" value={formulario.comprobante} onChange={actualizarCampo} />
-        </label>
 
         <label>
           Observaciones

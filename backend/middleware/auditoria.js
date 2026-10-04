@@ -8,8 +8,7 @@ const CAMPOS_SENSIBLES = new Set([
     'confirmarPassword',
     'token',
     'authorization',
-    'resetPasswordToken',
-    'comprobante'
+    'resetPasswordToken'
 ]);
 
 const normalizarClave = (valor = '') => String(valor).trim().toLowerCase();

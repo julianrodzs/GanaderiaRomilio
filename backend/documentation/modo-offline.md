@@ -8,7 +8,7 @@ El modo offline es deliberadamente acotado. No intenta replicar toda la aplicaci
 | --- | --- | --- |
 | Inventario | Lista previamente descargada, separada por especie | No |
 | Potreros | Lista previamente descargada | No |
-| Tareas | Lista visible para el rol, periodo y filtros previamente descargados | Completar tarea, observaciones y evidencia |
+| Tareas | Lista visible para el rol, periodo y filtros previamente descargados | Completar tarea y observaciones |
 
 Reproduccion, Sanidad, Pesajes, Compras, Ventas, Finanzas, Reportes, Importacion, Drone y Usuarios requieren conexion. Cuando la aplicacion detecta que no hay red, los formularios que ya soportan modo consulta se bloquean.
 
@@ -22,6 +22,8 @@ organizacionId + fincaId + usuarioId + recurso + variante
 
 Inventario agrega la especie a la variante. Tareas agrega los filtros y periodo consultado y se conserva para cualquier rol con acceso al módulo, incluidos Administrador y Encargado. Los datos de otra organizacion, finca o usuario no se devuelven aunque compartan el mismo navegador.
 
+La finca activa forma parte de la sesión local y de cada solicitud mediante `X-Finca-Id`. Al cambiarla, la interfaz vuelve a montar los módulos para no conservar resultados visuales de la finca anterior. Las descargas y operaciones pendientes no se trasladan: permanecen bajo la clave de su finca original y reaparecen al volver a ella. Si hay tareas pendientes, el selector advierte antes del cambio, pero no las descarta.
+
 El cierre de sesion voluntario elimina el contexto local completo. Si existen operaciones pendientes, el usuario debe confirmar que desea descartarlas. Un token JWT vencido no permite abrir la sesion offline, pero conserva la cola aislada para recuperarla cuando el mismo usuario vuelva a autenticarse.
 
 El service worker conserva solamente la interfaz estatica. Las respuestas `/api` no se guardan en Cache Storage; las colecciones permitidas se administran expresamente en IndexedDB.
@@ -34,7 +36,7 @@ Cada finalizacion offline guarda:
 - version `updatedAt` que tenia la tarea al descargarse;
 - estado de sincronizacion;
 - cantidad y fecha de intentos;
-- observaciones y evidencia;
+- observaciones;
 - contexto de organizacion, finca y usuario.
 
 Estados locales:
