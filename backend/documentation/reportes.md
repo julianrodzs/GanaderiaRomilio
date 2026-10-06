@@ -4,7 +4,7 @@
 
 Los resumenes operativos de inventario, potreros, sanidad, finanzas, ventas, productos, dron, camadas y tareas por camada son reportes basicos disponibles desde Esencial.
 
-La analitica productiva requiere Gestion o superior: IPG, vacas a revisar, partos por vaca y ano, crecimiento por pesajes, reproduccion porcina avanzada y rendimiento de potreros.
+La analitica productiva requiere Gestion o superior: indicador interno de cria bovina, productividad reproductiva porcina, vacas a revisar, partos por vaca y ano, crecimiento por pesajes, reproduccion porcina avanzada y rendimiento de potreros.
 
 ICP e IEE se documentan en `indices-productivos.md`. Ambos son indicadores de finca calculados por periodo. ICP normaliza crecimiento porcino por etapa; IEE normaliza el engorde bovino y porcino contra metas propias antes de consolidarlo por animal-dias.
 
@@ -338,7 +338,7 @@ Este objeto se construye con `crearReportePartos`.
 
 Ver seccion "Partos por vaca y ano".
 
-## Productividad de cria - IPG
+## Productividad reproductiva por especie
 
 Endpoint:
 
@@ -350,14 +350,19 @@ Query:
 
 - `fechaInicio`
 - `fechaFin`
+- `especie=Bovino|Porcino`
 
 Frontend:
 
 ```js
-obtenerProductividadCria({ fechaInicio, fechaFin })
+obtenerProductividadCria({ fechaInicio, fechaFin, especie })
 ```
 
-### Variables de salida
+### Bovinos
+
+La respuesta bovina conserva el indicador interno de cria y nunca incorpora porcinos. Cuando la seleccion es `Todos`, este bloque sigue siendo exclusivamente bovino; los resultados porcinos se presentan en su propio reporte.
+
+Variables de salida:
 
 ```js
 ipg
@@ -453,6 +458,33 @@ Se generan con base en:
 - destete bajo.
 - gestacion baja.
 - supervivencia baja.
+
+### Porcinos
+
+No se calcula IPG con datos porcinos. La respuesta usa `Camada.fechaNacimiento` para el periodo y devuelve:
+
+```js
+totalCamadas
+camadasDestetadas
+madresConParto
+nacidosVivos
+destetados
+promedioNacidosVivosPorCamada
+promedioDestetadosPorCamada
+supervivenciaPredestete
+mortalidadPredesteteRegistrada
+camadasPorMadreConParto
+destetadosPorMadre
+```
+
+Los indicadores de destete solo usan camadas con `fechaDesteteReal` o estado `Destetada`, `Vendida` o `Cerrada`:
+
+```txt
+promedioDestetadosPorCamada = destetados / camadas con destete cerrado
+supervivenciaPredestete = destetados / nacidos vivos de camadas con destete cerrado * 100
+```
+
+Las camadas activas sin destete no se convierten en mortalidad ni reducen artificialmente la supervivencia.
 
 ## Finanzas de cria
 
@@ -1236,6 +1268,7 @@ Query:
 - `fechaFin`
 - `animalId`
 - `diasSinPesaje`
+- `especie=Bovino|Porcino`
 
 Frontend:
 
@@ -1244,7 +1277,8 @@ obtenerReporteCrecimientoPesajes({
   fechaInicio,
   fechaFin,
   animalId,
-  diasSinPesaje
+  diasSinPesaje,
+  especie
 })
 ```
 
@@ -1270,6 +1304,8 @@ Animales:
 - Solo animales cuyo estado no esta en:
   - `Muerto`
   - `Vendido`
+- Aplica el filtro de especie antes de consultar los pesajes; un reporte porcino no puede incluir pesajes bovinos y viceversa.
+- La categoria se obtiene con el servicio central de categorias por edad, sexo y especie. El bloque de crias muestra terneros/terneras para bovinos y lechones/lechonas para porcinos.
 
 ### Analisis por animal
 
@@ -2518,12 +2554,14 @@ Fuentes: `Potrero`, `RotacionPotrero`, `CatalogoPasto` e `HistorialCoberturaPotr
 La primera ruta compara potreros e incluye la cobertura actual y el descanso real frente a `diasDescansoObjetivo`. La segunda acepta `agruparPor=pasto` o `agruparPor=especieBase` y devuelve:
 
 - cantidad de potreros y area observada.
-- dias ocupados, porcentaje promedio y numero de rotaciones.
-- animales promedio, animal-dias y animal-dias por hectarea.
+- dias ocupados, porcentaje de tiempo ocupado y numero de rotaciones.
+- animales promedio, densidad promedio durante el pastoreo en animales por hectarea, animal-dias y animal-dias por hectarea.
 - descanso promedio, minimo, maximo, objetivo y diferencia.
 - detalle comparable de los potreros incluidos en el grupo.
 
-La asignacion es historica: si una rotacion cruza un cambio de cobertura, el servicio reparte sus dias y animal-dias entre ambos periodos. Las rotaciones previas al primer registro aparecen como `Sin cobertura registrada`; una descripcion importada sin catalogar aparece como pendiente de revision.
+La asignacion es historica: si una rotacion cruza un cambio de cobertura, el servicio reparte sus dias y animal-dias entre ambos periodos. La primera cobertura comienza en `fechaEstablecimientoPasto` cuando esa fecha es anterior a la creación del historial. Si la fecha se agregó posteriormente en otra entrada consecutiva del mismo pasto, también se aplica al primer tramo. No se extiende a través de un cambio real de pasto. Como compatibilidad con potreros legados sin ningun documento de historial, se usa la cobertura actual y se marca como `sin historial previo`. Una descripcion importada sin catalogar aparece como pendiente de revision.
+
+El porcentaje de tiempo ocupado es `dias ocupados / dias del periodo`; no aumenta por tener mas animales. La densidad durante el pastoreo es el promedio ponderado de `numeroAnimales / areaHa` en los tramos ocupados. `animal-dias / ha` conserva la presion acumulada al incorporar tambien la duracion. No se publican UA/ha sin peso historico de los animales en cada rotacion.
 
 Estos reportes describen desempeno observado. No califican un pasto como mejor, no atribuyen causalidad y no mezclan GMD con la evaluacion de cobertura.
 

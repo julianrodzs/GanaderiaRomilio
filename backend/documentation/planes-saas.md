@@ -2,12 +2,12 @@
 
 La configuración fuente está en `backend/config/planes.js`. Los precios pueden cambiarse con variables de entorno y no deben duplicarse en controladores ni frontend.
 
-| Plan | USD/mes | Fincas | Usuarios activos | Animales activos | Dron/mes | Productiva | Económica | Emails |
-| --- | ---: | ---: | ---: | --- | --- | --- | --- | --- |
-| Esencial | 6 | 1 | 3 | 210 bovinos o 500 porcinos | 15 si elige bovinos | No | No | No |
-| Gestión | 12 | 2 | 8 | 2.000 total | 60 | Sí | No | No |
-| Pro | 20 | 5 | 20 | 5.000 total | 150 | Sí | Sí | Sí |
-| Premium | 35 | 10 | 50 | 10.000 total | Uso intensivo medido | Sí | Sí | Sí |
+| Plan | USD/mes | Fincas | Usuarios activos | Animales activos | Dron/mes | Productiva | Económica | IATF | Emails |
+| --- | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |
+| Esencial | 6 | 1 | 3 | 210 bovinos o 500 porcinos | 15 si elige bovinos | No | No | No | No |
+| Gestión | 12 | 2 | 8 | 2.000 total | 60 | Sí | No | No | No |
+| Pro | 20 | 5 | 20 | 5.000 total | 150 | Sí | Sí | Sí | Sí |
+| Premium | 35 | 10 | 50 | 10.000 total | Uso intensivo medido | Sí | Sí | Sí | Sí |
 
 Premium no tiene un límite comercial fijo de dron, pero cada conteo exitoso queda registrado en `UsoPlan`.
 
@@ -58,6 +58,8 @@ Analítica productiva, desde Gestión: productividad/IPG, vacas improductivas, p
 Analítica económica, desde Pro: finanzas y sustentabilidad de cría, compras avanzadas, economía por camada, ventas por origen y rotación de inventario vendido.
 
 Auditoría avanzada se consulta desde Pro. La captura continúa en todos los planes para conservar historial.
+
+IATF y los protocolos reproductivos configurables se habilitan desde Pro mediante `iatfReproductivo`. Premium agrega el consolidado observado entre fincas. La operación completa está documentada en `iatf.md`.
 
 El Centro de Alertas permanece activo en todos los planes. Los correos operativos de tareas se envían solo en Pro y Premium; recuperación de contraseña y seguridad no dependen del plan.
 

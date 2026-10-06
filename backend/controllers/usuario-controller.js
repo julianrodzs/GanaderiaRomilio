@@ -116,6 +116,7 @@ usuarioCtrl.getUsuariosAsignables = async (req, res) => {
         const permisoPorModulo = {
             Sanidad: 'sanidad.gestionar',
             Reproduccion: 'reproduccion.gestionar',
+            IATF: 'reproduccion.iatfCrear',
             Tareas: 'tareas.gestionar'
         };
         const permiso = permisoPorModulo[modulo];

@@ -7,11 +7,14 @@ import {
   crearTarea,
   eliminarTarea,
   obtenerAnimales,
+  obtenerActividadIATFPorTarea,
   obtenerMisTareas,
   obtenerTarea,
   obtenerPotreros,
   obtenerTareas,
-  obtenerUsuariosAsignables
+  obtenerUsuariosAsignables,
+  ejecutarPasoIATF,
+  registrarInseminacionesIATF
 } from '../services/api';
 import {
   guardarCambiosPendientes,
@@ -166,6 +169,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
   const [comentario, setComentario] = useState('');
   const [observacionesCompletar, setObservacionesCompletar] = useState('');
   const [reprogramacion, setReprogramacion] = useState(null);
+  const [actividadIatf, setActividadIatf] = useState(null);
 
   const cargarDatos = async () => {
     try {
@@ -377,6 +381,31 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
   const completar = async (tarea) => {
     try {
       setGuardando(true);
+      if (tarea.categoriaAutomatica === 'IATF') {
+        if (!navigator.onLine) throw new Error('La ejecución IATF necesita conexión para validar existencias y evitar consumos duplicados.');
+        const actividad = await obtenerActividadIATFPorTarea(tarea._id);
+        const aplicados = new Set((actividad.ejecucion.animalesAplicados || []).map((id) => String(id?._id || id)));
+        const esPasoInseminacion = actividad.ejecucion.pasoSnapshot.tipoAccion === 'IATF';
+        const soloInseminacion = esPasoInseminacion && aplicados.size > 0;
+        const participantes = actividad.campana.participantes.filter((item) => {
+          const id = String(item.animal?._id || item.animal);
+          if (['RETIRADA', 'CANCELADA'].includes(item.estadoParticipacion)) return false;
+          if (soloInseminacion) return aplicados.has(id) && item.estadoParticipacion !== 'INSEMINADA';
+          return !aplicados.has(id);
+        });
+        setActividadIatf({
+          ...actividad,
+          participantes,
+          soloInseminacion,
+          animales: participantes.map((item) => String(item.animal?._id || item.animal)),
+          retornosCelo: [],
+          fechaHoraReal: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
+          productos: (actividad.ejecucion.pasoSnapshot.productos || []).map((producto) => ({ producto: String(producto.producto?._id || producto.producto), cantidad: '', dosis: producto.dosis || '', unidad: producto.unidad || '' })),
+          semen: ''
+        });
+        setDetalle(null);
+        return;
+      }
       if (!navigator.onLine) {
         await guardarCambiosPendientes({
           tipo: 'completar-tarea',
@@ -400,6 +429,38 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
         await cargarDatos();
       }
       setObservacionesCompletar('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const guardarEjecucionIatf = async () => {
+    if (!actividadIatf?.animales.length) return;
+    try {
+      setGuardando(true);
+      const tipoAccion = actividadIatf.ejecucion.pasoSnapshot.tipoAccion;
+      if (tipoAccion === 'IATF') {
+        if (!actividadIatf.semen) throw new Error('Selecciona la pajuela utilizada antes de registrar la IATF.');
+      }
+      if (!actividadIatf.soloInseminacion) {
+        await ejecutarPasoIATF(actividadIatf.campana._id, actividadIatf.ejecucion.pasoPlantilla, {
+          fechaHoraReal: actividadIatf.fechaHoraReal,
+          animales: actividadIatf.animales,
+          retornoCeloAnimales: actividadIatf.retornosCelo,
+          productos: actividadIatf.productos.filter((item) => Number(item.cantidad) > 0).map((item) => ({ ...item, cantidad: Number(item.cantidad) }))
+        });
+      }
+      if (tipoAccion === 'IATF') {
+        const seleccionados = actividadIatf.participantes.filter((item) => actividadIatf.animales.includes(String(item.animal?._id || item.animal)));
+        await registrarInseminacionesIATF(actividadIatf.campana._id, {
+          fechaHoraReal: actividadIatf.fechaHoraReal,
+          inseminaciones: seleccionados.map((item) => ({ participanteId: item._id, semen: actividadIatf.semen, fechaHoraReal: actividadIatf.fechaHoraReal }))
+        });
+      }
+      setActividadIatf(null);
+      await cargarDatos();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -700,6 +761,28 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
                 </article>
               ))}
             </div>
+          </section>
+        </div>
+      )}
+
+      {actividadIatf && (
+        <div className="modal-backdrop">
+          <section className="modal-panel iatf-modal">
+            <div className="panel-title">
+              <div><p className="eyebrow">Actividad IATF asignada</p><h2>{actividadIatf.ejecucion.pasoSnapshot.nombre}</h2><p>{actividadIatf.campana.nombre}</p></div>
+              <button className="boton-link" type="button" onClick={() => setActividadIatf(null)}>Cerrar</button>
+            </div>
+            <div className="usuario-form-grid">
+              <label>Fecha y hora real<input type="datetime-local" value={actividadIatf.fechaHoraReal} onChange={(e) => setActividadIatf((actual) => ({ ...actual, fechaHoraReal: e.target.value }))} /></label>
+              {actividadIatf.productos.map((producto, indice) => {
+                const insumo = actividadIatf.insumos.find((item) => item._id === producto.producto);
+                return <label key={producto.producto}>Cantidad real de {insumo?.nombre || 'insumo'}<input type="number" min="0" step="0.001" value={producto.cantidad} onChange={(e) => setActividadIatf((actual) => ({ ...actual, productos: actual.productos.map((item, i) => i === indice ? { ...item, cantidad: e.target.value } : item) }))} /><small>Disponible: {insumo?.cantidadDisponible ?? '--'} {insumo?.unidad || producto.unidad}</small></label>;
+              })}
+              {actividadIatf.ejecucion.pasoSnapshot.tipoAccion === 'IATF' && <label>Pajuela utilizada<select value={actividadIatf.semen} onChange={(e) => setActividadIatf((actual) => ({ ...actual, semen: e.target.value }))}><option value="">Seleccionar</option>{actividadIatf.insumos.filter((item) => item.categoria === 'SEMEN').map((item) => <option key={item._id} value={item._id}>{item.toro || item.nombre} · {item.cantidadDisponible} disponibles</option>)}</select></label>}
+              <div className="campo-completo iatf-aplicacion-selector"><strong>Animales atendidos ({actividadIatf.animales.length})</strong>{actividadIatf.participantes.map((participante) => { const id = String(participante.animal?._id || participante.animal); return <label key={participante._id}><input type="checkbox" checked={actividadIatf.animales.includes(id)} onChange={() => setActividadIatf((actual) => ({ ...actual, animales: actual.animales.includes(id) ? actual.animales.filter((item) => item !== id) : [...actual.animales, id] }))} /> {participante.animal?.diio || participante.animal?.identificadorFinca} {participante.animal?.nombre || ''}</label>; })}</div>
+              {actividadIatf.ejecucion.pasoSnapshot.tipoAccion === 'OBSERVAR_CELO' && <div className="campo-completo iatf-aplicacion-selector"><strong>Celo observado ({actividadIatf.retornosCelo.length})</strong>{actividadIatf.participantes.filter((participante) => actividadIatf.animales.includes(String(participante.animal?._id || participante.animal))).map((participante) => { const id = String(participante.animal?._id || participante.animal); return <label key={participante._id}><input type="checkbox" checked={actividadIatf.retornosCelo.includes(id)} onChange={() => setActividadIatf((actual) => ({ ...actual, retornosCelo: actual.retornosCelo.includes(id) ? actual.retornosCelo.filter((item) => item !== id) : [...actual.retornosCelo, id] }))} /> {participante.animal?.diio || participante.animal?.identificadorFinca}</label>; })}</div>}
+            </div>
+            <div className="modal-actions"><button className="boton-link" type="button" onClick={() => setActividadIatf(null)}>Cancelar</button><button className="boton-primario" type="button" onClick={guardarEjecucionIatf} disabled={guardando || !actividadIatf.animales.length}>{guardando ? 'Registrando...' : 'Registrar ejecución real'}</button></div>
           </section>
         </div>
       )}

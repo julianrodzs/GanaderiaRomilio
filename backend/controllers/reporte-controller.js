@@ -27,6 +27,8 @@ const {
     obtenerReporteRacial
 } = require('../services/reportesRazaGenealogia-service');
 const { obtenerReportePesoDestete } = require('../services/reportePesoDestete-service');
+const { obtenerCategoriaAnimal } = require('../services/categoriaAnimal-service');
+const { calcularProductividadPorcina } = require('../services/productividadCria-service');
 
 const reporteCtrl = {};
 const { obtenerRendimientoForrajes } = require('../services/forrajeRendimiento-service');
@@ -576,7 +578,23 @@ const esMovimientoGastoOperativo = (movimiento) => {
 reporteCtrl.getProductividadCria = async (req, res) => {
     try {
         const { fechaInicio, fechaFin, especie } = req.query;
-        const idsEspecie = await obtenerIdsAnimalesPorEspecie(especie);
+        if (especie === 'Porcino') {
+            const [camadas, configuracion] = await Promise.all([
+                Camada.find(crearFiltroFechas('fechaNacimiento', fechaInicio, fechaFin)).lean(),
+                obtenerConfiguracionProductiva()
+            ]);
+            return res.json({
+                ...calcularProductividadPorcina(camadas, { configuracion: configuracion.toObject() }),
+                filtros: {
+                    fechaInicio: fechaInicio || null,
+                    fechaFin: fechaFin || null,
+                    especie: 'Porcino'
+                }
+            });
+        }
+
+        const especieAnalizada = 'Bovino';
+        const idsEspecie = await obtenerIdsAnimalesPorEspecie(especieAnalizada);
         const filtroPartos = crearFiltroFechas('fechaPartoReal', fechaInicio, fechaFin);
         filtroPartos.fechaPartoReal = {
             ...(filtroPartos.fechaPartoReal || {}),
@@ -592,7 +610,7 @@ reporteCtrl.getProductividadCria = async (req, res) => {
         };
 
         const periodoMuertes = crearFiltroPeriodo('updatedAt', fechaInicio, fechaFin);
-        const filtroMuertes = { estado: 'Muerto', ...crearFiltroEspecieAnimal(especie) };
+        const filtroMuertes = { estado: 'Muerto', ...crearFiltroEspecieAnimal(especieAnalizada) };
         if (Object.keys(periodoMuertes).length) {
             filtroMuertes.updatedAt = periodoMuertes;
         }
@@ -609,12 +627,12 @@ reporteCtrl.getProductividadCria = async (req, res) => {
             muertesPeriodo,
             totalAnimales
         ] = await Promise.all([
-            obtenerVacasReproductoras(especie),
+            obtenerVacasReproductoras(especieAnalizada),
             RegistroReproductivo.countDocuments(filtroPartos),
             RegistroReproductivo.countDocuments(filtroDestetes),
-            obtenerVacasGestantes(especie),
+            obtenerVacasGestantes(especieAnalizada),
             Animal.countDocuments(filtroMuertes),
-            Animal.countDocuments(crearFiltroEspecieAnimal(especie))
+            Animal.countDocuments(crearFiltroEspecieAnimal(especieAnalizada))
         ]);
 
         const vacasReproductoras = vacasReproductorasLista.length;
@@ -632,6 +650,8 @@ reporteCtrl.getProductividadCria = async (req, res) => {
         );
 
         res.json({
+            tipo: 'Bovino',
+            especieAnalizada,
             ipg,
             clasificacion: clasificarIpg(ipg),
             tasaNatalidad,
@@ -929,10 +949,7 @@ const obtenerDestetesBajos = (vaca, terneros, pesoDesteteMin, fechaInicio, fecha
 };
 
 const calcularCategoriaAnimal = (animal) => {
-    const edadMeses = calcularEdadMeses(animal.fechaNacimiento);
-    if (edadMeses !== null && edadMeses < 12) return 'Ternero';
-    if (animal.sexo === 'Hembra') return edadMeses !== null && edadMeses >= 24 ? 'Vaca' : 'Novilla';
-    return edadMeses !== null && edadMeses >= 24 ? 'Toro' : 'Novillo';
+    return obtenerCategoriaAnimal(animal) || animal.categoria || 'Otro';
 };
 
 const crearAnalisisPesajesAnimal = (animal, pesajes) => {
@@ -969,14 +986,19 @@ const crearAnalisisPesajesAnimal = (animal, pesajes) => {
 
 reporteCtrl.getCrecimientoPesajes = async (req, res) => {
     try {
-        const { fechaInicio, fechaFin, animalId, diasSinPesaje = 60 } = req.query;
+        const { fechaInicio, fechaFin, animalId, diasSinPesaje = 60, especie } = req.query;
         const filtroPesajes = crearFiltroFechas('fecha', fechaInicio, fechaFin);
-        if (animalId) filtroPesajes.animal = animalId;
-
-        const [pesajes, animales] = await Promise.all([
-            Pesaje.find(filtroPesajes).sort({ fecha: 1 }).lean(),
-            Animal.find({ estado: { $nin: ['Muerto', 'Vendido'] } }).lean()
-        ]);
+        const filtroAnimales = {
+            estado: { $nin: ['Muerto', 'Vendido'] },
+            ...crearFiltroEspecieAnimal(especie)
+        };
+        if (animalId) filtroAnimales._id = animalId;
+        const animales = await Animal.find(filtroAnimales).lean();
+        const idsAnimales = animales.map((animal) => animal._id);
+        filtroPesajes.animal = { $in: idsAnimales };
+        const pesajes = idsAnimales.length
+            ? await Pesaje.find(filtroPesajes).sort({ fecha: 1 }).lean()
+            : [];
         const pesajesPorAnimal = pesajes.reduce((mapa, pesaje) => {
             const id = pesaje.animal?.toString();
             if (!id) return mapa;
@@ -1002,7 +1024,12 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
             categoria: calcularCategoriaAnimal(animal),
             fechaUltimoPesaje: (pesajesPorAnimal.get(animal._id.toString()) || []).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0]?.fecha || null
         }));
-        const crecimientoTerneros = analisis.filter((item) => item.categoria === 'Ternero').map((item) => {
+        const categoriasCrias = especie === 'Porcino'
+            ? new Set(['Lechón', 'Lechona'])
+            : especie === 'Bovino'
+                ? new Set(['Ternero', 'Ternera'])
+                : new Set(['Ternero', 'Ternera', 'Lechón', 'Lechona']);
+        const crecimientoCrias = analisis.filter((item) => categoriasCrias.has(item.categoria)).map((item) => {
             const animal = animales.find((animalItem) => animalItem._id.toString() === item.animalId.toString());
             const pesoNacimiento = animal?.pesoNacimiento || 0;
             return {
@@ -1017,7 +1044,8 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
                 fechaInicio: fechaInicio || null,
                 fechaFin: fechaFin || null,
                 animalId: animalId || null,
-                diasSinPesaje: Number(diasSinPesaje || 60)
+                diasSinPesaje: Number(diasSinPesaje || 60),
+                especie: especie || 'Todos'
             },
             resumen: {
                 animalesConPesajes: analisis.length,
@@ -1046,7 +1074,8 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
             menoresCrecimientos: [...conCrecimiento].sort((a, b) => a.gananciaDiariaPromedio - b.gananciaDiariaPromedio).slice(0, 10),
             animalesSinPesajesRecientes,
             evolucion: animalId ? analisis[0]?.evolucion || [] : analisis.slice(0, 10),
-            crecimientoTerneros
+            crecimientoCrias,
+            crecimientoTerneros: especie === 'Porcino' ? [] : crecimientoCrias
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener reporte de crecimiento', error: error.message });
@@ -1055,6 +1084,20 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
 
 reporteCtrl.getVacasImproductivas = async (req, res) => {
     try {
+        if (req.query.especie === 'Porcino') {
+            return res.json({
+                aplica: false,
+                parametros: { especie: 'Porcino' },
+                resumen: {
+                    totalVacasRevisar: 0,
+                    sinPartoReciente: 0,
+                    sinGestacionActiva: 0,
+                    muchosDiasAbiertos: 0,
+                    destetesBajos: 0
+                },
+                vacas: []
+            });
+        }
         const {
             fechaInicio,
             fechaFin,
@@ -2164,7 +2207,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
         const filtroDrone = crearFiltroFechas('fechaVuelo', fechaInicio, fechaFin);
         const especieInventarioGanado = especie === 'Porcino' ? 'Porcino' : 'Bovino';
         const filtroAnimales = crearFiltroEspecieAnimal(especieInventarioGanado);
-        const idsEspecie = await obtenerIdsAnimalesPorEspecie(especie);
+        const incluyeBovinos = especie !== 'Porcino';
+        const idsEspecie = incluyeBovinos ? await obtenerIdsAnimalesPorEspecie('Bovino') : [];
         const filtroReproduccion = idsEspecie ? { animal: { $in: idsEspecie } } : {};
         const filtroSanidad = crearFiltroEspecieAnimal(especie);
         const incluyeAnaliticaProductiva = await tieneFeature('analiticaProductiva', req.organizacionId);
@@ -2275,7 +2319,7 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             ]),
             ConteoDrone.countDocuments(filtroDrone),
             agruparPorCampo(ConteoDrone, 'estado', filtroDrone),
-            incluyeAnaliticaProductiva
+            incluyeAnaliticaProductiva && incluyeBovinos
                 ? crearReportePartos({
                     fechaInicio: partosFechaInicio || fechaInicio,
                     fechaFin: partosFechaFin || fechaFin,
@@ -2283,7 +2327,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                     filtroExtra: filtroReproduccion
                 })
                 : Promise.resolve({
-                    bloqueado: true,
+                    bloqueado: !incluyeAnaliticaProductiva,
+                    aplica: incluyeBovinos,
                     feature: 'analiticaProductiva',
                     resumen: {},
                     anios: [],

@@ -17,6 +17,7 @@ La aplicacion ya cuenta con:
 - Inventario porcino con camadas.
 - Potreros con area, estado, actividades recientes y rotaciones.
 - Reproduccion/Gestacion bovina con parto estimado, parto real, destete y proximo celo estimado.
+- IATF configurable para planes Pro/Premium: protocolos versionados, campañas, tareas, insumos, pajuelas, diagnósticos, P/AI y costos reales.
 - Reproduccion porcina con inseminacion/monta, fechas calculadas y tareas automaticas.
 - Plan Sanitario centralizado con alertas y registro real de aplicaciones.
 - Pesajes historicos por animal.
@@ -258,7 +259,8 @@ La seccion `Rendimiento` calcula el uso de cada potrero desde `RotacionPotrero`;
 
 - Comparativo general con periodo mensual, 3 meses, 6 meses, anual o personalizado.
 - Detalle individual con informacion, rendimiento y rotaciones.
-- Dias ocupados, porcentaje de ocupacion, rotaciones, animales promedio y animal-dias.
+- Dias ocupados, porcentaje de tiempo ocupado, rotaciones, animales promedio y animal-dias.
+- Densidad promedio durante el pastoreo en animales por hectarea.
 - Animal-dias por hectarea cuando el potrero tiene area valida.
 - Descanso promedio, minimo, maximo, ultimo y actual.
 - Historico mensual de animal-dias.
@@ -267,6 +269,8 @@ La seccion `Rendimiento` calcula el uso de cada potrero desde `RotacionPotrero`;
 - Una rotacion real cuya entrada y salida ocurren el mismo dia cuenta como un dia.
 - La vista `Por tipo de pasto` agrupa rendimiento observado por cultivar o especie base.
 - Si una rotacion atraviesa un cambio de cobertura, sus dias y animal-dias se reparten entre los periodos historicos correspondientes.
+- En potreros legados sin ningun historial se usa la cobertura actual como compatibilidad y se identifica como dato sin historial previo.
+- La primera cobertura histórica se extiende hasta `fechaEstablecimientoPasto` cuando esa fecha es anterior al registro, sin atravesar cambios reales de pasto.
 - El reporte compara descanso real contra `diasDescansoObjetivo`, sin afirmar causalidad ni recomendar un pasto ganador.
 
 ### Reproduccion/Gestacion bovina
@@ -566,12 +570,12 @@ Al confirmar venta:
 Incluye:
 
 - resumen general de finca.
-- IPG: Indice de Productividad Ganadera.
+- indicador interno de cria bovina y productividad reproductiva porcina con metricas de camada separadas.
 - finanzas de cria.
 - sustentabilidad de cria.
 - partos por vaca y ano.
 - vacas improductivas.
-- crecimiento por pesajes.
+- crecimiento por pesajes filtrado por especie.
 - ventas por mes.
 - ventas por origen.
 - rotacion de inventario vendido.
@@ -819,6 +823,7 @@ node -e "require('./app'); console.log('backend ok')"
 - Razas bovinas y descendencia: `backend/documentation/razas-genealogia.md`
 - Modo offline: `backend/documentation/modo-offline.md`
 - Lotes y alimentacion: `backend/documentation/lotes-alimentacion.md`
+- IATF configurable: `backend/documentation/iatf.md`
 - IA drone: `ia-service/README.md`
 - Despliegue Vercel: `DEPLOY_VERCEL.md`
 - Despliegue Render: `DEPLOY_RENDER.md`

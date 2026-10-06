@@ -11,6 +11,15 @@ const prepararDatosFinca = (datos = {}, parcial = false) => {
     if (!parcial || datos.codigo !== undefined) resultado.codigo = limpiarTexto(datos.codigo).toUpperCase();
     if (datos.descripcion !== undefined) resultado.descripcion = limpiarTexto(datos.descripcion);
     if (datos.ubicacion !== undefined) resultado.ubicacion = limpiarTexto(datos.ubicacion);
+    if (datos.configuracionReproductiva !== undefined) {
+        const diasGestacion = Number(datos.configuracionReproductiva?.diasGestacionBovinaGeneral);
+        if (!Number.isInteger(diasGestacion) || diasGestacion < 1 || diasGestacion > 500) {
+            const error = new Error('La duración general de gestación bovina debe ser un número entero entre 1 y 500 días.');
+            error.status = 400;
+            throw error;
+        }
+        resultado.configuracionReproductiva = { diasGestacionBovinaGeneral: diasGestacion };
+    }
     if (datos.lineasProductivas !== undefined) resultado.lineasProductivas = validarLineasProductivas(datos.lineasProductivas);
     if (!parcial && (!resultado.nombre || !resultado.codigo)) {
         const error = new Error('Nombre y código de finca son requeridos.');

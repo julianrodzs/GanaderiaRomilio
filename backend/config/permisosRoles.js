@@ -50,6 +50,10 @@ const permisosPorModulo = {
     reproduccion: {
         ver: ['Administrador', 'Encargado', 'Veterinario', 'Consulta'],
         gestionar: ['Administrador', 'Encargado', 'Veterinario'],
+        iatfConfigurar: ['Administrador', 'Veterinario'],
+        iatfCrear: ['Administrador', 'Veterinario'],
+        iatfEjecutar: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
+        iatfDiagnosticar: ['Administrador', 'Veterinario'],
         eliminar: ['Administrador']
     },
     compras: {

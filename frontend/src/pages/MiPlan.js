@@ -21,6 +21,7 @@ const funcionesPlan = [
   { etiqueta: 'Analítica productiva', feature: 'analiticaProductiva', planMinimo: 'Gestión' },
   { etiqueta: 'Correos operativos', feature: 'emailsOperativos', planMinimo: 'Pro' },
   { etiqueta: 'Analítica económica', feature: 'analiticaEconomica', planMinimo: 'Pro' },
+  { etiqueta: 'IATF y protocolos reproductivos', feature: 'iatfReproductivo', planMinimo: 'Pro' },
   { etiqueta: 'Reportes multi-finca', feature: 'reportesMultiFinca', planMinimo: 'Premium' },
   { etiqueta: 'Configuración avanzada de correos', feature: 'configuracionEmailAvanzada', planMinimo: 'Premium' }
 ];
@@ -140,7 +141,10 @@ const MiPlan = () => {
         nombre: finca.nombre,
         codigo: finca.codigo,
         ubicacion: finca.ubicacion,
-        descripcion: finca.descripcion
+        descripcion: finca.descripcion,
+        configuracionReproductiva: {
+          diasGestacionBovinaGeneral: Number(finca.configuracionReproductiva?.diasGestacionBovinaGeneral || 283)
+        }
       });
       await cargarFincas();
       setMensaje('Datos de finca actualizados.');
@@ -249,6 +253,9 @@ const MiPlan = () => {
                 <label>Código<input value={finca.codigo || ''} onChange={(e) => setFincas((actuales) => actuales.map((item) => item._id === finca._id ? { ...item, codigo: e.target.value.toUpperCase() } : item))} /></label>
                 <label>Ubicación<input value={finca.ubicacion || ''} onChange={(e) => setFincas((actuales) => actuales.map((item) => item._id === finca._id ? { ...item, ubicacion: e.target.value } : item))} /></label>
                 <label>Descripción<input value={finca.descripcion || ''} onChange={(e) => setFincas((actuales) => actuales.map((item) => item._id === finca._id ? { ...item, descripcion: e.target.value } : item))} /></label>
+                {(finca.lineasProductivas || []).some((linea) => linea.especie === 'Bovino' && (linea.objetivos || []).includes('REPRODUCCION')) && (
+                  <label>Días de gestación bovina<input type="number" min="1" max="500" value={finca.configuracionReproductiva?.diasGestacionBovinaGeneral || 283} onChange={(e) => setFincas((actuales) => actuales.map((item) => item._id === finca._id ? { ...item, configuracionReproductiva: { ...(item.configuracionReproductiva || {}), diasGestacionBovinaGeneral: e.target.value } } : item))} /></label>
+                )}
               </div>
               <div className="lineas-productivas-grid">
                 {especiesProductivas.map((especie) => {

@@ -36,6 +36,9 @@ import PaginacionTabla, { ContenidoPaginado, usePaginacionControlada } from './P
 import ReporteMultiFinca from './ReporteMultiFinca';
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR').format(Math.round(valor || 0));
+const formatearDecimal = (valor, decimales = 2) => valor === null || valor === undefined
+  ? '--'
+  : new Intl.NumberFormat('es-CR', { maximumFractionDigits: decimales }).format(valor);
 
 const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
   style: 'currency',
@@ -89,12 +92,19 @@ const nombreMes = (mes) => {
 const obtenerAnioActual = () => new Date().getFullYear();
 
 const obtenerNivelIpg = (ipg) => {
+  if (ipg === null || ipg === undefined) return 'sin-datos';
   if (ipg >= 95) return 'excelente';
   if (ipg >= 85) return 'muy-bueno';
   if (ipg >= 75) return 'bueno';
   if (ipg >= 60) return 'regular';
   return 'deficiente';
 };
+
+const claseClasificacion = (valor = '') => valor
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replaceAll(' ', '-');
 
 const BarraReporte = ({ label, valor, detalle, maximo }) => {
   const porcentaje = maximo ? Math.max((valor / maximo) * 100, 4) : 0;
@@ -216,6 +226,7 @@ const Reportes = ({ usuario }) => {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const etiquetaId = 'DIIO';
+  const incluirReportesBovinos = especie !== 'Porcino' && puedeUsarEspecie('Bovino');
 
   const cargarReportes = useCallback(async () => {
     try {
@@ -281,7 +292,7 @@ const Reportes = ({ usuario }) => {
         tieneFeature('analiticaProductiva') ? obtenerProductividadCria(filtrosGenerales) : Promise.resolve(null),
         tieneFeature('analiticaEconomica') ? obtenerFinanzasCria(filtrosGenerales) : Promise.resolve(null),
         tieneFeature('analiticaEconomica') ? obtenerSustentabilidadCria(filtrosGenerales) : Promise.resolve(null),
-        tieneFeature('analiticaProductiva') ? obtenerVacasImproductivas(filtrosImproductivas) : Promise.resolve(null),
+        tieneFeature('analiticaProductiva') && incluirReportesBovinos ? obtenerVacasImproductivas(filtrosImproductivas) : Promise.resolve(null),
         tieneFeature('analiticaProductiva') ? obtenerReporteCrecimientoPesajes({
           ...filtrosGenerales,
           diasSinPesaje: filtros.diasSinPesaje
@@ -343,7 +354,7 @@ const Reportes = ({ usuario }) => {
     } finally {
       setCargando(false);
     }
-  }, [filtros, especie, tieneFeature, puedeUsarEspecie, paginaProductos, limiteProductos]);
+  }, [filtros, especie, tieneFeature, puedeUsarEspecie, incluirReportesBovinos, paginaProductos, limiteProductos]);
 
   useEffect(() => {
     cargarReportes();
@@ -478,11 +489,11 @@ const Reportes = ({ usuario }) => {
               <strong>{formatearNumero(reporte.drone.totalConteos)}</strong>
               <small>Segun rango de fechas</small>
             </article>
-            <article>
+            {incluirReportesBovinos && <article>
               <span>Partos registrados</span>
               <strong>{formatearNumero(reporte.reproduccion?.partos?.resumen?.totalPartos)}</strong>
               <small>{formatearNumero(reporte.reproduccion?.partos?.resumen?.vacasCumplen)} vacas cumplen</small>
-            </article>
+            </article>}
           </section>
 
           <ReportePesoDesteteBasico datos={pesoDesteteReporte} />
@@ -498,10 +509,10 @@ const Reportes = ({ usuario }) => {
 
           {!tieneFeature('analiticaProductiva') && (
             <section className="reportes-bloqueados" aria-label="Reportes de analítica productiva disponibles en otros planes">
-              <UpgradeMessage feature="analiticaProductiva" titulo="Índice de Productividad Ganadera" pregunta="¿Cómo se comportan la natalidad, el destete, la gestación y la supervivencia?" etiqueta="Reporte productivo" />
+              <UpgradeMessage feature="analiticaProductiva" titulo={especie === 'Porcino' ? 'Productividad reproductiva porcina' : 'Productividad reproductiva bovina'} pregunta={especie === 'Porcino' ? '¿Cuántos lechones nacen vivos y cuántos llegan al destete por camada?' : '¿Cómo se comportan la natalidad, el destete, la gestación y la supervivencia?'} etiqueta="Reporte productivo" />
               <UpgradeMessage feature="analiticaProductiva" titulo="Análisis de pesajes históricos" pregunta="¿Qué animales están creciendo mejor y cuáles necesitan seguimiento de peso?" etiqueta="Reporte de crecimiento" />
-              <UpgradeMessage feature="analiticaProductiva" titulo="Vacas a revisar" pregunta="¿Qué vacas llevan demasiado tiempo sin parto, gestación o resultados de destete?" etiqueta="Reporte reproductivo" />
-              <UpgradeMessage feature="analiticaProductiva" titulo="Partos por vaca y año" pregunta="¿Cuántos partos registra cada vaca y cuáles están bajo el objetivo anual?" etiqueta="Reporte reproductivo" />
+              {incluirReportesBovinos && <UpgradeMessage feature="analiticaProductiva" titulo="Vacas a revisar" pregunta="¿Qué vacas llevan demasiado tiempo sin parto, gestación o resultados de destete?" etiqueta="Reporte reproductivo" />}
+              {incluirReportesBovinos && <UpgradeMessage feature="analiticaProductiva" titulo="Partos por vaca y año" pregunta="¿Cuántos partos registra cada vaca y cuáles están bajo el objetivo anual?" etiqueta="Reporte reproductivo" />}
               <UpgradeMessage feature="analiticaProductiva" titulo="Composición racial" pregunta="¿Cómo se distribuyen las razas bovinas y porcinas de la finca?" etiqueta="Reporte racial" />
               {especie !== 'Porcino' && <UpgradeMessage feature="analiticaProductiva" titulo="Descendencia bovina" pregunta="¿Qué resultados reproductivos tiene cada progenitor bovino?" etiqueta="Reporte genealógico" />}
               {especie !== 'Bovino' && puedeUsarEspecie('Porcino') && <UpgradeMessage feature="analiticaProductiva" titulo="Reproductivo porcino" pregunta="¿Qué resultados tienen los ciclos, partos y destetes de las madres porcinas?" etiqueta="Reporte porcino" />}
@@ -534,18 +545,52 @@ const Reportes = ({ usuario }) => {
             <section className="reporte-panel reporte-panel-amplio cria-panel">
               <div className="cria-panel-header">
                 <div>
-                  <p className="eyebrow">Productividad de cria</p>
-                  <h2>Indice de Productividad Ganadera</h2>
+                  <p className="eyebrow">{productividad.tipo === 'Porcino' ? 'Porcinos · Reproducción' : 'Bovinos · Reproducción'}</p>
+                  <h2>{productividad.tipo === 'Porcino' ? 'Productividad reproductiva porcina' : 'Indicador interno de cría bovina'}</h2>
                 </div>
-                <span className={`tarea-badge ipg-clasificacion ipg-${productividad.clasificacion?.toLowerCase().replaceAll(' ', '-')}`}>
+                {productividad.clasificacion && <span className={`tarea-badge ipg-clasificacion ipg-${claseClasificacion(productividad.clasificacion)}`}>
                   {productividad.clasificacion}
-                </span>
+                </span>}
               </div>
-              <div className="cria-productividad-grid">
+              {productividad.tipo === 'Porcino' ? <>
+                <div className="cria-productividad-grid">
+                  <article className={`ipg-card ipg-fondo-${obtenerNivelIpg(productividad.icrp)}`}>
+                    <span>Índice de cría porcina</span>
+                    <strong>{formatearDecimal(productividad.icrp, 1)}</strong>
+                    <small>{productividad.datosInsuficientesIndice ? 'Datos insuficientes' : 'Escala interna de 0 a 100'}</small>
+                  </article>
+                  <BarraReporte
+                    label="Nacidos vivos / camada"
+                    valor={productividad.componentesIndice?.nacidosVivosPorCamada?.cumplimiento || 0}
+                    detalle={`${formatearDecimal(productividad.promedioNacidosVivosCamadasCerradas)} · meta ${formatearDecimal(productividad.metas?.nacidosVivosPorCamada)}`}
+                    maximo={100}
+                  />
+                  <BarraReporte
+                    label="Destetados / camada"
+                    valor={productividad.componentesIndice?.destetadosPorCamada?.cumplimiento || 0}
+                    detalle={`${formatearDecimal(productividad.promedioDestetadosPorCamada)} · meta ${formatearDecimal(productividad.metas?.destetadosPorCamada)}`}
+                    maximo={100}
+                  />
+                  <BarraReporte
+                    label="Supervivencia predestete"
+                    valor={productividad.componentesIndice?.supervivenciaPredestete?.cumplimiento || 0}
+                    detalle={`${formatearPorcentaje(productividad.supervivenciaPredestete)} · meta ${formatearPorcentaje(productividad.metas?.supervivenciaPredestetePct)}`}
+                    maximo={100}
+                  />
+                </div>
+                <div className="reportes-metricas finanzas-cria-metricas">
+                  <article><span>Camadas</span><strong>{formatearNumero(productividad.totalCamadas)}</strong><small>{formatearNumero(productividad.camadasDestetadas)} con destete cerrado</small></article>
+                  <article><span>Nacidos vivos / camada</span><strong>{new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(productividad.promedioNacidosVivosPorCamada || 0)}</strong><small>{formatearNumero(productividad.nacidosVivos)} nacidos vivos</small></article>
+                  <article><span>Destetados / camada</span><strong>{new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(productividad.promedioDestetadosPorCamada || 0)}</strong><small>Solo camadas con destete cerrado</small></article>
+                  <article><span>Supervivencia predestete</span><strong>{formatearPorcentaje(productividad.supervivenciaPredestete)}</strong><small>Destetados sobre nacidos vivos elegibles</small></article>
+                </div>
+                <p className="reporte-nota-metodologica">El ICRP pondera nacidos vivos (30%), destetados (45%) y supervivencia predestete (25%) contra las metas internas. Solo usa camadas con destete cerrado para no convertir registros pendientes en pérdidas.</p>
+              </> : <>
+                <div className="cria-productividad-grid">
                 <article className={`ipg-card ipg-fondo-${obtenerNivelIpg(productividad.ipg)}`}>
-                  <span>IPG</span>
+                  <span>Índice bovino</span>
                   <strong>{formatearNumero(productividad.ipg)}</strong>
-                  <small>Escala de 0 a 100 enfocada en cria</small>
+                  <small>Escala interna de 0 a 100</small>
                 </article>
                 <BarraReporte
                   label="Natalidad"
@@ -571,13 +616,14 @@ const Reportes = ({ usuario }) => {
                   detalle={`${formatearPorcentaje(productividad.tasaSupervivencia)} · ${productividad.muertesPeriodo} muertes`}
                   maximo={100}
                 />
-              </div>
-              <div className="cria-recomendaciones">
-                <strong>Recomendaciones</strong>
-                {(productividad.recomendaciones || []).map((recomendacion) => (
-                  <span key={recomendacion}>{recomendacion}</span>
-                ))}
-              </div>
+                </div>
+                <div className="cria-recomendaciones">
+                  <strong>Recomendaciones</strong>
+                  {(productividad.recomendaciones || []).map((recomendacion) => (
+                    <span key={recomendacion}>{recomendacion}</span>
+                  ))}
+                </div>
+              </>}
             </section>
           )}
 
@@ -1274,14 +1320,14 @@ const Reportes = ({ usuario }) => {
                 </article>
 
                 <article>
-                  <h3>Crecimiento de terneros</h3>
-                  {(crecimientoPesajes.crecimientoTerneros || []).slice(0, 10).map((animal) => (
+                  <h3>{especie === 'Porcino' ? 'Crecimiento de lechones' : especie === 'Bovino' ? 'Crecimiento de terneros' : 'Crecimiento de crías'}</h3>
+                  {(crecimientoPesajes.crecimientoCrias || crecimientoPesajes.crecimientoTerneros || []).slice(0, 10).map((animal) => (
                     <div className="reporte-lista-item" key={animal.animalId}>
                       <strong>{animal.diio || '--'} {animal.nombre || ''}</strong>
                       <span>Nacimiento: {formatearNumero(animal.pesoNacimiento)} kg · Actual: {formatearNumero(animal.pesoActual)} kg</span>
                     </div>
                   ))}
-                  {(crecimientoPesajes.crecimientoTerneros || []).length === 0 && <span className="reporte-vacio">Sin terneros con peso al nacer y pesajes.</span>}
+                  {(crecimientoPesajes.crecimientoCrias || crecimientoPesajes.crecimientoTerneros || []).length === 0 && <span className="reporte-vacio">Sin crías con peso al nacer y pesajes.</span>}
                 </article>
               </div>
 
@@ -1531,7 +1577,7 @@ const Reportes = ({ usuario }) => {
               ))}
             </article>
 
-            {tieneFeature('analiticaProductiva') && <article className="reporte-panel reporte-panel-amplio">
+            {tieneFeature('analiticaProductiva') && incluirReportesBovinos && <article className="reporte-panel reporte-panel-amplio">
               <div className="partos-panel-header">
                 <div>
                   <p className="eyebrow">Reproduccion</p>
@@ -1638,7 +1684,7 @@ const Reportes = ({ usuario }) => {
               )}
             </article>}
 
-            {vacasImproductivas && (
+            {incluirReportesBovinos && vacasImproductivas && (
               <article className="reporte-panel reporte-panel-amplio">
                 <div className="partos-panel-header">
                   <div>

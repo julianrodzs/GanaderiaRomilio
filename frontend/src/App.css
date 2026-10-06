@@ -1237,6 +1237,27 @@
   padding: 14px;
 }
 
+.dashboard-indices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.dashboard-indices-grid .dashboard-ipg-card {
+  min-height: 118px;
+  margin-top: 0;
+  align-content: start;
+}
+
+.dashboard-indices-vacio {
+  margin: 14px 0 0;
+  padding: 12px 0;
+  border-top: 1px solid #cfd8cf;
+  border-bottom: 1px solid #cfd8cf;
+  font-size: 13px;
+}
+
 .dashboard-ipg-card span {
   font-size: 12px;
   font-weight: 900;
@@ -1290,6 +1311,12 @@
 .ipg-fondo-deficiente {
   background: #ffe4df;
   color: #8f1f19;
+}
+
+.ipg-fondo-sin-datos {
+  border-color: #cdd5cf;
+  background: #f7f8f4;
+  color: #536158;
 }
 
 .ipg-fondo-regular {
@@ -2871,8 +2898,25 @@
 .acciones-consolidacion { display: flex; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
 .consolidacion-subpanel { padding: 16px; border: 1px solid #d5ddd5; background: #fbfcf9; }
 .consolidacion-dos-columnas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.metas-valores-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 13px 0; }
-.metas-valores-grid label { display: grid; gap: 5px; font-size: 12px; font-weight: 800; }
+.monto-moneda-secundaria { display: block; margin-top: 2px; font-size: 12px; font-weight: 800; }
+.montos-por-moneda { display: grid; gap: 4px; min-width: 128px; font-variant-numeric: tabular-nums; }
+.montos-por-moneda > span { display: grid; grid-template-columns: 34px max-content; align-items: baseline; gap: 7px; white-space: nowrap; }
+.montos-por-moneda small { color: #5d6a61; font-size: 10px; font-weight: 900; letter-spacing: 0; }
+.monto-sin-movimiento { color: #6e766f; }
+.nota-monedas-reporte { margin: 10px 0 0; color: #55635a; font-size: 12px; line-height: 1.45; }
+.meta-consolidacion-form { display: grid; gap: 18px; }
+.meta-consolidacion-datos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.meta-consolidacion-form label { display: grid; align-content: start; gap: 7px; color: #243d2e; font-size: 12px; font-weight: 900; text-transform: uppercase; }
+.meta-consolidacion-form input,
+.meta-consolidacion-form select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #aebcaf; border-radius: 2px; padding: 0 12px; background: #fff; color: #102419; font: inherit; font-size: 14px; font-weight: 700; text-transform: none; outline: none; }
+.meta-consolidacion-form input:focus,
+.meta-consolidacion-form select:focus { border-color: #0b4a2b; box-shadow: 0 0 0 3px rgba(11, 74, 43, .12); }
+.meta-consolidacion-valores { padding-top: 16px; border-top: 1px solid #d5ddd5; }
+.meta-consolidacion-valores h4 { margin: 0; color: #123d28; font-size: 15px; }
+.metas-valores-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 12px 0 0; }
+.metas-valores-grid label { display: grid; gap: 7px; font-size: 12px; font-weight: 900; }
+.meta-consolidacion-acciones { display: flex; justify-content: flex-end; }
+.meta-consolidacion-acciones .boton-primario { min-width: 160px; }
 .meta-consolidacion-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e0e5e0; }
 .meta-consolidacion-item:last-child { border-bottom: 0; }
 .meta-consolidacion-item div { display: grid; gap: 3px; }
@@ -2891,6 +2935,7 @@
   .operaciones-multifinca-grid,
   .consolidacion-dos-columnas,
   .traslado-animales-selector,
+  .meta-consolidacion-datos,
   .metas-valores-grid {
     grid-template-columns: 1fr;
   }
@@ -3856,9 +3901,25 @@
 
 .ipg-bueno,
 .ipg-muy-bueno,
-.ipg-excelente {
+.ipg-excelente,
+.ipg-meta-alcanzada {
   background: #e5efe7;
   color: #0b3b21;
+}
+
+.ipg-cerca-de-la-meta {
+  background: #edf3df;
+  color: #36510f;
+}
+
+.ipg-bajo-la-meta {
+  background: #fff3d5;
+  color: #8b5e00;
+}
+
+.ipg-requiere-revision {
+  background: #ffe4df;
+  color: #b22822;
 }
 
 .cria-productividad-grid {
@@ -6274,6 +6335,314 @@
   }
 }
 .alimentacion-tabs { margin-bottom: 18px; }
+
+/* IATF mantiene la densidad operativa del módulo de reproducción. */
+.reproduccion-tabs,
+.iatf-tabs {
+  margin-bottom: 18px;
+}
+
+.iatf-panel,
+.iatf-detalle {
+  border: 1px solid #d4ddd7;
+  background: #fffef9;
+  padding: 20px;
+}
+
+.iatf-panel .panel-title,
+.iatf-detalle .panel-title {
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.iatf-toolbar,
+.iatf-acciones-principales,
+.iatf-editor-header,
+.iatf-seleccion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.iatf-toolbar {
+  justify-content: flex-end;
+}
+
+.iatf-modal {
+  width: min(720px, calc(100vw - 30px));
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.iatf-modal-amplio {
+  width: min(1120px, calc(100vw - 30px));
+}
+
+.iatf-form {
+  display: grid;
+  gap: 18px;
+}
+
+.iatf-pasos-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.iatf-paso-editor {
+  border: 1px solid #cdd8d0;
+  background: #f8faf7;
+  padding: 14px;
+}
+
+.iatf-paso-editor > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.check-line {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+}
+
+.check-line input {
+  width: 18px !important;
+  height: 18px;
+}
+
+.iatf-selector-animales {
+  border: 1px solid #d4ddd7;
+  max-height: 310px;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.iatf-selector-animales > label {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 76px;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border-bottom: 1px solid #e0e6e1;
+}
+
+.iatf-selector-animales > label.seleccionado {
+  background: #e8f1eb;
+}
+
+.iatf-selector-animales span,
+.iatf-selector-animales small,
+.iatf-inventario-layout td small,
+.iatf-advertencia {
+  display: block;
+}
+
+.iatf-nota,
+.iatf-advertencia {
+  color: #6c4c00;
+}
+
+.iatf-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  border: 1px solid #d4ddd7;
+  margin: 16px 0;
+}
+
+.iatf-kpis article {
+  padding: 14px;
+  border-right: 1px solid #d4ddd7;
+}
+
+.iatf-kpis article:last-child {
+  border-right: 0;
+}
+
+.iatf-kpis span,
+.iatf-kpis strong {
+  display: block;
+}
+
+.iatf-kpis span {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #526158;
+}
+
+.iatf-kpis strong {
+  margin-top: 6px;
+  font-size: 22px;
+}
+
+.iatf-detalle-grid,
+.iatf-inventario-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 18px;
+}
+
+.iatf-detalle-grid > section,
+.iatf-participantes,
+.iatf-inventario-layout > * {
+  border: 1px solid #d4ddd7;
+  padding: 14px;
+}
+
+.iatf-timeline {
+  border-left: 2px solid #b9c8bd;
+  margin: 18px 0 8px 10px;
+}
+
+.iatf-timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 0 0 22px 20px;
+}
+
+.iatf-timeline-mark {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  left: -7px;
+  top: 4px;
+  background: #fffef9;
+  border: 2px solid #0a5130;
+}
+
+.iatf-timeline-item.estado-REALIZADO .iatf-timeline-mark,
+.iatf-timeline-item.estado-PARCIAL .iatf-timeline-mark {
+  background: #0a5130;
+}
+
+.iatf-timeline-item small {
+  display: block;
+  color: #58675e;
+  margin-top: 3px;
+}
+
+.iatf-acciones-principales {
+  justify-content: flex-start;
+  margin: 12px 0 18px;
+}
+
+.iatf-resumen div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e0e6e1;
+  padding: 9px 0;
+}
+
+.iatf-participantes {
+  margin-top: 18px;
+}
+
+.iatf-consolidado {
+  border-top: 1px solid #cbd7ce;
+  margin-top: 22px;
+  padding-top: 18px;
+}
+
+.iatf-protocolos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.iatf-protocolos-grid article {
+  border: 1px solid #d4ddd7;
+  padding: 16px;
+  background: #f9faf7;
+}
+
+.iatf-protocolos-grid header,
+.iatf-protocolos-grid dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.iatf-protocolo-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color, #d7ded9);
+}
+
+.iatf-protocolo-acciones button {
+  min-height: 38px;
+}
+
+.iatf-protocolos-grid dl div {
+  border-top: 1px solid #dfe6e0;
+  padding: 7px 0;
+}
+
+.iatf-resultados-masivos {
+  max-height: 330px;
+  overflow: auto;
+  border: 1px solid #d4ddd7;
+}
+
+.iatf-aplicacion-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #d4ddd7;
+  padding: 10px;
+}
+
+.iatf-aplicacion-selector > strong {
+  grid-column: 1 / -1;
+}
+
+.iatf-aplicacion-selector label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.iatf-aplicacion-selector input {
+  width: 18px;
+  height: 18px;
+}
+
+.iatf-resultados-masivos label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-bottom: 1px solid #dfe6e0;
+}
+
+.iatf-estado-EN_CURSO,
+.iatf-estado-DIAGNOSTICO { background: #fff0c7; }
+.iatf-estado-FINALIZADA { background: #dfeee4; }
+.iatf-estado-CANCELADA { background: #f6deda; }
+
+@media (max-width: 900px) {
+  .iatf-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .iatf-kpis article { border-bottom: 1px solid #d4ddd7; }
+  .iatf-detalle-grid,
+  .iatf-inventario-layout,
+  .iatf-protocolos-grid { grid-template-columns: 1fr; }
+  .iatf-selector-animales { grid-template-columns: 1fr; }
+}
 .barra-acciones-alimentacion { display: flex; justify-content: flex-end; margin: 0 0 12px; }
 .catalogo-resumen { border: 1px solid var(--border-color, #d7ddd7); padding: 18px; margin-top: 18px; }
 .catalogo-alimentos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }

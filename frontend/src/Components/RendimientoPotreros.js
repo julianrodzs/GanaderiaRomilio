@@ -67,10 +67,11 @@ const mostrarFecha = (valor) => (valor ? new Date(valor).toLocaleDateString('es-
 const TarjetasRendimiento = ({ datos }) => {
   const items = [
     ['Días ocupados', mostrarNumero(datos.diasOcupados, ' días')],
-    ['Ocupación', mostrarNumero(datos.porcentajeOcupacion, ' %')],
+    ['Tiempo ocupado', mostrarNumero(datos.porcentajeOcupacion, ' %')],
     ['Rotaciones', mostrarNumero(datos.numeroRotaciones)],
     ['Promedio por rotación', mostrarNumero(datos.promedioDiasRotacion, ' días')],
     ['Animales promedio', mostrarNumero(datos.animalesPromedio)],
+    ['Densidad al pastorear', mostrarNumero(datos.densidadAnimalesPorHectarea, ' animales/ha')],
     ['Animal-días', mostrarNumero(datos.animalDias)],
     ['Animal-días / ha', mostrarNumero(datos.animalDiasPorHectarea)],
     ['Descanso promedio', mostrarNumero(datos.descansoPromedio, ' días')]
@@ -220,7 +221,7 @@ const RendimientoPotreros = ({ rangoControlado = null, usarRutaReportes = false 
       <div className="rendimiento-toolbar">
         {!rangoControlado && <SelectorPeriodo preset={preset} rango={rango} onPreset={cambiarPreset} onRango={setRango} />}
         {vista === 'potrero'
-          ? <label>Ordenar por<select value={orden} onChange={(e) => setOrden(e.target.value)}><option value="animalDias">Animal-días</option><option value="animalDiasPorHectarea">Animal-días / ha</option><option value="diasOcupados">Días ocupados</option><option value="descansoPromedio">Descanso promedio</option></select></label>
+          ? <label>Ordenar por<select value={orden} onChange={(e) => setOrden(e.target.value)}><option value="animalDias">Animal-días</option><option value="animalDiasPorHectarea">Animal-días / ha</option><option value="densidadAnimalesPorHectarea">Densidad al pastorear</option><option value="diasOcupados">Días ocupados</option><option value="descansoPromedio">Descanso promedio</option></select></label>
           : <label>Agrupar por<select value={agruparPor} onChange={(e) => setAgruparPor(e.target.value)}><option value="pasto">Pasto o cultivar</option><option value="especieBase">Especie base</option></select></label>}
       </div>
       {error && <div className="alerta-formulario">{error}</div>}
@@ -229,7 +230,7 @@ const RendimientoPotreros = ({ rangoControlado = null, usarRutaReportes = false 
         <ContenidoPaginado datos={ordenados} clavePaginacion="rendimiento-potreros">
           {(potrerosPagina) => (
             <div className="tabla-scroll tabla-panel rendimiento-tabla">
-              <table><thead><tr><th>Potrero</th><th>Pasto actual</th><th>Área</th><th>Días ocupado</th><th>Ocupación</th><th>Rotaciones</th><th>Animal-días</th><th>Animal-días / ha</th><th>Descanso real / objetivo</th></tr></thead><tbody>{potrerosPagina.map((item) => <tr key={item.id}><td><strong>{item.codigo}</strong><small>{item.nombre}</small></td><td>{item.coberturaActual?.nombre || item.descripcionCobertura || '--'}</td><td>{mostrarNumero(item.area, ' ha')}</td><td>{mostrarNumero(item.diasOcupados)}</td><td>{mostrarNumero(item.porcentajeOcupacion, ' %')}</td><td>{item.numeroRotaciones}</td><td>{mostrarNumero(item.animalDias)}</td><td>{mostrarNumero(item.animalDiasPorHectarea)}</td><td>{mostrarNumero(item.descansoPromedio, ' días')} / {mostrarNumero(item.descansoObjetivo, ' días')}</td></tr>)}</tbody></table>
+              <table><thead><tr><th>Potrero</th><th>Pasto actual</th><th>Área</th><th>Días ocupado</th><th>Tiempo ocupado</th><th>Rotaciones</th><th>Densidad al pastorear</th><th>Animal-días</th><th>Animal-días / ha</th><th>Descanso real / objetivo</th></tr></thead><tbody>{potrerosPagina.map((item) => <tr key={item.id}><td><strong>{item.codigo}</strong><small>{item.nombre}</small></td><td>{item.coberturaActual?.nombre || item.descripcionCobertura || '--'}</td><td>{mostrarNumero(item.area, ' ha')}</td><td>{mostrarNumero(item.diasOcupados)}</td><td>{mostrarNumero(item.porcentajeOcupacion, ' %')}</td><td>{item.numeroRotaciones}</td><td>{mostrarNumero(item.densidadAnimalesPorHectarea, ' animales/ha')}</td><td>{mostrarNumero(item.animalDias)}</td><td>{mostrarNumero(item.animalDiasPorHectarea)}</td><td>{mostrarNumero(item.descansoPromedio, ' días')} / {mostrarNumero(item.descansoObjetivo, ' días')}</td></tr>)}</tbody></table>
             </div>
           )}
         </ContenidoPaginado>
@@ -239,11 +240,11 @@ const RendimientoPotreros = ({ rangoControlado = null, usarRutaReportes = false 
           <ContenidoPaginado datos={datosPorPasto} clavePaginacion={`rendimiento-${agruparPor}`}>
             {(pastosPagina) => (
               <div className="tabla-scroll tabla-panel rendimiento-tabla">
-                <table><thead><tr><th>{agruparPor === 'pasto' ? 'Pasto' : 'Especie base'}</th><th>Potreros</th><th>Área</th><th>Días ocupado</th><th>Rotaciones</th><th>Animales promedio</th><th>Animal-días</th><th>Animal-días / ha</th><th>Descanso real / objetivo</th></tr></thead><tbody>{pastosPagina.map((item) => <tr key={item.clave}><td><strong>{item.nombre}</strong><small>{agruparPor === 'pasto' ? item.especieBase : ''}</small></td><td>{item.cantidadPotreros}</td><td>{mostrarNumero(item.areaHectareas, ' ha')}</td><td>{mostrarNumero(item.diasOcupados)}</td><td>{item.numeroRotaciones}</td><td>{mostrarNumero(item.animalesPromedio)}</td><td>{mostrarNumero(item.animalDias)}</td><td>{mostrarNumero(item.animalDiasPorHectarea)}</td><td>{mostrarNumero(item.descansoPromedio, ' días')} / {mostrarNumero(item.descansoObjetivo, ' días')}</td></tr>)}</tbody></table>
+                <table><thead><tr><th>{agruparPor === 'pasto' ? 'Pasto' : 'Especie base'}</th><th>Potreros</th><th>Área</th><th>Días ocupado</th><th>Rotaciones</th><th>Animales promedio</th><th>Densidad al pastorear</th><th>Animal-días</th><th>Animal-días / ha</th><th>Descanso real / objetivo</th></tr></thead><tbody>{pastosPagina.map((item) => <tr key={item.clave}><td><strong>{item.nombre}</strong><small>{agruparPor === 'pasto' ? item.especieBase : ''}{item.potrerosConCoberturaActualSinHistorial > 0 ? ` · ${item.potrerosConCoberturaActualSinHistorial} sin historial previo` : ''}</small></td><td>{item.cantidadPotreros}</td><td>{mostrarNumero(item.areaHectareas, ' ha')}</td><td>{mostrarNumero(item.diasOcupados)}</td><td>{item.numeroRotaciones}</td><td>{mostrarNumero(item.animalesPromedio)}</td><td>{mostrarNumero(item.densidadAnimalesPorHectarea, ' animales/ha')}</td><td>{mostrarNumero(item.animalDias)}</td><td>{mostrarNumero(item.animalDiasPorHectarea)}</td><td>{mostrarNumero(item.descansoPromedio, ' días')} / {mostrarNumero(item.descansoObjetivo, ' días')}</td></tr>)}</tbody></table>
               </div>
             )}
           </ContenidoPaginado>
-          <p className="reporte-nota-metodologica">Los resultados describen el desempeño observado en cada cobertura durante el período; no atribuyen causalidad al tipo de pasto.</p>
+          <p className="reporte-nota-metodologica">Tiempo ocupado mide días con animales dentro del período. Densidad al pastorear es el promedio de animales por hectárea mientras hubo ocupación; animal-días por hectárea acumula animales y duración. Cuando falta historial, se usa la cobertura actual del potrero y se indica en la fila.</p>
         </>
       )}
     </section>

@@ -4,6 +4,8 @@ La arquitectura comercial de planes, limites y capacidades se documenta en `plan
 
 Los indices ICP e IEE y la configuracion de metas productivas se documentan en `indices-productivos.md`.
 
+Las campañas y protocolos IATF se documentan en `iatf.md`.
+
 Este documento describe el estado actual del backend Node/Express de GanaderiaRomilio.
 
 Aunque el archivo conserva el nombre `backend-inicial.md`, el contenido corresponde al backend actual.
@@ -600,10 +602,11 @@ Ambas rutas aceptan `fechaInicio` y `fechaFin` en formato `AAAA-MM-DD`; sin para
 - recorte de rotaciones al periodo consultado.
 - tratamiento de rotaciones activas, finalizadas y planificadas.
 - minimo de un dia para rotaciones reales del mismo dia.
-- ocupacion, promedios, animal-dias y animal-dias por hectarea.
+- tiempo ocupado, promedios, densidad de animales por hectarea durante el pastoreo, animal-dias y animal-dias por hectarea.
 - descansos historicos y descanso actual.
 - agrupacion mensual y comparativo por potrero.
 - resolucion de la cobertura vigente durante cada tramo de una rotacion.
+- compatibilidad con potreros legados: la cobertura actual se usa si no existe ningun historial; cuando existe, la primera cobertura puede comenzar en `fechaEstablecimientoPasto`, incluso si esa fecha se corrigió en una entrada posterior consecutiva del mismo pasto.
 - agrupacion por cultivar o `especieBase`, con comparaciones entre potreros de la misma cobertura.
 - descanso real, objetivo y diferencia.
 
@@ -1624,7 +1627,7 @@ Endpoints porcinos:
 | GET | `/porcinos/tareas-camadas` | Reporte de actividades/tareas por camada |
 | GET | `/porcinos/economia-camadas` | Reporte economico por camada |
 
-Indicador IPG:
+Indicador interno de cria bovina:
 
 ```txt
 IPG = natalidad * 0.40
@@ -1640,6 +1643,8 @@ Clasificacion:
 - 75 a 84: Bueno
 - 85 a 94: Muy bueno
 - 95 a 100: Excelente
+
+Este indicador nunca mezcla porcinos. Para `especie=Porcino`, `/reportes/productividad` devuelve el ICRP junto con nacidos vivos por camada, destetados por camada y supervivencia predestete usando solo camadas cuyo destete ya fue cerrado. El ICRP pondera esos tres componentes con 30%, 45% y 25%, respectivamente, contra metas internas configurables. Las camadas activas no se contabilizan como perdidas.
 
 ### Conteo por drone
 

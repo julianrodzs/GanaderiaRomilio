@@ -21,6 +21,7 @@ import Ventas from './Ventas';
 import { puedeAccederModulo, puedeGestionarModulo } from '../constants/permisosRoles';
 import {
   obtenerAnimales,
+  obtenerEficienciaEngorde,
   obtenerLotes,
   obtenerPlanesSanitarios,
   obtenerPotreros,
@@ -59,12 +60,50 @@ const obtenerRangoMesActual = () => {
 };
 
 const obtenerNivelIpg = (ipg) => {
+  if (ipg === null || ipg === undefined) return 'sin-datos';
   if (ipg >= 95) return 'excelente';
   if (ipg >= 85) return 'muy-bueno';
   if (ipg >= 75) return 'bueno';
   if (ipg >= 60) return 'regular';
   return 'deficiente';
 };
+
+const obtenerPerfilProductivo = (finca) => {
+  const lineas = (finca?.lineasProductivas || []).filter((linea) => linea.activa !== false);
+  const tiene = (especie, objetivo) => lineas.some((linea) => (
+    linea.especie === especie
+    && (linea.objetivos || []).some((item) => item === objetivo || (objetivo === 'REPRODUCCION' && item === 'CRIA'))
+  ));
+  return {
+    criaBovina: tiene('Bovino', 'REPRODUCCION'),
+    criaPorcina: tiene('Porcino', 'REPRODUCCION'),
+    engordeBovino: tiene('Bovino', 'ENGORDE'),
+    engordePorcino: tiene('Porcino', 'ENGORDE')
+  };
+};
+
+const construirIndicesDashboard = ({ perfil, productividadBovina, productividadPorcina, eficienciaEngorde }) => [
+  perfil.criaBovina && {
+    clave: 'cria-bovina', sigla: 'ICB', titulo: 'Cría bovina',
+    valor: productividadBovina?.ipg ?? null,
+    clasificacion: productividadBovina?.clasificacion || 'Datos insuficientes'
+  },
+  perfil.criaPorcina && {
+    clave: 'cria-porcina', sigla: 'ICRP', titulo: 'Cría porcina',
+    valor: productividadPorcina?.icrp ?? null,
+    clasificacion: productividadPorcina?.clasificacion || 'Datos insuficientes'
+  },
+  perfil.engordeBovino && {
+    clave: 'engorde-bovino', sigla: 'IEE-B', titulo: 'Engorde bovino',
+    valor: eficienciaEngorde?.bovinos?.iee ?? null,
+    clasificacion: eficienciaEngorde?.bovinos?.clasificacion || 'Datos insuficientes'
+  },
+  perfil.engordePorcino && {
+    clave: 'engorde-porcino', sigla: 'IEE-P', titulo: 'Engorde porcino',
+    valor: eficienciaEngorde?.porcinos?.iee ?? null,
+    clasificacion: eficienciaEngorde?.porcinos?.clasificacion || 'Datos insuficientes'
+  }
+].filter(Boolean);
 
 const calcularEdadMeses = (fechaNacimiento) => {
   if (!fechaNacimiento) return null;
@@ -112,8 +151,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     potrerosDescanso: 0,
     proximasSanidad: 0,
     vencidasSanidad: 0,
-    ipg: 0,
-    clasificacionIpg: 'Deficiente',
+    indicesProductivos: [],
     alimentacionHoy: { suministros: 0, lotes: 0, ultimo: null }
   });
   const [estadoConexion, setEstadoConexion] = useState({
@@ -132,12 +170,23 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
 
     const cargarMetricas = async () => {
       try {
-        const [animales, potreros, planes, reproduccion, productividad, sustentabilidadMes, lotes, alimentacionHoy] = await Promise.all([
+        const fincaActiva = sesion?.fincaActiva || sesion?.finca;
+        const perfil = obtenerPerfilProductivo(fincaActiva);
+        const rangoAnual = obtenerRangoAnioActual();
+        const usaAnalitica = tieneFeature('analiticaProductiva');
+        const especieEngorde = perfil.engordeBovino && perfil.engordePorcino
+          ? 'Todos'
+          : perfil.engordePorcino ? 'Porcino' : 'Bovino';
+        const [animales, potreros, planes, reproduccion, productividadBovina, productividadPorcina, eficienciaEngorde, sustentabilidadMes, lotes, alimentacionHoy] = await Promise.all([
           obtenerAnimales(),
           obtenerPotreros(),
           obtenerPlanesSanitarios(),
           obtenerRegistrosReproductivos(),
-          tieneFeature('analiticaProductiva') ? obtenerProductividadCria(obtenerRangoAnioActual()) : Promise.resolve(null),
+          usaAnalitica && perfil.criaBovina ? obtenerProductividadCria({ ...rangoAnual, especie: 'Bovino' }) : Promise.resolve(null),
+          usaAnalitica && perfil.criaPorcina ? obtenerProductividadCria({ ...rangoAnual, especie: 'Porcino' }) : Promise.resolve(null),
+          usaAnalitica && (perfil.engordeBovino || perfil.engordePorcino)
+            ? obtenerEficienciaEngorde({ ...rangoAnual, especie: especieEngorde })
+            : Promise.resolve(null),
           tieneFeature('analiticaEconomica') ? obtenerSustentabilidadCria(obtenerRangoMesActual()) : Promise.resolve(null),
           obtenerLotes({ estado: 'ACTIVO' }),
           obtenerResumenAlimentacionHoy()
@@ -175,8 +224,9 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
           potrerosDescanso: potreros.filter((potrero) => potrero.estado === 'Descanso').length,
           proximasSanidad: planes.filter((plan) => plan.estado === 'Próximo').length,
           vencidasSanidad: planes.filter((plan) => plan.estado === 'Vencido').length,
-          ipg: productividad?.ipg || 0,
-          clasificacionIpg: productividad?.clasificacion || 'Deficiente',
+          indicesProductivos: usaAnalitica
+            ? construirIndicesDashboard({ perfil, productividadBovina, productividadPorcina, eficienciaEngorde })
+            : [],
           alimentacionHoy
         });
       } catch (error) {
@@ -185,7 +235,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     };
 
     cargarMetricas();
-  }, [rol]);
+  }, [rol, sesion, tieneFeature]);
 
   useEffect(() => {
     if (!puedeAccederModulo(rol, vistaActiva)) {
@@ -410,7 +460,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Reproduccion soloLectura={!puedeGestionarModulo(rol, 'Reproduccion') || !estadoConexion.online} />
+        <Reproduccion rolUsuario={rol} soloLectura={!puedeGestionarModulo(rol, 'Reproduccion') || !estadoConexion.online} />
       </main>
     );
   }
@@ -594,14 +644,20 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
           <p className="eyebrow">Indicadores ejecutivos</p>
           <h2>Seguimiento diario</h2>
           <p>
-            Priorizar partos, celos, destetes y sanidad pendiente. Revisar utilidad estimada
-            cuando existan ventas registradas con peso y precio por kilo.
+            Se muestran únicamente los índices de las especies y objetivos productivos habilitados
+            para la finca activa.
           </p>
-          <div className={`dashboard-ipg-card ipg-fondo-${obtenerNivelIpg(metricas.ipg)}`}>
-            <span>IPG</span>
-            <strong>{metricas.ipg}</strong>
-            <small>{metricas.clasificacionIpg}</small>
-          </div>
+          {metricas.indicesProductivos.length > 0 ? (
+            <div className="dashboard-indices-grid">
+              {metricas.indicesProductivos.map((indice) => (
+                <article className={`dashboard-ipg-card ipg-fondo-${obtenerNivelIpg(indice.valor)}`} key={indice.clave}>
+                  <span>{indice.sigla}</span>
+                  <strong>{indice.valor == null ? '--' : new Intl.NumberFormat('es-CR', { maximumFractionDigits: 1 }).format(indice.valor)}</strong>
+                  <small>{indice.titulo} · {indice.clasificacion}</small>
+                </article>
+              ))}
+            </div>
+          ) : <p className="dashboard-indices-vacio">No hay índices aplicables para la configuración productiva de esta finca.</p>}
           <div className="dashboard-mini-grid">
             <article>
               <span>Sanidad</span>

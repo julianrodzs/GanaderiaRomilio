@@ -4,7 +4,8 @@ Los índices se calculan bajo demanda para el período seleccionado. No se guard
 
 ## Conceptos separados
 
-- IPG: productividad de cría bovina existente.
+- indicador interno de cría bovina: conserva la fórmula histórica y excluye porcinos.
+- ICRP: índice interno de cría porcina basado en camadas con destete cerrado.
 - ICP: crecimiento porcino de la finca contra metas por etapa.
 - IEE: eficiencia del engorde bovino, porcino o consolidado de finca.
 
@@ -16,6 +17,7 @@ ICP e IEE pertenecen a la capacidad `analiticaProductiva`, disponible desde Gest
 
 - GMD porcina para Fase 1, Fase 2, Fase 3, Desarrollo y Engorde.
 - Peso objetivo porcino de engorde.
+- Metas porcinas de nacidos vivos por camada, destetados por camada y supervivencia predestete.
 - GMD y peso objetivo bovinos de engorde.
 - Días para considerar un pesaje reciente.
 
@@ -60,6 +62,34 @@ Clasificación interna:
 - 80 a menos de 95: Bajo objetivo.
 - Menos de 80: Requiere revisión.
 
+## ICRP
+
+El Índice de Cría Porcina usa únicamente camadas con destete cerrado. Una camada activa no se interpreta como mortalidad ni como un destete en cero.
+
+```text
+30% cumplimiento de nacidos vivos por camada
+45% cumplimiento de destetados por camada
+25% cumplimiento de supervivencia predestete
+```
+
+Cada componente se compara con la meta interna de la organización y se limita a 100 antes de ponderarse. El mayor peso corresponde a los animales realmente destetados. Sin al menos una camada cerrada con nacidos vivos, `icrp` es `null` y el resultado declara datos insuficientes.
+
+Clasificación interna:
+
+- 100: Meta alcanzada.
+- 85 a menos de 100: Cerca de la meta.
+- 70 a menos de 85: Bajo la meta.
+- Menos de 70: Requiere revisión.
+
+Las variables elegidas corresponden a indicadores habituales de desempeño reproductivo porcino, pero la ponderación es una decisión interna de GanaderiaRomilio y no una calificación veterinaria universal.
+
+No se publica todavía "lechones destetados por cerda por año": ese KPI requiere el promedio histórico de cerdas productivas durante el período y la aplicación aún no conserva snapshots de inventario reproductor. Usar únicamente el inventario actual produciría una cifra aparentemente precisa pero sesgada.
+
+Referencias metodológicas consultadas:
+
+- [Teagasc National Pig Herd Performance Report 2023](https://teagasc.ie/media/website/publications/2024/Pig-Herd-Performance-Report-2023.pdf).
+- [Animal Welfare Committee: breeding technologies in livestock agriculture](https://www.gov.uk/government/publications/animal-welfare-committee-awc-opinion-on-breeding-and-breeding-technologies-in-commercial-livestock-agriculture/animal-welfare-committee-awc-opinion-on-breeding-and-breeding-technologies-in-commercial-livestock-agriculture).
+
 ## IEE
 
 Primera versión:
@@ -90,3 +120,14 @@ Las muertes se asignan al período únicamente mediante `fechaMuerte`. Un animal
 La aplicación no conserva todavía el inicio histórico del objetivo Engorde. Para datos anteriores a este cambio se considera la información productiva actual y las fechas de entrada/salida disponibles.
 
 No se incluyen conversión alimenticia ni eficiencia económica. Comprar alimento no demuestra consumo. El servicio anuncia `conversionAlimenticia` y `eficienciaEconomica` como extensiones futuras sin incorporarlas al cálculo actual.
+
+## Dashboard
+
+El dashboard consulta `Finca.lineasProductivas` y presenta como máximo cuatro índices:
+
+- ICB para bovinos con objetivo `REPRODUCCION`.
+- ICRP para porcinos con objetivo `REPRODUCCION`.
+- IEE-B para bovinos con objetivo `ENGORDE`.
+- IEE-P para porcinos con objetivo `ENGORDE`.
+
+No se infiere el propósito a partir del sexo, categoría o cantidad de animales. Una finca mixta con ambos objetivos ve los cuatro; una finca especializada ve solo los aplicables.

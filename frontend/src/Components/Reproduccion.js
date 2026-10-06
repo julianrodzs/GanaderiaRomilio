@@ -19,6 +19,8 @@ import FormularioReproduccion from './FormularioReproduccion';
 import SelectorEspecie from './SelectorEspecie';
 import { etiquetaUsuarioConRol } from '../utils/usuarios';
 import TablaDinamica from './TablaDinamica';
+import FeatureGate from './FeatureGate';
+import IATF from './IATF';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -123,7 +125,7 @@ const fechasRegistro = (registro) => [
   registro.fechaRevisionCeloPosterior
 ].filter(Boolean);
 
-const Reproduccion = ({ soloLectura = false }) => {
+const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const [registros, setRegistros] = useState([]);
   const [animales, setAnimales] = useState([]);
   const [usuariosAsignables, setUsuariosAsignables] = useState([]);
@@ -144,6 +146,7 @@ const Reproduccion = ({ soloLectura = false }) => {
   const [resumenPorcino, setResumenPorcino] = useState(null);
   const [conflictoCiclo, setConflictoCiclo] = useState(null);
   const [errorCamada, setErrorCamada] = useState('');
+  const [vistaReproduccion, setVistaReproduccion] = useState('general');
   const etiquetaId = 'DIIO';
 
   const cambiarEspecie = (valor) => {
@@ -442,8 +445,32 @@ const Reproduccion = ({ soloLectura = false }) => {
     );
   }
 
+  const tabsReproduccion = (
+    <nav className="sanidad-tabs reproduccion-tabs" aria-label="Vistas de reproducción">
+      <button type="button" className={vistaReproduccion === 'general' ? 'activo' : ''} onClick={() => setVistaReproduccion('general')}>General</button>
+      <button type="button" className={vistaReproduccion === 'iatf' ? 'activo' : ''} onClick={() => setVistaReproduccion('iatf')}>IATF</button>
+    </nav>
+  );
+
+  if (vistaReproduccion === 'iatf') {
+    return (
+      <>
+        {tabsReproduccion}
+        <FeatureGate
+          feature="iatfReproductivo"
+          titulo="IATF y protocolos reproductivos avanzados"
+          pregunta="Configura campañas, cronogramas, insumos, diagnósticos y resultados P/AI."
+          etiqueta="Reproducción avanzada"
+        >
+          <IATF soloLectura={soloLectura} rolUsuario={rolUsuario} />
+        </FeatureGate>
+      </>
+    );
+  }
+
   return (
     <>
+      {tabsReproduccion}
       <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
       <section className="panel-seccion evaluar-cruce-panel">
         <div className="panel-title">

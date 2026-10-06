@@ -15,9 +15,16 @@ const bovinosEngordeSchema = new Schema({
     pesoObjetivoKg: { type: Number, min: 0.01, default: 500 }
 }, { _id: false });
 
+const porcinosCriaSchema = new Schema({
+    nacidosVivosObjetivoCamada: { type: Number, min: 0.01, default: 12 },
+    destetadosObjetivoCamada: { type: Number, min: 0.01, default: 11 },
+    supervivenciaPredesteteObjetivoPct: { type: Number, min: 0.01, max: 100, default: 90 }
+}, { _id: false });
+
 const configuracionProductivaSchema = new Schema({
     clave: { type: String, default: 'principal', trim: true },
     porcinos: { type: metaSchema, default: () => ({}) },
+    porcinosCria: { type: porcinosCriaSchema, default: () => ({}) },
     bovinosEngorde: { type: bovinosEngordeSchema, default: () => ({}) },
     diasPesajeReciente: { type: Number, min: 1, default: 60 },
     actualizadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' }

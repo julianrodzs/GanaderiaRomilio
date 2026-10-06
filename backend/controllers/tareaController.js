@@ -280,6 +280,9 @@ tareaCtrl.actualizarTarea = async (req, res) => {
         }
 
         const tareaAnterior = await Tarea.findById(req.params.id).lean();
+        if (req.body.estado === 'Completada' && tareaAnterior?.categoriaAutomatica === 'IATF') {
+            return res.status(409).json({ mensaje: 'Registra la ejecución desde el formulario IATF.' });
+        }
         const datosActualizados = aplicarFechaCompletadaPorEstado(limpiarDatosTarea(req.body));
         const asignacionCambioManualmente = Object.prototype.hasOwnProperty.call(req.body, 'asignadoA')
             && String(tareaAnterior?.asignadoA || '') !== String(req.body.asignadoA || '');
@@ -328,6 +331,10 @@ tareaCtrl.cambiarEstadoTarea = async (req, res) => {
 
         const estadoAnterior = tarea.estado;
 
+        if (estado === 'Completada' && tarea.categoriaAutomatica === 'IATF') {
+            return res.status(409).json({ mensaje: 'Registra la ejecución desde el formulario IATF.' });
+        }
+
         if (!puedeGestionarTareas(req)) {
             if (!esAsignado(req, tarea)) {
                 return res.status(403).json({ mensaje: 'No puedes modificar tareas de otros usuarios' });
@@ -371,6 +378,13 @@ tareaCtrl.completarTarea = async (req, res) => {
 
         if (!tarea) {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
+        }
+
+        if (tarea.categoriaAutomatica === 'IATF') {
+            return res.status(409).json({
+                codigo: 'IATF_REQUIERE_EJECUCION',
+                mensaje: 'Esta tarea debe registrarse desde su formulario IATF para conservar inventario y trazabilidad.'
+            });
         }
 
         if (claveIdempotencia && tarea.operacionesIdempotentes?.some((operacion) => operacion.clave === claveIdempotencia)) {

@@ -818,6 +818,26 @@ export const eliminarRegistroReproductivo = (id) => {
 
 export const obtenerRegistrosReproductivosPorAnimal = (animalId) => request(`/reproduccion/animal/${animalId}`);
 
+export const obtenerProtocolosIATF = (incluirInactivos = false) => request(`/iatf/protocolos${incluirInactivos ? '?incluirInactivos=true' : ''}`);
+export const crearProtocoloIATF = (datos) => request('/iatf/protocolos', { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarProtocoloIATF = (id, datos) => request(`/iatf/protocolos/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+export const obtenerCampanasIATF = (filtros = {}) => request(`/iatf/campanas${construirQuery(filtros)}`);
+export const obtenerCampanaIATF = (id) => request(`/iatf/campanas/${id}`);
+export const crearCampanaIATF = (datos) => request('/iatf/campanas', { method: 'POST', body: JSON.stringify(datos) });
+export const ejecutarPasoIATF = (campanaId, pasoId, datos) => request(`/iatf/campanas/${campanaId}/pasos/${pasoId}/ejecutar`, { method: 'POST', body: JSON.stringify(datos) });
+export const reprogramarPasosIATF = (campanaId, pasoId, recalcular = true) => request(`/iatf/campanas/${campanaId}/pasos/${pasoId}/reprogramar`, { method: 'POST', body: JSON.stringify({ recalcular }) });
+export const registrarInseminacionesIATF = (campanaId, datos) => request(`/iatf/campanas/${campanaId}/inseminaciones`, { method: 'POST', body: JSON.stringify(datos) });
+export const registrarDiagnosticosIATF = (campanaId, datos) => request(`/iatf/campanas/${campanaId}/diagnosticos`, { method: 'POST', body: JSON.stringify(datos) });
+export const finalizarCampanaIATF = (id, motivo = '') => request(`/iatf/campanas/${id}/finalizar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const cancelarCampanaIATF = (id, motivo = '') => request(`/iatf/campanas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const retirarParticipanteIATF = (campanaId, participanteId, motivo) => request(`/iatf/campanas/${campanaId}/participantes/${participanteId}/retirar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const resincronizarCampanaIATF = (campanaId, datos) => request(`/iatf/campanas/${campanaId}/resincronizar`, { method: 'POST', body: JSON.stringify(datos) });
+export const obtenerInsumosIATF = () => request('/iatf/insumos');
+export const crearInsumoIATF = (datos) => request('/iatf/insumos', { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarInsumoIATF = (id, datos) => request(`/iatf/insumos/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+export const obtenerConsolidadoIATF = () => request('/iatf/metricas/consolidado');
+export const obtenerActividadIATFPorTarea = (tareaId) => request(`/iatf/tareas/${tareaId}`);
+
 export const registrarTerneroDesdeParto = (registroId, ternero) => {
   return request(`/reproduccion/${registroId}/ternero`, {
     method: 'POST',

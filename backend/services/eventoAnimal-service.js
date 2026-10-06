@@ -11,7 +11,7 @@ const crearFiltroEvento = ({ animal, moduloOrigen, referenciaId, tipoEvento }) =
     };
 };
 
-const upsertEventoAnimal = async (datosEvento) => {
+const upsertEventoAnimal = async (datosEvento, opciones = {}) => {
     if (!datosEvento?.animal || !datosEvento?.tipoEvento || !datosEvento?.fecha || !datosEvento?.titulo) {
         return null;
     }
@@ -19,13 +19,14 @@ const upsertEventoAnimal = async (datosEvento) => {
     const filtro = crearFiltroEvento(datosEvento);
 
     if (!filtro) {
-        return EventoAnimal.create(datosEvento);
+        const creados = await EventoAnimal.create([datosEvento], opciones.session ? { session: opciones.session } : {});
+        return creados[0];
     }
 
     return EventoAnimal.findOneAndUpdate(
         filtro,
         { $set: datosEvento },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { upsert: true, new: true, setDefaultsOnInsert: true, ...(opciones.session ? { session: opciones.session } : {}) }
     );
 };
 

@@ -72,6 +72,82 @@ test('mantiene un grupo explicito para rotaciones sin cobertura', () => {
     assert.equal(resultado.grupos[0].animalDias, 8);
 });
 
+test('usa la cobertura actual cuando el potrero legado no tiene historial', () => {
+    const resultado = calcularRendimientoPorPastoConDatos({
+        potreros: [{
+            _id: 'p1',
+            codigo: 'P-1',
+            nombre: 'Uno',
+            area: 0.5,
+            pastoPrincipal: { _id: 'ratana', nombre: 'Ratana', especieBase: 'Ischaemum indicum' }
+        }],
+        rotaciones: [{ _id: 'r1', potrero: 'p1', estado: 'Finalizada', fechaEntrada: '2026-01-01', fechaSalida: '2026-01-03', numeroAnimales: 20 }],
+        historiales: []
+    }, { fechaInicio: '2026-01-01', fechaFin: '2026-01-31' });
+
+    assert.equal(resultado.grupos[0].nombre, 'Ratana');
+    assert.equal(resultado.grupos[0].potrerosConCoberturaActualSinHistorial, 1);
+    assert.equal(resultado.grupos[0].densidadAnimalesPorHectarea, 40);
+});
+
+test('no reescribe un periodo anterior cuando ya existe historial de cobertura', () => {
+    const resultado = calcularRendimientoPorPastoConDatos({
+        potreros: [{
+            _id: 'p1',
+            codigo: 'P-1',
+            nombre: 'Uno',
+            area: 1,
+            pastoPrincipal: { _id: 'mombaza', nombre: 'Mombaza' }
+        }],
+        rotaciones: [{ _id: 'r1', potrero: 'p1', estado: 'Finalizada', fechaEntrada: '2026-01-01', fechaSalida: '2026-01-03', numeroAnimales: 5 }],
+        historiales: [{ potrero: 'p1', pastoPrincipal: { _id: 'mombaza', nombre: 'Mombaza' }, fechaInicio: '2026-02-01', fechaFin: null }]
+    }, { fechaInicio: '2026-01-01', fechaFin: '2026-01-31' });
+
+    assert.equal(resultado.grupos[0].nombre, 'Sin cobertura registrada');
+    assert.equal(resultado.grupos[0].potrerosConCoberturaActualSinHistorial, 0);
+});
+
+test('la fecha de establecimiento extiende la primera cobertura del reporte', () => {
+    const pasto = { _id: 'brizantha', nombre: 'Brizantha', especieBase: 'Urochloa brizantha' };
+    const resultado = calcularRendimientoPorPastoConDatos({
+        potreros: [{
+            _id: 'p1',
+            codigo: 'P-1',
+            nombre: 'Uno',
+            area: 2,
+            pastoPrincipal: pasto,
+            fechaEstablecimientoPasto: '2025-06-01'
+        }],
+        rotaciones: [{ _id: 'r1', potrero: 'p1', estado: 'Finalizada', fechaEntrada: '2026-06-10', fechaSalida: '2026-06-12', numeroAnimales: 10 }],
+        historiales: [{
+            potrero: 'p1',
+            pastoPrincipal: pasto,
+            fechaInicio: '2026-10-01',
+            fechaFin: null,
+            fechaEstablecimientoPasto: '2025-06-01'
+        }]
+    }, { fechaInicio: '2026-06-01', fechaFin: '2026-06-30' });
+
+    assert.equal(resultado.grupos.length, 1);
+    assert.equal(resultado.grupos[0].nombre, 'Brizantha');
+    assert.equal(resultado.grupos[0].animalDias, 20);
+});
+
+test('una correccion posterior de la misma cobertura aporta su fecha de establecimiento', () => {
+    const pasto = { _id: 'ratana', nombre: 'Ratana' };
+    const resultado = calcularRendimientoPorPastoConDatos({
+        potreros: [{ _id: 'p1', codigo: 'P-1', nombre: 'Uno', area: 1, pastoPrincipal: pasto, fechaEstablecimientoPasto: '2025-01-01' }],
+        rotaciones: [{ _id: 'r1', potrero: 'p1', estado: 'Finalizada', fechaEntrada: '2026-05-01', fechaSalida: '2026-05-03', numeroAnimales: 4 }],
+        historiales: [
+            { potrero: 'p1', pastoPrincipal: pasto, fechaInicio: '2026-09-01', fechaFin: '2026-09-30' },
+            { potrero: 'p1', pastoPrincipal: pasto, fechaInicio: '2026-10-01', fechaFin: null, fechaEstablecimientoPasto: '2025-01-01' }
+        ]
+    }, { fechaInicio: '2026-05-01', fechaFin: '2026-05-31' });
+
+    assert.equal(resultado.grupos[0].nombre, 'Ratana');
+    assert.equal(resultado.grupos[0].animalDias, 8);
+});
+
 test('una rotacion real de entrada y salida el mismo dia cuenta un dia', () => {
     assert.equal(calcularDiasRotacion({
         estado: 'Finalizada',
@@ -96,6 +172,7 @@ test('calcula rendimiento, carga por hectarea y descansos sin guardar derivados'
     assert.equal(resultado.rendimiento.numeroRotaciones, 2);
     assert.equal(resultado.rendimiento.animalDias, 25);
     assert.equal(resultado.rendimiento.animalDiasPorHectarea, 10);
+    assert.equal(resultado.rendimiento.densidadAnimalesPorHectarea, 3.3);
     assert.equal(resultado.rendimiento.descansoPromedio, 7);
     assert.equal(resultado.usoProyectado.numeroRotaciones, 1);
 });

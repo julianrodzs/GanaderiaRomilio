@@ -13,6 +13,9 @@ const numero = (valor, decimales = 1) => valor === null || valor === undefined
 const porcentaje = (valor) => valor === null || valor === undefined ? '--' : `${numero(valor)}%`;
 
 const camposConfiguracion = [
+  ['porcinosCria', 'nacidosVivosObjetivoCamada', 'Meta nacidos vivos por camada'],
+  ['porcinosCria', 'destetadosObjetivoCamada', 'Meta destetados por camada'],
+  ['porcinosCria', 'supervivenciaPredesteteObjetivoPct', 'Meta supervivencia predestete (%)'],
   ['porcinos', 'gmdFase1KgDia', 'GMD porcina Fase 1 (kg/día)'],
   ['porcinos', 'gmdFase2KgDia', 'GMD porcina Fase 2 (kg/día)'],
   ['porcinos', 'gmdFase3KgDia', 'GMD porcina Fase 3 (kg/día)'],
@@ -24,6 +27,7 @@ const camposConfiguracion = [
 ];
 
 const prepararFormulario = (configuracion) => ({
+  porcinosCria: { ...(configuracion?.porcinosCria || {}) },
   porcinos: { ...(configuracion?.porcinos || {}) },
   bovinosEngorde: { ...(configuracion?.bovinosEngorde || {}) },
   diasPesajeReciente: configuracion?.diasPesajeReciente || 60

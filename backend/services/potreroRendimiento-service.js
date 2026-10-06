@@ -105,13 +105,17 @@ const calcularResumen = (potrero, rotaciones, periodo, hoy = diaUTC(new Date()))
     const animalDias = tramos.reduce((total, item) => total + (Number(item.rotacion.numeroAnimales) || 0) * item.dias, 0);
     const area = Number(potrero.area);
     const descansos = calcularDescansos(rotaciones, periodo, hoy);
+    const animalesPromedio = diasOcupados ? animalDias / diasOcupados : null;
 
     return {
         diasOcupados,
         porcentajeOcupacion: diasDelPeriodo ? redondear((diasOcupados / diasDelPeriodo) * 100) : 0,
         numeroRotaciones: tramos.length,
         promedioDiasRotacion: tramos.length ? redondear(diasOcupados / tramos.length) : null,
-        animalesPromedio: diasOcupados ? redondear(animalDias / diasOcupados) : null,
+        animalesPromedio: animalesPromedio !== null ? redondear(animalesPromedio) : null,
+        densidadAnimalesPorHectarea: Number.isFinite(area) && area > 0 && animalesPromedio !== null
+            ? redondear(animalesPromedio / area)
+            : null,
         animalDias: redondear(animalDias),
         animalDiasPorHectarea: Number.isFinite(area) && area > 0 ? redondear(animalDias / area) : null,
         ...descansos,
@@ -136,6 +140,7 @@ const calcularRendimientoMensual = (potrero, rotaciones, periodo, hoy = diaUTC(n
             numeroRotaciones: resumen.numeroRotaciones,
             animalDias: resumen.animalDias,
             animalDiasPorHectarea: resumen.animalDiasPorHectarea,
+            densidadAnimalesPorHectarea: resumen.densidadAnimalesPorHectarea,
             descansoPromedio: resumen.descansoPromedio
         });
         cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
@@ -184,7 +189,8 @@ const calcularRendimientoPotrero = (potrero, rotaciones, periodo, opciones = {})
             numeroAnimales: ultima.rotacion.numeroAnimales || 0,
             diasOcupado: ultima.dias,
             animalDias: redondear((Number(ultima.rotacion.numeroAnimales) || 0) * ultima.dias),
-            animalDiasPorHectarea: area > 0 ? redondear(((Number(ultima.rotacion.numeroAnimales) || 0) * ultima.dias) / area) : null
+            animalDiasPorHectarea: area > 0 ? redondear(((Number(ultima.rotacion.numeroAnimales) || 0) * ultima.dias) / area) : null,
+            densidadAnimalesPorHectarea: area > 0 ? redondear((Number(ultima.rotacion.numeroAnimales) || 0) / area) : null
         } : null,
         usoProyectado: { numeroRotaciones: proyectadas.length },
         mensual: opciones.incluirMensual === false ? undefined : calcularRendimientoMensual(potrero, rotaciones, periodo, hoy)
@@ -228,7 +234,67 @@ const obtenerNombreCobertura = (cobertura) => cobertura?.pastoPrincipal?.nombre
     || cobertura?.descripcionCobertura
     || 'Sin cobertura registrada';
 
-const dividirTramoPorCoberturas = (tramo, historial = []) => {
+const claveIdentidadCobertura = (cobertura) => {
+    const pastoId = obtenerId(cobertura?.pastoPrincipal);
+    if (pastoId) return `pasto:${pastoId}`;
+    const descripcion = String(cobertura?.descripcionCobertura || '').trim().toLowerCase();
+    return descripcion ? `descripcion:${descripcion}` : 'sin-cobertura';
+};
+
+const prepararHistorialParaCalculo = (historial = [], potrero = null) => {
+    const ordenado = [...historial]
+        .map((item) => ({ ...item }))
+        .sort((a, b) => diaUTC(a.fechaInicio) - diaUTC(b.fechaInicio));
+    if (!ordenado.length) return ordenado;
+
+    const claveInicial = claveIdentidadCobertura(ordenado[0]);
+    const fechasEstablecimiento = [];
+    for (const item of ordenado) {
+        if (claveIdentidadCobertura(item) !== claveInicial) break;
+        const fecha = diaUTC(item.fechaEstablecimientoPasto);
+        if (fecha) fechasEstablecimiento.push(fecha);
+    }
+
+    const todasMismaCobertura = ordenado.every((item) => claveIdentidadCobertura(item) === claveInicial);
+    if (todasMismaCobertura && claveIdentidadCobertura(potrero) === claveInicial) {
+        const fechaActual = diaUTC(potrero?.fechaEstablecimientoPasto);
+        if (fechaActual) fechasEstablecimiento.push(fechaActual);
+    }
+
+    const inicioRegistrado = diaUTC(ordenado[0].fechaInicio);
+    const inicioEfectivo = fechasEstablecimiento
+        .filter((fecha) => fecha < inicioRegistrado)
+        .sort((a, b) => a - b)[0];
+    if (inicioEfectivo) {
+        ordenado[0].fechaInicioRegistrada = ordenado[0].fechaInicio;
+        ordenado[0].fechaInicio = inicioEfectivo;
+        ordenado[0].origenFechaInicio = 'Fecha de establecimiento';
+    }
+    return ordenado;
+};
+
+const crearCoberturaActualCompatibilidad = (potrero) => {
+    if (!potrero?.pastoPrincipal && !potrero?.descripcionCobertura) return null;
+    return {
+        pastoPrincipal: potrero.pastoPrincipal || null,
+        pastosSecundarios: potrero.pastosSecundarios || [],
+        leguminosasAsociadas: potrero.leguminosasAsociadas || [],
+        descripcionCobertura: potrero.descripcionCobertura || null,
+        fechaEstablecimientoPasto: potrero.fechaEstablecimientoPasto || null,
+        diasDescansoObjetivo: potrero.diasDescansoObjetivo,
+        origenCompatibilidad: 'Cobertura actual sin historial'
+    };
+};
+
+const dividirTramoPorCoberturas = (tramo, historial = [], coberturaCompatibilidad = null) => {
+    if (!historial.length && coberturaCompatibilidad) {
+        return [{
+            cobertura: coberturaCompatibilidad,
+            fechaInicio: tramo.fechaInicio,
+            fechaFinExclusiva: tramo.fechaFinExclusiva,
+            dias: tramo.dias
+        }];
+    }
     const ordenado = [...historial].sort((a, b) => diaUTC(a.fechaInicio) - diaUTC(b.fechaInicio));
     const segmentos = [];
     let cursor = tramo.fechaInicio;
@@ -272,7 +338,8 @@ const crearAcumulador = (datosClave) => ({
     potreros: new Map(),
     descansos: [],
     objetivoDiasPonderados: 0,
-    objetivoPeso: 0
+    objetivoPeso: 0,
+    coberturasCompatibilidad: new Set()
 });
 
 const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], historiales = [] }, filtros = {}) => {
@@ -285,6 +352,12 @@ const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], h
         grupos[clave].push(item);
         return grupos;
     }, {});
+    const historialCalculoPorPotrero = Object.fromEntries(
+        Object.entries(historialPorPotrero).map(([potreroId, items]) => [
+            potreroId,
+            prepararHistorialParaCalculo(items, potreroPorId.get(potreroId))
+        ])
+    );
     const rotacionesPorPotrero = rotaciones.reduce((grupos, item) => {
         const clave = obtenerId(item.potrero);
         if (!grupos[clave]) grupos[clave] = [];
@@ -300,15 +373,20 @@ const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], h
         const potreroId = obtenerId(rotacion.potrero);
         const potrero = potreroPorId.get(potreroId);
         if (!potrero) return;
-        dividirTramoPorCoberturas(tramo, historialPorPotrero[potreroId] || []).forEach((segmento) => {
+        const historial = historialCalculoPorPotrero[potreroId] || [];
+        const coberturaCompatibilidad = historial.length ? null : crearCoberturaActualCompatibilidad(potrero);
+        dividirTramoPorCoberturas(tramo, historial, coberturaCompatibilidad).forEach((segmento) => {
             const datosClave = claveCobertura(segmento.cobertura, agruparPor);
             if (!grupos.has(datosClave.clave)) grupos.set(datosClave.clave, crearAcumulador(datosClave));
             const grupo = grupos.get(datosClave.clave);
             const numeroAnimales = Number(rotacion.numeroAnimales) || 0;
             const animalDias = numeroAnimales * segmento.dias;
+            const areaPotrero = Number(potrero.area);
+            const densidadDias = areaPotrero > 0 ? (numeroAnimales / areaPotrero) * segmento.dias : null;
             const rotacionId = obtenerId(rotacion._id) || `${potreroId}:${rotacion.fechaEntrada}:${indice}`;
-            grupo.segmentos.push({ potreroId, dias: segmento.dias, animalDias });
+            grupo.segmentos.push({ potreroId, dias: segmento.dias, animalDias, densidadDias });
             grupo.rotaciones.add(rotacionId);
+            if (segmento.cobertura?.origenCompatibilidad) grupo.coberturasCompatibilidad.add(potreroId);
             if (!grupo.potreros.has(potreroId)) grupo.potreros.set(potreroId, { potrero, diasOcupados: 0, animalDias: 0, rotaciones: new Set() });
             const resumenPotrero = grupo.potreros.get(potreroId);
             resumenPotrero.diasOcupados += segmento.dias;
@@ -327,11 +405,12 @@ const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], h
             .filter((item) => item.fechaEntrada >= periodo.fechaInicio && item.fechaEntrada <= periodo.fechaFin)
             .forEach((descanso) => {
                 const fechaReferencia = new Date(descanso.fechaEntrada.getTime() - MS_DIA);
-                const cobertura = (historialPorPotrero[potreroId] || []).find((item) => {
+                const historial = historialCalculoPorPotrero[potreroId] || [];
+                const cobertura = historial.find((item) => {
                     const inicio = diaUTC(item.fechaInicio);
                     const fin = item.fechaFin ? diaUTC(item.fechaFin) : null;
                     return inicio <= fechaReferencia && (!fin || fin >= fechaReferencia);
-                }) || null;
+                }) || (historial.length ? null : crearCoberturaActualCompatibilidad(potreroPorId.get(potreroId)));
                 const datosClave = claveCobertura(cobertura, agruparPor);
                 if (!grupos.has(datosClave.clave)) grupos.set(datosClave.clave, crearAcumulador(datosClave));
                 const grupo = grupos.get(datosClave.clave);
@@ -348,6 +427,9 @@ const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], h
     const resultados = [...grupos.values()].map((grupo) => {
         const diasOcupados = grupo.segmentos.reduce((total, item) => total + item.dias, 0);
         const animalDias = grupo.segmentos.reduce((total, item) => total + item.animalDias, 0);
+        const segmentosConArea = grupo.segmentos.filter((item) => item.densidadDias !== null);
+        const diasConArea = segmentosConArea.reduce((total, item) => total + item.dias, 0);
+        const densidadDias = segmentosConArea.reduce((total, item) => total + item.densidadDias, 0);
         const potrerosGrupo = [...grupo.potreros.values()];
         const area = potrerosGrupo.reduce((total, item) => total + (Number(item.potrero.area) || 0), 0);
         const descansoPromedio = grupo.descansos.length
@@ -365,8 +447,10 @@ const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], h
             porcentajeOcupacionPromedio: potrerosGrupo.length && diasPeriodo ? redondear((diasOcupados / (potrerosGrupo.length * diasPeriodo)) * 100) : 0,
             numeroRotaciones: grupo.rotaciones.size,
             animalesPromedio: diasOcupados ? redondear(animalDias / diasOcupados) : null,
+            densidadAnimalesPorHectarea: diasConArea ? redondear(densidadDias / diasConArea) : null,
             animalDias: redondear(animalDias),
             animalDiasPorHectarea: area > 0 ? redondear(animalDias / area) : null,
+            potrerosConCoberturaActualSinHistorial: grupo.coberturasCompatibilidad.size,
             descansoPromedio,
             descansoMinimo: grupo.descansos.length ? Math.min(...grupo.descansos) : null,
             descansoMaximo: grupo.descansos.length ? Math.max(...grupo.descansos) : null,
@@ -379,6 +463,9 @@ const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], h
                 area: item.potrero.area,
                 diasOcupados: item.diasOcupados,
                 numeroRotaciones: item.rotaciones.size,
+                densidadAnimalesPorHectarea: Number(item.potrero.area) > 0 && item.diasOcupados > 0
+                    ? redondear((item.animalDias / item.diasOcupados) / Number(item.potrero.area))
+                    : null,
                 animalDias: redondear(item.animalDias),
                 animalDiasPorHectarea: Number(item.potrero.area) > 0 ? redondear(item.animalDias / Number(item.potrero.area)) : null
             }))
@@ -395,7 +482,12 @@ const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], h
 
 const calcularRendimientoPorPasto = async (filtros = {}) => {
     const [potreros, rotaciones, historiales] = await Promise.all([
-        Potrero.find().sort({ codigo: 1 }).lean(),
+        Potrero.find()
+            .populate('pastoPrincipal')
+            .populate('pastosSecundarios')
+            .populate('leguminosasAsociadas')
+            .sort({ codigo: 1 })
+            .lean(),
         RotacionPotrero.find().lean(),
         HistorialCoberturaPotrero.find()
             .populate('pastoPrincipal')
@@ -421,5 +513,6 @@ module.exports = {
     obtenerRendimientoPotrero,
     obtenerTramoRotacion,
     dividirTramoPorCoberturas,
+    prepararHistorialParaCalculo,
     resolverPeriodo
 };

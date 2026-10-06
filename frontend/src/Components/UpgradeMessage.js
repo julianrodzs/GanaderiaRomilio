@@ -6,7 +6,8 @@ const nombresPlan = {
   emailsOperativos: 'Pro',
   configuracionEmailAvanzada: 'Premium',
   reportesMultiFinca: 'Premium',
-  auditoriaAvanzada: 'Pro'
+  auditoriaAvanzada: 'Pro',
+  iatfReproductivo: 'Pro'
 };
 
 const UpgradeMessage = ({ feature, titulo = 'Función no incluida en tu plan', pregunta, etiqueta = 'Disponible en otro plan' }) => (

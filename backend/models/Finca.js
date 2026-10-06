@@ -15,6 +15,9 @@ const fincaSchema = new Schema(
         descripcion: { type: String, trim: true },
         ubicacion: { type: String, trim: true },
         lineasProductivas: { type: [lineaProductivaSchema], default: [] },
+        configuracionReproductiva: {
+            diasGestacionBovinaGeneral: { type: Number, min: 1, default: 283 }
+        },
         estado: {
             type: String,
             enum: ['Activa', 'Inactiva'],

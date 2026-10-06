@@ -5,6 +5,7 @@ const reproduccionBovinaConfig = require('../config/reproduccionBovinaConfig');
 
 const ESTADOS_REPRODUCTIVOS = [
     'Vacía',
+    'Inseminada pendiente diagnóstico',
     'Gestante',
     'Próxima a parto',
     'Parida',
@@ -136,6 +137,18 @@ const registroReproductivoSchema = new Schema(
         diasDestetePorcino: { type: Number, min: 1, default: 28 },
         diasCeloPostDestetePorcino: { type: Number, min: 1, default: 5 },
         tipoRegistro: { type: String, enum: ['Inseminación/Monta', 'Monta', 'Inseminación'], default: 'Inseminación/Monta' },
+        tipoInseminacion: { type: String, enum: ['IATF', 'IA_CONVENCIONAL'] },
+        campanaIATF: { type: Schema.Types.ObjectId, ref: 'CampanaIATF' },
+        origenGestacion: {
+            type: String,
+            enum: ['IATF', 'MONTA_NATURAL', 'IA_CONVENCIONAL', 'INDETERMINADO']
+        },
+        gestacionConfirmada: { type: Boolean, default: false },
+        resultadoDiagnosticoGestacion: {
+            type: String,
+            enum: ['PREÑADA', 'VACIA', 'DUDOSA', 'REQUIERE_RECONFIRMACION']
+        },
+        fechaUltimoDiagnosticoGestacion: { type: Date },
         destinoCrias: { type: String, enum: ['Se quedan', 'Se venden', 'Engorde', 'No definido'], default: 'No definido' },
         cantidadCriasEstimada: { type: Number, min: 0 },
         cantidadCrias: { type: Number, min: 0 },
@@ -214,6 +227,13 @@ const completarFechasYEstado = (datos, opciones = {}) => {
         return;
     }
 
+    if (datos.tipoInseminacion === 'IATF' && datos.fechaInseminacion && datos.gestacionConfirmada !== true) {
+        datos.estado = datos.resultadoDiagnosticoGestacion === 'VACIA'
+            ? 'Vacía'
+            : 'Inseminada pendiente diagnóstico';
+        return;
+    }
+
     if (datos.fechaMonta && !datos.fechaPartoEstimada) {
         datos.fechaPartoEstimada = sumarDias(datos.fechaMonta, especie === 'Porcino' ? 114 : 283);
     }
@@ -275,6 +295,9 @@ registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesD
         'activoParaAlertas',
         'fechaCierre',
         'motivoCierre',
+        'gestacionConfirmada',
+        'resultadoDiagnosticoGestacion',
+        'fechaUltimoDiagnosticoGestacion',
         'estado'
     ].forEach((campo) => {
         datosUpdate[campo] = datos[campo];
@@ -296,6 +319,7 @@ registroReproductivoSchema.index({ fechaPartoEstimada: 1 });
 registroReproductivoSchema.index({ fechaPartoReal: 1 });
 registroReproductivoSchema.index({ especie: 1, fechaInseminacion: 1 });
 registroReproductivoSchema.index({ animal: 1, estadoCiclo: 1, activoParaAlertas: 1 });
+registroReproductivoSchema.index({ campanaIATF: 1, animal: 1 });
 
 module.exports = {
     RegistroReproductivo: model('RegistroReproductivo', registroReproductivoSchema),

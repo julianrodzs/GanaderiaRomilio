@@ -7,6 +7,9 @@ const CAMPOS_CONFIGURABLES = [
     'porcinos.gmdDesarrolloKgDia',
     'porcinos.gmdEngordeKgDia',
     'porcinos.pesoObjetivoEngordeKg',
+    'porcinosCria.nacidosVivosObjetivoCamada',
+    'porcinosCria.destetadosObjetivoCamada',
+    'porcinosCria.supervivenciaPredesteteObjetivoPct',
     'bovinosEngorde.gmdObjetivoKgDia',
     'bovinosEngorde.pesoObjetivoKg',
     'diasPesajeReciente'

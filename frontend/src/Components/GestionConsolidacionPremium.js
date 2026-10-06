@@ -12,9 +12,41 @@ import {
 
 const camposMeta = [
   ['animalesActivos', 'Animales activos'], ['pesoPromedioKg', 'Peso promedio kg'],
-  ['ingresos', 'Ingresos'], ['egresosMaximos', 'Egresos máximos'], ['balance', 'Balance'],
+  ['ingresos', 'Ingresos CRC'], ['egresosMaximos', 'Egresos máximos CRC'], ['balance', 'Balance CRC'],
   ['partos', 'Partos'], ['destetes', 'Destetes'], ['aplicacionesSanitarias', 'Aplicaciones sanitarias']
 ];
+
+const formatearMonto = (valor, codigoMoneda) => new Intl.NumberFormat(codigoMoneda === 'USD' ? 'en-US' : 'es-CR', {
+  style: 'currency',
+  currency: codigoMoneda,
+  minimumFractionDigits: codigoMoneda === 'USD' ? 2 : 0,
+  maximumFractionDigits: 2
+}).format(Number(valor || 0));
+
+const agruparEvolucionMensual = (items = []) => {
+  const grupos = new Map();
+  items.forEach((item) => {
+    const clave = `${item.fincaId}-${item.anio}-${item.mes}`;
+    if (!grupos.has(clave)) grupos.set(clave, { fincaId: item.fincaId, anio: item.anio, mes: item.mes, monedas: {} });
+    grupos.get(clave).monedas[item.moneda || 'CRC'] = {
+      ingresos: Number(item.ingresos || 0),
+      egresos: Number(item.egresos || 0),
+      balance: Number(item.balance || 0)
+    };
+  });
+  return [...grupos.values()];
+};
+
+const MontoMensual = ({ monedas = {}, campo }) => {
+  const codigos = Object.keys(monedas).sort((a, b) => (a === 'CRC' ? -1 : b === 'CRC' ? 1 : a.localeCompare(b)));
+  const conMovimiento = codigos.filter((codigo) => (
+    campo === 'balance'
+      ? Number(monedas[codigo]?.ingresos || 0) !== 0 || Number(monedas[codigo]?.egresos || 0) !== 0
+      : Number(monedas[codigo]?.[campo] || 0) !== 0
+  ));
+  if (!conMovimiento.length) return <span className="monto-sin-movimiento">--</span>;
+  return <span className="montos-por-moneda">{conMovimiento.map((codigo) => <span key={codigo}><small>{codigo}</small>{formatearMonto(monedas[codigo][campo], codigo)}</span>)}</span>;
+};
 
 const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fechaFin, especie, datos, puedeConfigurar, onActualizar }) => {
   const [metas, setMetas] = useState([]);
@@ -88,6 +120,7 @@ const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fecha
   };
 
   const numero = (valor) => new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(Number(valor || 0));
+  const evolucionAgrupada = agruparEvolucionMensual(datos?.evolucionMensual || []);
 
   return (
     <section className="gestion-consolidacion">
@@ -98,24 +131,25 @@ const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fecha
       {error && <div className="alerta-formulario">{error}</div>}
       {mensaje && <p className="form-message">{mensaje}</p>}
 
-      {(datos?.evolucionMensual || []).length > 0 && (
+      {evolucionAgrupada.length > 0 && (
         <section className="consolidacion-subpanel"><div className="panel-title compacto"><div><p className="eyebrow">Evolución</p><h3>Resultado mensual por finca</h3></div></div>
-          <div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Período</th><th>Finca</th><th>Moneda</th><th>Ingresos</th><th>Egresos</th><th>Balance</th></tr></thead><tbody>{datos.evolucionMensual.map((item) => { const finca = fincas.find((f) => f._id === item.fincaId); return <tr key={`${item.fincaId}-${item.moneda}-${item.anio}-${item.mes}`}><td>{String(item.mes).padStart(2, '0')}/{item.anio}</td><td>{finca?.nombre || '--'}</td><td>{item.moneda}</td><td>{item.ingresos}</td><td>{item.egresos}</td><td>{item.balance}</td></tr>; })}</tbody></table></div>
+          <div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Período</th><th>Finca</th><th>Ingresos</th><th>Egresos</th><th>Balance</th></tr></thead><tbody>{evolucionAgrupada.map((item) => { const finca = fincas.find((f) => String(f._id) === String(item.fincaId)); return <tr key={`${item.fincaId}-${item.anio}-${item.mes}`}><td>{String(item.mes).padStart(2, '0')}/{item.anio}</td><td>{finca?.nombre || '--'}</td><td><MontoMensual monedas={item.monedas} campo="ingresos" /></td><td><MontoMensual monedas={item.monedas} campo="egresos" /></td><td><MontoMensual monedas={item.monedas} campo="balance" /></td></tr>; })}</tbody></table></div>
+          <p className="nota-monedas-reporte">Cada fila reúne el mes completo. CRC y USD se muestran por separado porque no se convierten ni se suman entre sí.</p>
         </section>
       )}
 
       {puedeConfigurar && (
         <form className="consolidacion-subpanel meta-consolidacion-form" onSubmit={guardarMeta}>
           <div className="panel-title compacto"><div><p className="eyebrow">Objetivos</p><h3>Nueva meta del período</h3></div></div>
-          <div className="form-grid">
+          <div className="form-grid meta-consolidacion-datos">
             <label>Alcance<select value={meta.alcance} onChange={(e) => setMeta((actual) => ({ ...actual, alcance: e.target.value, finca: '' }))}><option value="ORGANIZACION">Organización</option><option value="FINCA">Finca</option></select></label>
             {meta.alcance === 'FINCA' && <label>Finca<select required value={meta.finca} onChange={(e) => setMeta((actual) => ({ ...actual, finca: e.target.value }))}><option value="">Seleccionar</option>{fincas.map((finca) => <option key={finca._id} value={finca._id}>{finca.codigo} · {finca.nombre}</option>)}</select></label>}
-            <label>Nombre<input required value={meta.nombre} onChange={(e) => setMeta((actual) => ({ ...actual, nombre: e.target.value }))} /></label>
+            <label>Nombre<input required value={meta.nombre} onChange={(e) => setMeta((actual) => ({ ...actual, nombre: e.target.value }))} placeholder="Ej. Meta anual 2027" /></label>
             <label>Desde<input required type="date" value={meta.fechaInicio} onChange={(e) => setMeta((actual) => ({ ...actual, fechaInicio: e.target.value }))} /></label>
             <label>Hasta<input required type="date" value={meta.fechaFin} onChange={(e) => setMeta((actual) => ({ ...actual, fechaFin: e.target.value }))} /></label>
           </div>
-          <div className="metas-valores-grid">{camposMeta.map(([campo, etiqueta]) => <label key={campo}>{etiqueta}<input min={campo === 'balance' ? undefined : '0'} step="0.01" type="number" value={meta.metas[campo] || ''} onChange={(e) => setMeta((actual) => ({ ...actual, metas: { ...actual.metas, [campo]: e.target.value } }))} /></label>)}</div>
-          <button className="boton-primario" type="submit" disabled={procesando}>Guardar meta</button>
+          <div className="meta-consolidacion-valores"><h4>Valores objetivo</h4><div className="metas-valores-grid">{camposMeta.map(([campo, etiqueta]) => <label key={campo}>{etiqueta}<input min={campo === 'balance' ? undefined : '0'} step="0.01" type="number" value={meta.metas[campo] || ''} onChange={(e) => setMeta((actual) => ({ ...actual, metas: { ...actual.metas, [campo]: e.target.value } }))} placeholder="0" /></label>)}</div></div>
+          <div className="meta-consolidacion-acciones"><button className="boton-primario" type="submit" disabled={procesando}>Guardar meta</button></div>
         </form>
       )}
 

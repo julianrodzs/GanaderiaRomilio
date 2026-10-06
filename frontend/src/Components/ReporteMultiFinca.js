@@ -12,6 +12,20 @@ const numero = (valor, decimales = 0) => new Intl.NumberFormat('es-CR', {
   maximumFractionDigits: decimales
 }).format(valor || 0);
 
+const MontosPorMoneda = ({ crc = 0, usd = 0, mostrarCeros = false }) => {
+  const montos = [
+    { codigo: 'CRC', valor: Number(crc || 0), texto: moneda(crc) },
+    { codigo: 'USD', valor: Number(usd || 0), texto: monedaUSD(usd) }
+  ].filter((item) => mostrarCeros || item.valor !== 0);
+
+  if (!montos.length) return <span className="monto-sin-movimiento">--</span>;
+  return (
+    <span className="montos-por-moneda">
+      {montos.map((item) => <span key={item.codigo}><small>{item.codigo}</small>{item.texto}</span>)}
+    </span>
+  );
+};
+
 const ReporteMultiFinca = ({ fechaInicio, fechaFin, especie, puedeConfigurar = false }) => {
   const [fincas, setFincas] = useState([]);
   const [seleccionadas, setSeleccionadas] = useState([]);
@@ -100,9 +114,9 @@ const ReporteMultiFinca = ({ fechaInicio, fechaFin, especie, puedeConfigurar = f
           <div className="reportes-metricas multi-finca-metricas">
             <article><span>Fincas incluidas</span><strong>{datos.consolidado.fincas}</strong></article>
             <article><span>Animales activos</span><strong>{numero(datos.consolidado.animalesActivos)}</strong><small>{datos.consolidado.bovinos} bovinos · {datos.consolidado.porcinos} porcinos</small></article>
-            <article><span>Ingresos</span><strong>{moneda(datos.consolidado.monedas?.CRC?.ingresos)}</strong><small>{monedaUSD(datos.consolidado.monedas?.USD?.ingresos)}</small></article>
-            <article><span>Egresos</span><strong>{moneda(datos.consolidado.monedas?.CRC?.egresos)}</strong><small>{monedaUSD(datos.consolidado.monedas?.USD?.egresos)}</small></article>
-            <article><span>Balance</span><strong>{moneda(datos.consolidado.monedas?.CRC?.balance)}</strong><small>{monedaUSD(datos.consolidado.monedas?.USD?.balance)}</small></article>
+            <article><span>Ingresos</span><strong>{moneda(datos.consolidado.monedas?.CRC?.ingresos)}</strong><small className="monto-moneda-secundaria">USD · {monedaUSD(datos.consolidado.monedas?.USD?.ingresos)}</small></article>
+            <article><span>Egresos</span><strong>{moneda(datos.consolidado.monedas?.CRC?.egresos)}</strong><small className="monto-moneda-secundaria">USD · {monedaUSD(datos.consolidado.monedas?.USD?.egresos)}</small></article>
+            <article><span>Balance</span><strong>{moneda(datos.consolidado.monedas?.CRC?.balance)}</strong><small className="monto-moneda-secundaria">USD · {monedaUSD(datos.consolidado.monedas?.USD?.balance)}</small></article>
             <article><span>Partos / destetes</span><strong>{datos.consolidado.partos} / {datos.consolidado.destetes}</strong></article>
             <article><span>Traslados internos</span><strong>{numero(datos.consolidado.traslados)}</strong><small>{moneda(datos.consolidado.monedas?.CRC?.transferenciasInternas)} · {monedaUSD(datos.consolidado.monedas?.USD?.transferenciasInternas)} sin afectar el consolidado</small></article>
             <article><span>Gasto compartido</span><strong>{moneda(datos.consolidado.monedas?.CRC?.gastosCompartidos)}</strong><small>{monedaUSD(datos.consolidado.monedas?.USD?.gastosCompartidos)}</small></article>
@@ -124,8 +138,11 @@ const ReporteMultiFinca = ({ fechaInicio, fechaFin, especie, puedeConfigurar = f
                   <td>{numero(item.inventario.activos)}</td>
                   <td>{numero(item.participacion.inventarioPct, 1)}%</td>
                   <td>{item.inventario.pesoPromedio == null ? '--' : `${numero(item.inventario.pesoPromedio, 1)} kg`}</td>
-                  <td>{moneda(item.finanzas.monedas?.CRC?.ingresos)}<small>{monedaUSD(item.finanzas.monedas?.USD?.ingresos)}</small></td><td>{moneda(item.finanzas.monedas?.CRC?.egresos)}<small>{monedaUSD(item.finanzas.monedas?.USD?.egresos)}</small></td><td>{moneda(item.finanzas.monedas?.CRC?.ingresos - item.finanzas.monedas?.CRC?.egresos)}<small>{monedaUSD((item.finanzas.monedas?.USD?.ingresos || 0) - (item.finanzas.monedas?.USD?.egresos || 0))}</small></td>
-                  <td>{moneda((item.finanzas.monedas?.CRC?.transferenciasEntrantes || 0) - (item.finanzas.monedas?.CRC?.transferenciasSalientes || 0))}<small>{monedaUSD((item.finanzas.monedas?.USD?.transferenciasEntrantes || 0) - (item.finanzas.monedas?.USD?.transferenciasSalientes || 0))}</small></td><td>{moneda(item.finanzas.monedas?.CRC?.gastosCompartidos)}<small>{monedaUSD(item.finanzas.monedas?.USD?.gastosCompartidos)}</small></td>
+                  <td><MontosPorMoneda crc={item.finanzas.monedas?.CRC?.ingresos} usd={item.finanzas.monedas?.USD?.ingresos} /></td>
+                  <td><MontosPorMoneda crc={item.finanzas.monedas?.CRC?.egresos} usd={item.finanzas.monedas?.USD?.egresos} /></td>
+                  <td><MontosPorMoneda crc={(item.finanzas.monedas?.CRC?.ingresos || 0) - (item.finanzas.monedas?.CRC?.egresos || 0)} usd={(item.finanzas.monedas?.USD?.ingresos || 0) - (item.finanzas.monedas?.USD?.egresos || 0)} /></td>
+                  <td><MontosPorMoneda crc={(item.finanzas.monedas?.CRC?.transferenciasEntrantes || 0) - (item.finanzas.monedas?.CRC?.transferenciasSalientes || 0)} usd={(item.finanzas.monedas?.USD?.transferenciasEntrantes || 0) - (item.finanzas.monedas?.USD?.transferenciasSalientes || 0)} /></td>
+                  <td><MontosPorMoneda crc={item.finanzas.monedas?.CRC?.gastosCompartidos} usd={item.finanzas.monedas?.USD?.gastosCompartidos} /></td>
                   <td>{item.reproduccion.partos}</td><td>{item.reproduccion.destetes}</td><td>{item.sanidad.aplicaciones}</td><td>{item.sanidad.tratamientosActivos}</td>
                   <td>{item.traslados.entradas} / {item.traslados.salidas}</td>
                   <td><button className="boton-secundario compacto" type="button" onClick={() => abrirDetalle(item.finca)}>Ver</button></td>

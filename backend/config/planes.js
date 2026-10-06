@@ -16,6 +16,7 @@ const FEATURES = Object.freeze({
     BANCOS_FORRAJEROS: 'bancosForrajeros',
     LOTES: 'lotes',
     PLANES_ALIMENTACION: 'planesAlimentacion',
+    IATF_REPRODUCTIVO: 'iatfReproductivo',
     OPERACION_MULTI_FINCA: 'operacionMultiFinca'
 });
 
@@ -51,6 +52,7 @@ const planesConfig = Object.freeze({
             bancosForrajeros: true,
             lotes: true,
             planesAlimentacion: true,
+            iatfReproductivo: false,
             operacionMultiFinca: false
         }
     },
@@ -80,6 +82,7 @@ const planesConfig = Object.freeze({
             bancosForrajeros: true,
             lotes: true,
             planesAlimentacion: true,
+            iatfReproductivo: false,
             operacionMultiFinca: true
         }
     },
@@ -109,6 +112,7 @@ const planesConfig = Object.freeze({
             bancosForrajeros: true,
             lotes: true,
             planesAlimentacion: true,
+            iatfReproductivo: true,
             operacionMultiFinca: true
         }
     },
@@ -138,6 +142,7 @@ const planesConfig = Object.freeze({
             bancosForrajeros: true,
             lotes: true,
             planesAlimentacion: true,
+            iatfReproductivo: true,
             operacionMultiFinca: true
         },
         caracteristicasComerciales: {
@@ -153,6 +158,7 @@ const PLAN_MINIMO_POR_FEATURE = Object.freeze({
     configuracionEmailAvanzada: 'PREMIUM',
     reportesMultiFinca: 'PREMIUM',
     auditoriaAvanzada: 'PRO',
+    iatfReproductivo: 'PRO',
     operacionMultiFinca: 'GESTION'
 });
 

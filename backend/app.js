@@ -53,6 +53,7 @@ app.use('/api/plan-sanitario', auth, require('./routes/planSanitario'));
 app.use('/api/tratamientos-sanitarios', auth, require('./routes/tratamientoSanitarioRoutes'));
 app.use('/api/aplicaciones-sanitarias', auth, require('./routes/aplicacionSanitariaRoutes'));
 app.use('/api/reproduccion', auth, require('./routes/reproduccionRoutes'));
+app.use('/api/iatf', auth, require('./routes/iatfRoutes'));
 app.use('/api/costos', auth, require('./routes/costo'));
 app.use('/api/finanzas', auth, require('./routes/finanza'));
 app.use('/api/ventas', auth, require('./routes/ventaAnimalRoutes'));
