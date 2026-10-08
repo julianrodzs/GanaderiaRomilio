@@ -46,7 +46,10 @@ const sanitizarAnimal = (payload = {}, { crear = false } = {}) => {
 
     const internosRecibidos = Object.keys(payload).filter((campo) => CAMPOS_INTERNOS.has(campo));
     if (internosRecibidos.some((campo) => ['organizacionId', 'fincaId'].includes(campo))) {
-        throw crearErrorDto('La organización o finca de un animal solo puede cambiar mediante el flujo autorizado.', 'ANIMAL_TENANT_FIELD_NOT_ALLOWED');
+        throw crearErrorDto(
+            'Este formulario no permite cambiar la organización o la finca. Use Trasladar animales para conservar el historial.',
+            'ANIMAL_TENANT_FIELD_NOT_ALLOWED'
+        );
     }
 
     const permitidos = new Set(CAMPOS_ANIMAL_PERMITIDOS);

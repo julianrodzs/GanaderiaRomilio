@@ -59,9 +59,15 @@ const formatearFechaInput = (fecha) => {
   return new Date(fecha).toISOString().slice(0, 10);
 };
 
+const camposEditablesAnimal = (animal = {}) => Object.fromEntries(
+  Object.keys(estadoInicial)
+    .filter((campo) => Object.prototype.hasOwnProperty.call(animal, campo))
+    .map((campo) => [campo, animal[campo]])
+);
+
 const normalizarAnimal = (animal) => ({
   ...estadoInicial,
-  ...animal,
+  ...camposEditablesAnimal(animal),
   objetivoProductivo: normalizarObjetivoProductivo(animal?.objetivoProductivo) || 'SIN_DEFINIR',
   estado: animal?.estado === 'En tratamiento' ? 'Activo' : animal?.estado || 'Activo',
   padre: animal?.padre?._id || animal?.padre || '',

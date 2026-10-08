@@ -10,7 +10,8 @@ test('el DTO de animal rechaza operadores MongoDB y rutas con punto', () => {
 });
 
 test('el DTO bloquea cambios de tenant y conserva solo campos de negocio', () => {
-    assert.throws(() => sanitizarAnimal({ nombre: 'Luna', fincaId: 'otra' }), /flujo autorizado/);
+    assert.throws(() => sanitizarAnimal({ nombre: 'Luna', fincaId: 'otra' }), /Trasladar animales/);
+    assert.deepEqual(sanitizarAnimal({ diio: '1880001817986' }), { diio: '1880001817986' });
     assert.deepEqual(sanitizarAnimal({ nombre: 'Luna', __v: 2, createdAt: 'ayer' }), { nombre: 'Luna' });
     assert.deepEqual(sanitizarAnimal({ fotoPrincipal: 'archivo-inyectado' }), {});
 });
