@@ -18,6 +18,10 @@ const fincaSchema = new Schema(
         configuracionReproductiva: {
             diasGestacionBovinaGeneral: { type: Number, min: 1, default: 283 }
         },
+        imagenes: {
+            dashboard: { type: Schema.Types.ObjectId, ref: 'ArchivoMultimedia', default: null },
+            potreros: { type: Schema.Types.ObjectId, ref: 'ArchivoMultimedia', default: null }
+        },
         estado: {
             type: String,
             enum: ['Activa', 'Inactiva'],

@@ -1,48 +1,84 @@
-# PROMPT PARA CODEX: MÓDULO IATF CONFIGURABLE - PLAN PRO ($35) / PREMIUM ($60)
+                    PROTOCOLOS
+                        │
+       ┌────────────────┼────────────────┐
+       │                │                │
+      IATF          ENGORDE         PORCINOS
+       │                │                │
+       └────────────────┼────────────────┘
+                        │
+               ORQUESTAN ACCIONES
+                        │
+ ┌──────────┬───────────┼──────────┬──────────┐
+ │          │           │          │          │
+Reproducción Sanidad Inventario  Tareas    Pesajes
+ │          │           │          │          │
+ └──────────┴───────────┼──────────┴──────────┘
+                        │
+                     Animal
+                        │
+                  Bitácora general
+
+# PROMPT PARA CODEX: PROTOCOLOS PRO/PREMIUM
+# ENGORDE BOVINO + REPRODUCCIÓN PORCINA POR BANDAS
 
 Eres el Desarrollador Fullstack Senior de GanaderiaRomilio.
 
-Necesito implementar un módulo avanzado de:
+Necesito implementar dos funcionalidades avanzadas para los planes:
 
-IATF
-(Inseminación Artificial a Tiempo Fijo)
+PRO ($35)
+PREMIUM ($60)
 
-integrado al módulo de Reproducción existente.
+1. Protocolos Productivos de Engorde Bovino
+2. Protocolos Reproductivos Porcinos / Manejo por Bandas
+
+Estas funcionalidades deben integrarse con los módulos existentes.
 
 IMPORTANTE:
 
-NO implementar IATF como un único protocolo fijo.
+UN PROTOCOLO NO REEMPLAZA LOS MÓDULOS DE DOMINIO.
 
-La aplicación debe permitir trabajar con:
+El protocolo:
 
-- distintos protocolos veterinarios
-- diferentes duraciones
-- diferentes hormonas/productos
-- diferentes momentos de aplicación
-- diferentes ventanas de inseminación
-- diferentes estrategias post-IATF
-
-La aplicación:
-
-NO prescribe protocolos.
-NO recomienda hormonas.
-NO decide dosis.
-NO sustituye al veterinario.
-
-GanaderiaRomilio únicamente:
-
-- registra
 - programa
-- ejecuta
-- controla inventario
+- coordina
 - genera tareas
-- conserva trazabilidad
-- calcula resultados
+- controla cumplimiento
+- registra ejecución
+- consume insumos cuando realmente corresponde
+- conecta resultados
+- calcula indicadores
 
-del protocolo definido por el profesional responsable.
+pero los datos reales continúan perteneciendo a sus módulos.
+
+Ejemplos:
+
+Engorde
+→ utiliza Lotes
+→ utiliza Alimentación
+→ utiliza Pesajes
+→ utiliza Sanidad
+→ utiliza Tareas
+→ puede preparar una Venta
+
+Porcinos reproductivos
+→ utiliza RegistroReproductivo
+→ utiliza Camadas
+→ utiliza Sanidad
+→ utiliza Tareas
+→ utiliza Alimentación cuando corresponda
+→ utiliza Inventario
+→ utiliza IA/Monta existentes
+
+NO crear:
+
+- PesajeEngorde paralelo
+- VentaEngorde paralela
+- SanidadEngorde paralela
+- ReproduccionPorcinaProtocolo paralela
+- inventarios separados
 
 ==================================================
-1. REVISIÓN PREVIA OBLIGATORIA
+1. AUDITORÍA PREVIA
 ==================================================
 
 Antes de implementar revisar:
@@ -50,593 +86,1595 @@ Antes de implementar revisar:
 - Animal
 - Lote
 - PertenenciaLote
-- RegistroReproductivo
-- reproducción bovina actual
-- monta natural
-- inseminación convencional
-- gestación
-- partos
+- Lote.etapaOperativa
+- objetivoProductivo
+- Pesaje
+- Sanidad
+- PlanSanitario
+- TratamientoSanitario
+- AplicacionProductoAnimal / AplicacionSanitaria existente
+- Productos / Inventario
+- PlanAlimentacion
+- Racion
+- AsignacionRacionLote
+- SuministroAlimentacion
 - Tarea
-- calendario operativo
-- calendario lunar informativo
-- EventoAnimal / bitácora
-- Productos / Insumos
-- inventario disponible
-- pajuelas / semen si ya existe
-- Compras
-- Finanzas / MovimientoFinanciero
-- Usuarios
-- Roles
-- PlanService
-- planesConfig
-- FeatureGate
+- EventoAnimal
+- VentaAnimal
+- CompraAnimal
+- Finanzas
+- RegistroReproductivo
+- Camada
+- reproducción porcina actual
+- ciclos reproductivos porcinos
+- monta natural
+- inseminación
+- Usuarios/Roles
 - Organizacion
 - Finca
-- tenantContext
+- PlanService
+- FeatureGate
+- sistema IATF si ya existe
 
-NO romper ni duplicar el flujo existente.
+Si el módulo IATF ya creó infraestructura reutilizable para:
+
+- plantillas
+- versionado
+- pasos
+- cronogramas
+- ejecución programada vs real
+- tareas
+- auditoría
+
+REUTILIZARLA.
+
+No crear tres motores completamente distintos.
+
+Pero tampoco crear un "mega modelo genérico" que complique todo el sistema.
+
+Extraer únicamente la infraestructura común realmente útil.
 
 ==================================================
-2. FEATURE COMERCIAL
+2. FEATURES POR PLAN
 ==================================================
 
-Crear capacidad:
+Agregar capacidades independientes:
 
-iatfReproductivo
+protocolosEngorde
+protocolosReproductivosPorcinos
 
-Disponibilidad:
+Configuración:
 
 ESENCIAL:
-false
+false / false
 
 GESTION:
-false
+false / false
 
 PRO:
-true
+true / true
 
 PREMIUM:
-true
+true / true
 
-Backend:
+Usar:
 
-requireFeature('iatfReproductivo')
+requireFeature(...)
 
-para todos los endpoints operativos IATF.
+y PlanService.
 
-NO utilizar:
+NO:
 
-if (plan === 'PRO')
+if (plan === "PRO")
 
-Usar PlanService / capabilities existentes.
+Premium tendrá además:
 
-==================================================
-3. UBICACIÓN EN LA APP
-==================================================
-
-NO crear un módulo principal separado en el menú.
-
-Debe estar dentro de:
-
-REPRODUCCIÓN
-
-Ejemplo:
-
-Reproducción
-
-[General]
-[Gestaciones]
-[IATF]
-
-En Esencial/Gestión:
-
-mostrar IATF bloqueado:
-
-"IATF y protocolos reproductivos avanzados"
-
-"Disponible desde Plan PRO"
+- plantillas compartidas entre fincas
+- consolidado
+- comparaciones multi-finca
+- auditoría avanzada
 
 ==================================================
-4. PRINCIPIO DE ARQUITECTURA
+3. PRINCIPIO GENERAL DE PROTOCOLOS
 ==================================================
 
-Separar:
+Separar siempre:
 
-PLANTILLA DEL PROTOCOLO
+PLANTILLA
+    ↓
+EJECUCIÓN REAL
+    ↓
+RESULTADOS
 
-de:
+Una plantilla indica:
 
-CAMPAÑA / EJECUCIÓN REAL
+"qué debería ocurrir"
 
-Arquitectura:
-
-PlantillaProtocoloIATF
-        ↓
-CampanaIATF
-        ↓
-Animales
-        ↓
-Pasos ejecutados
-        ↓
-IATF
-        ↓
-Diagnósticos
-        ↓
-Resultados
-
-La plantilla describe:
-
-"qué se debe hacer"
-
-La campaña registra:
+La ejecución indica:
 
 "qué ocurrió realmente"
 
-==================================================
-5. NO USAR LOTEIATF COMO CONCEPTO PRINCIPAL
-==================================================
-
-Ya existe:
-
-Lote
-
-como grupo operativo de animales.
-
-No crear confusión usando:
-
-LoteIATF
-
-Preferir:
-
-CampanaIATF
-
-o:
-
-EjecucionProtocoloIATF
-
-Una campaña puede incluir animales provenientes de:
-
-- un Lote reproductivo
-- varios grupos
-- selección manual
-
-según permisos y validaciones.
+Nunca modificar resultados históricos cuando se edite una plantilla.
 
 ==================================================
-6. PLANTILLA DE PROTOCOLO
+4. VERSIONADO
 ==================================================
 
-Crear:
+Toda plantilla debe tener:
 
-PlantillaProtocoloIATF
+version
+
+Al iniciar una ejecución:
+
+guardar snapshot/version.
+
+Ejemplo:
+
+Protocolo Engorde v2
+
+Lote ENG-01
+→ usa v2
+
+Posteriormente:
+
+Protocolo Engorde cambia a v3
+
+ENG-01 sigue conservando v2.
+
+==================================================
+PARTE A
+PROTOCOLOS PRODUCTIVOS DE ENGORDE BOVINO
+==================================================
+
+==================================================
+5. OBJETIVO DEL PROTOCOLO DE ENGORDE
+==================================================
+
+Permitir controlar el ciclo operativo de un lote desde:
+
+RECEPCIÓN
+↓
+ADAPTACIÓN
+↓
+DESARROLLO
+↓
+ENGORDE
+↓
+FINALIZACIÓN
+↓
+LISTO PARA VENTA
+
+No necesariamente todas las fincas utilizan todas las etapas.
+
+Las etapas deben ser configurables.
+
+Reutilizar:
+
+Lote.etapaOperativa
+
+si ya contiene:
+
+INGRESO
+ADAPTACION
+DESARROLLO
+ENGORDE
+FINALIZACION
+LISTO_VENTA
+MANTENIMIENTO
+OTRA
+
+No crear un segundo estado equivalente.
+
+==================================================
+6. MODELO PLANTILLA ENGORDE
+==================================================
+
+Crear o adaptar:
+
+PlantillaProtocoloEngorde
 
 Campos conceptuales:
 
 {
   organizacion,
   finca?,
+
   nombre,
   descripcion,
 
   especie: "BOVINO",
 
   alcance:
-    SISTEMA
-    ORGANIZACION
-    FINCA,
+    FINCA
+    ORGANIZACION,
 
   activo,
 
-  diasPostpartoMinimosRecomendados?,
-  
-  escalaCondicionCorporal:
-    "1-5"
-    "1-9",
+  etapas: [...],
 
-  condicionCorporalMinima?,
-
-  pasos: [...],
+  version,
 
   creadoPor,
+
   createdAt,
   updatedAt
 }
 
-IMPORTANTE:
-
-Los criterios:
-
-diasPostpartoMinimos
-condicionCorporalMinima
-
-son criterios configurados por el usuario/veterinario.
-
-NO reglas veterinarias universales de la aplicación.
-
 ==================================================
-7. PROTOCOLOS DIFERENTES
-==================================================
-
-La arquitectura debe poder representar, por ejemplo:
-
-- protocolos P4 + estradiol
-- protocolos con eCG
-- protocolos sin eCG
-- protocolos con cipionato
-- protocolos con benzoato
-- protocolos basados en GnRH
-- CIDR / DIB
-- protocolos de 5 días
-- protocolos de 7 días
-- protocolos de 8 días
-- protocolos personalizados
-
-NO hardcodear ningún medicamento como obligatorio.
-
-==================================================
-8. PASOS DEL PROTOCOLO
-==================================================
-
-Cada plantilla contiene:
-
-PasoProtocolo
-
-Ejemplo conceptual:
-
-{
-  nombre,
-
-  offsetHorasDesdeInicio,
-
-  tipoAccion,
-
-  ventanaInicioHoras?,
-  ventanaFinHoras?,
-
-  productos: [...],
-
-  generaTarea,
-
-  rolResponsable,
-
-  instrucciones,
-
-  obligatorio
-}
-
-==================================================
-9. TIPOS DE ACCIÓN
-==================================================
-
-Soportar inicialmente:
-
-INSERTAR_DISPOSITIVO
-RETIRAR_DISPOSITIVO
-APLICAR_PRODUCTO
-IATF
-OBSERVAR_CELO
-DIAGNOSTICO_GESTACION
-RESINCRONIZACION
-MONTA_REPASO
-CONTROL
-OTRA
-
-NO hacer que todos los protocolos tengan todos los pasos.
-
-==================================================
-10. EJEMPLO PROTOCOLO P4/E2
-==================================================
-
-La aplicación debe PODER representar:
-
-Día 0
-
-Insertar dispositivo progesterona
-+
-Aplicar producto configurado
-
-Día 7
-
-Retirar dispositivo
-+
-Aplicar PGF
-+
-eCG
-+
-otro producto
-
-Día 9
-
-IATF
-
-Día 30
-
-Diagnóstico
-
-Pero esto es únicamente una plantilla posible.
-
-==================================================
-11. EJEMPLO PROTOCOLO GnRH
-==================================================
-
-También debe PODER representar:
-
-Día 0
-
-GnRH
-+
-CIDR
-
-Día 7
-
-Retiro CIDR
-+
-PGF
-
-60-66 horas después
-
-IATF
-+
-GnRH
-
-sin necesidad de:
-
-estradiol
-eCG
-cipionato
-
-Esto demuestra que el sistema no depende de medicamentos específicos.
-
-==================================================
-12. PRODUCTOS DEL PROTOCOLO
-==================================================
-
-Cada paso puede tener:
-
-productos
-
-Ejemplo:
-
-{
-  productoId,
-  dosis,
-  unidad,
-  viaAdministracion?,
-  cantidadPorAnimal,
-  observaciones
-}
-
-Usar Productos/Insumos existentes.
-
-NO crear otro inventario hormonal separado si el catálogo actual puede manejarlo.
-
-==================================================
-13. CATEGORÍAS DE INSUMO
-==================================================
-
-Preparar/usar categorías:
-
-HORMONA_REPRODUCTIVA
-DISPOSITIVO_REPRODUCTIVO
-SEMEN
-INSUMO_REPRODUCTIVO
-OTRO
-
-No convertir nombres comerciales en enums.
-
-==================================================
-14. DOSIS
-==================================================
-
-La dosis pertenece:
-
-AL PASO DEL PROTOCOLO
-
-NO al medicamento global necesariamente.
-
-Ejemplo:
-
-Producto X
-
-puede utilizarse en protocolos distintos con dosis distintas.
-
-La aplicación registra lo indicado.
-
-NO recomienda dosis.
-
-==================================================
-15. CREAR CAMPAÑA IATF
-==================================================
-
-Usuario selecciona:
-
-Nueva campaña IATF
-
-Campos:
-
-Nombre
-
-Finca
-
-Plantilla de protocolo
-
-Fecha/hora Día 0
-
-Veterinario / responsable
-
-Animales
-
-Observaciones
-
-Ejemplo:
-
-IATF Novillas Octubre 2026
-
-==================================================
-16. SELECCIÓN DE ANIMALES
-==================================================
-
-Permitir:
-
-- seleccionar Lote
-- seleccionar animales manualmente
-- filtros
-
-Filtros útiles:
-
-sexo
-categoría
-objetivoProductivo
-días posparto
-estado reproductivo
-condición corporal
-lote
-edad
-
-Solo:
-
-hembras reproductivamente compatibles.
-
-Validar reglas existentes.
-
-==================================================
-17. NO USAR >45 DÍAS COMO REGLA UNIVERSAL
-==================================================
-
-NO bloquear automáticamente:
-
-diasPostparto < 45
-
-La plantilla puede tener:
-
-diasPostpartoMinimosRecomendados
-
-Ejemplo:
-
-45
-60
-otro
-
-Si animal no cumple:
-
-mostrar advertencia:
-
-"Este animal no cumple el criterio configurado para este protocolo."
-
-El veterinario/admin decide según permisos.
-
-==================================================
-18. CONDICIÓN CORPORAL
-==================================================
-
-Al iniciar campaña permitir registrar:
-
-condicionCorporal
-
-por animal.
-
-Guardar también:
-
-escala utilizada.
-
-Ejemplo:
-
-{
-  valor: 3.5,
-  escala: "1-5"
-}
-
-No asumir siempre escala 1-5.
-
-==================================================
-19. SNAPSHOT INICIAL DEL ANIMAL
-==================================================
-
-Dentro de campaña guardar snapshot mínimo:
-
-animalId
-loteOrigen
-diasPostparto
-condicionCorporal
-estadoReproductivo
-categoria
-
-al momento de inicio.
-
-No depender únicamente del estado futuro del Animal.
-
-==================================================
-20. PARTICIPANTE IATF
-==================================================
-
-Preferir modelo:
-
-ParticipanteIATF
-
-o subdocumento bien estructurado.
-
-Campos:
-
-{
-  animal,
-  campana,
-
-  condicionCorporal,
-  escalaCC,
-
-  estadoParticipacion,
-
-  fechaInseminacion,
-
-  semenUtilizado,
-
-  tecnicoInseminador,
-
-  observaciones,
-
-  resultadoActual
-}
-
-==================================================
-21. ESTADOS DE PARTICIPACIÓN
-==================================================
-
-Separar participación de diagnóstico.
-
-Estados sugeridos:
-
-INSCRITA
-EN_PROTOCOLO
-PROTOCOLO_COMPLETADO
-INSEMINADA
-RETIRADA
-CANCELADA
-
-NO mezclar todo dentro de:
-
-PREÑADA / VACIA
-
-porque eso corresponde al resultado reproductivo.
-
-==================================================
-22. EJECUCIÓN DE PASOS
+7. EJECUCIÓN DEL PROTOCOLO
 ==================================================
 
 Crear:
 
-EjecucionPasoIATF
+CicloEngorde
 
-Debe registrar:
+o:
 
-campana
-pasoPlantilla
-fechaHoraProgramada
-fechaHoraReal
-responsable
-animalesAplicados
-productosRealmenteUtilizados
-observaciones
+EjecucionProtocoloEngorde
+
+NO crear otro Lote.
+
+Debe referenciar:
+
+lote
+
+Ejemplo:
+
+{
+  organizacion,
+  finca,
+
+  lote,
+
+  plantilla,
+  versionPlantilla,
+
+  fechaInicio,
+
+  fechaFin,
+
+  estado,
+
+  etapaActual,
+
+  creadoPor
+}
+
+Estados:
+
+PROGRAMADO
+ACTIVO
+FINALIZADO
+CANCELADO
+
+==================================================
+8. UN PROTOCOLO SE APLICA A UN LOTE
+==================================================
+
+Unidad principal:
+
+LOTE
+
+Ejemplo:
+
+ENG-2026-04
+
+No aplicar el protocolo individualmente a 40 animales como 40 procesos separados.
+
+Los animales siguen teniendo:
+
+- pesajes individuales
+- sanidad individual
+- eventos individuales
+- ventas individuales
+
+cuando corresponda.
+
+==================================================
+9. ETAPAS CONFIGURABLES
+==================================================
+
+Cada plantilla puede definir:
+
+EtapaProtocoloEngorde
+
+Ejemplo:
+
+{
+  codigo: "ADAPTACION",
+
+  nombre: "Adaptación",
+
+  orden,
+
+  descripcion,
+
+  criteriosEntrada,
+
+  criteriosSalida,
+
+  acciones,
+
+  objetivos
+}
+
+==================================================
+10. CRITERIOS DE CAMBIO DE ETAPA
+==================================================
+
+NO depender exclusivamente de días.
+
+Soportar inicialmente:
+
+TIEMPO
+PESO_PROMEDIO
+EVENTO
+MANUAL
+
+Preparar para:
+
+GMD
+
+si existe información suficiente.
+
+Ejemplos:
+
+ADAPTACIÓN:
+
+duración sugerida:
+21 días
+
+DESARROLLO → FINALIZACIÓN:
+
+pesoPromedio >= 420 kg
+
+FINALIZACIÓN → LISTO_VENTA:
+
+pesoPromedio >= 500 kg
+
+Pero son valores configurados por la finca.
+
+NO valores universales.
+
+==================================================
+11. NO CAMBIAR ETAPA SILENCIOSAMENTE
+==================================================
+
+Cuando se cumpla un criterio:
+
+mostrar:
+
+"El lote cumple el criterio para avanzar a FINALIZACIÓN."
+
+Opciones:
+
+[Avanzar etapa]
+[Mantener etapa]
+
+NO modificar automáticamente el lote salvo que en el futuro exista una configuración explícita.
+
+==================================================
+12. OBJETIVOS
+==================================================
+
+Una etapa puede tener:
+
+pesoObjetivoKg
+gmdObjetivoKgDia
+diasObjetivo
+
+Todos opcionales.
+
+Reutilizar campos existentes del Lote cuando corresponda.
+
+No duplicar objetivos innecesariamente.
+
+==================================================
+13. FASE RECEPCIÓN
+==================================================
+
+Debe poder configurar acciones como:
+
+- registrar recepción
+- pesaje inicial
+- revisión de identificación
+- asignación de ubicación
+- clasificación del lote
+- revisión sanitaria
+- tareas específicas
+- inicio de adaptación alimentaria
+
+NO hardcodear medicamentos.
+
+==================================================
+14. SANIDAD EN ENGORDE
+==================================================
+
+Si el protocolo incluye:
+
+"Aplicación sanitaria de recepción"
+
+el protocolo genera:
+
+actividad/tarea
+
+Al ejecutarla:
+
+usar Sanidad existente.
+
+Si es aplicación única:
+
+AplicacionProductoAnimal
+tipo = SANITARIA
+
+Si es tratamiento:
+
+TratamientoSanitario
+↓
+Aplicaciones correspondientes
+
+NO crear:
+
+TratamientoEngorde.
+
+==================================================
+15. MEDICAMENTOS
+==================================================
+
+El protocolo puede referenciar:
+
+producto
+dosis
+unidad
+
+configurados por veterinario/usuario autorizado.
+
+GanaderiaRomilio:
+
+NO recomienda medicamento.
+NO recomienda dosis.
+NO calcula dosis clínica.
+
+Solo ejecuta lo configurado.
+
+==================================================
+16. INVENTARIO
+==================================================
+
+Programar:
+
+NO consume inventario.
+
+Ejecutar una aplicación:
+
+SÍ consume la cantidad real.
+
+Ejemplo:
+
+30 animales programados
+
+28 tratados
+
+inventario:
+
+-28 dosis
+
+NO:
+
+-30.
+
+==================================================
+17. ADAPTACIÓN ALIMENTARIA
+==================================================
+
+Una etapa puede asignar:
+
+PlanAlimentacion
+Racion
+
+Ejemplo:
+
+Adaptación A
+↓
+Adaptación B
+↓
+Adaptación C
+↓
+Ración Engorde
+
+Pero los planes/raciones son los existentes.
+
+NO crear:
+
+RacionEngorde.
+
+==================================================
+18. ASIGNACIÓN HISTÓRICA
+==================================================
+
+Cuando cambia ración:
+
+usar:
+
+AsignacionRacionLote
+
+Cerrar asignación anterior.
+
+Crear nueva asignación.
+
+Preservar historial.
+
+==================================================
+19. ALIMENTACIÓN REAL
+==================================================
+
+El protocolo puede indicar:
+
+"Utilizar Ración Adaptación B"
+
+Pero el consumo real sigue registrándose mediante:
+
+SuministroAlimentacion.
+
+No asumir:
+
+ración planificada = alimentación consumida.
+
+==================================================
+20. NO CREAR TAREAS DIARIAS DE ALIMENTAR
+==================================================
+
+Mantener decisión actual:
+
+alimentar es operación rutinaria.
+
+NO generar:
+
+"Alimentar lote 7am"
+"Alimentar lote 12pm"
+
+todos los días.
+
+Sí generar tareas específicas:
+
+- cambiar ración
+- revisar rechazo
+- pesar lote
+- revisar adaptación
+- evaluar comederos
+- revisar condición
+- ejecutar control sanitario
+
+==================================================
+21. PESAJE
+==================================================
+
+El protocolo puede programar:
+
+Pesaje inicial
+
+Pesaje de control
+
+Pesaje final
+
+Pero debe utilizar:
+
+Pesaje
+
+existente.
+
+==================================================
+22. PESAJE GRUPAL
+==================================================
+
+Si se ejecuta:
+
+"Pesar lote ENG-01"
+
+abrir flujo de pesaje grupal ya diseñado.
+
+Crear:
+
+un Pesaje por animal.
+
+NO:
+
+PesajeLote.
+
+==================================================
+23. PESO PROMEDIO
+==================================================
+
+Calcular:
+
+peso promedio actual
+
+desde:
+
+últimos pesajes válidos.
+
+Mostrar cobertura:
+
+31 / 34 animales con peso válido.
+
+NO persistir promedio como verdad histórica.
+
+==================================================
+24. GMD
+==================================================
+
+Utilizar metodología actual de GMD.
+
+NO crear una fórmula distinta para protocolo de engorde.
+
+Mostrar:
+
+GMD lote
+cobertura
+período
+
+solo cuando exista información suficiente.
+
+==================================================
+25. RECEPCIÓN / ADAPTACIÓN / DESARROLLO
+==================================================
+
+Ejemplo de una plantilla POSIBLE:
+
+Recepción
+
+→ pesaje inicial
+→ revisión sanitaria
+→ asignación ubicación
+
+Adaptación
+
+→ ración A
+→ ración B
+→ ración C
+
+Desarrollo
+
+→ ración crecimiento
+→ pesajes periódicos
+
+Finalización
+
+→ ración finalización
+→ seguimiento objetivo de peso
+
+Listo Venta
+
+→ evaluar animales para venta
+
+Esto es un ejemplo.
+
+NO hacerlo obligatorio.
+
+==================================================
+26. VENTA
+==================================================
+
+El protocolo NO realiza ventas.
+
+Cuando animales cumplan criterios:
+
+mostrar:
+
+"Candidatos para venta"
+
+Ejemplo:
+
+17 / 34 animales alcanzaron peso objetivo.
+
+Botón:
+
+[Preparar venta]
+
+==================================================
+27. PREPARAR VENTA
+==================================================
+
+Debe abrir:
+
+módulo Ventas existente
+
+con:
+
+lote
+animales elegibles
+
+preseleccionados.
+
+Después Ventas maneja:
+
+comprador
+peso
+precio/kg
+monto
 estado
+comprobante
+finanzas
+bitácora
+Animal.estado
+
+==================================================
+28. NO MARCAR AUTOMÁTICAMENTE VENDIDO
+==================================================
+
+LISTO_VENTA
+
+NO significa:
+
+VENDIDO.
+
+La venta debe confirmarse en Ventas.
+
+==================================================
+29. MUERTES Y SALIDAS DEL LOTE
+==================================================
+
+Si un animal:
+
+muere
+se vende
+se traslada
+
+debe actualizarse pertenencia al lote mediante flujo existente.
+
+El protocolo conserva snapshot/historial.
+
+==================================================
+30. COSTOS
+==================================================
+
+Para PRO preparar:
+
+costo del ciclo de engorde.
+
+Pero utilizar solamente datos confiables existentes.
+
+Ejemplos:
+
+sanidad utilizada
+productos consumidos
+costos registrados
+otros costos específicos
+
+NO inventar:
+
+costo de alimentación
+
+si todavía no existe costo fiable por alimento/suministro.
+
+==================================================
+31. FUTURO COSTO ALIMENTACIÓN
+==================================================
+
+Preparar arquitectura para:
+
+costo alimentación
+costo/kg ganado
+costo/animal
+margen lote
+
+cuando existan:
+
+costos fiables
++
+suministros
++
+pesajes
+
+No implementar métricas falsas.
+
+==================================================
+32. NO CALCULAR CONVERSIÓN ALIMENTICIA TODAVÍA
+==================================================
+
+No implementar automáticamente:
+
+kg alimento / kg ganancia
+
+si todavía no existe metodología y calidad de datos suficientes.
+
+Dejar preparado.
+
+==================================================
+33. KPIs ENGORDE PRO
+==================================================
+
+Mostrar cuando existan datos:
+
+Animales inicio
+
+Animales actuales
+
+Peso promedio inicial
+
+Peso promedio actual
+
+Peso objetivo
+
+GMD observada
+
+Días en ciclo
+
+Etapa actual
+
+% animales que alcanzaron objetivo
+
+Cobertura pesajes
+
+Cumplimiento protocolo
+
+==================================================
+34. CUMPLIMIENTO PROTOCOLO
+==================================================
+
+Ejemplo:
+
+Actividades programadas:
+12
+
+Realizadas:
+10
+
+Omitidas:
+1
+
+Pendientes:
+1
+
+Cumplimiento:
+según metodología definida.
+
+No mezclar esto con productividad.
+
+==================================================
+35. DASHBOARD CICLO ENGORDE
+==================================================
+
+Ejemplo:
+
+ENG-04
+
+Etapa:
+FINALIZACIÓN
+
+Animales:
+34
+
+Peso inicial:
+351 kg
+
+Peso actual:
+462 kg
+
+Objetivo:
+500 kg
+
+GMD:
+0.84 kg/día
+
+Días:
+132
+
+Cobertura peso:
+31/34
+
+Próxima actividad:
+Pesaje de control
+
+==================================================
+36. PREMIUM ENGORDE
+==================================================
+
+Premium puede tener:
+
+plantillas alcance ORGANIZACION.
+
+Ejemplo:
+
+"Protocolo corporativo Engorde v4"
+
+utilizado por:
+
+Finca Norte
+Finca Sur
+Finca El Roble
+
+==================================================
+37. PREMIUM CONSOLIDADO
+==================================================
+
+Mostrar:
+
+Finca
+Lotes activos
+Animales
+Peso promedio
+GMD
+Días promedio
+Lotes listos venta
+Cumplimiento
+
+NO hacer promedio simple de métricas cuando no corresponda.
+
+==================================================
+38. DRILL DOWN
+==================================================
+
+Premium:
+
+Organización
+↓
+Finca
+↓
+Ciclo de engorde
+↓
+Lote
+↓
+Animal
+
+==================================================
+PARTE B
+PROTOCOLOS REPRODUCTIVOS PORCINOS
+==================================================
+
+==================================================
+39. OBJETIVO
+==================================================
+
+Implementar manejo reproductivo porcino estructurado por:
+
+CICLOS
++
+BANDAS
+
+Ejemplo:
+
+Banda Octubre A
+
+20 cerdas
+
+Destete
+↓
+Celo
+↓
+Servicio / IA
+↓
+Control retorno
+↓
+Diagnóstico
+↓
+Gestación
+↓
+Preparto
+↓
+Parto
+↓
+Destete
+↓
+Nuevo ciclo
+
+==================================================
+40. NO REEMPLAZAR REGISTRO REPRODUCTIVO
+==================================================
+
+Ya existe:
+
+RegistroReproductivo
+
+Debe seguir siendo fuente de verdad del ciclo individual de cada cerda.
+
+El protocolo/banda:
+
+COORDINA varios RegistroReproductivo.
+
+NO crear una reproducción paralela.
+
+==================================================
+41. MODELO PLANTILLA PORCINA
+==================================================
+
+Crear/adaptar:
+
+PlantillaProtocoloReproductivoPorcino
+
+Campos:
+
+{
+  organizacion,
+  finca?,
+
+  nombre,
+  descripcion,
+
+  especie: "PORCINO",
+
+  alcance:
+    FINCA
+    ORGANIZACION,
+
+  pasos,
+
+  version,
+
+  activo,
+
+  creadoPor
+}
+
+==================================================
+42. BANDA REPRODUCTIVA
+==================================================
+
+Crear:
+
+BandaReproductivaPorcina
+
+Campos conceptuales:
+
+{
+  organizacion,
+  finca,
+
+  nombre,
+
+  plantilla,
+  versionPlantilla,
+
+  fechaInicio,
+
+  animales,
+
+  estado,
+
+  createdBy
+}
+
+Estados:
+
+PROGRAMADA
+ACTIVA
+GESTACION
+PARTOS
+FINALIZADA
+CANCELADA
+
+No sustituye el ciclo individual.
+
+==================================================
+43. PARTICIPANTES
+==================================================
+
+Cada cerda de la banda debe referenciar su:
+
+RegistroReproductivo
+
+cuando exista.
+
+Guardar snapshot inicial mínimo:
+
+animal
+estado reproductivo
+paridad
+fechaUltimoParto
+fechaDestete
+condicionCorporal si existe
+lote
+
+==================================================
+44. PASOS CONFIGURABLES
+==================================================
+
+Soportar acciones:
+
+DESTETE
+OBSERVAR_CELO
+SERVICIO
+INSEMINACION
+TRATAMIENTO_REPRODUCTIVO
+DIAGNOSTICO_GESTACION
+CONTROL_REPETICION
+PREPARTO
+TRASLADO_MATERNIDAD
+PARTO
+DESTETE_CAMADA
+CONTROL
+OTRA
+
+No exigir que todas las plantillas tengan todos.
+
+==================================================
+45. NO HARDCODEAR DÍAS UNIVERSALES
+==================================================
+
+Los tiempos deben pertenecer a la plantilla.
+
+Ejemplo:
+
+Destete
+↓
+X días/horas
+↓
+control celo
+
+Servicio
+↓
+21 días aprox.
+↓
+control repetidora
+
+Pero:
+
+NO asumir que todas las granjas usan exactamente las mismas ventanas.
+
+==================================================
+46. REGLAS ACTUALES DEL CLIENTE
+==================================================
+
+Si actualmente GanaderiaRomilio ya tiene reglas porcinas configuradas, por ejemplo:
+
+- control de celo
+- diagnóstico
+- preparto
+- parto
+- destete
+- nuevo servicio
+
+REUTILIZARLAS o migrarlas a una plantilla.
+
+NO duplicar tareas.
+
+==================================================
+47. FECHA REAL MANDA
+==================================================
+
+Si:
+
+parto estimado:
+10 enero
+
+parto real:
+8 enero
+
+todas las actividades dependientes del PARTO REAL deben recalcularse desde:
+
+8 enero
+
+No desde estimación anterior.
+
+==================================================
+48. DEPENDENCIAS
+==================================================
+
+Permitir pasos relativos a:
+
+INICIO
+DESTETE
+SERVICIO
+IA
+PARTO_ESTIMADO
+PARTO_REAL
+DESTETE_REAL
+OTRO_PASO
+
+Ejemplo:
+
+Destete camada
+=
+31 días después de parto real
+
+si esa finca lo configura.
+
+==================================================
+49. SERVICIO
+==================================================
+
+Soportar:
+
+MONTA_NATURAL
+IA_CONVENCIONAL
+IA_PROGRAMADA
+OTRO
+
+No asumir inseminación para todas las granjas.
+
+==================================================
+50. MONTA NATURAL
+==================================================
+
+Si servicio es natural:
+
+usar flujo reproductivo existente.
+
+Registrar:
+
+verraco
+fecha
+responsable
+observaciones
+
+==================================================
+51. INSEMINACIÓN
+==================================================
+
+Si se utiliza IA:
+
+usar flujo actual de inseminación.
+
+Registrar cuando corresponda:
+
+semen
+verraco
+lote semen
+fecha/hora
+técnico
+
+y descontar inventario real.
+
+==================================================
+52. IATF PORCINA / IA PROGRAMADA
+==================================================
+
+La arquitectura debe permitir en el futuro:
+
+protocolos de IA a tiempo fijo porcina
+
+sin hardcodear hormonas.
+
+Puede usar:
+
+pasos
+productos
+horas
+IA
+
+de forma similar al motor IATF bovino.
+
+Pero GanaderiaRomilio:
+
+NO prescribe tratamientos reproductivos.
+
+==================================================
+53. PRODUCTOS REPRODUCTIVOS
+==================================================
+
+Si un protocolo porcino utiliza:
+
+producto hormonal
+vitamina
+otro insumo
+
+registrar mediante:
+
+AplicacionProductoAnimal
+
+con categoría adecuada.
+
+Ejemplo:
+
+REPRODUCTIVA
+
+NO marcar automáticamente como:
+
+TratamientoSanitario.
+
+==================================================
+54. SANIDAD PORCINA
+==================================================
+
+Si el protocolo contiene una actividad realmente sanitaria:
+
+vacunación
+desparasitación
+tratamiento
+
+usar Sanidad existente.
+
+==================================================
+55. UNA APLICACIÓN NO ES SIEMPRE UN TRATAMIENTO
+==================================================
+
+Mantener distinción:
+
+AplicacionProductoAnimal
+
+vs
+
+TratamientoSanitario
+
+Ejemplo:
+
+una aplicación reproductiva:
+AplicacionProductoAnimal
+categoria REPRODUCTIVA
+
+Un tratamiento clínico:
+TratamientoSanitario
+↓
+Aplicaciones
+
+==================================================
+56. INVENTARIO
+==================================================
+
+Programación:
+
+NO consume.
+
+Aplicación real:
+
+consume.
+
+IA real:
+
+consume semen.
+
+No descontar producto porque existe una tarea futura.
+
+==================================================
+57. CONTROL DE REPETIDORA
+==================================================
+
+Permitir paso:
+
+CONTROL_REPETICION
+
+Si se observa celo:
+
+registrar:
+
+retornoCelo = true
+fecha
+observaciones
+
+NO marcar automáticamente:
+
+VACIA
+
+si no existe diagnóstico.
+
+==================================================
+58. DIAGNÓSTICO
+==================================================
+
+Usar reproducción existente.
+
+Resultados:
+
+PREÑADA
+VACIA
+DUDOSA
+
+o equivalentes actuales.
+
+No crear diagnóstico paralelo.
+
+==================================================
+59. CERDA NO PREÑADA
+==================================================
+
+Si resulta VACIA:
+
+permitir:
+
+nuevo servicio
+nueva IA
+resincronización
+cerrar ciclo
+otro
+
+No decidir automáticamente.
+
+==================================================
+60. NUEVO CICLO
+==================================================
+
+Si comienza un nuevo intento:
+
+cerrar correctamente ciclo anterior.
+
+Mantener:
+
+estadoCiclo
+fechaCierre
+motivoCierre
+activoParaAlertas
+
+según modelo actual.
+
+==================================================
+61. PREPARTO
+==================================================
+
+El protocolo puede programar:
+
+preparar maternidad
+traslado
+revisión
+alimentación específica
+actividad sanitaria configurada
+
+Pero reutilizar módulos existentes.
+
+==================================================
+62. ALIMENTACIÓN EN PREPARTO
+==================================================
+
+Si corresponde cambiar ración:
+
+usar:
+
+PlanAlimentacion
+Racion
+AsignacionRacionLote
+
+NO crear:
+
+RacionCerdaPreparto paralela.
+
+==================================================
+63. PARTO
+==================================================
+
+Cuando ocurre:
+
+PARTO REAL
+
+usar flujo existente.
+
+Debe poder crear/actualizar:
+
+Camada
+
+Registrar datos existentes como:
+
+nacidos
+nacidos vivos
+muertos
+otros indicadores actuales
+
+NO duplicar Camada.
+
+==================================================
+64. CAMADA
+==================================================
+
+Banda reproductiva:
+
+puede contener múltiples cerdas.
+
+Cada parto:
+
+genera su propia Camada.
+
+No crear una camada única para toda la banda.
+
+==================================================
+65. ACTIVIDADES DE LECHONES
+==================================================
+
+La plantilla puede contener pasos dependientes del parto:
+
+ejemplo:
+
+Día +X
+actividad sanitaria
+
+Día +Y
+iniciar alimento
+
+Día +Z
+destete
+
+Pero TODOS los tiempos son configurables.
+
+==================================================
+66. REGLAS EXISTENTES DE LECHONES
+==================================================
+
+Si actualmente existen automatizaciones específicas para:
+
+hierro
+vitaminización
+desparasitación
+circovirus
+alimento iniciador
+desarrollo
+engorde
+
+NO duplicarlas.
+
+Integrarlas mediante protocolo o reutilizar generadores actuales.
+
+==================================================
+67. MEDICAMENTOS DE LECHONES
+==================================================
+
+Si una actividad implica aplicación:
+
+usar:
+
+AplicacionProductoAnimal
+
+si los lechones están individualizados.
+
+Si el sistema maneja la Camada como unidad en ese momento:
+
+utilizar arquitectura actual.
+
+No crear identificaciones artificiales solamente para el protocolo.
+
+==================================================
+68. DESTETE
+==================================================
+
+Usar:
+
+fechaDesteteReal
+
+cuando se realiza.
+
+No mantener como definitiva únicamente:
+
+fecha estimada.
+
+Actualizar ciclo reproductivo de la madre.
+
+==================================================
+69. DESPUÉS DEL DESTETE
+==================================================
+
+La plantilla puede iniciar:
+
+nuevo ciclo reproductivo
+
+o:
+
+programar evaluación para próximo servicio.
+
+No crear automáticamente servicio real.
+
+==================================================
+70. TAREAS
+==================================================
+
+Generar tareas por actividad de banda.
+
+Ejemplo:
+
+"Control celo - Banda Octubre A"
+
+NO:
+
+20 tareas idénticas
+
+si puede gestionarse en una sola actividad con lista de animales.
+
+==================================================
+71. TAREAS INDIVIDUALES
+==================================================
+
+Cuando exista una excepción individual:
+
+Cerda 104
+requiere revisión
+
+sí puede generarse tarea individual.
+
+==================================================
+72. PROGRAMADO VS REAL
+==================================================
+
+Cada paso:
+
+Programado
+Real
+Responsable
+Estado
 
 Estados:
 
@@ -647,1890 +1685,939 @@ OMITIDO
 CANCELADO
 
 ==================================================
-23. PLANIFICADO ≠ EJECUTADO
+73. ANIMALES CON DIFERENTE RESULTADO
 ==================================================
 
-Muy importante:
+Una banda puede comenzar:
 
-crear CampanaIATF
+20 cerdas
 
-NO significa que los medicamentos ya fueron utilizados.
+Después:
 
-El inventario NO debe descontarse simplemente por programar.
+17 preñadas
+3 vacías
 
-Descontar al:
+La banda continúa.
 
-EJECUTAR EL PASO
+Las 3 vacías pueden:
 
-según cantidades realmente utilizadas.
+salir del flujo
+repetir servicio
+entrar otra banda
 
-==================================================
-24. RESERVA OPCIONAL
-==================================================
-
-Si inventario ya permite reservas:
-
-se puede reservar insumo al programar.
-
-Pero:
-
-RESERVADO
-≠
-CONSUMIDO
-
-Si no existe reserva:
-
-no implementarla únicamente por IATF.
+No obligar a toda la banda a permanecer sincronizada.
 
 ==================================================
-25. TAREAS AUTOMÁTICAS
+74. MÉTRICAS PORCINAS
 ==================================================
 
-Cuando se crea campaña:
+Reutilizar reportes existentes cuando sea posible.
 
-generar Tareas según:
+Mostrar por banda:
 
-pasos.generaTarea = true
+Hembras iniciales
+Servidas
+Preñadas
+Vacías
+Partos
+Camadas
+Nacidos
+Nacidos vivos
+Destetados
+
+==================================================
+75. DENOMINADORES EXPLÍCITOS
+==================================================
+
+No mostrar porcentajes ambiguos.
 
 Ejemplo:
 
-Retirar dispositivos
-Aplicar protocolo Día 7
-Realizar IATF
-Diagnóstico
+Preñez:
 
-NO hardcodear:
+17 preñadas
+/
+20 servidas
 
-Día 7
-Día 9
-Día 30
-
-Las fechas salen de:
-
-offsetHorasDesdeInicio
-
-de la plantilla.
-
-==================================================
-26. UNA TAREA POR ACTIVIDAD DE CAMPAÑA
-==================================================
-
-No crear:
-
-30 tareas idénticas
-
-si hay 30 vacas.
-
-Crear:
-
-"Retiro de dispositivos - IATF Octubre"
-
-y dentro:
-
-30 animales.
-
-Reutilizar Tarea existente.
-
-==================================================
-27. ASIGNACIÓN
-==================================================
-
-Tareas pueden asignarse a:
-
-Veterinario
-Encargado
-Trabajador autorizado
-
-según rol configurado en paso.
-
-==================================================
-28. VENTANAS HORARIAS
-==================================================
-
-IATF puede depender de:
-
-horas desde retiro.
-
-Por eso soportar:
-
-ventanaInicioHoras
-ventanaFinHoras
-
-Ejemplo:
-
-IATF:
-
-48h
-a
-56h
-
-después de determinado evento.
-
-Si la plantilla lo configura.
-
-==================================================
-29. DEPENDENCIA ENTRE PASOS
-==================================================
-
-Además de offset desde Día 0:
-
-preparar capacidad para:
-
-paso relativo a otro paso.
-
-Ejemplo:
-
-IATF
 =
-52 horas después de RETIRO_DISPOSITIVO
+85 %
 
-Esto es preferible para protocolos sensibles a ejecución real.
+Si alguna no fue servida:
 
-Modelo posible:
-
-referenciaTemporal:
-
-DESDE_INICIO
-DESDE_PASO
-
-pasoReferenciaId
-offsetHoras
+NO usarla en denominador incorrecto.
 
 ==================================================
-30. REPROGRAMACIÓN
+76. TASA DE PARTOS
 ==================================================
 
-Si un paso crítico ocurrió tarde:
+Si se implementa:
 
-permitir recalcular pasos dependientes.
+partos
+/
+hembras servidas elegibles
 
-NO modificar silenciosamente.
+según metodología ya utilizada por reportes.
 
-Mostrar:
-
-"El retiro se registró 4 horas después de lo programado."
-
-"Existen actividades dependientes."
-
-[Recalcular]
-[Mantener fechas]
-
-Solo usuarios autorizados.
+No inventar fórmula diferente dentro del protocolo.
 
 ==================================================
-31. DISPOSITIVOS P4 / CIDR / DIB
+77. INTERVALO DESTETE-SERVICIO
 ==================================================
 
-NO tratar necesariamente:
+Calcular desde fechas reales:
 
-dispositivo insertado
-=
-inventario consumido permanentemente.
+fechaServicio
+-
+fechaDestete
 
-Preparar soporte para:
-
-DESECHABLE
-REUTILIZABLE_CONTROLADO
-
-según configuración del producto.
+cuando existan.
 
 ==================================================
-32. ESTADO DE DISPOSITIVO
-==================================================
-
-Si inventario permite unidades individuales:
-
-DISPONIBLE
-EN_USO
-RETIRADO
-DESCARTADO
-
-Opcional:
-
-numeroUsos
-
-NO habilitar reutilización automáticamente.
-
-Debe depender de:
-
-configuración del producto
-y decisión autorizada.
-
-==================================================
-33. PRODUCTOS HORMONALES
-==================================================
-
-Al ejecutar:
-
-APLICAR_PRODUCTO
-
-registrar:
-
-producto
-lote
-vencimiento si existe
-dosis por animal
-cantidad total utilizada
-responsable
-
-y descontar inventario real.
-
-==================================================
-34. PAJUELAS / SEMEN
-==================================================
-
-En el paso IATF:
-
-por cada animal inseminado registrar:
-
-pajuelaSemenId
-toro
-codigoToro
-raza
-loteSemen
-tipoSemen
-tecnico
-fechaHoraReal
-
-==================================================
-35. SEMEN
-==================================================
-
-Tipos preparados:
-
-CONVENCIONAL
-SEXADO
-OTRO
-
-No asumir mismos resultados o protocolo.
-
-==================================================
-36. DESCUENTO DE SEMEN
-==================================================
-
-Descontar:
-
-1 pajuela
-
-solamente cuando:
-
-inseminación realmente realizada.
-
-Si animal programado no fue inseminado:
-
-NO descontar.
-
-==================================================
-37. INSEMINADAS VS INSCRITAS
-==================================================
-
-Registrar por separado:
-
-animalesInscritos
-animalesQueCompletaron
-animalesInseminados
-
-Esto es crucial para métricas.
-
-==================================================
-38. ESTADO REPRODUCTIVO DEL ANIMAL
-==================================================
-
-Al ejecutar IATF:
-
-integrarse con flujo existente.
-
-Actualizar equivalente a:
-
-INSEMINADA
-
-con:
-
-tipoInseminacion = IATF
-
-No crear estado completamente paralelo si reproducción actual ya soporta IA.
-
-==================================================
-39. NO ROMPER IA CONVENCIONAL
-==================================================
-
-Debe seguir existiendo:
-
-Monta natural
-
-IA convencional
-
-IATF
-
-como vías reproductivas distintas dentro del mismo historial.
-
-==================================================
-40. OBSERVACIÓN DE CELO REPETIDOR
-==================================================
-
-Debe ser:
-
-PASO OPCIONAL.
-
-Una plantilla puede incluir:
-
-OBSERVAR_CELO
-
-aprox. 18-24 días post IATF
-
-pero NO todas las campañas deben tenerlo.
-
-==================================================
-41. REPETIDORA NO = VACÍA CONFIRMADA
-==================================================
-
-Si se observa celo:
-
-registrar:
-
-retornoCeloObservado = true
-
-fecha
-
-observaciones
-
-Puede mostrar:
-
-"Posible no preñez"
-
-NO cambiar automáticamente:
-
-resultadoDiagnostico = VACIA
-
-==================================================
-42. MONTA DE REPASO
-==================================================
-
-Otra plantilla/estrategia puede indicar:
-
-MONTA_REPASO
-
-por ejemplo después de IATF.
-
-Permitir relacionar:
-
-toro de repaso
-fecha inicio
-fecha fin
-
-Reutilizar reproducción/monta natural existente.
-
-==================================================
-43. DIAGNÓSTICO DE GESTACIÓN
-==================================================
-
-No limitar diagnóstico a:
-
-Ecografía D30-35
-
-Crear:
-
-DiagnosticoGestacion
-
-o reutilizar modelo existente.
-
-Campos:
-
-animal
-campanaIATF
-fecha
-metodo
-resultado
-responsable
-observaciones
-
-==================================================
-44. MÉTODOS
-==================================================
-
-Soportar:
-
-ECOGRAFIA
-PALPACION
-PAG
-OTRO
-
-No asumir que todos se realizan en el mismo día.
-
-==================================================
-45. RESULTADOS
-==================================================
-
-Resultado:
-
-PREÑADA
-VACIA
-DUDOSA
-
-Opcional:
-
-REQUIERE_RECONFIRMACION
-
-==================================================
-46. DIAGNÓSTICOS MÚLTIPLES
+78. REPETIDORAS
 ==================================================
 
 Permitir:
 
-D32
-Ecografía
-Preñada
+cantidad
+porcentaje
 
-D60
-Reconfirmación
-Preñada
+con denominador explícito.
 
-No sobrescribir diagnóstico anterior.
+No diagnosticar causa.
 
 ==================================================
-47. MÉTRICA PRINCIPAL
+79. CAMADAS
 ==================================================
 
-Usar nombre:
-
-PREÑEZ A IATF
-(P/AI)
-
-Preferible a:
-
-"Tasa de concepción"
-
-Cálculo:
-
-animalesPreñados
-/
-animalesRealmenteInseminados
-*
-100
-
-==================================================
-48. NO USAR INSCRITOS COMO DENOMINADOR
-==================================================
+Reutilizar métricas actuales de Camadas.
 
 Ejemplo:
 
-34 inscritas
-31 completaron
-30 inseminadas
-18 preñadas
+nacidos totales
+nacidos vivos
+destetados
 
-P/AI:
-
-18 / 30
-=
-60 %
-
-NO:
-
-18 / 34
+No recalcular diferente dentro de Banda.
 
 ==================================================
-49. MOSTRAR EMBUDO
+80. ECONOMÍA POR CAMADA
 ==================================================
 
-En campaña mostrar:
+Si ya existe reporte:
 
-Inscritas:
-34
+economía por camada
 
-Completaron protocolo:
-31
+REUTILIZARLO.
 
-Inseminadas:
-30
-
-Preñadas D32:
-18
-
-P/AI:
-60 %
+No duplicar modelo económico.
 
 ==================================================
-50. MÉTRICAS POR FECHA DE DIAGNÓSTICO
+81. COSTO DEL PROTOCOLO PORCINO
 ==================================================
 
-Si existe:
+PRO puede acumular:
 
-D32
-18 preñadas
-
-y:
-
-D60
-17 preñadas
-
-mostrar ambas.
-
-No reemplazar silenciosamente el resultado temprano.
-
-==================================================
-51. PÉRDIDA GESTACIONAL
-==================================================
-
-Preparar futura métrica:
-
-pérdida entre diagnóstico temprano y reconfirmación.
-
-No llamarla automáticamente:
-
-muerte embrionaria
-
-sin diagnóstico profesional.
-
-==================================================
-52. COSTOS REALES
-==================================================
-
-NO pedir simplemente:
-
-costoHormonas manual
-
-si podemos obtener costo desde insumos utilizados.
-
-Calcular usando snapshots:
-
-cantidad utilizada
-x
-costo unitario al momento
-
-más:
-
+productos utilizados
 semen
-honorarios
-otros costos.
+servicios/honorarios
+otros costos
+
+si existen datos confiables.
+
+Mostrar:
+
+costo banda
+
+Opcionalmente:
+
+costo/preñez
+costo/camada
+
+solo si metodología y datos son correctos.
 
 ==================================================
-53. SNAPSHOT DE COSTOS
+82. NO DOBLE CONTABILIDAD
 ==================================================
 
-Guardar:
+Producto comprado:
 
-costoUnitarioSnapshot
+ya pudo generar egreso.
 
-al ejecutar.
+Su uso en protocolo:
 
-Si precio del producto cambia posteriormente:
+sirve para costeo productivo.
 
-el costo histórico no cambia.
-
-==================================================
-54. HONORARIOS
-==================================================
-
-Permitir registrar:
-
-costoVeterinario
-costoInseminador
-otrosCostos
-
-por campaña.
-
-No obligar.
+NO crear otro egreso financiero al consumirlo.
 
 ==================================================
-55. COSTO TOTAL
+83. VISTA PORCINA
 ==================================================
 
-Costo campaña:
+Dentro de:
 
-hormonas
-+
-dispositivos consumidos
-+
-semen utilizado
-+
-honorarios
-+
-otros
+Reproducción → Porcinos
 
-==================================================
-56. COSTO POR PREÑEZ
-==================================================
+agregar:
 
-Costo por preñez:
-
-costoTotalCampana
-/
-preñadasConfirmadas
-
-Mostrar según diagnóstico seleccionado.
-
-Ejemplo:
-
-Costo/preñez D32
-
-Costo/preñez D60
-
-si existen ambos.
-
-==================================================
-57. INVENTARIO Y COSTOS
-==================================================
-
-No duplicar movimientos financieros.
-
-Utilizar:
-
-Productos
-Compras
-Finanzas
-
-cuando exista asociación confiable.
-
-No inventar costo de un producto sin costo conocido.
-
-==================================================
-58. ANIMAL PREÑADO
-==================================================
-
-Cuando resultado:
-
-PREÑADA
-
-integrarse con:
-
-RegistroReproductivo
-Gestación
-línea de tiempo existente
-
-No crear una segunda gestación paralela.
-
-==================================================
-59. FECHA PROBABLE DE PARTO
-==================================================
-
-NO hardcodear:
-
-IATF + 283 días
-
-para todas las razas.
-
-Usar servicio existente de:
-
-duracionGestacionEstimada
-
-si existe.
-
-Debe poder considerar:
-
-- configuración de finca
-- raza madre
-- raza/toro
-- valor configurado
-
-Fallback:
-
-valor configurable general
-
-pero NO una verdad universal rígida.
-
-==================================================
-60. BRAHMAN / BOS INDICUS
-==================================================
-
-La arquitectura debe permitir gestaciones esperadas distintas de:
-
-283 días.
-
-No meter:
-
-if Brahman = X
-
-directamente en componentes.
-
-Centralizar en servicio/configuración reproductiva.
-
-==================================================
-61. NO GENERAR FECHA DE SECADO
-==================================================
-
-GanaderiaRomilio está enfocada en:
-
-carne / cría
-
-NO producción lechera.
-
-Eliminar del flujo IATF:
-
-fecha esperada de secado.
-
-==================================================
-62. DESTETE
-==================================================
-
-Después de PREÑADA:
-
-puede existir una PROYECCIÓN de parto.
-
-Pero el destete definitivo debe calcularse desde:
-
-PARTO REAL
-
-según regla configurada de finca.
-
-No:
-
-IATF + gestación + destete fijo
-
-como fecha definitiva.
-
-==================================================
-63. CELO POSPARTO
-==================================================
-
-Igual:
-
-calcular después de:
-
-fechaPartoReal
-
-usando regla existente/configurable.
-
-No crear fecha definitiva desde IATF.
-
-==================================================
-64. ANIMAL VACÍO
-==================================================
-
-Resultado:
-
-VACIA
-
-NO decidir automáticamente qué hacer.
-
-Mostrar opciones:
-
-Resincronizar
-Monta de repaso
-IA convencional
-Esperar
-Otra
-
-==================================================
-65. RESINCRONIZACIÓN
-==================================================
-
-Si usuario selecciona:
-
-Re-IATF
-
-crear nueva CampanaIATF o participación en campaña posterior.
-
-Relacionar:
-
-campanaAnterior
-
-para trazabilidad.
-
-==================================================
-66. NO MODIFICAR PROTOCOLO ORIGINAL
-==================================================
-
-Una Re-IATF:
-
-NO cambia la campaña anterior.
-
-Historial:
-
-IATF 1
-→ vacía
-
-IATF 2
-→ preñada
-
-==================================================
-67. KPI DE RESINCRONIZACIÓN FUTURO
-==================================================
-
-Preparar para:
-
-preñez acumulada
-
-Ejemplo:
-
-Primera IATF:
-60 %
-
-Después Re-IATF:
-+20 %
-
-Preñez acumulada:
-80 %
-
-No implementar fórmula si todavía no existe metodología consolidada.
-
-==================================================
-68. TORO DE REPASO
-==================================================
-
-Si se usa:
-
-registrar mediante flujo existente de monta.
-
-Relacionar opcionalmente:
-
-campanaIATFOrigen.
-
-Esto permitirá diferenciar:
-
-preñez por IATF
-vs
-preñez posterior por toro
-
-cuando sea posible.
-
-==================================================
-69. NO ATRIBUIR PREÑEZ INCORRECTAMENTE
-==================================================
-
-Si hubo:
-
-IATF
-+
-toro de repaso
-
-y no existe diagnóstico que permita atribución:
-
-NO afirmar que la gestación fue causada por IATF.
-
-Preparar campo:
-
-origenGestacion:
-
-IATF
-MONTA_NATURAL
-IA_CONVENCIONAL
-INDETERMINADO
-
-==================================================
-70. PLANTILLAS INICIALES
-==================================================
-
-Podemos incluir plantillas de EJEMPLO, pero no como recomendación veterinaria.
-
-Ejemplos:
-
-IATF P4/E2 7 días
-IATF P4/E2 8 días
-7-Day CO-Synch + CIDR
-Protocolo personalizado
-
-IMPORTANTE:
-
-si no existe información suficientemente validada en el proyecto para dosis:
-
-NO precargar dosis médicas inventadas.
-
-Preferir plantilla estructural sin dosis
-o exigir configuración veterinaria.
-
-==================================================
-71. PLANTILLAS PERSONALIZADAS
-==================================================
-
-Admin/Veterinario autorizado puede:
-
-Duplicar plantilla
-
-Editar:
-
-pasos
-tiempos
-productos
-dosis
-roles
-tareas
-
-No modificar campañas históricas ya iniciadas.
-
-==================================================
-72. VERSIONADO DE PLANTILLA
-==================================================
-
-Cuando inicia campaña:
-
-guardar snapshot/version de plantilla.
-
-Si mañana se edita:
-
-no cambiar campaña antigua.
-
-Ejemplo:
-
-Plantilla versión 3
-
-Campaña Octubre
-→ mantiene versión 3
-
-Plantilla actual:
-versión 4
-
-==================================================
-73. PERMISOS
-==================================================
-
-Administrador:
-
-gestionar campañas
-plantillas
-resultados
-
-Veterinario:
-
-crear/configurar protocolo
-ejecutar pasos
-registrar diagnósticos
-IATF
-
-Encargado:
-
-ver campañas
-ejecutar actividades permitidas
-
-Trabajador:
-
-ver/ejecutar tareas asignadas
-NO cambiar dosis/protocolo salvo permiso
-
-Adaptar a permisos actuales.
-
-==================================================
-74. CALENDARIO OPERATIVO
-==================================================
-
-Todas las tareas IATF deben aparecer en:
-
-Calendario Operativo
-
-Ejemplo:
-
-8 oct
-IATF Octubre
-Retiro dispositivo
-34 animales
-
-10 oct
-IATF
-30 animales
-
-31 oct
-Diagnóstico
-
-==================================================
-75. CALENDARIO LUNAR
-==================================================
-
-Como reproducción ya soporta información lunar:
-
-mostrar fase lunar junto a fechas si feature/configuración está activa.
-
-Solo informativo.
-
-NO modificar protocolos según luna.
-
-==================================================
-76. VISTA PRINCIPAL IATF
-==================================================
-
-Ruta:
-
-/reproduccion/iatf
-
-Tabs sugeridos:
-
-[Campañas]
+[Individual]
+[Bandas]
 [Protocolos]
 
-No crear demasiadas pestañas.
+o adaptar navegación existente.
+
+No crear nuevo módulo principal.
 
 ==================================================
-77. LISTADO DE CAMPAÑAS
+84. LISTA DE BANDAS
 ==================================================
 
 Mostrar:
 
-Nombre
+Banda
 Finca
 Protocolo
-Inicio
-Animales
-Inseminadas
+Fecha inicio
+Hembras
+Servidas
 Preñadas
-P/AI
+Partos
 Estado
 
-Estados:
-
-PROGRAMADA
-EN_CURSO
-DIAGNOSTICO
-FINALIZADA
-CANCELADA
-
 ==================================================
-78. DETALLE DE CAMPAÑA
+85. DETALLE BANDA
 ==================================================
 
-Encabezado:
+Ejemplo:
 
-IATF Octubre 2026
+BANDA OCTUBRE A
 
-Protocolo:
-P4/E2 7 días
-
-Finca:
-El Roble
-
-Responsable:
-...
+20 hembras
 
 Estado:
-En curso
+Gestación
+
+CRONOGRAMA
+
+✓ Destete
+✓ Servicio
+✓ Control
+✓ Diagnóstico
+○ Preparto
+○ Partos
+○ Destete
 
 ==================================================
-79. LÍNEA DE TIEMPO
+86. TABLA DE CERDAS
 ==================================================
-
-Mostrar:
-
-Día 0
-✓ Inicio
-
-Día 7
-✓ Retiro
-
-Día 9
-● IATF
-
-Día 30
-○ Diagnóstico
-
-Pero usar fechas/horas reales de la plantilla.
-
-No asumir siempre esos días.
-
-==================================================
-80. PROGRAMADO VS REAL
-==================================================
-
-Cada paso debe mostrar:
-
-Programado:
-10 oct 08:00
-
-Real:
-10 oct 09:17
-
-Diferencia:
-+1h17
-
-Esto aporta trazabilidad.
-
-==================================================
-81. ANIMALES DE CAMPAÑA
-==================================================
-
-Tabla:
 
 Animal
-DIIO
-CC
-Estado protocolo
-IATF
-Semen
+Paridad
+Destete
+Servicio
+Método
 Resultado
-Último diagnóstico
-
-Permitir operación masiva.
+Parto esperado
+Parto real
+Camada
+Estado
 
 ==================================================
-82. EJECUCIÓN MASIVA
+87. OPERACIONES MASIVAS
 ==================================================
+
+Permitir:
+
+Registrar servicio
+
+Registrar IA
+
+Registrar diagnóstico
+
+Registrar actividad
+
+para varias hembras.
+
+Pero conservar registros individuales.
+
+==================================================
+88. PREMIUM PORCINO
+==================================================
+
+Premium:
+
+plantillas organizacionales.
 
 Ejemplo:
 
-Paso:
-Retiro dispositivo
+Protocolo reproductivo porcino v5
 
-Seleccionar:
+disponible en:
 
-30 animales
-
-Registrar:
-
-producto
-dosis
-hora
-responsable
-
-Aplicar.
-
-Pero guardar trazabilidad por animal cuando corresponda.
+Finca A
+Finca B
+Finca C
 
 ==================================================
-83. RESULTADOS MASIVOS
+89. CONSOLIDADO PREMIUM PORCINO
 ==================================================
 
-Diagnóstico:
+Mostrar por finca:
 
-Animal 001:
-PREÑADA
-
-002:
-VACIA
-
-003:
-PREÑADA
-
-...
-
-Guardar en bloque.
-
-==================================================
-84. KPIS
-==================================================
-
-Mostrar:
-
-Inscritas
-
-Completaron
-
-Inseminadas
-
+Bandas
+Hembras servidas
 Preñadas
-
-Vacías
-
-Dudosas
-
-P/AI
-
-Costo campaña
-
-Costo/preñez
+Partos
+Nacidos vivos
+Destetados
+Intervalo destete-servicio
 
 ==================================================
-85. TORO / SEMEN
+90. NO PROMEDIAR PORCENTAJES
 ==================================================
-
-Si se usaron varios toros:
-
-mostrar:
-
-Toro
-Inseminadas
-Preñadas
-P/AI observado
 
 Ejemplo:
 
-Toro A:
-10 / 18
-
-Toro B:
-8 / 12
-
-==================================================
-86. NO DECLARAR "MEJOR TORO"
-==================================================
-
-No decir automáticamente:
-
-"Toro A es superior"
-
-porque existen:
-
-n pequeño
-selección de animales
-condición corporal
-técnico
-protocolo
-otros factores.
-
-Usar:
-
-"Resultados observados"
-
-==================================================
-87. CONDICIÓN CORPORAL
-==================================================
-
-Permitir análisis futuro:
-
-P/AI según rango de CC.
-
-Ejemplo:
-
-CC <3:
-...
-
-CC 3-3.5:
-...
-
-CC >3.5:
-...
-
-Desde analítica correspondiente.
-
-No hacer recomendaciones automáticas.
-
-==================================================
-88. PLAN PRO
-==================================================
-
-PRO obtiene:
-
-- protocolos IATF
-- campañas
-- tareas
-- inventario
-- semen
-- diagnósticos
-- métricas
-- costos
-- comparaciones
-- historial
-
-==================================================
-89. PREMIUM
-==================================================
-
-PREMIUM obtiene además contexto multi-finca.
-
-Ejemplo:
-
-IATF consolidado organización
-
-Finca A:
-P/AI 61 %
-
-Finca B:
-56 %
-
-Finca C:
-64 %
-
-Siempre como:
-
-resultados observados.
-
-==================================================
-90. CONSOLIDADO PREMIUM
-==================================================
-
-Premium puede ver:
-
-campañas
-animales inseminados
-preñadas
-P/AI ponderada correctamente
-costos
-costo/preñez
-
-por finca.
-
-No promedio simple de porcentajes.
-
-==================================================
-91. MÉTRICA CONSOLIDADA
-==================================================
-
-P/AI organización:
+Preñez consolidada:
 
 SUM(preñadas)
 /
-SUM(inseminadas)
+SUM(servidas)
 
 NO:
 
-(P/AI finca A + P/AI finca B) / N
+promedio simple de % por finca.
 
 ==================================================
-92. TENANT
+PARTE C
+INFRAESTRUCTURA COMPARTIDA
 ==================================================
 
-Todos los modelos:
-
-organizacion
-finca
-
-según arquitectura multi-tenant.
-
-No confiar en finca enviada por frontend.
-
 ==================================================
-93. SEGURIDAD
+91. MOTOR COMÚN
 ==================================================
 
-Todas las consultas deben estar scopeadas.
+Si IATF ya implementó componentes para:
 
-Campaña de Organización A:
+- plantilla
+- versión
+- pasos
+- dependencias
+- horarios
+- ejecución
+- tareas
 
-nunca accesible desde B.
+extraer/reutilizar una infraestructura común.
 
-Validar referencias:
+Por ejemplo:
 
-animal
-producto
-semen
-lote
-usuario
+ProtocolSchedulerService
 
-pertenecen al tenant permitido.
+ProtocolTaskService
 
-==================================================
-94. ENDPOINTS
-==================================================
+ProtocolExecutionService
 
-Adaptar a arquitectura real.
-
-Sugeridos:
-
-GET /api/iatf/protocolos
-POST /api/iatf/protocolos
-GET /api/iatf/protocolos/:id
-PUT /api/iatf/protocolos/:id
-
-POST /api/iatf/campanas
-GET /api/iatf/campanas
-GET /api/iatf/campanas/:id
-
-POST /api/iatf/campanas/:id/pasos/:pasoId/ejecutar
-
-POST /api/iatf/campanas/:id/inseminaciones
-
-POST /api/iatf/campanas/:id/diagnosticos
-
-GET /api/iatf/campanas/:id/metricas
-
-POST /api/iatf/campanas/:id/finalizar
-
-POST /api/iatf/campanas/:id/cancelar
+No necesariamente un único modelo MongoDB genérico.
 
 ==================================================
-95. SERVICE
+92. PASOS RELATIVOS
 ==================================================
 
-Crear:
+Soportar:
 
-iatfService
+DESDE_INICIO
+DESDE_PASO
+DESDE_EVENTO_REAL
 
-y servicios auxiliares si conviene.
+Ejemplos:
 
-Funciones:
+Porcino:
 
-crearPlantilla()
-versionarPlantilla()
+Destete real
++ X días
+→ control
 
-crearCampana()
-calcularCronograma()
+Engorde:
 
-generarTareas()
-
-ejecutarPaso()
-
-registrarProductosUtilizados()
-
-registrarIATF()
-
-descontarPajuelas()
-
-registrarDiagnostico()
-
-calcularPrenezIATF()
-
-calcularCostos()
-
-calcularCostoPorPrenez()
-
-resincronizar()
-
-finalizarCampana()
+Inicio adaptación
++ X días
+→ revisión
 
 ==================================================
-96. NO PONER LÓGICA MÉDICA EN CONTROLLER
+93. CRONOGRAMA
 ==================================================
 
-Controllers:
+Nunca perder diferencia entre:
 
-validan request
-llaman service
-responden
-
-Toda lógica de protocolo:
-
-servicios.
+fecha programada
+fecha real.
 
 ==================================================
-97. TRANSACCIONES
+94. REPROGRAMACIÓN
 ==================================================
 
-Usar transacciones cuando una operación implique:
+Si cambia un evento base:
 
-- ejecución paso
-- descuento inventario
-- creación registros
-- bitácora
+mostrar pasos dependientes.
 
-Si falla:
+Permitir:
 
-no dejar inventario descontado sin registro reproductivo.
+[Recalcular]
+[Mantener]
+
+No modificar silenciosamente.
+
+==================================================
+95. TAREAS
+==================================================
+
+Un protocolo puede generar Tareas.
+
+Pero Tarea sigue siendo modelo existente.
+
+Guardar referencia:
+
+tipoOrigen:
+PROTOCOLO
+
+origenId
+
+pasoId
+
+según arquitectura actual.
+
+==================================================
+96. DEDUPLICACIÓN
+==================================================
+
+No crear tareas duplicadas cuando:
+
+- se recalcula cronograma
+- se edita fecha
+- se reinicia UI
+- endpoint se reintenta
+
+Usar dedupKey/idempotencia.
+
+==================================================
+97. APLICACIONES
+==================================================
+
+Aplicaciones reales deben utilizar concepto común:
+
+AplicacionProductoAnimal
+
+con:
+
+categoria:
+
+SANITARIA
+REPRODUCTIVA
+NUTRICIONAL
+OTRA
+
+si este refactor ya fue aprobado.
+
+Mantener backwards compatibility con:
+
+AplicacionSanitaria
+
+si actualmente existe.
 
 ==================================================
 98. BITÁCORA
 ==================================================
 
-Crear EventoAnimal:
+Registrar eventos relevantes.
 
-Inicio protocolo IATF
+Engorde:
 
-Inseminación IATF
+inicio ciclo
+cambio etapa
+pesaje clave
+listo venta
+fin ciclo
 
-Diagnóstico
+Porcinos:
 
-Preñez confirmada
+inicio banda/ciclo
+servicio
+diagnóstico
+parto
+destete
+cierre
 
-Salida/cancelación del protocolo
-
-sin saturar bitácora con cada detalle técnico si no aporta.
-
-==================================================
-99. EVENTO DE CAMPAÑA
-==================================================
-
-Si infraestructura lo permite:
-
-EventoCampanaIATF
-
-para:
-
-creada
-paso ejecutado
-reprogramada
-diagnóstico realizado
-finalizada
+No saturar bitácora con cada tarea menor.
 
 ==================================================
-100. CANCELACIÓN
+99. VENTAS
 ==================================================
 
-Cancelar campaña:
+Solamente Engorde puede ofrecer:
 
-NO borrar.
+Preparar Venta.
 
-Cancelar tareas pendientes.
+Siempre abrir:
 
-NO revertir automáticamente:
+Ventas existente.
 
-productos ya usados
-semen usado
-acciones realizadas.
-
-Conservar historial.
+No crear venta dentro de protocolos.
 
 ==================================================
-101. ANIMAL RETIRADO
+100. FINANZAS
 ==================================================
 
-Permitir retirar individualmente:
+Los protocolos pueden utilizar costos operativos para análisis.
 
-enfermedad
+No sustituir:
+
+Finanzas.
+
+No duplicar movimientos.
+
+==================================================
+101. MULTI-TENANT
+==================================================
+
+Todos los nuevos modelos deben incluir:
+
+organizacion
+finca
+
+según arquitectura actual.
+
+Toda query debe validar tenant.
+
+==================================================
+102. REFERENCIAS
+==================================================
+
+Validar que:
+
+lote
+animal
+producto
+ración
+plan
+usuario
 venta
-muerte
-decisión veterinaria
-otro
+camada
+registro reproductivo
 
-No eliminarlo de campaña histórica.
+pertenezcan a:
 
-==================================================
-102. IMPORTANTE: INVENTARIO
-==================================================
+misma organización
 
-Productos:
-
-descontar únicamente al ejecutar.
-
-Semen:
-
-descontar al inseminar.
-
-Dispositivos:
-
-manejar según configuración de consumo/reutilización.
-
-No descontar todo en Día 0 solamente porque campaña fue creada.
+y finca cuando corresponda.
 
 ==================================================
-103. FINANZAS
+103. PLANTILLAS PREMIUM
 ==================================================
 
-No crear automáticamente:
+PRO:
 
-egreso financiero
+plantillas de finca.
 
-si el producto ya fue comprado y registrado como egreso.
+PREMIUM:
 
-Usar:
+puede crear plantilla con:
 
-costo histórico del consumo
-
-para analítica IATF.
-
-Evitar doble contabilización.
+alcance ORGANIZACION.
 
 ==================================================
-104. FUTURO
+104. NO MODIFICAR CAMPAÑAS HISTÓRICAS
 ==================================================
 
-Dejar preparado para:
+Cambiar plantilla:
 
-- resincronización avanzada
-- protocolos por categoría
-- semen sexado
-- evaluación por toro
-- evaluación por técnico
-- P/AI por condición corporal
-- P/AI por finca
-- P/AI por protocolo
-- pérdida gestacional
-- costo acumulado por gestación
-- comparación entre campañas
+NO cambia:
+
+CicloEngorde activo/histórico
+BandaPorcina activa/histórica.
+
+Usar snapshots/versionado.
 
 ==================================================
-105. NO HACER TODAVÍA
+105. PERMISOS
+==================================================
+
+Administrador:
+
+gestionar plantillas y ejecuciones.
+
+Encargado:
+
+ejecutar protocolo según permisos.
+
+Veterinario:
+
+configurar/ejecutar pasos sanitarios/reproductivos permitidos.
+
+Trabajador:
+
+ver y ejecutar tareas asignadas.
+
+No permitir modificar:
+
+dosis
+protocolos
+criterios
+
+sin permiso.
+
+==================================================
+106. FRONTEND ENGORDE
+==================================================
+
+Dentro de:
+
+Lotes
+
+o sección productiva correspondiente:
+
+Detalle Lote
+→ Protocolo
+
+Mostrar:
+
+Etapa actual
+Cronograma
+Objetivos
+Próximas actividades
+Pesajes
+GMD
+Alimentación
+Sanidad
+Candidatos venta
+
+==================================================
+107. FRONTEND PORCINOS
+==================================================
+
+Dentro de:
+
+Reproducción Porcina
+
+mostrar:
+
+Bandas
+Protocolos
+
+No nuevo menú principal.
+
+==================================================
+108. UI GATING
+==================================================
+
+Esencial/Gestión:
+
+mostrar capacidad bloqueada cuando tenga sentido.
+
+Texto:
+
+"Protocolos productivos avanzados"
+
+"Disponible desde Plan PRO"
+
+No romper funciones normales existentes.
+
+==================================================
+109. FUNCIONES NORMALES SIGUEN DISPONIBLES
+==================================================
+
+IMPORTANTE:
+
+Un usuario Esencial/Gestión sigue pudiendo:
+
+- pesar
+- alimentar
+- registrar sanidad
+- reproducir
+- vender
+- manejar lotes
+
+según capacidades actuales.
+
+Lo exclusivo PRO/PREMIUM es:
+
+ORQUESTAR TODO COMO PROTOCOLO AVANZADO.
+
+==================================================
+110. TESTS ENGORDE
+==================================================
+
+Probar:
+
+crear plantilla
+
+versionar plantilla
+
+crear ciclo con lote
+
+cambio etapa manual
+
+criterio por tiempo
+
+criterio por peso
+
+pesaje grupal
+
+asignación ración
+
+cambio ración
+
+aplicación sanitaria
+
+inventario real
+
+tarea automática
+
+animal vendido
+
+animal muerto
+
+lote listo venta
+
+preparar venta
+
+cancelar ciclo
+
+no borrar historial
+
+==================================================
+111. TESTS PORCINOS
+==================================================
+
+Probar:
+
+crear plantilla
+
+crear banda
+
+20 cerdas
+
+destete
+
+servicio natural
+
+IA
+
+control repetidora
+
+diagnóstico
+
+preñada
+
+vacía
+
+parto estimado
+
+parto real diferente
+
+recalcular tareas
+
+camada
+
+destete
+
+nuevo ciclo
+
+cerda retirada
+
+banda parcial
+
+cancelación
+
+==================================================
+112. TESTS PLANES
+==================================================
+
+ESENCIAL:
+403 protocolo
+
+GESTION:
+403 protocolo
+
+PRO:
+permitido
+
+PREMIUM:
+permitido
+
+==================================================
+113. TEST PREMIUM
+==================================================
+
+Pro:
+
+NO consolidado organización.
+
+Premium:
+
+plantillas organizacionales
++
+consolidado.
+
+==================================================
+114. TEST TENANT
+==================================================
+
+Organización A:
+
+NO puede:
+
+ver
+editar
+ejecutar
+referenciar
+
+protocolos/ciclos/bandas de Organización B.
+
+==================================================
+115. NO IMPLEMENTAR
 ==================================================
 
 NO implementar:
 
 recomendaciones veterinarias automáticas
 
-selección automática de hormonas
+selección automática de medicamentos
 
-selección automática de protocolo
+selección automática de dietas
 
-cálculo automático de dosis según peso
+formulación nutricional profesional
 
-diagnóstico de fertilidad
+dosis clínicas automáticas
 
-ranking genético del toro
+predicción IA de gestación
 
-predicción IA de preñez
+predicción IA de engorde
 
-==================================================
-106. MIGRACIÓN
-==================================================
+venta automática
 
-El módulo nuevo no debe afectar:
+conversión alimenticia sin datos suficientes
 
-Monta natural
-
-IA convencional
-
-Gestaciones existentes
-
-Registros históricos.
-
-Si existe modelo IA actual:
-
-adaptar relaciones de forma backwards-compatible.
+ranking automático de finca/veterinario/toro basado en muestras pequeñas
 
 ==================================================
-107. TESTS IMPORTANTES
+116. OBJETIVO COMERCIAL
 ==================================================
 
-Probar:
+PRO debe responder a:
 
-Pro crea protocolo
-Premium crea protocolo
+"Quiero controlar procesos productivos completos y medir sus resultados."
 
-Gestión:
-403
+Ejemplo:
 
-Esencial:
-403
+Lote de engorde:
 
-protocolo con P4/E2
+Recepción
+→ Adaptación
+→ Desarrollo
+→ Finalización
+→ Venta
 
-protocolo GnRH/CIDR
+Porcinos:
 
-protocolo sin eCG
-
-protocolo personalizado
-
-pasos diferentes
-
-Día 7 vs Día 8
-
-IATF 48h
-IATF 56h
-IATF 66h
-
-campaña con lote
-
-campaña selección manual
-
-CC 1-5
-
-CC 1-9
-
-producto insuficiente
-
-semen insuficiente
-
-paso parcial
-
-animal retirado
-
-inseminación realizada
-
-inseminación no realizada
-
-diagnóstico preñada
-
-diagnóstico vacía
-
-diagnóstico dudosa
-
-reconfirmación
-
-resincronización
-
-toro de repaso
-
-cancelación campaña
-
-costos
-
-costo/preñez
-
-P/AI correcto
-
-tenant isolation
+Destete
+→ Servicio
+→ Gestación
+→ Parto
+→ Destete
 
 ==================================================
-108. PRUEBA DE DENOMINADOR
+117. OBJETIVO PREMIUM
 ==================================================
 
-Caso:
+PREMIUM debe responder a:
 
-34 inscritas
+"Quiero que todas mis fincas trabajen con procesos estandarizados y poder comparar los resultados."
 
-31 completaron
+Ejemplo:
 
-30 inseminadas
+PROTOCOLO CORPORATIVO DE ENGORDE v4
 
-18 preñadas
+Finca A
+Finca B
+Finca C
 
-Debe resultar:
+o:
 
-P/AI = 60 %
+PROTOCOLO REPRODUCTIVO PORCINO v3
 
-==================================================
-109. PRUEBA DE COSTO
-==================================================
-
-Costo real:
-
-Hormonas:
-₡180.000
-
-Semen:
-₡240.000
-
-Veterinario:
-₡120.000
-
-Otros:
-₡30.000
-
-Total:
-₡570.000
-
-Preñadas:
-18
-
-Costo/preñez:
-₡31.666,67
+Finca Norte
+Finca Sur
 
 ==================================================
-110. PRUEBA DE FECHA PARTO
+118. PRINCIPIO FINAL
 ==================================================
 
-Confirmar que:
+PROTOCOLO
+≠
+MÓDULO PARALELO
 
-fechaProbableParto
+PROTOCOLO
+=
+ORQUESTADOR
 
-NO se calcula siempre:
+Debe reutilizar:
 
-IATF + 283.
+Lotes
+Animales
+Reproducción
+Camadas
+Pesajes
+Alimentación
+Sanidad
+Inventario
+Tareas
+Ventas
+Finanzas
+Bitácora
 
-Debe usar:
+Cada módulo continúa siendo:
 
-servicio reproductivo/configuración existente.
+FUENTE DE VERDAD
 
-==================================================
-111. PRUEBA DE DESTETE
-==================================================
-
-Confirmar:
-
-destete definitivo
-
-NO se genera desde IATF.
-
-Debe depender posteriormente de:
-
-parto real.
-
-==================================================
-112. PRUEBA DE SECADO
-==================================================
-
-Confirmar:
-
-NO se crea tarea/fecha de secado.
-
-Producción lechera está fuera del alcance actual.
+de su propio dominio.
 
 ==================================================
-113. UX
+119. ENTREGA FINAL
 ==================================================
 
-El usuario debe sentir que está manejando:
+Al finalizar informar:
 
-UNA CAMPAÑA REPRODUCTIVA
-
-no un formulario enorme de medicamentos.
-
-Flujo ideal:
-
-1. Elegir protocolo.
-2. Elegir animales.
-3. Registrar CC.
-4. Elegir fecha inicio.
-5. Sistema genera cronograma.
-6. Ejecutar tareas.
-7. Registrar IATF.
-8. Registrar diagnósticos.
-9. Ver resultados.
-
-==================================================
-114. EJEMPLO VISUAL
-==================================================
-
-IATF OCTUBRE 2026
-
-Protocolo:
-P4/E2 7 días
-
-Animales:
-34
-
-Estado:
-En curso
-
-
-CRONOGRAMA
-
-03 oct
-✓ Inicio protocolo
-
-10 oct
-✓ Retiro dispositivo
-
-12 oct
-✓ IATF
-30 inseminadas
-
-02 nov
-○ Diagnóstico
-
-
-RESULTADOS
-
-Inscritas:
-34
-
-Completaron:
-31
-
-Inseminadas:
-30
-
-Preñadas:
-18
-
-P/AI:
-60 %
-
-Costo/preñez:
-₡31.667
-
-==================================================
-115. PRINCIPIO DE DISEÑO
-==================================================
-
-NO construir:
-
-"IATF = receta fija"
-
-Construir:
-
-"IATF = ejecución controlada de un protocolo veterinario configurable"
-
-GanaderiaRomilio debe conocer:
-
-QUÉ se programó
-QUÉ se ejecutó
-CUÁNDO
-A QUÉ animales
-QUÉ productos se utilizaron
-QUÉ semen se utilizó
-QUIÉN lo hizo
-CUÁNTO costó
-CUÁL fue el resultado
-
-pero NO decidir:
-
-qué medicamento usar
-qué dosis utilizar
-qué protocolo es mejor.
-
-==================================================
-116. ENTREGA DE CODEX
-==================================================
-
-Al finalizar reportar:
-
-- modelos revisados
-- modelos creados
+- arquitectura encontrada
+- infraestructura IATF reutilizada
+- componentes comunes creados
+- modelos nuevos
 - modelos modificados
-- integración con Reproducción
-- integración con Animal
+- PlantillaProtocoloEngorde
+- CicloEngorde
+- etapas implementadas
+- criterios implementados
 - integración con Lotes
-- integración con Productos/Inventario
-- manejo de dispositivos
-- integración con semen
-- integración con Tareas
-- cronograma configurable
-- plantillas implementadas
-- versionado
-- campañas
-- ejecución de pasos
+- integración con Pesajes
+- integración con Alimentación
+- integración con Sanidad
+- integración con Inventario
+- integración con Ventas
+- métricas de engorde
+
+- PlantillaProtocoloReproductivoPorcino
+- BandaReproductivaPorcina
+- integración con RegistroReproductivo
+- integración con Camada
+- servicios/IA
 - diagnósticos
-- métricas
-- P/AI
-- costos
-- costo/preñez
+- parto
+- destete
+- tareas
+- métricas porcinas
+
 - FeatureGate PRO/PREMIUM
+- funcionalidades Premium multi-finca
 - tenant isolation
-- migraciones
 - índices
-- pruebas realizadas
-- cualquier parte que haya quedado preparada pero no implementada
+- migraciones
+- tests
+- funcionalidades preparadas para futuro pero no implementadas

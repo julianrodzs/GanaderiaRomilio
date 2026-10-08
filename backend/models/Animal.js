@@ -95,6 +95,7 @@ const animalSchema = new Schema(
         },
         potreroActual: { type: Schema.Types.ObjectId, ref: 'Potrero' },
         loteActual: { type: Schema.Types.ObjectId, ref: 'Lote' },
+        fotoPrincipal: { type: Schema.Types.ObjectId, ref: 'ArchivoMultimedia', default: null },
         observaciones: { type: String, trim: true }
     },
     {

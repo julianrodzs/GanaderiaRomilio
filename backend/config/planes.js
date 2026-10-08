@@ -17,6 +17,9 @@ const FEATURES = Object.freeze({
     LOTES: 'lotes',
     PLANES_ALIMENTACION: 'planesAlimentacion',
     IATF_REPRODUCTIVO: 'iatfReproductivo',
+    PROTOCOLOS_ENGORDE: 'protocolosEngorde',
+    PROTOCOLOS_REPRODUCTIVOS_PORCINOS: 'protocolosReproductivosPorcinos',
+    FOTOS_ANIMALES: 'fotosAnimales',
     OPERACION_MULTI_FINCA: 'operacionMultiFinca'
 });
 
@@ -53,6 +56,9 @@ const planesConfig = Object.freeze({
             lotes: true,
             planesAlimentacion: true,
             iatfReproductivo: false,
+            protocolosEngorde: false,
+            protocolosReproductivosPorcinos: false,
+            fotosAnimales: false,
             operacionMultiFinca: false
         }
     },
@@ -83,6 +89,9 @@ const planesConfig = Object.freeze({
             lotes: true,
             planesAlimentacion: true,
             iatfReproductivo: false,
+            protocolosEngorde: false,
+            protocolosReproductivosPorcinos: false,
+            fotosAnimales: false,
             operacionMultiFinca: true
         }
     },
@@ -113,6 +122,9 @@ const planesConfig = Object.freeze({
             lotes: true,
             planesAlimentacion: true,
             iatfReproductivo: true,
+            protocolosEngorde: true,
+            protocolosReproductivosPorcinos: true,
+            fotosAnimales: true,
             operacionMultiFinca: true
         }
     },
@@ -143,6 +155,9 @@ const planesConfig = Object.freeze({
             lotes: true,
             planesAlimentacion: true,
             iatfReproductivo: true,
+            protocolosEngorde: true,
+            protocolosReproductivosPorcinos: true,
+            fotosAnimales: true,
             operacionMultiFinca: true
         },
         caracteristicasComerciales: {
@@ -159,6 +174,9 @@ const PLAN_MINIMO_POR_FEATURE = Object.freeze({
     reportesMultiFinca: 'PREMIUM',
     auditoriaAvanzada: 'PRO',
     iatfReproductivo: 'PRO',
+    protocolosEngorde: 'PRO',
+    protocolosReproductivosPorcinos: 'PRO',
+    fotosAnimales: 'PRO',
     operacionMultiFinca: 'GESTION'
 });
 

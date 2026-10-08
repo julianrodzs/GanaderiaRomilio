@@ -1671,7 +1671,7 @@ Endpoints:
 
 Se comunica con servicio IA si esta configurado.
 
-El conteo por dron es el unico flujo que almacena imagenes. Compras, ventas, finanzas, animales y tareas no aceptan comprobantes, fotografias ni evidencias adjuntas. La importacion Excel conserva su carga de `.xlsx`, pero el archivo se procesa en memoria y no se trata como imagen operativa.
+El conteo por dron conserva su almacenamiento operativo propio. Compras, ventas, finanzas y tareas no aceptan comprobantes ni evidencias adjuntas. Los planes PRO y PREMIUM pueden asociar una fotografia principal a un bovino o porcino mediante `ArchivoMultimedia` en Cloudflare R2; el DTO general de Animal no acepta esa referencia y obliga a usar `POST /api/animales/:id/foto`. La lectura y eliminacion se conservan tras un downgrade, mientras la carga o reemplazo exige `fotosAnimales`. La importacion Excel conserva su carga de `.xlsx`, pero el archivo se procesa en memoria y no se trata como imagen operativa.
 
 Limpieza de campos legados:
 

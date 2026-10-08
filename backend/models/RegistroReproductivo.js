@@ -139,6 +139,13 @@ const registroReproductivoSchema = new Schema(
         tipoRegistro: { type: String, enum: ['Inseminación/Monta', 'Monta', 'Inseminación'], default: 'Inseminación/Monta' },
         tipoInseminacion: { type: String, enum: ['IATF', 'IA_CONVENCIONAL'] },
         campanaIATF: { type: Schema.Types.ObjectId, ref: 'CampanaIATF' },
+        bandaReproductivaPorcina: { type: Schema.Types.ObjectId, ref: 'BandaReproductivaPorcina' },
+        historialDiagnosticos: [{
+            fecha: { type: Date, required: true },
+            resultado: { type: String, enum: ['PREÑADA', 'VACIA', 'DUDOSA', 'REQUIERE_RECONFIRMACION'], required: true },
+            observaciones: { type: String, trim: true },
+            registradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' }
+        }],
         origenGestacion: {
             type: String,
             enum: ['IATF', 'MONTA_NATURAL', 'IA_CONVENCIONAL', 'INDETERMINADO']
@@ -217,13 +224,27 @@ const completarFechasYEstado = (datos, opciones = {}) => {
             datos.fechaFinVentanaParto = sumarDias(datos.fechaPartoEstimada, reproduccionPorcinaConfig.margenPartoDias);
             datos.fechaDesparasitacionAntesParto = restarDias(datos.fechaPartoEstimada, reproduccionPorcinaConfig.diasDesparasitacionAntesParto);
             datos.fechaAlimentoLactancia = restarDias(datos.fechaPartoEstimada, reproduccionPorcinaConfig.diasAlimentoLactanciaAntesParto);
-            datos.fechaDestete = sumarDias(datos.fechaPartoEstimada, reproduccionPorcinaConfig.diasDestetePostParto);
+        }
+
+        const fechaBasePostParto = datos.fechaPartoReal || datos.fechaPartoEstimada;
+        if (fechaBasePostParto) {
+            datos.fechaDestete = sumarDias(fechaBasePostParto, Number(datos.diasDestetePorcino) || reproduccionPorcinaConfig.diasDestetePostParto);
             datos.fechaNuevaInseminacion = sumarDias(datos.fechaDestete, reproduccionPorcinaConfig.diasNuevaMontaPostDestete);
             datos.fechaRevisionCeloPosterior = sumarDias(datos.fechaNuevaInseminacion, reproduccionPorcinaConfig.diasRevisionCeloPostNuevaMonta);
             datos.fechaProximoCelo = datos.fechaNuevaInseminacion;
         }
 
-        datos.estado = calcularEstadoReproductivo(datos);
+        if (datos.fechaPartoReal) {
+            datos.estado = calcularEstadoReproductivo(datos);
+        } else if (datos.resultadoDiagnosticoGestacion === 'VACIA') {
+            datos.gestacionConfirmada = false;
+            datos.estado = 'Vacía';
+        } else if (datos.resultadoDiagnosticoGestacion === 'PREÑADA') {
+            datos.gestacionConfirmada = true;
+            datos.estado = datos.fechaPartoEstimada && diasHasta(datos.fechaPartoEstimada) <= 15 ? 'Próxima a parto' : 'Gestante';
+        } else {
+            datos.estado = calcularEstadoReproductivo(datos);
+        }
         return;
     }
 
@@ -320,6 +341,7 @@ registroReproductivoSchema.index({ fechaPartoReal: 1 });
 registroReproductivoSchema.index({ especie: 1, fechaInseminacion: 1 });
 registroReproductivoSchema.index({ animal: 1, estadoCiclo: 1, activoParaAlertas: 1 });
 registroReproductivoSchema.index({ campanaIATF: 1, animal: 1 });
+registroReproductivoSchema.index({ bandaReproductivaPorcina: 1, animal: 1 });
 
 module.exports = {
     RegistroReproductivo: model('RegistroReproductivo', registroReproductivoSchema),

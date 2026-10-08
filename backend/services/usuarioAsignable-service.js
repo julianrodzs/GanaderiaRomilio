@@ -5,6 +5,8 @@ const ROLES_ASIGNABLES = {
     Sanidad: ['Administrador', 'Encargado', 'Veterinario'],
     Reproduccion: ['Administrador', 'Encargado', 'Veterinario'],
     IATF: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
+    ProtocolosEngorde: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
+    BandasPorcinas: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
     Tareas: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador']
 };
 

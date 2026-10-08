@@ -1,9 +1,11 @@
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const { Tarea } = require('../models/Tarea');
-const { upsertEventoAnimal } = require('./eventoAnimal-service');
+const EventoAnimal = require('../models/EventoAnimal');
 const { sincronizarTareasBovinas } = require('./reproduccionBovina-service');
+const { sincronizarTareasPorcinas } = require('./reproduccionPorcina-service');
 
 const ESTADOS_CIERRE = ['Cerrado', 'Cancelado', 'No preñada'];
+const CANCELACION_POR_CIERRE = 'CIERRE_CICLO_REPRODUCTIVO';
 
 const obtenerCicloActivoPorAnimal = (animalId, excluirId = null) => {
     const filtro = {
@@ -21,7 +23,7 @@ const obtenerCicloActivoPorAnimal = (animalId, excluirId = null) => {
     return RegistroReproductivo.findOne(filtro).populate('animal');
 };
 
-const cancelarTareasAutomaticasDelCiclo = async (cicloId, motivo = 'Cancelada por cierre de ciclo reproductivo') => {
+const cancelarTareasAutomaticasDelCiclo = async (cicloId, motivo = 'Cancelada por cierre de ciclo reproductivo', origen = 'SINCRONIZACION_REPRODUCTIVA') => {
     const resultado = await Tarea.updateMany(
         {
             moduloOrigen: 'Reproduccion',
@@ -32,7 +34,38 @@ const cancelarTareasAutomaticasDelCiclo = async (cicloId, motivo = 'Cancelada po
         {
             $set: {
                 estado: 'Cancelada',
-                observaciones: motivo
+                observaciones: motivo,
+                cancelacionAutomaticaOrigen: origen,
+                canceladaAutomaticamenteEn: new Date()
+            }
+        }
+    );
+
+    return resultado.modifiedCount || 0;
+};
+
+const reactivarTareasCerradasDelCiclo = async (ciclo) => {
+    const resultado = await Tarea.updateMany(
+        {
+            moduloOrigen: 'Reproduccion',
+            referenciaId: ciclo._id,
+            creadoAutomaticamente: true,
+            estado: 'Cancelada',
+            $or: [
+                { cancelacionAutomaticaOrigen: CANCELACION_POR_CIERRE },
+                {
+                    cancelacionAutomaticaOrigen: { $exists: false },
+                    observaciones: ciclo.motivoCierre
+                }
+            ]
+        },
+        {
+            $set: { estado: 'Pendiente' },
+            $unset: {
+                fechaCompletada: '',
+                observaciones: '',
+                cancelacionAutomaticaOrigen: '',
+                canceladaAutomaticamenteEn: ''
             }
         }
     );
@@ -66,7 +99,7 @@ const registrarEventoCierre = async ({ ciclo, estadoCiclo, motivo, usuarioId }) 
         'No preñada': motivo || 'El ciclo reproductivo fue cerrado porque el animal no quedó preñado.'
     };
 
-    await upsertEventoAnimal({
+    await EventoAnimal.create({
         animal: animalId,
         tipoEvento: estadoCiclo === 'No preñada' ? 'Diagnostico de gestacion' : 'Observacion',
         fecha: new Date(),
@@ -96,6 +129,8 @@ const cambiarEstadoCiclo = async ({ cicloId, estadoCiclo, motivo, usuarioId }) =
         throw error;
     }
 
+    if (ciclo.estadoCiclo === estadoCiclo && ciclo.activoParaAlertas === false) return ciclo;
+
     ciclo.estadoCiclo = estadoCiclo;
     ciclo.activoParaAlertas = false;
     ciclo.fechaCierre = new Date();
@@ -117,9 +152,64 @@ const cambiarEstadoCiclo = async ({ cicloId, estadoCiclo, motivo, usuarioId }) =
             usuarioId
         });
     } else {
-        await cancelarTareasAutomaticasDelCiclo(cicloGuardado._id, cicloGuardado.motivoCierre);
+        await cancelarTareasAutomaticasDelCiclo(
+            cicloGuardado._id,
+            cicloGuardado.motivoCierre,
+            estadoCiclo === 'Cerrado' ? CANCELACION_POR_CIERRE : `CIERRE_CICLO_${estadoCiclo.toUpperCase().replaceAll(' ', '_')}`
+        );
     }
     await registrarEventoCierre({ ciclo: cicloGuardado, estadoCiclo, motivo: cicloGuardado.motivoCierre, usuarioId });
+
+    return cicloGuardado;
+};
+
+const reabrirCicloReproductivo = async ({ cicloId, motivo, usuarioId }) => {
+    const ciclo = await RegistroReproductivo.findById(cicloId).populate('animal');
+    if (!ciclo) {
+        const error = new Error('Registro reproductivo no encontrado');
+        error.status = 404;
+        throw error;
+    }
+    if ((ciclo.estadoCiclo || 'Activo') === 'Activo' && ciclo.activoParaAlertas !== false) return ciclo;
+    if (ciclo.estadoCiclo !== 'Cerrado') {
+        const error = new Error('Solo se puede reabrir un ciclo que fue cerrado. Los ciclos cancelados o no preñados conservan su cierre clínico.');
+        error.status = 409;
+        throw error;
+    }
+
+    const otroActivo = await obtenerCicloActivoPorAnimal(ciclo.animal._id, ciclo._id);
+    if (otroActivo) {
+        const error = new Error('No se puede reabrir porque el animal ya tiene otro ciclo reproductivo activo.');
+        error.status = 409;
+        throw error;
+    }
+
+    const motivoCierreAnterior = ciclo.motivoCierre;
+    const tareasReactivadas = await reactivarTareasCerradasDelCiclo(ciclo);
+    ciclo.estadoCiclo = 'Activo';
+    ciclo.activoParaAlertas = true;
+    ciclo.fechaCierre = undefined;
+    ciclo.motivoCierre = undefined;
+    const cicloGuardado = await ciclo.save();
+    const especie = cicloGuardado.especie || cicloGuardado.animal?.especie || 'Bovino';
+
+    if (especie === 'Porcino') {
+        await sincronizarTareasPorcinas({ registro: cicloGuardado, animal: cicloGuardado.animal, usuarioId });
+    } else {
+        await sincronizarTareasBovinas({ registro: cicloGuardado, animal: cicloGuardado.animal, usuarioId });
+    }
+
+    await EventoAnimal.create({
+        animal: cicloGuardado.animal._id,
+        tipoEvento: 'Observacion',
+        fecha: new Date(),
+        titulo: 'Ciclo reproductivo reabierto',
+        descripcion: motivo || 'Se reabrió el ciclo reproductivo y se recalcularon sus tareas pendientes.',
+        moduloOrigen: 'Reproduccion',
+        referenciaId: cicloGuardado._id,
+        creadoPor: usuarioId,
+        metadata: { motivo, motivoCierreAnterior, tareasReactivadas }
+    });
 
     return cicloGuardado;
 };
@@ -179,6 +269,8 @@ module.exports = {
     cancelarCicloReproductivo,
     marcarCicloNoPrenada,
     cancelarTareasAutomaticasDelCiclo,
+    reactivarTareasCerradasDelCiclo,
+    reabrirCicloReproductivo,
     eliminarTareasAutomaticasPendientesDelCiclo,
     crearNuevoCicloReproductivo
 };

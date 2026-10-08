@@ -15,6 +15,7 @@ import Usuarios from '../pages/Usuarios';
 import Tareas from '../pages/Tareas';
 import CentroNotificaciones from '../pages/CentroNotificaciones';
 import MiPlan from '../pages/MiPlan';
+import { useApariencia } from '../context/AparienciaContext';
 import AdministracionSaas from '../pages/AdministracionSaas';
 import ConfiguracionCuenta from '../pages/ConfiguracionCuenta';
 import Ventas from './Ventas';
@@ -124,6 +125,7 @@ const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
 }).format(valor || 0);
 
 const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, onLogout }) => {
+  const { dashboard: imagenDashboard } = useApariencia();
   const { tieneFeature } = usePlan();
   const rol = usuario?.rol || 'Consulta';
   const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Alimentacion', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
@@ -634,10 +636,10 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
       <section className="dashboard-content">
         <article className="panel-mapa">
           <div className="panel-title">
-            <h2>Ubicacion de lotes</h2>
-            <span>Mapa real</span>
+            <h2>Vista de la finca</h2>
+            <span>Imagen principal</span>
           </div>
-          <img className="dashboard-mapa-potreros" src="/assests/mapa-potreros.png" alt="Mapa de potreros de la finca" />
+          <img className="dashboard-mapa-potreros" src={imagenDashboard} alt="Imagen principal de la finca" onError={(evento) => { evento.currentTarget.onerror = null; evento.currentTarget.src = '/assests/mapa-potreros.png'; }} />
         </article>
 
         <article className="panel-alerta">

@@ -22,7 +22,10 @@ const permisosPorModulo = {
     },
     lotes: {
         ver: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Consulta'],
-        gestionar: ['Administrador', 'Encargado']
+        gestionar: ['Administrador', 'Encargado'],
+        protocoloConfigurar: ['Administrador'],
+        protocoloCrear: ['Administrador', 'Encargado'],
+        protocoloEjecutar: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario']
     },
     alimentacion: {
         ver: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Consulta'],
@@ -54,6 +57,10 @@ const permisosPorModulo = {
         iatfCrear: ['Administrador', 'Veterinario'],
         iatfEjecutar: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
         iatfDiagnosticar: ['Administrador', 'Veterinario'],
+        protocoloPorcinoConfigurar: ['Administrador', 'Veterinario'],
+        protocoloPorcinoCrear: ['Administrador', 'Veterinario'],
+        protocoloPorcinoEjecutar: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
+        protocoloPorcinoDiagnosticar: ['Administrador', 'Veterinario'],
         eliminar: ['Administrador']
     },
     compras: {

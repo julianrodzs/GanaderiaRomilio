@@ -12,6 +12,7 @@ const {
     cerrarCicloReproductivo,
     cancelarCicloReproductivo,
     marcarCicloNoPrenada,
+    reabrirCicloReproductivo,
     obtenerCicloActivoPorAnimal,
     cancelarTareasAutomaticasDelCiclo
 } = require('../services/reproduccion-service');
@@ -508,6 +509,28 @@ reproduccionCtrl.cerrarCiclo = (req, res) => ejecutarCierreCiclo({
     titulo: 'Ciclo reproductivo cerrado',
     verbo: 'cerró'
 });
+
+reproduccionCtrl.reabrirCiclo = async (req, res) => {
+    try {
+        const registroActualizado = await reabrirCicloReproductivo({
+            cicloId: req.params.id,
+            motivo: req.body?.motivo,
+            usuarioId: req.usuario?.id
+        });
+        const registro = await poblarAnimal(RegistroReproductivo.findById(registroActualizado._id));
+        await notificarRegistroReproductivo(
+            req,
+            registroActualizado,
+            registro.animal,
+            'CICLO_REPRODUCTIVO_REABIERTO',
+            'Ciclo reproductivo reabierto',
+            'reabrió'
+        );
+        res.json(registro);
+    } catch (error) {
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al reabrir el ciclo reproductivo' });
+    }
+};
 
 reproduccionCtrl.cancelarCiclo = (req, res) => ejecutarCierreCiclo({
     req,

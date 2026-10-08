@@ -42,6 +42,8 @@ const tareaSchema = new Schema(
         moduloOrigen: { type: String, trim: true },
         referenciaId: { type: Schema.Types.ObjectId },
         creadoAutomaticamente: { type: Boolean, default: false },
+        cancelacionAutomaticaOrigen: { type: String, trim: true },
+        canceladaAutomaticamenteEn: { type: Date },
         especie: { type: String, enum: ['Bovino', 'Porcino'] },
         categoriaAutomatica: { type: String, trim: true },
         claveAutomatica: { type: String, trim: true },

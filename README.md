@@ -18,6 +18,26 @@ La aplicacion ya cuenta con:
 - Potreros con area, estado, actividades recientes y rotaciones.
 - Reproduccion/Gestacion bovina con parto estimado, parto real, destete y proximo celo estimado.
 - IATF configurable para planes Pro/Premium: protocolos versionados, campañas, tareas, insumos, pajuelas, diagnósticos, P/AI y costos reales.
+- Protocolos PRO de engorde bovino por lote: etapas versionadas, cronograma, pesajes reales, cambios de ración, aplicaciones sanitarias, criterios de avance y preparación de candidatos para el flujo existente de ventas.
+- Bandas reproductivas porcinas PRO: protocolos versionados, actividades grupales, servicios, diagnósticos, partos y destetes conectados con los ciclos reproductivos, camadas, tareas y bitácoras existentes.
+
+### Orquestadores productivos PRO
+
+Los protocolos no reemplazan los módulos operativos. `CicloEngorde` coordina un `Lote` y delega cada hecho real en Pesajes, Alimentación, Sanidad o Ventas. `BandaReproductivaPorcina` coordina animales y delega servicios, diagnósticos, partos y destetes en Reproducción y Camadas. Ambos conservan una copia de la versión de la plantilla usada para que el historial no cambie cuando se edita el protocolo.
+
+## Apariencia y archivos en Cloudflare R2
+
+La identidad visual separa el logo de la organización de las imágenes de Dashboard y Potreros de cada finca. Sin R2 configurado, la aplicación mantiene `/assests/logo-romilio.png` y `/assests/mapa-potreros.png` como recursos predeterminados. Las imágenes se cambian desde **Configuración > Mi plan > Identidad visual**.
+
+Los planes PRO y PREMIUM también pueden cargar una fotografía principal por bovino o porcino desde el detalle del inventario. La foto se almacena como `ArchivoMultimedia`, no dentro del documento `Animal`; al bajar de plan permanece visible y puede eliminarse, pero su carga o reemplazo vuelve a requerir la capacidad `fotosAnimales`.
+
+Para habilitar las cargas configure en el backend `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` y `R2_PUBLIC_URL`. `R2_ENDPOINT` es opcional. El bucket debe exponer los objetos mediante el dominio indicado en `R2_PUBLIC_URL`; solo se aceptan JPG, PNG y WebP de hasta 8 MB.
+
+Las tareas automáticas de estos orquestadores deben completarse desde su formulario de ejecución. La bandeja de tareas bloquea el cierre genérico para impedir que una actividad figure como realizada sin registrar el dato de dominio. Las fechas dependientes de un evento real, como un diagnóstico posterior a la inseminación, no se programan hasta que ese evento haya ocurrido.
+
+Los ciclos reproductivos cerrados por error pueden reabrirse mientras el animal no tenga otro ciclo activo. La reapertura restaura únicamente las tareas automáticas canceladas por ese cierre y recalcula sus fechas; conserva intactas las tareas completadas y las canceladas manualmente. Al cambiar una fecha de inseminación o monta se actualizan las tareas pendientes existentes mediante sus claves idempotentes, sin crear duplicados.
+
+`PRO` habilita `protocolosEngorde` y `protocolosReproductivosPorcinos` por finca. `PREMIUM` añade plantillas de alcance organización y consolidación multi-finca. Ningún protocolo recomienda medicamentos, dietas, ventas ni decisiones clínicas de forma automática.
 - Reproduccion porcina con inseminacion/monta, fechas calculadas y tareas automaticas.
 - Plan Sanitario centralizado con alertas y registro real de aplicaciones.
 - Pesajes historicos por animal.

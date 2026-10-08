@@ -14,6 +14,7 @@ const {
     updateRegistro,
     deleteRegistro,
     cerrarCiclo,
+    reabrirCiclo,
     cancelarCiclo,
     marcarNoPrenada
 } = require('../controllers/reproduccionController');
@@ -25,6 +26,7 @@ router.route('/')
 router.get('/animal/:animalId', puedeVer, getRegistrosPorAnimal);
 router.post('/:id/ternero', puedeGestionar, registrarTerneroDesdeParto);
 router.patch('/:id/cerrar-ciclo', puedeGestionar, cerrarCiclo);
+router.patch('/:id/reabrir-ciclo', puedeGestionar, reabrirCiclo);
 router.patch('/:id/cancelar-ciclo', puedeGestionar, cancelarCiclo);
 router.patch('/:id/no-prenada', puedeGestionar, marcarNoPrenada);
 

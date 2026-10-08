@@ -11,6 +11,7 @@ const {
     notificarTareaModificada
 } = require('../services/tarea-notificacion-service');
 const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
+const { construirFiltroBusquedaTareas } = require('../services/tareaBusqueda-service');
 
 const tareaCtrl = {};
 
@@ -200,7 +201,10 @@ tareaCtrl.getTareas = async (req, res) => {
             return res.status(403).json({ mensaje: 'No tienes permisos para ver todas las tareas' });
         }
 
-        const tareas = await Tarea.find(construirFiltros(req.query))
+        const tareas = await Tarea.find({
+            ...construirFiltros(req.query),
+            ...await construirFiltroBusquedaTareas(req.query.busqueda)
+        })
             .populate(POPULATE_TAREA)
             .sort({ fechaProgramada: 1, prioridad: 1 });
 
@@ -214,6 +218,7 @@ tareaCtrl.getMisTareas = async (req, res) => {
     try {
         const filtros = {
             ...construirFiltros(req.query),
+            ...await construirFiltroBusquedaTareas(req.query.busqueda),
             asignadoA: req.usuario.id
         };
 
@@ -331,8 +336,8 @@ tareaCtrl.cambiarEstadoTarea = async (req, res) => {
 
         const estadoAnterior = tarea.estado;
 
-        if (estado === 'Completada' && tarea.categoriaAutomatica === 'IATF') {
-            return res.status(409).json({ mensaje: 'Registra la ejecución desde el formulario IATF.' });
+        if (estado === 'Completada' && ['IATF', 'PROTOCOLO_ENGORDE', 'BANDA_PORCINA'].includes(tarea.categoriaAutomatica)) {
+            return res.status(409).json({ mensaje: 'Registra la ejecución desde el protocolo correspondiente para conservar la trazabilidad.' });
         }
 
         if (!puedeGestionarTareas(req)) {
@@ -380,10 +385,10 @@ tareaCtrl.completarTarea = async (req, res) => {
             return res.status(404).json({ mensaje: 'Tarea no encontrada' });
         }
 
-        if (tarea.categoriaAutomatica === 'IATF') {
+        if (['IATF', 'PROTOCOLO_ENGORDE', 'BANDA_PORCINA'].includes(tarea.categoriaAutomatica)) {
             return res.status(409).json({
-                codigo: 'IATF_REQUIERE_EJECUCION',
-                mensaje: 'Esta tarea debe registrarse desde su formulario IATF para conservar inventario y trazabilidad.'
+                codigo: 'PROTOCOLO_REQUIERE_EJECUCION',
+                mensaje: 'Esta tarea debe registrarse desde su protocolo para conservar inventario y trazabilidad.'
             });
         }
 

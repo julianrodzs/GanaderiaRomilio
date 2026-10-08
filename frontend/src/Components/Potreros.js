@@ -19,6 +19,7 @@ import TablaDinamica from './TablaDinamica';
 import { fechaEnRango, obtenerRangoMesActual } from '../utils/fechas';
 import FeatureGate from './FeatureGate';
 import BancosForrajeros from './BancosForrajeros';
+import { useApariencia } from '../context/AparienciaContext';
 
 const formatearFecha = (fecha) => {
   if (!fecha) return '--';
@@ -66,6 +67,7 @@ const filtrosRotaciones = [
 ];
 
 const Potreros = ({ soloLectura = false }) => {
+  const { potreros: imagenPotreros } = useApariencia();
   const [potreros, setPotreros] = useState([]);
   const [rotaciones, setRotaciones] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -269,7 +271,7 @@ const Potreros = ({ soloLectura = false }) => {
           <p className="eyebrow">Mapa de referencia</p>
           <h2>Rotacion de potreros</h2>
         </div>
-        <img src="/assests/mapa-potreros.png" alt="Mapa de potreros de la finca" />
+        <img src={imagenPotreros} alt="Mapa o imagen de potreros de la finca" onError={(evento) => { evento.currentTarget.onerror = null; evento.currentTarget.src = '/assests/mapa-potreros.png'; }} />
       </article>
 
       <TablaDinamica

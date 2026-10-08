@@ -34,6 +34,15 @@ test('la matriz HTTP permite y bloquea funciones según los cuatro planes', asyn
         ['GESTION', 'analiticaProductiva', 200],
         ['GESTION', 'analiticaEconomica', 403],
         ['PRO', 'analiticaEconomica', 200],
+        ['ESENCIAL', 'protocolosEngorde', 403],
+        ['GESTION', 'protocolosReproductivosPorcinos', 403],
+        ['PRO', 'protocolosEngorde', 200],
+        ['PRO', 'protocolosReproductivosPorcinos', 200],
+        ['PREMIUM', 'protocolosEngorde', 200],
+        ['ESENCIAL', 'fotosAnimales', 403],
+        ['GESTION', 'fotosAnimales', 403],
+        ['PRO', 'fotosAnimales', 200],
+        ['PREMIUM', 'fotosAnimales', 200],
         ['PRO', 'reportesMultiFinca', 403],
         ['PREMIUM', 'reportesMultiFinca', 200]
     ];

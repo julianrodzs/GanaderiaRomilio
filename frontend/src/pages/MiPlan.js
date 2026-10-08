@@ -12,6 +12,7 @@ import {
 } from '../services/api';
 import { etiquetaObjetivoProductivo, OBJETIVOS_LINEA_PRODUCTIVA } from '../constants/objetivosProductivos';
 import FacturacionPlan from '../Components/FacturacionPlan';
+import ConfiguracionApariencia from '../Components/ConfiguracionApariencia';
 
 const especiesProductivas = ['Bovino', 'Porcino'];
 const objetivosProductivos = OBJETIVOS_LINEA_PRODUCTIVA;
@@ -22,6 +23,9 @@ const funcionesPlan = [
   { etiqueta: 'Correos operativos', feature: 'emailsOperativos', planMinimo: 'Pro' },
   { etiqueta: 'Analítica económica', feature: 'analiticaEconomica', planMinimo: 'Pro' },
   { etiqueta: 'IATF y protocolos reproductivos', feature: 'iatfReproductivo', planMinimo: 'Pro' },
+  { etiqueta: 'Protocolos avanzados de engorde', feature: 'protocolosEngorde', planMinimo: 'Pro' },
+  { etiqueta: 'Bandas reproductivas porcinas', feature: 'protocolosReproductivosPorcinos', planMinimo: 'Pro' },
+  { etiqueta: 'Fotografía principal por animal', feature: 'fotosAnimales', planMinimo: 'Pro' },
   { etiqueta: 'Reportes multi-finca', feature: 'reportesMultiFinca', planMinimo: 'Premium' },
   { etiqueta: 'Configuración avanzada de correos', feature: 'configuracionEmailAvanzada', planMinimo: 'Premium' }
 ];
@@ -198,6 +202,7 @@ const MiPlan = () => {
         <span className={`estado-badge ${plan.plan.vigente ? 'activo' : 'estado-Aplicado'}`}>{plan.plan.estado}</span>
       </div>
       <FacturacionPlan codigoActual={plan.plan.codigo} />
+      <ConfiguracionApariencia />
 
       {esEsencial && (
         <section className="mi-plan-especie">

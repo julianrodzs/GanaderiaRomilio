@@ -34,6 +34,7 @@ app.use('/api/admin/organizaciones', authPlataforma, require('./routes/adminOrga
 app.use('/api/auditoria', auth, require('./routes/auditoriaRoutes'));
 app.use('/api/notificaciones', auth, require('./routes/notificacionRoutes'));
 app.use('/api/archivos', auth, require('./routes/archivoRoutes'));
+app.use('/api/apariencia', auth, require('./routes/aparienciaRoutes'));
 app.use('/api/plan', auth, require('./routes/plan'));
 app.use('/api/facturacion', auth, require('./routes/facturacionRoutes'));
 app.use('/api/fincas', auth, require('./routes/finca'));
@@ -54,6 +55,8 @@ app.use('/api/tratamientos-sanitarios', auth, require('./routes/tratamientoSanit
 app.use('/api/aplicaciones-sanitarias', auth, require('./routes/aplicacionSanitariaRoutes'));
 app.use('/api/reproduccion', auth, require('./routes/reproduccionRoutes'));
 app.use('/api/iatf', auth, require('./routes/iatfRoutes'));
+app.use('/api/protocolos-engorde', auth, require('./routes/protocoloEngordeRoutes'));
+app.use('/api/protocolos-porcinos', auth, require('./routes/protocoloPorcinoRoutes'));
 app.use('/api/costos', auth, require('./routes/costo'));
 app.use('/api/finanzas', auth, require('./routes/finanza'));
 app.use('/api/ventas', auth, require('./routes/ventaAnimalRoutes'));

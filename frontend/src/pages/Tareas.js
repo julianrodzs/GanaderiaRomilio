@@ -8,11 +8,16 @@ import {
   eliminarTarea,
   obtenerAnimales,
   obtenerActividadIATFPorTarea,
+  obtenerActividadEngordePorTarea,
+  obtenerActividadPorcinaPorTarea,
   obtenerMisTareas,
   obtenerTarea,
   obtenerPotreros,
   obtenerTareas,
   obtenerUsuariosAsignables,
+  obtenerRaciones,
+  ejecutarPasoEngorde,
+  ejecutarPasoBandaPorcina,
   ejecutarPasoIATF,
   registrarInseminacionesIATF
 } from '../services/api';
@@ -55,7 +60,9 @@ const categoriasAutomaticas = [
   'Reproducción porcina',
   'Crías porcinas',
   'Sanidad porcina',
-  'Alimentación porcina'
+  'Alimentación porcina',
+  'PROTOCOLO_ENGORDE',
+  'BANDA_PORCINA'
 ];
 
 const estadoInicial = {
@@ -156,8 +163,10 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
     asignadoA: '',
     especie: '',
     categoriaAutomatica: '',
-    creadoAutomaticamente: ''
+    creadoAutomaticamente: '',
+    busqueda: ''
   });
+  const [busquedaTexto, setBusquedaTexto] = useState('');
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -170,6 +179,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
   const [observacionesCompletar, setObservacionesCompletar] = useState('');
   const [reprogramacion, setReprogramacion] = useState(null);
   const [actividadIatf, setActividadIatf] = useState(null);
+  const [actividadProtocolo, setActividadProtocolo] = useState(null);
 
   const cargarDatos = async () => {
     try {
@@ -235,8 +245,17 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
     filtros.especie,
     filtros.categoriaAutomatica,
     filtros.creadoAutomaticamente,
+    filtros.busqueda,
     usuario?.rol
   ]);
+
+  useEffect(() => {
+    const temporizador = window.setTimeout(() => {
+      const busqueda = busquedaTexto.trim();
+      setFiltros((actual) => actual.busqueda === busqueda ? actual : { ...actual, busqueda });
+    }, 350);
+    return () => window.clearTimeout(temporizador);
+  }, [busquedaTexto]);
 
   useEffect(() => {
     const actualizarTrasSincronizacion = () => {
@@ -271,6 +290,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
   };
 
   const limpiarFiltros = () => {
+    setBusquedaTexto('');
     setFiltros({
       ...obtenerRangoMesActual(),
       estado: '',
@@ -279,7 +299,8 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       asignadoA: '',
       especie: '',
       categoriaAutomatica: '',
-      creadoAutomaticamente: ''
+      creadoAutomaticamente: '',
+      busqueda: ''
     });
   };
 
@@ -406,6 +427,21 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
         setDetalle(null);
         return;
       }
+      if (['PROTOCOLO_ENGORDE', 'BANDA_PORCINA'].includes(tarea.categoriaAutomatica)) {
+        if (!navigator.onLine) throw new Error('La ejecución de protocolos necesita conexión para evitar registros duplicados.');
+        if (tarea.categoriaAutomatica === 'PROTOCOLO_ENGORDE') {
+          const [actividad, raciones] = await Promise.all([obtenerActividadEngordePorTarea(tarea._id), obtenerRaciones({ especie: 'Bovino', activo: true })]);
+          setActividadProtocolo({ tipo: 'ENGORDE', ...actividad, raciones, fechaReal: fechaInput(new Date()), observaciones: '', racion: raciones[0]?._id || '', producto: '', tipoSanidad: '', dosis: '', viaAplicacion: '', pesajes: (actividad.ciclo.detalleLote.animales || []).map((animal) => ({ animal: animal._id, etiqueta: animal.diio || animal.identificadorFinca || animal.nombre, peso: '' })) });
+        } else {
+          const actividad = await obtenerActividadPorcinaPorTarea(tarea._id);
+          const procesados = new Set((actividad.ejecucion.participantes || []).map(String));
+          const disponibles = actividad.banda.participantes.filter((item) => item.estadoParticipacion !== 'RETIRADA' && !procesados.has(String(item._id))).map((item) => String(item._id));
+          const participantes = ['PARTO', 'DESTETE_CAMADA'].includes(actividad.ejecucion.tipoAccion) ? disponibles.slice(0, 1) : disponibles;
+          setActividadProtocolo({ tipo: 'PORCINO', ...actividad, fechaReal: fechaInput(new Date()), observaciones: '', resultado: 'PREÑADA', retornoCelo: false, participantes, producto: '', tipoSanidad: '', dosis: '', viaAplicacion: '', nacidosTotales: '', nacidosVivos: '', nacidosMuertos: '', momias: '', destetados: '', pesoPromedioDestete: '' });
+        }
+        setDetalle(null);
+        return;
+      }
       if (!navigator.onLine) {
         await guardarCambiosPendientes({
           tipo: 'completar-tarea',
@@ -468,6 +504,30 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
     }
   };
 
+  const guardarEjecucionProtocolo = async () => {
+    try {
+      setGuardando(true); setError('');
+      if (actividadProtocolo.tipo === 'ENGORDE') {
+        const tipoAccion = actividadProtocolo.ejecucion.tipoAccion;
+        const datos = { fechaReal: actividadProtocolo.fechaReal, observaciones: actividadProtocolo.observaciones };
+        if (tipoAccion === 'PESAJE') datos.pesajes = actividadProtocolo.pesajes.filter((item) => item.peso !== '');
+        if (tipoAccion === 'CAMBIO_RACION') datos.racion = actividadProtocolo.racion;
+        if (tipoAccion === 'SANIDAD') datos.aplicacion = { producto: actividadProtocolo.producto, tipo: actividadProtocolo.tipoSanidad, dosis: actividadProtocolo.dosis, viaAplicacion: actividadProtocolo.viaAplicacion, motivo: actividadProtocolo.observaciones };
+        await ejecutarPasoEngorde(actividadProtocolo.ciclo._id, actividadProtocolo.ejecucion._id, datos);
+      } else {
+        const tipoAccion = actividadProtocolo.ejecucion.tipoAccion;
+        const datos = { fechaReal: actividadProtocolo.fechaReal, observaciones: actividadProtocolo.observaciones, participantes: actividadProtocolo.participantes };
+        if (tipoAccion === 'DIAGNOSTICO_GESTACION') datos.resultado = actividadProtocolo.resultado;
+        if (tipoAccion === 'CONTROL_REPETICION') datos.retornoCelo = actividadProtocolo.retornoCelo;
+        if (tipoAccion === 'TRATAMIENTO_REPRODUCTIVO') datos.aplicacion = { producto: actividadProtocolo.producto, tipo: actividadProtocolo.tipoSanidad, dosis: actividadProtocolo.dosis, viaAplicacion: actividadProtocolo.viaAplicacion, motivo: actividadProtocolo.observaciones };
+        if (tipoAccion === 'PARTO') datos.camada = { nacidosTotales: Number(actividadProtocolo.nacidosTotales || 0), nacidosVivos: Number(actividadProtocolo.nacidosVivos || 0), nacidosMuertos: Number(actividadProtocolo.nacidosMuertos || 0), momias: Number(actividadProtocolo.momias || 0), destino: 'No definido' };
+        if (tipoAccion === 'DESTETE_CAMADA') { datos.destetados = Number(actividadProtocolo.destetados || 0); datos.pesoPromedioDestete = actividadProtocolo.pesoPromedioDestete || undefined; }
+        await ejecutarPasoBandaPorcina(actividadProtocolo.banda._id, actividadProtocolo.ejecucion._id, datos);
+      }
+      setActividadProtocolo(null); await cargarDatos();
+    } catch (err) { setError(err.message); } finally { setGuardando(false); }
+  };
+
   const borrar = async (tarea) => {
     const confirmar = window.confirm(`¿Eliminar la tarea "${tarea.titulo}"? Esta accion no se puede deshacer.`);
     if (!confirmar) return;
@@ -515,6 +575,16 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       </section>
 
       <div className="tareas-filtros">
+        <label className="tareas-buscador">
+          <span>Buscar tareas</span>
+          <input
+            type="search"
+            value={busquedaTexto}
+            onChange={(evento) => setBusquedaTexto(evento.target.value)}
+            placeholder="DIIO, animal, camada o protocolo"
+            maxLength="80"
+          />
+        </label>
         <div className="finanzas-rango-fechas tareas-rango-fechas">
           <label>
             Desde
@@ -783,6 +853,31 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
               {actividadIatf.ejecucion.pasoSnapshot.tipoAccion === 'OBSERVAR_CELO' && <div className="campo-completo iatf-aplicacion-selector"><strong>Celo observado ({actividadIatf.retornosCelo.length})</strong>{actividadIatf.participantes.filter((participante) => actividadIatf.animales.includes(String(participante.animal?._id || participante.animal))).map((participante) => { const id = String(participante.animal?._id || participante.animal); return <label key={participante._id}><input type="checkbox" checked={actividadIatf.retornosCelo.includes(id)} onChange={() => setActividadIatf((actual) => ({ ...actual, retornosCelo: actual.retornosCelo.includes(id) ? actual.retornosCelo.filter((item) => item !== id) : [...actual.retornosCelo, id] }))} /> {participante.animal?.diio || participante.animal?.identificadorFinca}</label>; })}</div>}
             </div>
             <div className="modal-actions"><button className="boton-link" type="button" onClick={() => setActividadIatf(null)}>Cancelar</button><button className="boton-primario" type="button" onClick={guardarEjecucionIatf} disabled={guardando || !actividadIatf.animales.length}>{guardando ? 'Registrando...' : 'Registrar ejecución real'}</button></div>
+          </section>
+        </div>
+      )}
+
+      {actividadProtocolo && (
+        <div className="modal-backdrop">
+          <section className="modal-panel iatf-modal">
+            <div className="panel-title">
+              <div><p className="eyebrow">Actividad de protocolo asignada</p><h2>{actividadProtocolo.ejecucion.nombre}</h2><p>{actividadProtocolo.tipo === 'ENGORDE' ? actividadProtocolo.ciclo.protocoloSnapshot.nombre : actividadProtocolo.banda.nombre}</p></div>
+              <button className="boton-link" type="button" onClick={() => setActividadProtocolo(null)}>Cerrar</button>
+            </div>
+            <div className="usuario-form-grid">
+              <label>Fecha real<input type="date" value={actividadProtocolo.fechaReal} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, fechaReal: e.target.value }))} /></label>
+              {actividadProtocolo.tipo === 'ENGORDE' && actividadProtocolo.ejecucion.tipoAccion === 'PESAJE' && <div className="campo-completo pesajes-lote-grid">{actividadProtocolo.pesajes.map((item, indice) => <label key={item.animal}>{item.etiqueta}<input type="number" min="0.01" step="0.01" value={item.peso} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, pesajes: actual.pesajes.map((peso, i) => i === indice ? { ...peso, peso: e.target.value } : peso) }))} /></label>)}</div>}
+              {actividadProtocolo.tipo === 'ENGORDE' && actividadProtocolo.ejecucion.tipoAccion === 'CAMBIO_RACION' && <label>Ración<select value={actividadProtocolo.racion} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, racion: e.target.value }))}><option value="">Seleccionar</option>{actividadProtocolo.raciones.map((item) => <option key={item._id} value={item._id}>{item.nombre} · {item.etapa}</option>)}</select></label>}
+              {actividadProtocolo.tipo === 'ENGORDE' && actividadProtocolo.ejecucion.tipoAccion === 'SANIDAD' && <><label>Producto<input value={actividadProtocolo.producto} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, producto: e.target.value }))} /></label><label>Tipo<input value={actividadProtocolo.tipoSanidad} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, tipoSanidad: e.target.value }))} /></label><label>Dosis<input value={actividadProtocolo.dosis} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, dosis: e.target.value }))} /></label><label>Vía de aplicación<input value={actividadProtocolo.viaAplicacion} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, viaAplicacion: e.target.value }))} /></label></>}
+              {actividadProtocolo.tipo === 'PORCINO' && <div className="campo-completo iatf-aplicacion-selector"><strong>Participantes atendidas ({actividadProtocolo.participantes.length})</strong>{actividadProtocolo.banda.participantes.filter((item) => item.estadoParticipacion !== 'RETIRADA').map((item) => { const id = String(item._id); return <label key={id}><input type="checkbox" checked={actividadProtocolo.participantes.includes(id)} onChange={() => setActividadProtocolo((actual) => ({ ...actual, participantes: actual.participantes.includes(id) ? actual.participantes.filter((actualId) => actualId !== id) : [...actual.participantes, id] }))} /> {item.animal?.diio || item.diio} · {item.animal?.nombre || item.nombre || 'Sin nombre'}</label>; })}</div>}
+              {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'DIAGNOSTICO_GESTACION' && <label>Resultado<select value={actividadProtocolo.resultado} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, resultado: e.target.value }))}><option value="PREÑADA">Preñada</option><option value="VACIA">Vacía</option><option value="DUDOSA">Dudosa</option></select></label>}
+              {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'CONTROL_REPETICION' && <label className="opcion-check"><input type="checkbox" checked={actividadProtocolo.retornoCelo} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, retornoCelo: e.target.checked }))} /> Se observó retorno a celo</label>}
+              {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'TRATAMIENTO_REPRODUCTIVO' && <><label>Producto<input required value={actividadProtocolo.producto} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, producto: e.target.value }))} /></label><label>Tipo<input value={actividadProtocolo.tipoSanidad} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, tipoSanidad: e.target.value }))} /></label><label>Dosis<input value={actividadProtocolo.dosis} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, dosis: e.target.value }))} /></label><label>Vía de aplicación<input value={actividadProtocolo.viaAplicacion} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, viaAplicacion: e.target.value }))} /></label></>}
+              {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'PARTO' && <><label>Nacidos totales<input type="number" min="0" value={actividadProtocolo.nacidosTotales} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, nacidosTotales: e.target.value }))} /></label><label>Nacidos vivos<input type="number" min="0" value={actividadProtocolo.nacidosVivos} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, nacidosVivos: e.target.value }))} /></label><label>Nacidos muertos<input type="number" min="0" value={actividadProtocolo.nacidosMuertos} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, nacidosMuertos: e.target.value }))} /></label><label>Momias<input type="number" min="0" value={actividadProtocolo.momias} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, momias: e.target.value }))} /></label></>}
+              {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'DESTETE_CAMADA' && <><label>Destetados<input type="number" min="0" value={actividadProtocolo.destetados} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, destetados: e.target.value }))} /></label><label>Peso promedio al destete<input type="number" min="0" step="0.01" value={actividadProtocolo.pesoPromedioDestete} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, pesoPromedioDestete: e.target.value }))} /></label></>}
+              <label className="campo-completo">Observaciones<textarea rows="3" value={actividadProtocolo.observaciones} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, observaciones: e.target.value }))} /></label>
+            </div>
+            <div className="modal-actions"><button className="boton-link" type="button" onClick={() => setActividadProtocolo(null)}>Cancelar</button><button className="boton-primario" type="button" onClick={guardarEjecucionProtocolo} disabled={guardando || (actividadProtocolo.tipo === 'PORCINO' && !actividadProtocolo.participantes.length)}>{guardando ? 'Registrando...' : 'Registrar ejecución real'}</button></div>
           </section>
         </div>
       )}

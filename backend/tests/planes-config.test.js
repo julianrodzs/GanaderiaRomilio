@@ -17,6 +17,9 @@ test('mantiene la progresion de funcionalidades comerciales', () => {
     assert.equal(planesConfig.GESTION.funcionalidades.analiticaProductiva, true);
     assert.equal(planesConfig.GESTION.funcionalidades.analiticaEconomica, false);
     assert.equal(planesConfig.PRO.funcionalidades.analiticaEconomica, true);
+    assert.equal(planesConfig.GESTION.funcionalidades.fotosAnimales, false);
+    assert.equal(planesConfig.PRO.funcionalidades.fotosAnimales, true);
+    assert.equal(planesConfig.PREMIUM.funcionalidades.fotosAnimales, true);
     assert.equal(planesConfig.PREMIUM.funcionalidades.configuracionEmailAvanzada, true);
     assert.equal(planesConfig.PREMIUM.funcionalidades.reportesMultiFinca, true);
     assert.equal(planesConfig.PRO.funcionalidades.reportesMultiFinca, false);
@@ -26,6 +29,7 @@ test('mantiene la progresion de funcionalidades comerciales', () => {
     assert.equal(PLAN_MINIMO_POR_FEATURE.analiticaEconomica, 'PRO');
     assert.equal(PLAN_MINIMO_POR_FEATURE.reportesMultiFinca, 'PREMIUM');
     assert.equal(PLAN_MINIMO_POR_FEATURE.operacionMultiFinca, 'GESTION');
+    assert.equal(PLAN_MINIMO_POR_FEATURE.fotosAnimales, 'PRO');
 });
 
 test('el plan esencial reserva una sola especie y limites separados', () => {

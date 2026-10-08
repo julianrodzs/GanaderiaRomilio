@@ -7,6 +7,7 @@ import OlvideContrasena from './Components/OlvideContrasena';
 import RestablecerContrasena from './Components/RestablecerContrasena';
 import { cambiarOrganizacionActiva, obtenerPerfilUsuario } from './services/api';
 import { PlanProvider } from './context/PlanContext';
+import { AparienciaProvider } from './context/AparienciaContext';
 import {
   limpiarCacheApiLegado,
   limpiarDatosOfflineContexto,
@@ -219,14 +220,16 @@ function App() {
     const claveFinca = `${sesion?.organizacion?._id || 'organizacion'}:${sesion?.fincaActiva?._id || sesion?.finca?._id || sesion?.fincaId || 'principal'}`;
     return (
       <PlanProvider key={claveFinca}>
-        <ListaUsuario
-          key={claveFinca}
-          usuario={sesion?.usuario}
-          sesion={sesion}
-          onCambiarFinca={cambiarFincaActiva}
-          onCambiarOrganizacion={cambiarOrganizacion}
-          onLogout={cerrarSesion}
-        />
+        <AparienciaProvider key={claveFinca} contextoId={claveFinca}>
+          <ListaUsuario
+            key={claveFinca}
+            usuario={sesion?.usuario}
+            sesion={sesion}
+            onCambiarFinca={cambiarFincaActiva}
+            onCambiarOrganizacion={cambiarOrganizacion}
+            onLogout={cerrarSesion}
+          />
+        </AparienciaProvider>
       </PlanProvider>
     );
   }

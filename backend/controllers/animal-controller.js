@@ -24,6 +24,7 @@ const Lote = require('../models/Lote');
 const { obtenerCategoriaAnimal, validarYPrepararCategoriaAnimal } = require('../services/categoriaAnimal-service');
 const { prepararObjetivoProductivo } = require('../config/objetivosProductivos');
 const { sanitizarAnimal } = require('../services/animal-dto');
+const { limpiarFotoAnimalEliminado } = require('../services/fotoAnimal-service');
 
 const limpiarDiio = (diio) => {
     if (diio === undefined) return undefined;
@@ -219,6 +220,7 @@ animalCtrl.getAnimales = async (req, res) => {
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo especie')
             .populate('madre', 'diio identificadorFinca nombre sexo especie')
+            .populate('fotoPrincipal', 'url nombreOriginal mimeType tamanoBytes')
             .sort({ createdAt: -1 })
             .lean();
         let animales = await enriquecerConEstadoSanitario(encontrados.map((animal) => ({
@@ -282,6 +284,7 @@ animalCtrl.getAnimal = async (req, res) => {
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo')
             .populate('madre', 'diio identificadorFinca nombre sexo')
+            .populate('fotoPrincipal', 'url nombreOriginal mimeType tamanoBytes')
             .lean();
 
         if (!animal) {
@@ -387,7 +390,8 @@ animalCtrl.updateAnimal = async (req, res) => {
             .populate('loteActual', 'codigo nombre proposito estado')
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo')
-            .populate('madre', 'diio identificadorFinca nombre sexo');
+            .populate('madre', 'diio identificadorFinca nombre sexo')
+            .populate('fotoPrincipal', 'url nombreOriginal mimeType tamanoBytes');
         const animal = permisoReactivacion
             ? await ejecutarConReservaCuota({ permiso: permisoReactivacion, recurso: 'animales', organizacionId: req.organizacionId, operacion: actualizar })
             : await actualizar();
@@ -467,6 +471,7 @@ animalCtrl.deleteAnimal = async (req, res) => {
         }
 
         await eliminarEventosPorReferencia({ moduloOrigen: 'Inventario', referenciaId: animal._id });
+        await limpiarFotoAnimalEliminado(animal.fotoPrincipal);
 
         res.json({ mensaje: 'Animal eliminado' });
     } catch (error) {

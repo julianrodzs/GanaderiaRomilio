@@ -11,6 +11,7 @@ import {
   obtenerAnimales,
   obtenerRegistrosReproductivos,
   obtenerUsuariosAsignables,
+  reabrirCicloReproductivo,
   registrarTerneroDesdeParto
 } from '../services/api';
 import { fechaEnRango, obtenerRangoReproduccion } from '../utils/fechas';
@@ -21,6 +22,7 @@ import { etiquetaUsuarioConRol } from '../utils/usuarios';
 import TablaDinamica from './TablaDinamica';
 import FeatureGate from './FeatureGate';
 import IATF from './IATF';
+import BandasPorcinas from './BandasPorcinas';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -95,7 +97,11 @@ const columnas = [
     label: 'Gestión ciclo',
     accessor: (registro) => registro.estadoCiclo || 'Activo',
     render: (registro) => {
-      if (registro.soloLectura || (registro.estadoCiclo && registro.estadoCiclo !== 'Activo')) return '--';
+      if (registro.soloLectura) return '--';
+      if (registro.estadoCiclo === 'Cerrado') {
+        return <button type="button" onClick={() => registro.reabrirCiclo?.(registro)}>Reabrir</button>;
+      }
+      if (registro.estadoCiclo && registro.estadoCiclo !== 'Activo') return '--';
 
       return (
         <div className="acciones-ciclo">
@@ -152,6 +158,7 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const cambiarEspecie = (valor) => {
     localStorage.setItem('ganaderiaEspecie', valor);
     setEspecie(valor);
+    setVistaReproduccion('general');
   };
 
   const registrosFiltrados = useMemo(() => {
@@ -280,6 +287,21 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
 
     try {
       await cerrarCicloReproductivo(registro._id, motivo);
+      setCargando(true);
+      await cargarDatos();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const reabrirCiclo = async (registro) => {
+    const confirmado = window.confirm('¿Reabrir este ciclo? Las tareas canceladas por el cierre volverán a quedar pendientes con las fechas recalculadas.');
+    if (!confirmado) return;
+    const motivo = window.prompt('Motivo de reapertura:', 'Cierre realizado por error');
+    if (motivo === null) return;
+
+    try {
+      await reabrirCicloReproductivo(registro._id, motivo);
       setCargando(true);
       await cargarDatos();
     } catch (err) {
@@ -447,8 +469,10 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
 
   const tabsReproduccion = (
     <nav className="sanidad-tabs reproduccion-tabs" aria-label="Vistas de reproducción">
-      <button type="button" className={vistaReproduccion === 'general' ? 'activo' : ''} onClick={() => setVistaReproduccion('general')}>General</button>
-      <button type="button" className={vistaReproduccion === 'iatf' ? 'activo' : ''} onClick={() => setVistaReproduccion('iatf')}>IATF</button>
+      <button type="button" className={vistaReproduccion === 'general' ? 'activo' : ''} onClick={() => setVistaReproduccion('general')}>{especie === 'Porcino' ? 'Individual' : 'General'}</button>
+      {especie === 'Porcino' && <button type="button" className={vistaReproduccion === 'bandas' ? 'activo' : ''} onClick={() => setVistaReproduccion('bandas')}>Bandas</button>}
+      {especie === 'Porcino' && <button type="button" className={vistaReproduccion === 'protocolos' ? 'activo' : ''} onClick={() => setVistaReproduccion('protocolos')}>Protocolos</button>}
+      {especie === 'Bovino' && <button type="button" className={vistaReproduccion === 'iatf' ? 'activo' : ''} onClick={() => setVistaReproduccion('iatf')}>IATF</button>}
     </nav>
   );
 
@@ -463,6 +487,23 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
           etiqueta="Reproducción avanzada"
         >
           <IATF soloLectura={soloLectura} rolUsuario={rolUsuario} />
+        </FeatureGate>
+      </>
+    );
+  }
+
+  if (['bandas', 'protocolos'].includes(vistaReproduccion)) {
+    return (
+      <>
+        {tabsReproduccion}
+        <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
+        <FeatureGate
+          feature="protocolosReproductivosPorcinos"
+          titulo="Bandas reproductivas porcinas"
+          pregunta="Coordina servicios, diagnósticos, partos y destetes con fechas reales."
+          etiqueta="Reproducción avanzada"
+        >
+          <BandasPorcinas modo={vistaReproduccion} soloLectura={soloLectura} />
         </FeatureGate>
       </>
     );
@@ -575,6 +616,7 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
               abrirTernero: abrirFormularioTernero,
               abrirCamada: abrirFormularioCamada,
               cerrarCiclo,
+              reabrirCiclo,
               marcarNoPrenada,
               cancelarCiclo,
               soloLectura

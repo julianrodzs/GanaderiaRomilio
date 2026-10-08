@@ -116,6 +116,28 @@ export const actualizarConfiguracionEmails = (datos) => request('/usuario/config
   body: JSON.stringify(datos)
 });
 
+export const obtenerApariencia = () => request('/apariencia');
+export const obtenerConfiguracionApariencia = () => request('/apariencia/configuracion');
+
+const enviarImagenApariencia = (ruta, imagen) => {
+  const formData = new FormData();
+  formData.append('imagen', imagen);
+  return request(ruta, { method: 'POST', body: formData });
+};
+
+export const subirLogoOrganizacion = (imagen) => enviarImagenApariencia('/apariencia/organizacion/logo', imagen);
+export const subirImagenFinca = (fincaId, tipo, imagen) => enviarImagenApariencia(`/apariencia/fincas/${fincaId}/${tipo}`, imagen);
+export const reutilizarImagenDashboard = (fincaId) => request(`/apariencia/fincas/${fincaId}/reutilizar-dashboard`, { method: 'PATCH' });
+export const restaurarImagenApariencia = ({ alcance, tipo, fincaId }) => request(`/apariencia/${alcance}/${tipo}${fincaId ? `?fincaId=${encodeURIComponent(fincaId)}` : ''}`, { method: 'DELETE' });
+
+export const subirFotoPrincipalAnimal = (animalId, imagen) => {
+  const formData = new FormData();
+  formData.append('imagen', imagen);
+  return request(`/animales/${animalId}/foto`, { method: 'POST', body: formData });
+};
+
+export const eliminarFotoPrincipalAnimal = (animalId) => request(`/animales/${animalId}/foto`, { method: 'DELETE' });
+
 export const obtenerLotes = (filtros = {}) => request(`/lotes${construirQuery(filtros)}`);
 export const obtenerLote = (id) => request(`/lotes/${id}`);
 export const crearLote = (datos) => request('/lotes', { method: 'POST', body: JSON.stringify(datos) });
@@ -796,6 +818,13 @@ export const cerrarCicloReproductivo = (id, motivo = '') => {
   });
 };
 
+export const reabrirCicloReproductivo = (id, motivo = '') => {
+  return request(`/reproduccion/${id}/reabrir-ciclo`, {
+    method: 'PATCH',
+    body: JSON.stringify({ motivo })
+  });
+};
+
 export const cancelarCicloReproductivo = (id, motivo = '') => {
   return request(`/reproduccion/${id}/cancelar-ciclo`, {
     method: 'PATCH',
@@ -837,6 +866,34 @@ export const crearInsumoIATF = (datos) => request('/iatf/insumos', { method: 'PO
 export const actualizarInsumoIATF = (id, datos) => request(`/iatf/insumos/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
 export const obtenerConsolidadoIATF = () => request('/iatf/metricas/consolidado');
 export const obtenerActividadIATFPorTarea = (tareaId) => request(`/iatf/tareas/${tareaId}`);
+
+export const obtenerPlantillasEngorde = (incluirInactivas = false) => request(`/protocolos-engorde/plantillas${incluirInactivas ? '?incluirInactivas=true' : ''}`);
+export const crearPlantillaEngorde = (datos) => request('/protocolos-engorde/plantillas', { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarPlantillaEngorde = (id, datos) => request(`/protocolos-engorde/plantillas/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+export const obtenerCiclosEngorde = (filtros = {}) => request(`/protocolos-engorde/ciclos${construirQuery(filtros)}`);
+export const obtenerCicloEngorde = (id) => request(`/protocolos-engorde/ciclos/${id}`);
+export const crearCicloEngorde = (datos) => request('/protocolos-engorde/ciclos', { method: 'POST', body: JSON.stringify(datos) });
+export const ejecutarPasoEngorde = (id, pasoId, datos) => request(`/protocolos-engorde/ciclos/${id}/pasos/${pasoId}/ejecutar`, { method: 'POST', body: JSON.stringify(datos) });
+export const avanzarEtapaEngorde = (id, datos = {}) => request(`/protocolos-engorde/ciclos/${id}/avanzar-etapa`, { method: 'POST', body: JSON.stringify(datos) });
+export const finalizarCicloEngorde = (id, motivo = '') => request(`/protocolos-engorde/ciclos/${id}/finalizar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const cancelarCicloEngorde = (id, motivo = '') => request(`/protocolos-engorde/ciclos/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const obtenerCandidatosVentaEngorde = (id) => request(`/protocolos-engorde/ciclos/${id}/candidatos-venta`);
+export const obtenerConsolidadoProtocolosEngorde = () => request('/protocolos-engorde/metricas/consolidado');
+export const obtenerActividadEngordePorTarea = (tareaId) => request(`/protocolos-engorde/tareas/${tareaId}`);
+
+export const obtenerPlantillasPorcinas = (incluirInactivas = false) => request(`/protocolos-porcinos/plantillas${incluirInactivas ? '?incluirInactivas=true' : ''}`);
+export const crearPlantillaPorcina = (datos) => request('/protocolos-porcinos/plantillas', { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarPlantillaPorcina = (id, datos) => request(`/protocolos-porcinos/plantillas/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+export const obtenerBandasPorcinas = (filtros = {}) => request(`/protocolos-porcinos/bandas${construirQuery(filtros)}`);
+export const obtenerBandaPorcina = (id) => request(`/protocolos-porcinos/bandas/${id}`);
+export const crearBandaPorcina = (datos) => request('/protocolos-porcinos/bandas', { method: 'POST', body: JSON.stringify(datos) });
+export const ejecutarPasoBandaPorcina = (id, pasoId, datos) => request(`/protocolos-porcinos/bandas/${id}/pasos/${pasoId}/ejecutar`, { method: 'POST', body: JSON.stringify(datos) });
+export const reprogramarBandaPorcina = (id, eventos) => request(`/protocolos-porcinos/bandas/${id}/reprogramar`, { method: 'POST', body: JSON.stringify({ eventos }) });
+export const retirarParticipanteBandaPorcina = (id, participanteId, motivo) => request(`/protocolos-porcinos/bandas/${id}/participantes/${participanteId}/retirar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const finalizarBandaPorcina = (id, motivo = '') => request(`/protocolos-porcinos/bandas/${id}/finalizar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const cancelarBandaPorcina = (id, motivo = '') => request(`/protocolos-porcinos/bandas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const obtenerConsolidadoBandasPorcinas = () => request('/protocolos-porcinos/metricas/consolidado');
+export const obtenerActividadPorcinaPorTarea = (tareaId) => request(`/protocolos-porcinos/tareas/${tareaId}`);
 
 export const registrarTerneroDesdeParto = (registroId, ternero) => {
   return request(`/reproduccion/${registroId}/ternero`, {

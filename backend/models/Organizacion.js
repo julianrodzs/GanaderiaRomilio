@@ -13,6 +13,9 @@ const organizacionSchema = new Schema(
             default: 'Activa',
             index: true
         },
+        branding: {
+            logo: { type: Schema.Types.ObjectId, ref: 'ArchivoMultimedia', default: null }
+        },
         fincaPrincipal: { type: Schema.Types.ObjectId, ref: 'Finca', default: null },
         plan: {
             codigo: {

@@ -10,6 +10,7 @@ import {
   crearEventoAnimal,
   eliminarAnimal,
   eliminarCamada,
+  eliminarFotoPrincipalAnimal,
   obtenerAnimales,
   obtenerAnimal,
   obtenerArbolGenealogico,
@@ -19,7 +20,8 @@ import {
   obtenerEventosCamada,
   obtenerHistorialFincaAnimal,
   obtenerPesajesPorAnimal,
-  registrarDesteteCamada
+  registrarDesteteCamada,
+  subirFotoPrincipalAnimal
 } from '../services/api';
 import { guardarInventarioOffline, obtenerInventarioOffline } from '../services/offlineStorage';
 import FormularioAnimal from './FormularioAnimal';
@@ -33,6 +35,7 @@ import Lotes from './Lotes';
 import { calcularEdadMeses, obtenerAptitudReproductivaPorEdad, obtenerCategoriaVisible } from '../utils/categoriasAnimales';
 import { etiquetaObjetivoProductivo } from '../constants/objetivosProductivos';
 import { usePlan } from '../context/PlanContext';
+import { useApariencia } from '../context/AparienciaContext';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -115,6 +118,31 @@ const NodoGenealogico = ({ nodo, titulo = 'Animal' }) => {
       )}
     </article>
   );
+};
+
+const FotoAnimal = ({ animal, detalle = false }) => {
+  const [imagenInvalida, setImagenInvalida] = useState(false);
+  const url = animal?.fotoPrincipal?.url;
+
+  useEffect(() => { setImagenInvalida(false); }, [url]);
+
+  const identificador = animal?.nombre || animal?.diio || animal?.identificadorFinca || 'Animal';
+  const inicial = identificador.trim().charAt(0).toUpperCase() || 'A';
+
+  return (
+    <div className={`foto-animal ${detalle ? 'foto-animal-detalle' : 'foto-animal-miniatura'}`}>
+      {url && !imagenInvalida
+        ? <img src={url} alt={`Fotografía de ${identificador}`} onError={() => setImagenInvalida(true)} />
+        : <span aria-label="Sin fotografía">{inicial}</span>}
+    </div>
+  );
+};
+
+const columnaFotoAnimal = {
+  id: 'fotoPrincipal',
+  label: 'Foto',
+  accessor: (animal) => animal.fotoPrincipal?.url || '',
+  render: (animal) => <FotoAnimal animal={animal} />
 };
 
 const columnas = [
@@ -231,6 +259,7 @@ const filtrosCamadas = [
 
 const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavegar }) => {
   const { capacidadDisponible, tieneFeature } = usePlan();
+  const { almacenamientoDisponible } = useApariencia();
   const [animales, setAnimales] = useState([]);
   const [camadas, setCamadas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -263,11 +292,14 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
   const [guardandoEvento, setGuardandoEvento] = useState(false);
   const [cambiandoEstadoSanitario, setCambiandoEstadoSanitario] = useState(false);
   const [errorEstadoSanitario, setErrorEstadoSanitario] = useState('');
+  const [guardandoFoto, setGuardandoFoto] = useState(false);
+  const [errorFoto, setErrorFoto] = useState('');
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const [vistaInventario, setVistaInventario] = useState('Animales');
   const [modoTrasladoFinca, setModoTrasladoFinca] = useState(false);
   const etiquetaId = 'DIIO';
   const cuotaAnimales = capacidadDisponible('animales');
+  const mostrarColumnaFotos = tieneFeature('fotosAnimales') || animales.some((animal) => animal.fotoPrincipal?.url);
 
   const cambiarEspecie = (valor) => {
     localStorage.setItem('ganaderiaEspecie', valor);
@@ -480,6 +512,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
     setArbolGenealogico(null);
     setDescendenciaAnimal(null);
     setHistorialFincasAnimal([]);
+    setErrorFoto('');
     const [detalle] = await Promise.all([
       obtenerAnimal(animal._id),
       cargarEventosAnimal(animal._id),
@@ -505,6 +538,46 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
     setErrorGenealogia('');
     setCambiandoEstadoSanitario(false);
     setErrorEstadoSanitario('');
+    setErrorFoto('');
+  };
+
+  const actualizarDetalleTrasFoto = async (animalId) => {
+    const [detalle] = await Promise.all([
+      obtenerAnimal(animalId),
+      cargarAnimales()
+    ]);
+    setAnimalDetalle(detalle);
+  };
+
+  const cambiarFotoAnimal = async (evento) => {
+    const archivo = evento.target.files?.[0];
+    evento.target.value = '';
+    if (!archivo || !animalDetalle?._id) return;
+
+    try {
+      setGuardandoFoto(true);
+      setErrorFoto('');
+      await subirFotoPrincipalAnimal(animalDetalle._id, archivo);
+      await actualizarDetalleTrasFoto(animalDetalle._id);
+    } catch (err) {
+      setErrorFoto(err.message);
+    } finally {
+      setGuardandoFoto(false);
+    }
+  };
+
+  const quitarFotoAnimal = async () => {
+    if (!animalDetalle?._id || !window.confirm('¿Eliminar la fotografía principal de este animal?')) return;
+    try {
+      setGuardandoFoto(true);
+      setErrorFoto('');
+      await eliminarFotoPrincipalAnimal(animalDetalle._id);
+      await actualizarDetalleTrasFoto(animalDetalle._id);
+    } catch (err) {
+      setErrorFoto(err.message);
+    } finally {
+      setGuardandoFoto(false);
+    }
   };
 
   const guardarEstadoSanitario = async ({ estadoSanitario, motivo }) => {
@@ -704,7 +777,9 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
         <TablaDinamica
           titulo={especie === 'Porcino' ? 'Porcinos' : 'Bovinos'}
           subtitulo="Inventario"
-          columnas={(especie === 'Porcino' ? [columnas[0], columnaCamadaOrigen, ...columnas.slice(1)] : columnas)
+          columnas={(especie === 'Porcino'
+            ? [...(mostrarColumnaFotos ? [columnaFotoAnimal] : []), columnas[0], columnaCamadaOrigen, ...columnas.slice(1)]
+            : [...(mostrarColumnaFotos ? [columnaFotoAnimal] : []), ...columnas])
             .map((columna) => columna.id === 'diio' ? { ...columna, label: etiquetaId } : columna)}
           datos={animales.map((animal) => ({ ...animal, abrirDetalle: abrirDetalleAnimal }))}
           cargando={cargando}
@@ -832,6 +907,53 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
               </div>
               <button className="boton-link" type="button" onClick={cerrarDetalleAnimal}>Cerrar</button>
             </div>
+
+            <section className="foto-animal-principal">
+              <FotoAnimal animal={animalDetalle} detalle />
+              <div className="foto-animal-contenido">
+                <div>
+                  <p className="eyebrow">Identificación visual</p>
+                  <h3>Fotografía principal</h3>
+                  <span>Una imagen del animal, disponible para bovinos y porcinos.</span>
+                </div>
+                {errorFoto && <div className="alerta-formulario">{errorFoto}</div>}
+                {!soloLectura && (
+                  <div className="foto-animal-acciones">
+                    {tieneFeature('fotosAnimales') ? (
+                      <>
+                        <label
+                          className={`boton-secundario compacto foto-animal-selector ${!almacenamientoDisponible || guardandoFoto ? 'deshabilitado' : ''}`}
+                          title={!almacenamientoDisponible ? 'Disponible cuando Cloudflare R2 esté configurado.' : ''}
+                        >
+                          {guardandoFoto ? 'Guardando...' : animalDetalle.fotoPrincipal ? 'Cambiar foto' : 'Agregar foto'}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            onChange={cambiarFotoAnimal}
+                            disabled={!almacenamientoDisponible || guardandoFoto}
+                          />
+                        </label>
+                        {!almacenamientoDisponible && (
+                          <small>La carga se habilitará al configurar Cloudflare R2.</small>
+                        )}
+                      </>
+                    ) : (
+                      <small>La carga de fotografías está disponible a partir del plan Pro.</small>
+                    )}
+                    {animalDetalle.fotoPrincipal && (
+                      <button
+                        className="boton-secundario compacto peligro"
+                        type="button"
+                        onClick={quitarFotoAnimal}
+                        disabled={guardandoFoto}
+                      >
+                        Eliminar foto
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
 
             <div className="detalle-animal-grid">
               <article>

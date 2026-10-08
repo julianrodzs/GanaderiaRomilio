@@ -61,6 +61,8 @@ Auditoría avanzada se consulta desde Pro. La captura continúa en todos los pla
 
 IATF y los protocolos reproductivos configurables se habilitan desde Pro mediante `iatfReproductivo`. Premium agrega el consolidado observado entre fincas. La operación completa está documentada en `iatf.md`.
 
+La fotografia principal de bovinos y porcinos se habilita desde Pro mediante `fotosAnimales`. Una reduccion de plan conserva las fotografias existentes visibles y permite eliminarlas; solamente bloquea nuevas cargas y reemplazos.
+
 El Centro de Alertas permanece activo en todos los planes. Los correos operativos de tareas se envían solo en Pro y Premium; recuperación de contraseña y seguridad no dependen del plan.
 
 ## Dron

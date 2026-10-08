@@ -7,6 +7,8 @@ import {
   guardarMetaMultiFinca,
   obtenerCierresMultiFinca,
   obtenerCierreMultiFinca,
+  obtenerConsolidadoBandasPorcinas,
+  obtenerConsolidadoProtocolosEngorde,
   obtenerMetasMultiFinca
 } from '../services/api';
 
@@ -52,6 +54,8 @@ const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fecha
   const [metas, setMetas] = useState([]);
   const [cierres, setCierres] = useState([]);
   const [cierreDetalle, setCierreDetalle] = useState(null);
+  const [protocolosEngorde, setProtocolosEngorde] = useState([]);
+  const [bandasPorcinas, setBandasPorcinas] = useState([]);
   const [meta, setMeta] = useState({ alcance: 'ORGANIZACION', finca: '', nombre: '', fechaInicio, fechaFin, metas: {} });
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
@@ -59,8 +63,8 @@ const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fecha
 
   const cargar = async () => {
     try {
-      const [metasData, cierresData] = await Promise.all([obtenerMetasMultiFinca(), obtenerCierresMultiFinca()]);
-      setMetas(metasData); setCierres(cierresData);
+      const [metasData, cierresData, engordeData, porcinoData] = await Promise.all([obtenerMetasMultiFinca(), obtenerCierresMultiFinca(), obtenerConsolidadoProtocolosEngorde(), obtenerConsolidadoBandasPorcinas()]);
+      setMetas(metasData); setCierres(cierresData); setProtocolosEngorde(engordeData); setBandasPorcinas(porcinoData);
     } catch (err) { setError(err.message); }
   };
   useEffect(() => { cargar(); }, []);
@@ -137,6 +141,10 @@ const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fecha
           <p className="nota-monedas-reporte">Cada fila reúne el mes completo. CRC y USD se muestran por separado porque no se convierten ni se suman entre sí.</p>
         </section>
       )}
+
+      {protocolosEngorde.length > 0 && <section className="consolidacion-subpanel"><div className="panel-title compacto"><div><p className="eyebrow">Protocolos de engorde</p><h3>Desempeño observado por finca</h3></div></div><div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Finca</th><th>Lotes activos</th><th>Animales</th><th>Peso promedio</th><th>GMD</th><th>Días promedio</th><th>Listos venta</th><th>Cumplimiento</th></tr></thead><tbody>{protocolosEngorde.map((item) => { const finca = fincas.find((actual) => String(actual._id) === String(item.fincaId)); return <tr key={item.fincaId}><td>{finca?.nombre || '--'}</td><td>{item.lotesActivos}</td><td>{item.animales}</td><td>{item.pesoPromedioKg == null ? '--' : `${numero(item.pesoPromedioKg)} kg`}<small>{item.coberturaPeso.conDato}/{item.coberturaPeso.total} con peso</small></td><td>{item.gmdKgDia == null ? '--' : `${numero(item.gmdKgDia)} kg/día`}</td><td>{item.diasPromedio == null ? '--' : numero(item.diasPromedio)}</td><td>{item.lotesListosVenta}</td><td>{item.cumplimiento.porcentaje}%<small>{item.cumplimiento.realizadas}/{item.cumplimiento.totalObligatorias}</small></td></tr>; })}</tbody></table></div><p className="nota-monedas-reporte">El peso se pondera por animales con dato y la GMD por animal-días; no se promedian promedios de fincas.</p></section>}
+
+      {bandasPorcinas.length > 0 && <section className="consolidacion-subpanel"><div className="panel-title compacto"><div><p className="eyebrow">Bandas porcinas</p><h3>Resultado reproductivo por finca</h3></div></div><div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Finca</th><th>Bandas</th><th>Servidas</th><th>Preñadas</th><th>Preñez</th><th>Partos</th><th>Nacidos vivos</th><th>Destetados</th><th>Destete-servicio</th></tr></thead><tbody>{bandasPorcinas.map((item) => { const finca = fincas.find((actual) => String(actual._id) === String(item.fincaId)); return <tr key={item.fincaId}><td>{finca?.nombre || '--'}</td><td>{item.bandas}</td><td>{item.servidas}</td><td>{item.prenadas}</td><td>{item.tasaPrenez == null ? '--' : `${item.tasaPrenez}%`}<small>{item.prenadas}/{item.servidas}</small></td><td>{item.partos}</td><td>{item.nacidosVivos}</td><td>{item.destetados}</td><td>{item.intervaloDesteteServicioDias == null ? '--' : `${item.intervaloDesteteServicioDias} días`}<small>{item.coberturaIntervalo.conDato}/{item.coberturaIntervalo.total} con dato</small></td></tr>; })}</tbody></table></div><p className="nota-monedas-reporte">La preñez consolidada se calcula con la suma de preñadas dividida entre la suma de servidas.</p></section>}
 
       {puedeConfigurar && (
         <form className="consolidacion-subpanel meta-consolidacion-form" onSubmit={guardarMeta}>

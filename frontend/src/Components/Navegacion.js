@@ -3,6 +3,7 @@ import { puedeAccederModulo } from '../constants/permisosRoles';
 import CampanaNotificaciones from './CampanaNotificaciones';
 import EstadoSincronizacion from './EstadoSincronizacion';
 import { usePlan } from '../context/PlanContext';
+import { useApariencia } from '../context/AparienciaContext';
 
 const Navegacion = ({
   vistaActiva = 'Dashboard',
@@ -22,6 +23,7 @@ const Navegacion = ({
   onDescartarCambio
 }) => {
   const { plan } = usePlan();
+  const { logo } = useApariencia();
   const navegacionRef = useRef(null);
   const [desplazamiento, setDesplazamiento] = useState({ izquierda: false, derecha: false });
   const itemsBase = ['Dashboard', 'Tareas', 'Importar', 'Inventario', 'Pesajes', 'Potreros', 'Alimentacion', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone'];
@@ -64,7 +66,7 @@ const Navegacion = ({
   return (
     <header className="app-header">
       <div className="app-brand">
-        <span className="brand-icon">GR</span>
+        <img className="brand-logo" src={logo} alt="Logo de la organización" onError={(evento) => { evento.currentTarget.onerror = null; evento.currentTarget.src = '/assests/logo-romilio.png'; }} />
         {organizaciones.length > 1 && (
           <label className="selector-finca-header selector-organizacion-header">
             <span>Organización</span>
