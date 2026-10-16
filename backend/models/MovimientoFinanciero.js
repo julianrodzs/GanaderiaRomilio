@@ -77,6 +77,12 @@ const movimientoFinancieroSchema = new Schema(
     }
 );
 
+movimientoFinancieroSchema.statics.CAMPOS_ORIGEN_INTERNOS = Object.freeze([
+    'organizacionId', 'fincaId', 'referenciaId', 'referenciaModelo',
+    'alcanceFinanciero', 'grupoConsolidacion', 'fincaContraparte',
+    'excluirConsolidacion', 'porcentajeDistribucion'
+]);
+
 movimientoFinancieroSchema.pre('validate', function normalizarMovimiento(next) {
     const normalizado = normalizarMovimientoFinanciero(this.toObject());
 

@@ -10,6 +10,7 @@ import {
   marcarCicloNoPrenada,
   obtenerAnimales,
   obtenerRegistrosReproductivos,
+  obtenerSemenReproductivoDisponible,
   obtenerUsuariosAsignables,
   reabrirCicloReproductivo,
   registrarTerneroDesdeParto
@@ -135,6 +136,7 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const [registros, setRegistros] = useState([]);
   const [animales, setAnimales] = useState([]);
   const [usuariosAsignables, setUsuariosAsignables] = useState([]);
+  const [semenDisponible, setSemenDisponible] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -172,14 +174,16 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const cargarDatos = async () => {
     try {
       setError('');
-      const [registrosData, animalesData, usuariosData] = await Promise.all([
+      const [registrosData, animalesData, usuariosData, semenData] = await Promise.all([
         obtenerRegistrosReproductivos({ especie }),
         obtenerAnimales({ especie }),
-        soloLectura ? Promise.resolve([]) : obtenerUsuariosAsignables('Reproduccion')
+        soloLectura ? Promise.resolve([]) : obtenerUsuariosAsignables('Reproduccion'),
+        soloLectura ? Promise.resolve([]) : obtenerSemenReproductivoDisponible()
       ]);
       setRegistros(registrosData);
       setAnimales(animalesData);
       setUsuariosAsignables(usuariosData || []);
+      setSemenDisponible(semenData || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -430,6 +434,7 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
           error={errorFormulario}
           especie={especie}
           usuariosAsignables={usuariosAsignables}
+          semenDisponible={semenDisponible}
         />
         {conflictoCiclo && (
           <div className="modal-backdrop">

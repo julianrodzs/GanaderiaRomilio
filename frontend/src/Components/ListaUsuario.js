@@ -19,7 +19,7 @@ import { useApariencia } from '../context/AparienciaContext';
 import AdministracionSaas from '../pages/AdministracionSaas';
 import ConfiguracionCuenta from '../pages/ConfiguracionCuenta';
 import Ventas from './Ventas';
-import { puedeAccederModulo, puedeGestionarModulo } from '../constants/permisosRoles';
+import { puedeAccederModulo, puedeGestionarModulo, puedeRealizarAccion } from '../constants/permisosRoles';
 import {
   obtenerAnimales,
   obtenerEficienciaEngorde,
@@ -314,7 +314,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
   };
 
   const descartarCambio = async (id) => {
-    if (!window.confirm('¿Descartar este cambio local? La tarea conservara su estado actual en el servidor.')) return;
+    if (!window.confirm('¿Descartar este cambio local pendiente de sincronización?')) return;
     await eliminarCambioPendiente(id).catch(() => {});
   };
 
@@ -413,6 +413,8 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
         <Animales
           soloLectura={!puedeGestionarModulo(rol, 'Inventario') || !estadoConexion.online}
           puedeGestionarSanidad={puedeGestionarModulo(rol, 'Sanidad') && estadoConexion.online}
+          puedeCrearNotaBitacora={puedeRealizarAccion(rol, 'bitacora.crearNotas')}
+          estaOnline={estadoConexion.online}
           onNavegar={setVistaActiva}
         />
       </main>
@@ -471,7 +473,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         <Navegacion {...propsNavegacion} vistaActiva="Finanzas" />
-        <Finanzas />
+        <Finanzas rolUsuario={rol} />
       </main>
     );
   }

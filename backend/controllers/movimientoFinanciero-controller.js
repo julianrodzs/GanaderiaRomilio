@@ -1,6 +1,13 @@
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const { normalizarMovimientoFinanciero } = require('../services/normalizacionFinanciera-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
+const { sanitizarMovimientoManual } = require('../services/movimientoFinanciero-dto');
+const { crearMapaMonedas, normalizarMoneda } = require('../services/finanzas-calculos-service');
+const {
+    errorMovimientoAutomatico,
+    esMovimientoFinancieroAutomatico,
+    presentarMovimientoFinanciero
+} = require('../services/movimientoFinanciero-proteccion-service');
 
 const movimientoFinancieroCtrl = {};
 
@@ -38,38 +45,6 @@ const normalizarTipoMovimiento = (tipoMovimiento = '') => {
     return tipoMovimiento;
 };
 
-const calcularResumenPorTipo = async () => {
-    const totales = await MovimientoFinanciero.aggregate([
-        {
-            $group: {
-                _id: '$tipoMovimiento',
-                total: { $sum: '$monto' }
-            }
-        }
-    ]);
-
-    return totales.reduce((acumulado, item) => {
-        acumulado[item._id] = item.total;
-        return acumulado;
-    }, {});
-};
-
-const calcularResumenPorNaturaleza = async () => {
-    const totales = await MovimientoFinanciero.aggregate([
-        {
-            $group: {
-                _id: '$naturaleza',
-                total: { $sum: '$monto' }
-            }
-        }
-    ]);
-
-    return totales.reduce((acumulado, item) => {
-        acumulado[item._id] = item.total;
-        return acumulado;
-    }, {});
-};
-
 const construirFiltroFecha = ({ fechaInicio, fechaFin } = {}) => {
     const filtro = {};
 
@@ -100,7 +75,7 @@ movimientoFinancieroCtrl.getMovimientos = async (req, res) => {
             MovimientoFinanciero.find().sort({ fecha: -1 })
         );
 
-        res.json(movimientos);
+        res.json(movimientos.map(presentarMovimientoFinanciero));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener movimientos financieros', error: error.message });
     }
@@ -108,7 +83,12 @@ movimientoFinancieroCtrl.getMovimientos = async (req, res) => {
 
 movimientoFinancieroCtrl.createMovimiento = async (req, res) => {
     try {
-        const nuevoMovimiento = new MovimientoFinanciero(normalizarMovimientoFinanciero(req.body));
+        const payload = sanitizarMovimientoManual(req.body);
+        const nuevoMovimiento = new MovimientoFinanciero({
+            ...normalizarMovimientoFinanciero(payload),
+            organizacionId: req.organizacionId,
+            fincaId: req.fincaId
+        });
         const movimientoGuardado = await nuevoMovimiento.save();
         const movimiento = await poblarReferencias(
             MovimientoFinanciero.findById(movimientoGuardado._id)
@@ -116,29 +96,40 @@ movimientoFinancieroCtrl.createMovimiento = async (req, res) => {
 
         await notificarMovimiento(req, movimiento, 'MOVIMIENTO_FINANCIERO_CREADO', 'Movimiento financiero registrado', 'registró');
 
-        res.status(201).json(movimiento);
+        res.status(201).json(presentarMovimientoFinanciero(movimiento));
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al crear movimiento financiero', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al crear movimiento financiero', error: error.message, codigo: error.code });
     }
 };
 
 movimientoFinancieroCtrl.getResumen = async (req, res) => {
     try {
-        const [totalGeneralResultado, totalesPorTipo, totalesPorNaturaleza, totalPorCategoria, totalPorMes, totalPorMoneda] = await Promise.all([
+        const [totales, totalPorCategoria, totalPorMes] = await Promise.all([
             MovimientoFinanciero.aggregate([
                 {
                     $group: {
-                        _id: null,
-                        total: { $sum: '$monto' }
+                        _id: { moneda: { $ifNull: ['$moneda', 'CRC'] } },
+                        totalGeneral: { $sum: '$monto' },
+                        totalPlanillas: { $sum: { $cond: [{ $eq: ['$tipoMovimiento', 'Planilla'] }, '$monto', 0] } },
+                        totalInversiones: { $sum: { $cond: [{ $eq: ['$tipoMovimiento', 'Inversion'] }, '$monto', 0] } },
+                        totalCompras: {
+                            $sum: {
+                                $cond: [{ $in: ['$tipoMovimiento', ['Compra', 'Compra de animales']] }, '$monto', 0]
+                            }
+                        },
+                        totalIngresos: { $sum: { $cond: [{ $eq: ['$naturaleza', 'Ingreso'] }, '$monto', 0] } },
+                        totalEgresos: { $sum: { $cond: [{ $eq: ['$naturaleza', 'Egreso'] }, '$monto', 0] } },
+                        cantidad: { $sum: 1 }
                     }
                 }
             ]),
-            calcularResumenPorTipo(),
-            calcularResumenPorNaturaleza(),
             MovimientoFinanciero.aggregate([
                 {
                     $group: {
-                        _id: '$categoria',
+                        _id: {
+                            categoria: '$categoria',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -150,49 +141,60 @@ movimientoFinancieroCtrl.getResumen = async (req, res) => {
                     $group: {
                         _id: {
                             anio: { $year: '$fecha' },
-                            mes: { $month: '$fecha' }
+                            mes: { $month: '$fecha' },
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
                         },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
                 },
                 { $sort: { '_id.anio': 1, '_id.mes': 1 } }
-            ]),
-            MovimientoFinanciero.aggregate([
-                {
-                    $group: {
-                        _id: '$moneda',
-                        total: { $sum: '$monto' },
-                        cantidad: { $sum: 1 }
-                    }
-                },
-                { $sort: { _id: 1 } }
             ])
         ]);
 
+        const monedas = crearMapaMonedas(() => ({
+            totalGeneral: 0,
+            totalPlanillas: 0,
+            totalInversiones: 0,
+            totalCompras: 0,
+            totalIngresos: 0,
+            totalEgresos: 0,
+            balance: 0,
+            cantidad: 0
+        }));
+        totales.forEach((item) => {
+            const moneda = normalizarMoneda(item._id?.moneda);
+            monedas[moneda] = {
+                totalGeneral: item.totalGeneral || 0,
+                totalPlanillas: item.totalPlanillas || 0,
+                totalInversiones: item.totalInversiones || 0,
+                totalCompras: item.totalCompras || 0,
+                totalIngresos: item.totalIngresos || 0,
+                totalEgresos: item.totalEgresos || 0,
+                balance: (item.totalIngresos || 0) - (item.totalEgresos || 0),
+                cantidad: item.cantidad || 0
+            };
+        });
+
         res.json({
-            totalGeneral: totalGeneralResultado[0]?.total || 0,
-            totalPlanillas: totalesPorTipo.Planilla || 0,
-            totalInversiones: totalesPorTipo.Inversion || 0,
-            totalCompras: (totalesPorTipo.Compra || 0) + (totalesPorTipo['Compra de animales'] || 0),
-            totalIngresos: totalesPorNaturaleza.Ingreso || 0,
-            totalEgresos: totalesPorNaturaleza.Egreso || 0,
-            balance: (totalesPorNaturaleza.Ingreso || 0) - (totalesPorNaturaleza.Egreso || 0),
+            monedas,
             totalPorCategoria: totalPorCategoria.map((item) => ({
-                categoria: item._id,
+                categoria: item._id.categoria,
+                moneda: normalizarMoneda(item._id.moneda),
                 total: item.total,
                 cantidad: item.cantidad
             })),
             totalPorMes: totalPorMes.map((item) => ({
                 anio: item._id.anio,
                 mes: item._id.mes,
+                moneda: normalizarMoneda(item._id.moneda),
                 total: item.total,
                 cantidad: item.cantidad
             })),
-            totalPorMoneda: totalPorMoneda.map((item) => ({
-                moneda: item._id || 'CRC',
-                total: item.total,
-                cantidad: item.cantidad
+            totalPorMoneda: Object.entries(monedas).map(([moneda, datos]) => ({
+                moneda,
+                total: datos.totalGeneral,
+                cantidad: datos.cantidad
             }))
         });
     } catch (error) {
@@ -207,7 +209,7 @@ movimientoFinancieroCtrl.getMovimientosPorTipo = async (req, res) => {
             MovimientoFinanciero.find({ tipoMovimiento }).sort({ fecha: -1 })
         );
 
-        res.json(movimientos);
+        res.json(movimientos.map(presentarMovimientoFinanciero));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener movimientos por tipo', error: error.message });
     }
@@ -419,7 +421,8 @@ movimientoFinancieroCtrl.getResumenConsumo = async (req, res) => {
                     _id: {
                         producto: '$producto',
                         unidad: { $ifNull: ['$unidadNormalizada', '$unidad'] },
-                        categoria: '$categoria'
+                        categoria: '$categoria',
+                        moneda: { $ifNull: ['$moneda', 'CRC'] }
                     },
                     cantidadTotal: { $sum: { $ifNull: ['$cantidadFisica', '$cantidad'] } },
                     montoTotal: { $sum: '$monto' },
@@ -434,6 +437,7 @@ movimientoFinancieroCtrl.getResumenConsumo = async (req, res) => {
                     producto: '$_id.producto',
                     unidad: { $ifNull: ['$_id.unidad', 'sin unidad'] },
                     categoria: '$_id.categoria',
+                    moneda: '$_id.moneda',
                     cantidadTotal: 1,
                     montoTotal: 1,
                     precioPromedioUnitario: {
@@ -464,17 +468,14 @@ movimientoFinancieroCtrl.getResumenPlanilla = async (req, res) => {
             tipoMovimiento: 'Planilla'
         };
 
-        const [general, porTipoTrabajo, porEmpleado, porMes] = await Promise.all([
+        const [general, porCategoria, porEmpleado, porMes] = await Promise.all([
             MovimientoFinanciero.aggregate([
                 { $match: filtro },
                 {
                     $group: {
-                        _id: null,
+                        _id: { moneda: { $ifNull: ['$moneda', 'CRC'] } },
                         total: { $sum: '$monto' },
-                        registros: { $sum: 1 },
-                        totalPersonas: { $sum: { $ifNull: ['$cantidadPersonas', 0] } },
-                        totalDias: { $sum: { $ifNull: ['$diasTrabajados', 0] } },
-                        totalHoras: { $sum: { $ifNull: ['$horasTrabajadas', 0] } }
+                        registros: { $sum: 1 }
                     }
                 }
             ]),
@@ -482,11 +483,12 @@ movimientoFinancieroCtrl.getResumenPlanilla = async (req, res) => {
                 { $match: filtro },
                 {
                     $group: {
-                        _id: { $ifNull: ['$tipoTrabajo', 'Sin clasificar'] },
+                        _id: {
+                            categoria: { $ifNull: ['$categoria', 'Mano de Obra / Jornales'] },
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         total: { $sum: '$monto' },
-                        registros: { $sum: 1 },
-                        dias: { $sum: { $ifNull: ['$diasTrabajados', 0] } },
-                        horas: { $sum: { $ifNull: ['$horasTrabajadas', 0] } }
+                        registros: { $sum: 1 }
                     }
                 },
                 { $sort: { total: -1 } }
@@ -495,7 +497,10 @@ movimientoFinancieroCtrl.getResumenPlanilla = async (req, res) => {
                 { $match: { ...filtro, empleado: { $exists: true, $nin: [null, ''] } } },
                 {
                     $group: {
-                        _id: '$empleado',
+                        _id: {
+                            empleado: '$empleado',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         total: { $sum: '$monto' },
                         registros: { $sum: 1 }
                     }
@@ -508,7 +513,8 @@ movimientoFinancieroCtrl.getResumenPlanilla = async (req, res) => {
                     $group: {
                         _id: {
                             anio: { $year: '$fecha' },
-                            mes: { $month: '$fecha' }
+                            mes: { $month: '$fecha' },
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
                         },
                         total: { $sum: '$monto' },
                         registros: { $sum: 1 }
@@ -518,27 +524,33 @@ movimientoFinancieroCtrl.getResumenPlanilla = async (req, res) => {
             ])
         ]);
 
+        const monedas = crearMapaMonedas(() => ({ total: 0, registros: 0 }));
+        general.forEach((item) => {
+            monedas[normalizarMoneda(item._id?.moneda)] = {
+                total: item.total || 0,
+                registros: item.registros || 0
+            };
+        });
+
         res.json({
-            total: general[0]?.total || 0,
-            registros: general[0]?.registros || 0,
-            totalPersonas: general[0]?.totalPersonas || 0,
-            totalDias: general[0]?.totalDias || 0,
-            totalHoras: general[0]?.totalHoras || 0,
-            porTipoTrabajo: porTipoTrabajo.map((item) => ({
-                tipoTrabajo: item._id,
+            monedas,
+            registros: Object.values(monedas).reduce((total, item) => total + item.registros, 0),
+            porCategoria: porCategoria.map((item) => ({
+                categoria: item._id.categoria,
+                moneda: normalizarMoneda(item._id.moneda),
                 total: item.total,
-                registros: item.registros,
-                dias: item.dias,
-                horas: item.horas
+                registros: item.registros
             })),
             porEmpleado: porEmpleado.map((item) => ({
-                empleado: item._id,
+                empleado: item._id.empleado,
+                moneda: normalizarMoneda(item._id.moneda),
                 total: item.total,
                 registros: item.registros
             })),
             porMes: porMes.map((item) => ({
                 anio: item._id.anio,
                 mes: item._id.mes,
+                moneda: normalizarMoneda(item._id.moneda),
                 total: item.total,
                 registros: item.registros
             }))
@@ -555,16 +567,14 @@ movimientoFinancieroCtrl.getResumenInversiones = async (req, res) => {
             tipoMovimiento: 'Inversion'
         };
 
-        const [general, porTipoInversion, porEstadoActivo, depreciables] = await Promise.all([
+        const [general, porCategoria, porMes] = await Promise.all([
             MovimientoFinanciero.aggregate([
                 { $match: filtro },
                 {
                     $group: {
-                        _id: null,
+                        _id: { moneda: { $ifNull: ['$moneda', 'CRC'] } },
                         total: { $sum: '$monto' },
-                        registros: { $sum: 1 },
-                        depreciacionMensual: { $sum: { $ifNull: ['$depreciacionMensual', 0] } },
-                        valorResidual: { $sum: { $ifNull: ['$valorResidual', 0] } }
+                        registros: { $sum: 1 }
                     }
                 }
             ]),
@@ -572,19 +582,10 @@ movimientoFinancieroCtrl.getResumenInversiones = async (req, res) => {
                 { $match: filtro },
                 {
                     $group: {
-                        _id: { $ifNull: ['$tipoInversion', '$categoria'] },
-                        total: { $sum: '$monto' },
-                        registros: { $sum: 1 },
-                        depreciacionMensual: { $sum: { $ifNull: ['$depreciacionMensual', 0] } }
-                    }
-                },
-                { $sort: { total: -1 } }
-            ]),
-            MovimientoFinanciero.aggregate([
-                { $match: filtro },
-                {
-                    $group: {
-                        _id: { $ifNull: ['$estadoActivo', 'Sin estado'] },
+                        _id: {
+                            categoria: { $ifNull: ['$categoria', 'Inversiones / Infraestructura'] },
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         total: { $sum: '$monto' },
                         registros: { $sum: 1 }
                     }
@@ -592,36 +593,43 @@ movimientoFinancieroCtrl.getResumenInversiones = async (req, res) => {
                 { $sort: { total: -1 } }
             ]),
             MovimientoFinanciero.aggregate([
-                { $match: { ...filtro, depreciable: true } },
+                { $match: filtro },
                 {
                     $group: {
-                        _id: null,
+                        _id: {
+                            anio: { $year: '$fecha' },
+                            mes: { $month: '$fecha' },
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         total: { $sum: '$monto' },
-                        registros: { $sum: 1 },
-                        depreciacionMensual: { $sum: { $ifNull: ['$depreciacionMensual', 0] } }
+                        registros: { $sum: 1 }
                     }
-                }
+                },
+                { $sort: { '_id.anio': 1, '_id.mes': 1 } }
             ])
         ]);
 
+        const monedas = crearMapaMonedas(() => ({ total: 0, registros: 0 }));
+        general.forEach((item) => {
+            monedas[normalizarMoneda(item._id?.moneda)] = {
+                total: item.total || 0,
+                registros: item.registros || 0
+            };
+        });
+
         res.json({
-            total: general[0]?.total || 0,
-            registros: general[0]?.registros || 0,
-            depreciacionMensual: general[0]?.depreciacionMensual || 0,
-            valorResidual: general[0]?.valorResidual || 0,
-            depreciables: {
-                total: depreciables[0]?.total || 0,
-                registros: depreciables[0]?.registros || 0,
-                depreciacionMensual: depreciables[0]?.depreciacionMensual || 0
-            },
-            porTipoInversion: porTipoInversion.map((item) => ({
-                tipoInversion: item._id || 'Sin clasificar',
+            monedas,
+            registros: Object.values(monedas).reduce((total, item) => total + item.registros, 0),
+            porCategoria: porCategoria.map((item) => ({
+                categoria: item._id.categoria,
+                moneda: normalizarMoneda(item._id.moneda),
                 total: item.total,
-                registros: item.registros,
-                depreciacionMensual: item.depreciacionMensual
+                registros: item.registros
             })),
-            porEstadoActivo: porEstadoActivo.map((item) => ({
-                estadoActivo: item._id,
+            porMes: porMes.map((item) => ({
+                anio: item._id.anio,
+                mes: item._id.mes,
+                moneda: normalizarMoneda(item._id.moneda),
                 total: item.total,
                 registros: item.registros
             }))
@@ -633,7 +641,16 @@ movimientoFinancieroCtrl.getResumenInversiones = async (req, res) => {
 
 movimientoFinancieroCtrl.updateMovimiento = async (req, res) => {
     try {
-        const movimientoActualizado = await MovimientoFinanciero.findByIdAndUpdate(req.params.id, req.body, {
+        const movimientoActual = await MovimientoFinanciero.findById(req.params.id);
+        if (!movimientoActual) {
+            return res.status(404).json({ mensaje: 'Movimiento financiero no encontrado' });
+        }
+        if (esMovimientoFinancieroAutomatico(movimientoActual)) {
+            throw errorMovimientoAutomatico(movimientoActual);
+        }
+
+        const payload = sanitizarMovimientoManual(req.body);
+        const movimientoActualizado = await MovimientoFinanciero.findByIdAndUpdate(req.params.id, { $set: payload }, {
             new: true,
             runValidators: true
         });
@@ -648,25 +665,29 @@ movimientoFinancieroCtrl.updateMovimiento = async (req, res) => {
 
         await notificarMovimiento(req, movimiento, 'MOVIMIENTO_FINANCIERO_MODIFICADO', 'Movimiento financiero actualizado', 'actualizó');
 
-        res.json(movimiento);
+        res.json(presentarMovimientoFinanciero(movimiento));
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al actualizar movimiento financiero', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar movimiento financiero', error: error.message, codigo: error.code });
     }
 };
 
 movimientoFinancieroCtrl.deleteMovimiento = async (req, res) => {
     try {
-        const movimiento = await MovimientoFinanciero.findByIdAndDelete(req.params.id);
-
+        const movimiento = await MovimientoFinanciero.findById(req.params.id);
         if (!movimiento) {
             return res.status(404).json({ mensaje: 'Movimiento financiero no encontrado' });
         }
+        if (esMovimientoFinancieroAutomatico(movimiento)) {
+            throw errorMovimientoAutomatico(movimiento);
+        }
+
+        await MovimientoFinanciero.deleteOne({ _id: movimiento._id });
 
         await notificarMovimiento(req, movimiento, 'MOVIMIENTO_FINANCIERO_ELIMINADO', 'Movimiento financiero eliminado', 'eliminó');
 
         res.json({ mensaje: 'Movimiento financiero eliminado' });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al eliminar movimiento financiero', error: error.message });
+        res.status(error.status || 500).json({ mensaje: error.message || 'Error al eliminar movimiento financiero', error: error.message, codigo: error.code });
     }
 };
 

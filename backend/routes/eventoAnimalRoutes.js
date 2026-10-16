@@ -1,8 +1,8 @@
 const { Router } = require('express');
 const { autorizarPermiso } = require('../middleware/auth');
 const router = Router();
-const puedeVer = autorizarPermiso('inventario.ver');
-const puedeCrear = autorizarPermiso('sanidad.gestionar');
+const puedeVer = autorizarPermiso('bitacora.ver');
+const puedeCrear = autorizarPermiso('bitacora.crearNotas');
 const soloAdministrador = autorizarPermiso('usuarios.gestionar');
 
 const {

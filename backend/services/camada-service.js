@@ -1,9 +1,166 @@
 const Camada = require('../models/Camada');
+const Animal = require('../models/Animal');
+const VentaAnimal = require('../models/VentaAnimal');
 const { Tarea } = require('../models/Tarea');
 const { ejecutarNotificacionSegura, notificarTareaAsignada } = require('./tarea-notificacion-service');
 const { upsertEventoAnimal } = require('./eventoAnimal-service');
 const { upsertEventoCamada } = require('./eventoCamada-service');
 const reproduccionPorcinaConfig = require('../config/reproduccionPorcinaConfig');
+
+const CAMPOS_ENTEROS_CAMADA = Object.freeze([
+    'nacidosTotales',
+    'nacidosVivos',
+    'nacidosMuertos',
+    'momias',
+    'destetados',
+    'muertosPreDestete',
+    'criasParaFinca',
+    'criasParaVenta',
+    'criasParaEngorde'
+]);
+
+const errorPoblacionCamada = (mensaje, status = 422, code = 'CAMADA_POPULATION_INVALID') => Object.assign(
+    new Error(mensaje),
+    { status, code }
+);
+
+const validarEnteroNoNegativo = (valor, campo) => {
+    const numero = Number(valor ?? 0);
+    if (!Number.isInteger(numero) || numero < 0) {
+        throw errorPoblacionCamada(`${campo} debe ser un numero entero no negativo.`);
+    }
+    return numero;
+};
+
+const validarCantidadesCamada = (datos = {}) => {
+    const normalizados = { ...datos };
+    CAMPOS_ENTEROS_CAMADA.forEach((campo) => {
+        if (Object.prototype.hasOwnProperty.call(datos, campo)) {
+            normalizados[campo] = validarEnteroNoNegativo(datos[campo], campo);
+        }
+    });
+
+    const vivos = Number(normalizados.nacidosVivos || 0);
+    const muertos = Number(normalizados.muertosPreDestete || 0);
+    if (muertos > vivos) {
+        throw errorPoblacionCamada('Las muertes predestete no pueden superar los nacidos vivos.');
+    }
+    const totalDestino = Number(normalizados.criasParaFinca || 0)
+        + Number(normalizados.criasParaVenta || 0)
+        + Number(normalizados.criasParaEngorde || 0);
+    if (totalDestino > Math.max(vivos - muertos, 0)) {
+        throw errorPoblacionCamada('La distribucion de crias no puede superar la poblacion viva de la camada.');
+    }
+    return normalizados;
+};
+
+const saldoColectivoCamada = (camada = {}) => Math.max(
+    Number(camada.nacidosVivos || 0)
+        - Number(camada.muertosPreDestete || 0)
+        - Number(camada.criasIndividualizadas || 0)
+        - Number(camada.criasVendidas || 0),
+    0
+);
+
+const inicializarControlPoblacionCamada = async (camadaId, session = null) => {
+    let camada = await Camada.findById(camadaId).session(session);
+    if (!camada) throw errorPoblacionCamada('Camada no encontrada.', 404, 'CAMADA_NOT_FOUND');
+    if (camada.controlPoblacionInicializado) return camada;
+
+    const [individualizadas, ventas] = await Promise.all([
+        Animal.countDocuments({ camadaOrigen: camada._id }).session(session),
+        VentaAnimal.aggregate([
+            { $match: { estado: { $ne: 'Anulada' }, 'camadas.camada': camada._id } },
+            { $unwind: '$camadas' },
+            { $match: { 'camadas.camada': camada._id } },
+            { $group: { _id: null, cantidad: { $sum: '$camadas.cantidad' } } }
+        ]).session(session)
+    ]);
+
+    await Camada.updateOne(
+        { _id: camada._id, controlPoblacionInicializado: { $ne: true } },
+        {
+            $set: {
+                criasIndividualizadas: Number(individualizadas || 0),
+                criasVendidas: Number(ventas[0]?.cantidad || 0),
+                controlPoblacionInicializado: true
+            }
+        },
+        { session }
+    );
+    camada = await Camada.findById(camada._id).session(session);
+    return camada;
+};
+
+const expresionSaldoSuficiente = (cantidad) => ({
+    $gte: [
+        {
+            $subtract: [
+                {
+                    $subtract: [
+                        { $ifNull: ['$nacidosVivos', 0] },
+                        { $ifNull: ['$muertosPreDestete', 0] }
+                    ]
+                },
+                {
+                    $add: [
+                        { $ifNull: ['$criasIndividualizadas', 0] },
+                        { $ifNull: ['$criasVendidas', 0] }
+                    ]
+                }
+            ]
+        },
+        cantidad
+    ]
+});
+
+const reservarCriasCamada = async ({ camadaId, cantidad = 1, destino, session = null }) => {
+    const unidades = validarEnteroNoNegativo(cantidad, 'cantidad');
+    if (unidades === 0) return inicializarControlPoblacionCamada(camadaId, session);
+    if (!['individualizacion', 'venta'].includes(destino)) {
+        throw errorPoblacionCamada('Destino de reserva de camada no valido.');
+    }
+    await inicializarControlPoblacionCamada(camadaId, session);
+    const campo = destino === 'individualizacion' ? 'criasIndividualizadas' : 'criasVendidas';
+    const condiciones = [expresionSaldoSuficiente(unidades)];
+    if (destino === 'venta') {
+        condiciones.push({
+            $gte: [
+                { $subtract: [{ $ifNull: ['$criasParaVenta', 0] }, { $ifNull: ['$criasVendidas', 0] }] },
+                unidades
+            ]
+        });
+    }
+    const actualizada = await Camada.findOneAndUpdate(
+        {
+            _id: camadaId,
+            estado: { $ne: 'Cancelada' },
+            controlPoblacionInicializado: true,
+            $expr: condiciones.length === 1 ? condiciones[0] : { $and: condiciones }
+        },
+        { $inc: { [campo]: unidades } },
+        { new: true, runValidators: true, session }
+    );
+    if (!actualizada) {
+        throw errorPoblacionCamada('La camada no tiene suficientes crias vivas disponibles.', 409, 'CAMADA_STOCK_INSUFICIENTE');
+    }
+    return actualizada;
+};
+
+const liberarCriasCamada = async ({ camadaId, cantidad = 1, destino, session = null }) => {
+    const unidades = validarEnteroNoNegativo(cantidad, 'cantidad');
+    if (unidades === 0) return Camada.findById(camadaId).session(session);
+    const campo = destino === 'individualizacion' ? 'criasIndividualizadas' : 'criasVendidas';
+    const actualizada = await Camada.findOneAndUpdate(
+        { _id: camadaId, [campo]: { $gte: unidades } },
+        { $inc: { [campo]: -unidades } },
+        { new: true, runValidators: true, session }
+    );
+    if (!actualizada) {
+        throw errorPoblacionCamada('No se pudo conciliar el saldo de la camada.', 409, 'CAMADA_BALANCE_CONFLICT');
+    }
+    return actualizada;
+};
 
 const sumarDias = (fecha, dias) => {
     if (!fecha) return null;
@@ -325,11 +482,18 @@ const registrarEventoCamada = async ({ camada, madre, usuarioId, titulo = 'Camad
 };
 
 module.exports = {
+    CAMPOS_ENTEROS_CAMADA,
     generarCodigoCamada,
     calcularFechasCamada,
+    inicializarControlPoblacionCamada,
+    liberarCriasCamada,
+    reservarCriasCamada,
+    saldoColectivoCamada,
     sincronizarTareasCamada,
     cancelarTareasCamada,
     completarTareasDesteteCamada,
     cancelarTareasEstimadasDelRegistro,
-    registrarEventoCamada
+    registrarEventoCamada,
+    validarCantidadesCamada,
+    validarEnteroNoNegativo
 };

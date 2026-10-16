@@ -3,7 +3,7 @@ const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugi
 
 const reservaSchema = new Schema({
     token: { type: String, required: true },
-    cantidad: { type: Number, required: true, min: 1 },
+    cantidad: { type: Number, required: true, min: 0 },
     expiraEn: { type: Date, required: true }
 }, { _id: false });
 

@@ -24,6 +24,9 @@ const { prepararDatosRaciales } = require('../services/raza-service');
 const { validarYPrepararCategoriaAnimal } = require('../services/categoriaAnimal-service');
 const { prepararObjetivoProductivo } = require('../config/objetivosProductivos');
 const { respuestaErrorPlan } = require('../middleware/plan');
+const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
+const { consumirSemen } = require('../services/semen-reproductivo-service');
+const { InsumoReproductivo } = require('../models/InsumoReproductivo');
 
 const reproduccionCtrl = {};
 
@@ -42,7 +45,31 @@ const notificarRegistroReproductivo = (req, registro, animal, tipo, titulo, acci
 
 const poblarAnimal = (query) => query
     .populate('animal')
+    .populate('semenUtilizado', 'nombre toro codigoToro razaToro lote tipoSemen fechaVencimiento cantidadDisponible')
     .populate('asignadoA', 'nombre apellido correo rol estado');
+
+const esInseminacionConvencional = (datos = {}) => datos.tipoRegistro === 'Inseminación'
+    && Boolean(datos.fechaInseminacion || datos.fechaMonta);
+
+const prepararInseminacionConvencional = async ({ datos, session }) => {
+    const fechaInseminacion = datos.fechaInseminacion || datos.fechaMonta;
+    const consumo = await consumirSemen({
+        semenId: datos.semenUtilizado || datos.semen,
+        cantidad: datos.cantidadPajuelas ?? 1,
+        fechaInseminacion,
+        session
+    });
+    return {
+        ...datos,
+        fechaInseminacion,
+        fechaMonta: fechaInseminacion,
+        tipoInseminacion: 'IA_CONVENCIONAL',
+        origenGestacion: 'IA_CONVENCIONAL',
+        semenUtilizado: consumo.insumo._id,
+        semenSnapshot: consumo.snapshot,
+        cantidadPajuelas: consumo.cantidad
+    };
+};
 
 const crearFiltroEspecie = (especie) => {
     if (especie === 'Bovino') return { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] };
@@ -190,12 +217,21 @@ reproduccionCtrl.createRegistro = async (req, res) => {
             return res.status(validacion.status).json({ mensaje: validacion.mensaje });
         }
 
-        const registroGuardado = await crearNuevoCicloReproductivo({
-            data: req.body,
-            animal: validacion.animal,
-            usuarioId: req.usuario?.id,
-            cerrarCicloAnterior: req.body.cerrarCicloAnterior === true
-        });
+        const crearRegistro = async (session = null) => {
+            const data = esInseminacionConvencional(req.body)
+                ? await prepararInseminacionConvencional({ datos: req.body, session })
+                : req.body;
+            return crearNuevoCicloReproductivo({
+                data,
+                animal: validacion.animal,
+                usuarioId: req.usuario?.id,
+                cerrarCicloAnterior: req.body.cerrarCicloAnterior === true,
+                session
+            });
+        };
+        const registroGuardado = esInseminacionConvencional(req.body)
+            ? await ejecutarEnTransaccion(crearRegistro)
+            : await crearRegistro();
         await registrarEventoReproduccion(registroGuardado, req.usuario?.id);
         await sincronizarAutomatizacionReproductiva({
             registro: registroGuardado,
@@ -222,7 +258,7 @@ reproduccionCtrl.createRegistro = async (req, res) => {
             });
         }
 
-        res.status(400).json({ mensaje: 'Error al crear registro reproductivo', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al crear registro reproductivo', error: error.message, code: error.code });
     }
 };
 
@@ -374,6 +410,27 @@ reproduccionCtrl.getRegistro = async (req, res) => {
     }
 };
 
+reproduccionCtrl.getSemenDisponible = async (req, res) => {
+    try {
+        const fecha = req.query.fecha ? new Date(req.query.fecha) : new Date();
+        if (Number.isNaN(fecha.getTime())) return res.status(422).json({ mensaje: 'La fecha indicada no es valida.' });
+        const inicioDia = new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()));
+        const semen = await InsumoReproductivo.find({
+            categoria: 'SEMEN',
+            activo: true,
+            cantidadDisponible: { $gte: 1 },
+            $or: [
+                { fechaVencimiento: { $exists: false } },
+                { fechaVencimiento: null },
+                { fechaVencimiento: { $gte: inicioDia } }
+            ]
+        }).sort({ fechaVencimiento: 1, nombre: 1 });
+        return res.json(semen);
+    } catch (error) {
+        return res.status(400).json({ mensaje: 'No se pudo consultar el semen disponible', error: error.message });
+    }
+};
+
 reproduccionCtrl.getRegistrosPorAnimal = async (req, res) => {
     try {
         const registrosSinPoblar = await RegistroReproductivo.find({ animal: req.params.animalId }).sort({ fechaMonta: -1, createdAt: -1 });
@@ -418,10 +475,25 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
             req.body.especie = animalValidado.especie || 'Bovino';
         }
 
-        const registroActualizado = await RegistroReproductivo.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true
-        });
+        if (registroAnterior.semenUtilizado
+            && req.body.semenUtilizado
+            && String(registroAnterior.semenUtilizado) !== String(req.body.semenUtilizado)) {
+            return res.status(409).json({ mensaje: 'El lote de semen consumido no puede sustituirse; registre una correccion trazable.' });
+        }
+        const requiereConsumoSemen = esInseminacionConvencional(req.body) && !registroAnterior.semenUtilizado;
+        const actualizar = async (session = null) => {
+            const datos = requiereConsumoSemen
+                ? await prepararInseminacionConvencional({ datos: req.body, session })
+                : req.body;
+            return RegistroReproductivo.findByIdAndUpdate(req.params.id, datos, {
+                new: true,
+                runValidators: true,
+                session
+            });
+        };
+        const registroActualizado = requiereConsumoSemen
+            ? await ejecutarEnTransaccion(actualizar)
+            : await actualizar();
 
         if (!registroActualizado) {
             return res.status(404).json({ mensaje: 'Registro reproductivo no encontrado' });
@@ -466,7 +538,7 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
 
         res.json(registro);
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al actualizar registro reproductivo', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar registro reproductivo', error: error.message, code: error.code });
     }
 };
 

@@ -6,12 +6,18 @@ const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const { Tarea } = require('../models/Tarea');
 const { upsertEventoAnimal } = require('./eventoAnimal-service');
 const { crearAplicacionSanitaria } = require('./aplicacionSanitaria-service');
-const { calcularFechasCamada, generarCodigoCamada, registrarEventoCamada } = require('./camada-service');
+const {
+    calcularFechasCamada,
+    generarCodigoCamada,
+    registrarEventoCamada,
+    validarCantidadesCamada
+} = require('./camada-service');
 const { upsertEventoCamada } = require('./eventoCamada-service');
-const { tieneFeature } = require('./plan-service');
+const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota, tieneFeature } = require('./plan-service');
 const { validarUsuarioAsignable } = require('./usuarioAsignable-service');
 const { calcularCronograma, calcularCumplimiento, idTexto, normalizarPasos, validarPasos } = require('./protocoloScheduler-service');
-const { obtenerFincaActual } = require('../context/organizacion-context');
+const { obtenerFincaActual, obtenerOrganizacionActual } = require('../context/organizacion-context');
+const { consumirSemen, devolverSemen, validarCantidadPajuelas } = require('./semen-reproductivo-service');
 
 const errorProtocolo = (mensaje, status = 400, code = 'PROTOCOLO_PORCINO') => Object.assign(new Error(mensaje), { status, code });
 const seleccionar = (datos, campos) => Object.fromEntries(campos.filter((campo) => Object.hasOwn(datos || {}, campo)).map((campo) => [campo, datos[campo]]));
@@ -153,7 +159,7 @@ const obtenerBanda = async (id) => {
     return { ...banda, metricas: await calcularMetricas(banda) };
 };
 
-const registrarAccionParticipante = async ({ banda, participante, paso, datos, usuarioId }) => {
+const registrarAccionParticipante = async ({ banda, participante, paso, datos, usuarioId, semenConsumido = null }) => {
     const fecha = new Date(datos.fechaReal || Date.now());
     let registro = participante.registroReproductivo ? await RegistroReproductivo.findById(participante.registroReproductivo) : await obtenerRegistroActivo(participante.animal);
     if (['SERVICIO', 'INSEMINACION'].includes(paso.tipoAccion)) {
@@ -161,7 +167,16 @@ const registrarAccionParticipante = async ({ banda, participante, paso, datos, u
         registro.tipoRegistro = paso.tipoAccion === 'SERVICIO' ? 'Monta' : 'Inseminación'; registro.tipoInseminacion = paso.tipoAccion === 'INSEMINACION' ? 'IA_CONVENCIONAL' : undefined;
         registro.origenGestacion = paso.tipoAccion === 'SERVICIO' ? 'MONTA_NATURAL' : 'IA_CONVENCIONAL';
         if (paso.tipoAccion === 'SERVICIO') { registro.fechaMonta = fecha; registro.fechaInseminacion = undefined; }
-        else { registro.fechaInseminacion = fecha; registro.fechaMonta = undefined; }
+        else {
+            registro.fechaInseminacion = fecha;
+            registro.fechaMonta = undefined;
+            registro.semenUtilizado = semenConsumido.insumo._id;
+            registro.cantidadPajuelas = semenConsumido.cantidadPorAnimal;
+            registro.semenSnapshot = {
+                ...semenConsumido.snapshot,
+                cantidad: semenConsumido.cantidadPorAnimal
+            };
+        }
         registro.observaciones = datos.observaciones;
         await registro.save(); participante.registroReproductivo = registro._id; participante.estadoParticipacion = 'SERVIDA'; participante.fechasReales.set ? participante.fechasReales.set(paso.tipoAccion === 'SERVICIO' ? 'SERVICIO' : 'IA', fecha) : (participante.fechasReales[paso.tipoAccion === 'SERVICIO' ? 'SERVICIO' : 'IA'] = fecha);
     }
@@ -186,11 +201,30 @@ const registrarAccionParticipante = async ({ banda, participante, paso, datos, u
         registro.fechaPartoReal = fecha; await registro.save(); participante.estadoParticipacion = 'PARIDA'; participante.fechasReales.set ? participante.fechasReales.set('PARTO_REAL', fecha) : (participante.fechasReales.PARTO_REAL = fecha);
         let camada = await Camada.findOne({ registroReproductivo: registro._id });
         if (camada) throw errorProtocolo('Esta cerda ya tiene una camada para el ciclo reproductivo actual.', 409);
-        const datosCamada = seleccionar(datos.camada, ['nacidosTotales', 'nacidosVivos', 'nacidosMuertos', 'momias', 'destino', 'pesoPromedioNacimiento', 'observaciones']);
+        const datosCamada = validarCantidadesCamada(seleccionar(datos.camada, ['nacidosTotales', 'nacidosVivos', 'nacidosMuertos', 'momias', 'destino', 'pesoPromedioNacimiento', 'observaciones']));
         const suma = Number(datosCamada.nacidosVivos || 0) + Number(datosCamada.nacidosMuertos || 0) + Number(datosCamada.momias || 0);
         if (datosCamada.nacidosTotales != null && Number(datosCamada.nacidosTotales) !== suma) throw errorProtocolo('Nacidos totales debe coincidir con vivos, muertos y momias.');
         const fechas = calcularFechasCamada({ fechaNacimiento: fecha, destino: datosCamada.destino });
-        camada = await Camada.create({ ...datosCamada, nacidosTotales: suma, madre: participante.animal, registroReproductivo: registro._id, asignadoA: banda.responsable, codigoCamada: datos.camada.codigoCamada || await generarCodigoCamada(fecha), fechaNacimiento: fecha, fechaDesteteEstimada: fechas.fechaDesteteEstimada });
+        const poblacionInicial = Number(datosCamada.nacidosVivos || 0);
+        const codigoCamada = datos.camada.codigoCamada || await generarCodigoCamada(fecha);
+        const permiso = await asegurarPuedeCrearAnimal({ organizacionId: obtenerOrganizacionActual(), especie: 'Porcino', cantidad: poblacionInicial });
+        camada = await ejecutarConReservaCuota({
+            permiso,
+            recurso: 'animales',
+            organizacionId: obtenerOrganizacionActual(),
+            cantidad: poblacionInicial,
+            operacion: () => Camada.create({
+                ...datosCamada,
+                nacidosTotales: suma,
+                madre: participante.animal,
+                registroReproductivo: registro._id,
+                asignadoA: banda.responsable,
+                codigoCamada,
+                fechaNacimiento: fecha,
+                fechaDesteteEstimada: fechas.fechaDesteteEstimada,
+                controlPoblacionInicializado: true
+            })
+        });
         await registrarEventoCamada({ camada, madre: participante.animal, usuarioId, titulo: 'Parto registrado desde banda reproductiva' });
     }
     if (paso.tipoAccion === 'DESTETE_CAMADA') {
@@ -205,7 +239,7 @@ const registrarAccionParticipante = async ({ banda, participante, paso, datos, u
         const tipoEvento = paso.tipoAccion === 'PARTO' ? 'Parto'
             : ['DESTETE', 'DESTETE_CAMADA'].includes(paso.tipoAccion) ? 'Destete'
                 : paso.tipoAccion === 'DIAGNOSTICO_GESTACION' ? 'Diagnostico de gestacion' : 'Monta';
-        await upsertEventoAnimal({ animal: participante.animal, tipoEvento, fecha, titulo: paso.nombre, descripcion: datos.observaciones || `Actividad de la banda ${banda.nombre}.`, moduloOrigen: 'Reproduccion', referenciaId: banda._id, creadoPor: usuarioId, metadata: { bandaId: banda._id, pasoId: paso._id, tipoAccion: paso.tipoAccion, resultado: datos.resultado } });
+        await upsertEventoAnimal({ animal: participante.animal, tipoEvento, fecha, titulo: paso.nombre, descripcion: datos.observaciones || `Actividad de la banda ${banda.nombre}.`, moduloOrigen: 'Reproduccion', referenciaId: banda._id, creadoPor: usuarioId, metadata: { bandaId: banda._id, pasoId: paso._id, tipoAccion: paso.tipoAccion, resultado: datos.resultado, semenId: semenConsumido?.insumo?._id, cantidadPajuelas: semenConsumido?.cantidadPorAnimal } });
     }
 };
 
@@ -231,7 +265,24 @@ const ejecutarPaso = async ({ bandaId, pasoId, datos = {}, usuarioId, rolUsuario
         if (!datos.aplicacion?.producto) throw errorProtocolo('Indica el producto realmente aplicado.');
         await crearAplicacionSanitaria({ ...datos.aplicacion, animales: participantes.map((item) => item.animal), fechaAplicacion: datos.fechaReal || new Date(), especie: 'Porcino', naturaleza: 'Aplicacion unica', responsableUsuario: usuarioId, motivo: datos.aplicacion.motivo || datos.observaciones }, usuarioId, { soloActivos: true });
     }
-    for (const participante of participantes) await registrarAccionParticipante({ banda, participante, paso, datos, usuarioId });
+    let semenConsumido = null;
+    if (paso.tipoAccion === 'INSEMINACION') {
+        const cantidadPorAnimal = validarCantidadPajuelas(datos.cantidadPajuelas ?? 1);
+        const consumo = await consumirSemen({
+            semenId: datos.semenUtilizado || datos.semen,
+            cantidad: cantidadPorAnimal * participantes.length,
+            fechaInseminacion: datos.fechaReal || new Date()
+        });
+        semenConsumido = { ...consumo, cantidadPorAnimal };
+    }
+    try {
+        for (const participante of participantes) await registrarAccionParticipante({ banda, participante, paso, datos, usuarioId, semenConsumido });
+    } catch (error) {
+        if (semenConsumido) {
+            await devolverSemen({ semenId: semenConsumido.insumo._id, cantidad: semenConsumido.cantidad });
+        }
+        throw error;
+    }
     ejecucion.fechaReal = datos.fechaReal || new Date(); ejecucion.participantes = [...(ejecucion.participantes || []), ...participantes.map((item) => item._id)]; ejecucion.estado = ejecucion.participantes.length < banda.participantes.filter((item) => item.estadoParticipacion !== 'RETIRADA').length ? 'PARCIAL' : 'REALIZADO'; ejecucion.resultado = seleccionar(datos, ['resultado', 'retornoCelo', 'observaciones']); ejecucion.realizadoPor = usuarioId;
     if (ejecucion.tarea && ejecucion.estado === 'REALIZADO') await Tarea.updateOne({ _id: ejecucion.tarea }, { $set: { estado: 'Completada', fechaCompletada: ejecucion.fechaReal, observaciones: datos.observaciones } });
     const eventoPorAccion = { DESTETE: 'DESTETE', SERVICIO: 'SERVICIO', INSEMINACION: 'IA', PARTO: 'PARTO_REAL', DESTETE_CAMADA: 'DESTETE_REAL' };

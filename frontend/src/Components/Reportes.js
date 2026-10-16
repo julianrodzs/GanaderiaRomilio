@@ -40,11 +40,19 @@ const formatearDecimal = (valor, decimales = 2) => valor === null || valor === u
   ? '--'
   : new Intl.NumberFormat('es-CR', { maximumFractionDigits: decimales }).format(valor);
 
-const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
+const formatearMoneda = (valor, moneda = 'CRC') => new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-CR', {
   style: 'currency',
-  currency: 'CRC',
-  maximumFractionDigits: 0
+  currency: moneda,
+  maximumFractionDigits: moneda === 'USD' ? 2 : 0
 }).format(valor || 0);
+
+const TotalesMoneda = ({ monedas = {}, campo = 'total' }) => {
+  const valores = Object.entries(monedas)
+    .map(([moneda, datos]) => [moneda, typeof datos === 'number' ? datos : datos?.[campo]])
+    .filter(([, valor]) => Number(valor || 0) !== 0)
+    .map(([moneda, valor]) => formatearMoneda(valor, moneda));
+  return valores.length ? valores.join(' | ') : formatearMoneda(0);
+};
 
 const formatearPorcentaje = (valor) => `${new Intl.NumberFormat('es-CR', {
   maximumFractionDigits: 2
@@ -124,8 +132,6 @@ const BarraReporte = ({ label, valor, detalle, maximo }) => {
 
 const obtenerMaximo = (items, campo) => Math.max(...items.map((item) => item[campo] || 0), 0);
 
-const totalizarDestino = (destino) => (destino.totales || []).reduce((total, item) => total + (item.total || 0), 0);
-
 const LineaFinanzasMensual = ({ datos = [], maximo }) => {
   if (!datos.length) return <span className="reporte-vacio">Sin gastos para este rango.</span>;
 
@@ -142,19 +148,19 @@ const LineaFinanzasMensual = ({ datos = [], maximo }) => {
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Gastos por mes">
         <polyline points={coordenadas} fill="none" stroke="currentColor" strokeWidth="3" vectorEffect="non-scaling-stroke" />
         {puntos.map((punto) => (
-          <circle key={`${punto.anio}-${punto.mes}`} cx={punto.x} cy={punto.y} r="1.8" vectorEffect="non-scaling-stroke" />
+          <circle key={`${punto.anio}-${punto.mes}-${punto.moneda}`} cx={punto.x} cy={punto.y} r="1.8" vectorEffect="non-scaling-stroke" />
         ))}
       </svg>
       <div className="linea-finanzas-etiquetas">
         {puntos.map((punto) => (
-          <span key={`${punto.anio}-${punto.mes}`}>{nombreMes(punto.mes)}</span>
+          <span key={`${punto.anio}-${punto.mes}-${punto.moneda}`}>{nombreMes(punto.mes)}</span>
         ))}
       </div>
       <div className="linea-finanzas-detalle">
         {puntos.map((punto) => (
-          <article key={`${punto.anio}-${punto.mes}`}>
+          <article key={`${punto.anio}-${punto.mes}-${punto.moneda}`}>
             <strong>{nombreMes(punto.mes)} {punto.anio}</strong>
-            <span>{formatearMoneda(punto.total)} · {punto.cantidad} registros</span>
+            <span>{formatearMoneda(punto.total, punto.moneda)} · {punto.cantidad} registros</span>
           </article>
         ))}
       </div>
@@ -365,25 +371,31 @@ const Reportes = ({ usuario }) => {
   }, [filtros.fechaInicio, filtros.fechaFin, filtros.productoFiltro, filtros.categoriaProducto, filtros.proveedorProducto]);
 
   const egresos = useMemo(() => {
-    return reporte?.finanzas?.porNaturaleza?.find((item) => item.naturaleza === 'Egreso')?.total || 0;
+    return Object.fromEntries(['CRC', 'USD'].map((moneda) => [moneda, {
+      total: (reporte?.finanzas?.porNaturaleza || [])
+        .filter((item) => item.naturaleza === 'Egreso' && item.moneda === moneda)
+        .reduce((total, item) => total + Number(item.total || 0), 0)
+    }]));
   }, [reporte]);
 
   const ingresos = useMemo(() => {
-    return reporte?.finanzas?.porNaturaleza?.find((item) => item.naturaleza === 'Ingreso')?.total || 0;
+    return Object.fromEntries(['CRC', 'USD'].map((moneda) => [moneda, {
+      total: (reporte?.finanzas?.porNaturaleza || [])
+        .filter((item) => item.naturaleza === 'Ingreso' && item.moneda === moneda)
+        .reduce((total, item) => total + Number(item.total || 0), 0)
+    }]));
   }, [reporte]);
 
-  const maxCategoria = obtenerMaximo(reporte?.finanzas?.porCategoria || [], 'total');
-  const maxGastosMes = obtenerMaximo(reporte?.finanzas?.gastosPorMes || [], 'total');
   const destinosOrdenados = useMemo(() => {
     return [...destinosFinancieros]
-      .map((destino) => ({
+      .flatMap((destino) => (destino.totales || []).map((total) => ({
         destinoUso: destino.destinoUso,
-        total: totalizarDestino(destino),
+        moneda: total.moneda || 'CRC',
+        total: total.total || 0,
         registros: destino.registros
-      }))
+      })))
       .sort((a, b) => b.total - a.total);
   }, [destinosFinancieros]);
-  const maxDestino = obtenerMaximo(destinosOrdenados, 'total');
   const productosConPaginacionRemota = Boolean(productosReporte?.paginacionProductos);
   const productosPorProducto = productosReporte?.porProducto || [];
   const productosPagina = productosConPaginacionRemota
@@ -476,12 +488,12 @@ const Reportes = ({ usuario }) => {
             </article>
             <article>
               <span>Egresos</span>
-              <strong>{formatearMoneda(egresos)}</strong>
+              <strong><TotalesMoneda monedas={egresos} /></strong>
               <small>Segun rango de fechas</small>
             </article>
             <article>
               <span>Ingresos</span>
-              <strong>{formatearMoneda(ingresos)}</strong>
+              <strong><TotalesMoneda monedas={ingresos} /></strong>
               <small>Segun rango de fechas</small>
             </article>
             <article>
@@ -633,23 +645,23 @@ const Reportes = ({ usuario }) => {
               <h2>Inversion, operacion y patrimonio</h2>
               <div className="reportes-metricas finanzas-cria-metricas">
                 <article>
-                  <span>Inversion acumulada</span>
-                  <strong>{formatearMoneda(finanzasCria.inversionAcumulada)}</strong>
-                  <small>Separada de los gastos operativos</small>
+                  <span>Inversión operativa histórica</span>
+                  <strong><TotalesMoneda monedas={finanzasCria.monedas} campo="inversionOperativaHistorica" /></strong>
+                  <small>Infraestructura y maquinaria; excluye compras del hato</small>
                 </article>
                 <article>
                   <span>Gastos operativos</span>
-                  <strong>{formatearMoneda(finanzasCria.gastosOperativosPeriodo)}</strong>
+                  <strong><TotalesMoneda monedas={finanzasCria.monedas} campo="gastosOperativosPeriodo" /></strong>
                   <small>Segun rango de fechas</small>
                 </article>
                 <article>
                   <span>Ingresos</span>
-                  <strong>{formatearMoneda(finanzasCria.ingresosPeriodo)}</strong>
+                  <strong><TotalesMoneda monedas={finanzasCria.monedas} campo="ingresosPeriodo" /></strong>
                   <small>Ventas u otros ingresos</small>
                 </article>
                 <article>
                   <span>Balance operativo</span>
-                  <strong>{formatearMoneda(finanzasCria.balanceOperativo)}</strong>
+                  <strong><TotalesMoneda monedas={finanzasCria.monedas} campo="balanceOperativo" /></strong>
                   <small>Ingresos menos gastos operativos</small>
                 </article>
                 <article>
@@ -663,9 +675,9 @@ const Reportes = ({ usuario }) => {
                   <small>{formatearNumero(finanzasCria.animalesInicioPeriodo)} inicio · {formatearNumero(finanzasCria.animalesActuales)} actuales</small>
                 </article>
                 <article>
-                  <span>Patrimonio estimado</span>
+                  <span>Valor del hato activo</span>
                   <strong>{formatearMoneda(finanzasCria.patrimonioGanaderoEstimado)}</strong>
-                  <small>Hato estimado mas inversion acumulada</small>
+                  <small>Sin volver a sumar su costo histórico de compra</small>
                 </article>
               </div>
             </section>
@@ -678,32 +690,32 @@ const Reportes = ({ usuario }) => {
               <div className="reportes-metricas finanzas-cria-metricas">
                 <article>
                   <span>Ventas de animales</span>
-                  <strong>{formatearMoneda(sustentabilidadCria.montoVentasAnimales)}</strong>
+                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="montoVentasAnimales" /></strong>
                   <small>{formatearNumero(sustentabilidadCria.animalesVendidosPeriodo)} animales vendidos</small>
                 </article>
                 <article>
                   <span>Compras de animales</span>
-                  <strong>{formatearMoneda(sustentabilidadCria.montoComprasAnimales)}</strong>
+                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="montoComprasAnimales" /></strong>
                   <small>{formatearNumero(sustentabilidadCria.animalesCompradosPeriodo)} animales comprados</small>
                 </article>
                 <article>
                   <span>Gastos operativos</span>
-                  <strong>{formatearMoneda(sustentabilidadCria.gastosOperativosPeriodo)}</strong>
+                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="gastosOperativosPeriodo" /></strong>
                   <small>{formatearNumero(sustentabilidadCria.animalesActivosCosto)} animales · {sustentabilidadCria.mesesPeriodo} meses</small>
                 </article>
                 <article>
                   <span>Costo mensual/animal</span>
-                  <strong>{formatearMoneda(sustentabilidadCria.costoProduccionMensualPorAnimal)}</strong>
+                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="costoProduccionMensualPorAnimal" /></strong>
                   <small>Costo operativo prorrateado</small>
                 </article>
                 <article>
                   <span>Costo asignado</span>
-                  <strong>{formatearMoneda(sustentabilidadCria.costoProduccionAsignado)}</strong>
+                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="costoProduccionAsignado" /></strong>
                   <small>Segun meses en finca de vendidos</small>
                 </article>
-                <article className={sustentabilidadCria.margenSustentabilidad >= 0 ? 'sustentabilidad-positiva' : 'sustentabilidad-negativa'}>
+                <article className={(sustentabilidadCria.monedas?.CRC?.margenSustentabilidad || 0) >= 0 ? 'sustentabilidad-positiva' : 'sustentabilidad-negativa'}>
                   <span>Utilidad / pérdida</span>
-                  <strong>{formatearMoneda(sustentabilidadCria.margenSustentabilidad)}</strong>
+                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="margenSustentabilidad" /></strong>
                   <small>Ventas - compras - costo asignado</small>
                 </article>
                 <article>
@@ -755,8 +767,8 @@ const Reportes = ({ usuario }) => {
                           <td>{formatearMoneda(animal.totalVenta)}</td>
                           <td>{formatearMoneda(animal.totalCompra)}</td>
                           <td>{animal.duracionMeses}</td>
-                          <td>{formatearMoneda(animal.costoProduccionAsignado)}</td>
-                          <td>{formatearMoneda(animal.utilidadPerdida)}</td>
+                          <td><TotalesMoneda monedas={animal.costosProduccionAsignados} /></td>
+                          <td><TotalesMoneda monedas={animal.utilidadPerdidaPorMoneda} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -978,7 +990,7 @@ const Reportes = ({ usuario }) => {
               <div className="reportes-metricas finanzas-cria-metricas">
                 <article>
                   <span>Monto comprado</span>
-                  <strong>{formatearMoneda(productosReporte.resumen?.montoTotal)}</strong>
+                  <strong><TotalesMoneda monedas={productosReporte.resumen?.monedas} campo="montoTotal" /></strong>
                   <small>Compras con producto y cantidad en el rango</small>
                 </article>
                 <article>
@@ -999,7 +1011,7 @@ const Reportes = ({ usuario }) => {
                 <article>
                   <span>Categoría principal</span>
                   <strong>{productosReporte.resumen?.categoriasMasRegistradas?.[0]?.categoria || '--'}</strong>
-                  <small>{formatearMoneda(productosReporte.resumen?.categoriasMasRegistradas?.[0]?.montoTotal)}</small>
+                  <small>{productosReporte.resumen?.categoriasMasRegistradas?.[0] ? formatearMoneda(productosReporte.resumen.categoriasMasRegistradas[0].montoTotal, productosReporte.resumen.categoriasMasRegistradas[0].moneda) : '--'}</small>
                 </article>
                 <article>
                   <span>Proveedor principal</span>
@@ -1023,7 +1035,7 @@ const Reportes = ({ usuario }) => {
                       </thead>
                       <tbody>
                         {productosPagina.map((item) => (
-                          <tr key={`${item.producto}-${item.categoria}-${item.unidadMedida}`}>
+                          <tr key={`${item.producto}-${item.categoria}-${item.unidadMedida}-${item.moneda}`}>
                             <td>{item.producto}</td>
                             <td>{item.categoria}</td>
                             <td>
@@ -1034,9 +1046,9 @@ const Reportes = ({ usuario }) => {
                               <small>{formatearNumero(item.cantidadRegistros)} compras registradas</small>
                             </td>
                             <td>
-                              <strong>{formatearMoneda(item.montoTotal)}</strong>
+                              <strong>{formatearMoneda(item.montoTotal, item.moneda)}</strong>
                               <small>
-                                Promedio: {formatearMoneda(item.precioPromedio)}
+                                Promedio: {formatearMoneda(item.precioPromedio, item.moneda)}
                                 {item.unidadBase ? ` / ${item.unidadBase}` : ''}
                               </small>
                             </td>
@@ -1078,11 +1090,11 @@ const Reportes = ({ usuario }) => {
                           </thead>
                           <tbody>
                             {categoriasPagina.map((item) => (
-                              <tr key={item.categoria}>
-                                <td>{item.categoria}</td>
+                              <tr key={`${item.categoria}-${item.moneda}`}>
+                                <td>{item.categoria}<small>{item.moneda}</small></td>
                                 <td>{(item.productosIncluidos || []).filter(Boolean).join(', ') || '--'}</td>
                                 <td>{formatearNumero(item.cantidadRegistros)}</td>
-                                <td>{formatearMoneda(item.montoTotal)}</td>
+                                <td>{formatearMoneda(item.montoTotal, item.moneda)}</td>
                                 <td>{formatearPorcentaje(item.porcentajeDelTotal)}</td>
                               </tr>
                             ))}
@@ -1096,31 +1108,22 @@ const Reportes = ({ usuario }) => {
 
                 <article>
                   <h3>Combustibles</h3>
-                  <div className="combustible-resumen">
-                    <div>
-                      <span>Litros totales</span>
-                      <strong>{formatearCantidad(productosReporte.combustibles?.litrosTotales, 'litros')}</strong>
+                  {Object.entries(productosReporte.combustibles?.monedas || {}).map(([moneda, datos]) => datos.registros > 0 && (
+                    <div className="combustible-resumen" key={moneda}>
+                      <div><span>Moneda</span><strong>{moneda}</strong></div>
+                      <div><span>Litros totales</span><strong>{formatearCantidad(datos.litrosTotales, 'litros')}</strong></div>
+                      <div><span>Monto total</span><strong>{formatearMoneda(datos.montoTotal, moneda)}</strong></div>
+                      <div><span>Promedio/litro</span><strong>{formatearMoneda(datos.precioPromedioLitro, moneda)}</strong></div>
+                      <div><span>Proveedor más usado</span><strong>{datos.proveedorMasUsado || '--'}</strong></div>
                     </div>
-                    <div>
-                      <span>Monto total</span>
-                      <strong>{formatearMoneda(productosReporte.combustibles?.montoTotal)}</strong>
-                    </div>
-                    <div>
-                      <span>Promedio/litro</span>
-                      <strong>{formatearMoneda(productosReporte.combustibles?.precioPromedioLitro)}</strong>
-                    </div>
-                    <div>
-                      <span>Proveedor más usado</span>
-                      <strong>{productosReporte.combustibles?.proveedorMasUsado || '--'}</strong>
-                    </div>
-                  </div>
+                  ))}
                   {(productosReporte.combustibles?.consumoPorMes || []).map((item) => (
                     <BarraReporte
-                      key={`${item.anio}-${item.mes}`}
+                      key={`${item.anio}-${item.mes}-${item.moneda}`}
                       label={`${nombreMes(item.mes)} ${item.anio}`}
                       valor={item.litros}
-                      detalle={`${formatearCantidad(item.litros, 'litros')} · ${formatearMoneda(item.montoTotal)}`}
-                      maximo={obtenerMaximo(productosReporte.combustibles?.consumoPorMes || [], 'litros')}
+                      detalle={`${formatearCantidad(item.litros, 'litros')} · ${formatearMoneda(item.montoTotal, item.moneda)}`}
+                      maximo={obtenerMaximo((productosReporte.combustibles?.consumoPorMes || []).filter((mes) => mes.moneda === item.moneda), 'litros')}
                     />
                   ))}
                   {(productosReporte.combustibles?.consumoPorMes || []).length === 0 && <span className="reporte-vacio">Sin combustibles registrados.</span>}
@@ -1129,9 +1132,9 @@ const Reportes = ({ usuario }) => {
                 <article>
                   <h3>Por proveedor</h3>
                   {(productosReporte.proveedores || []).slice(0, 10).map((item) => (
-                    <div className="reporte-lista-item" key={item.proveedor}>
+                    <div className="reporte-lista-item" key={`${item.proveedor}-${item.moneda}`}>
                       <strong>{item.proveedor}</strong>
-                      <span>{formatearMoneda(item.montoTotal)} · {item.productosComprados.slice(0, 4).join(', ')} · Última: {formatearFecha(item.ultimaCompra)}</span>
+                      <span>{formatearMoneda(item.montoTotal, item.moneda)} · {item.productosComprados.slice(0, 4).join(', ')} · Última: {formatearFecha(item.ultimaCompra)}</span>
                     </div>
                   ))}
                   {(productosReporte.proveedores || []).length === 0 && <span className="reporte-vacio">Sin proveedores para este rango.</span>}
@@ -1180,10 +1183,10 @@ const Reportes = ({ usuario }) => {
                   <strong>{formatearNumero(porcinosReporte.tareasCamadas?.resumen?.totalTareas)}</strong>
                   <small>{formatearNumero(porcinosReporte.tareasCamadas?.resumen?.pendientes)} pendientes · {formatearNumero(porcinosReporte.tareasCamadas?.resumen?.vencidas)} vencidas</small>
                 </article>
-                <article className={(porcinosReporte.economia?.resumen?.balancePorcino || 0) >= 0 ? 'sustentabilidad-positiva' : 'sustentabilidad-negativa'}>
+                <article className={(porcinosReporte.economia?.resumen?.monedas?.CRC?.balancePorcino || 0) >= 0 ? 'sustentabilidad-positiva' : 'sustentabilidad-negativa'}>
                   <span>Balance porcino</span>
-                  <strong>{formatearMoneda(porcinosReporte.economia?.resumen?.balancePorcino)}</strong>
-                  <small>{formatearMoneda(porcinosReporte.economia?.resumen?.costoPromedioPorCamada)} costo prom/camada</small>
+                  <strong><TotalesMoneda monedas={porcinosReporte.economia?.resumen?.monedas} campo="balancePorcino" /></strong>
+                  <small><TotalesMoneda monedas={porcinosReporte.economia?.resumen?.monedas} campo="costoPromedioPorCamada" /> costo prom/camada</small>
                 </article>
               </div>
 
@@ -1230,8 +1233,8 @@ const Reportes = ({ usuario }) => {
                   {(porcinosReporte.economia?.camadas || []).slice(0, 10).map((camada) => (
                     <div className="reporte-lista-item" key={camada._id}>
                       <strong>{camada.codigoCamada || 'Camada sin código'} · {camada.destino || '--'}</strong>
-                      <span>Costo: {formatearMoneda(camada.costoEstimado)} · Ingreso: {formatearMoneda(camada.ingresoEstimado)}</span>
-                      <span>Margen: {formatearMoneda(camada.margenEstimado)} · Costo/destetado: {formatearMoneda(camada.costoPorCriaDestetada)}</span>
+                      <span>Costo: <TotalesMoneda monedas={camada.monedas} campo="costoEstimado" /> · Ingreso: <TotalesMoneda monedas={camada.monedas} campo="ingresoEstimado" /></span>
+                      <span>Margen: <TotalesMoneda monedas={camada.monedas} campo="margenEstimado" /> · Costo/destetado: <TotalesMoneda monedas={camada.monedas} campo="costoPorCriaDestetada" /></span>
                     </div>
                   ))}
                   {(porcinosReporte.economia?.camadas || []).length === 0 && <span className="reporte-vacio">Sin camadas para estimación económica.</span>}
@@ -1460,21 +1463,29 @@ const Reportes = ({ usuario }) => {
             <article className="reporte-panel">
               <p className="eyebrow">Finanzas</p>
               <h2>Gastos por categoría</h2>
-              {(reporte.finanzas.porCategoria || []).map((item) => (
-                <BarraReporte
-                  key={item.categoria}
-                  label={item.categoria}
-                  valor={item.total}
-                  detalle={`${formatearMoneda(item.total)} · ${item.cantidad} registros`}
-                  maximo={maxCategoria}
-                />
-              ))}
+              {['CRC', 'USD'].map((moneda) => {
+                const categorias = (reporte.finanzas.porCategoria || []).filter((item) => item.moneda === moneda);
+                if (!categorias.length) return null;
+                const maximo = obtenerMaximo(categorias, 'total');
+                return <div key={moneda} className="reportes-meses"><strong>{moneda}</strong>{categorias.map((item) => (
+                  <BarraReporte
+                    key={`${item.categoria}-${moneda}`}
+                    label={item.categoria}
+                    valor={item.total}
+                    detalle={`${formatearMoneda(item.total, moneda)} · ${item.cantidad} registros`}
+                    maximo={maximo}
+                  />
+                ))}</div>;
+              })}
             </article>
 
             <article className="reporte-panel reporte-panel-amplio">
               <p className="eyebrow">Finanzas</p>
               <h2>Gastos por mes</h2>
-              <LineaFinanzasMensual datos={reporte.finanzas.gastosPorMes || []} maximo={maxGastosMes} />
+              {['CRC', 'USD'].map((moneda) => {
+                const datos = (reporte.finanzas.gastosPorMes || []).filter((item) => item.moneda === moneda);
+                return datos.length ? <div key={moneda} className="finanzas-bloque-interno"><strong>{moneda}</strong><LineaFinanzasMensual datos={datos} /></div> : null;
+              })}
             </article>
 
             <article className="reporte-panel reporte-panel-amplio">
@@ -1483,11 +1494,11 @@ const Reportes = ({ usuario }) => {
               <div className="reportes-meses">
                 {destinosOrdenados.map((item) => (
                   <BarraReporte
-                    key={item.destinoUso}
+                    key={`${item.destinoUso}-${item.moneda}`}
                     label={item.destinoUso || 'Sin destino'}
                     valor={item.total}
-                    detalle={`${formatearMoneda(item.total)} · ${item.registros} registros`}
-                    maximo={maxDestino}
+                    detalle={`${formatearMoneda(item.total, item.moneda)} · ${item.registros} registros`}
+                    maximo={obtenerMaximo(destinosOrdenados.filter((destino) => destino.moneda === item.moneda), 'total')}
                   />
                 ))}
               </div>

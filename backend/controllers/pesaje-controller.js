@@ -5,9 +5,12 @@ const Animal = require('../models/Animal');
 const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 const EventoLote = require('../models/EventoLote');
+const { Membresia } = require('../models/Membresia');
+const { listarFincasAccesibles } = require('../services/accesoFinca-service');
 
 const poblarPesaje = (query) => query
     .populate('animal')
+    .populate('fincaId', 'nombre codigo')
     .populate('registradoPor', 'nombre apellido correo rol');
 
 const actualizarPesoActualAnimal = async (animalId) => {
@@ -127,8 +130,25 @@ pesajeCtrl.getPesaje = async (req, res) => {
 
 pesajeCtrl.getPesajesPorAnimal = async (req, res) => {
     try {
+        const animal = await Animal.findById(req.params.animalId).select('_id organizacionId');
+        if (!animal) return res.status(404).json({ mensaje: 'Animal no encontrado' });
+        const membresia = await Membresia.findById(req.usuario?.membresiaId);
+        if (!membresia || String(membresia.organizacionId) !== String(animal.organizacionId)) {
+            return res.status(403).json({ mensaje: 'No tienes acceso al historial de este animal' });
+        }
+        const fincas = await listarFincasAccesibles(membresia, { incluirInactivas: true });
+        const fincaIds = fincas.map((finca) => finca._id);
         const pesajes = await poblarPesaje(
-            Pesaje.find({ animal: req.params.animalId }).sort({ fecha: -1, createdAt: -1 })
+            Pesaje.find({
+                animal: req.params.animalId,
+                $or: [
+                    { fincaId: { $in: fincaIds } },
+                    { fincaId: { $exists: false } },
+                    { fincaId: null }
+                ]
+            })
+                .setOptions({ omitirAislamientoFinca: true })
+                .sort({ fecha: -1, createdAt: -1 })
         );
         res.json(pesajes);
     } catch (error) {

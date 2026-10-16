@@ -1,11 +1,16 @@
+const { Types } = require('mongoose');
 const Animal = require('../models/Animal');
 const ConfiguracionEmail = require('../models/ConfiguracionEmail');
+const { Membresia } = require('../models/Membresia');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const Organizacion = require('../models/Organizacion');
 const { Tarea } = require('../models/Tarea');
 const { ejecutarConOrganizacion } = require('../context/organizacion-context');
 const { enviarCorreoResend } = require('./correoElectronico-service');
 const { incrementarEmailsOperativos } = require('./plan-service');
+const { crearMapaMonedas, normalizarMoneda } = require('./finanzas-calculos-service');
+const { listarFincasAccesibles } = require('./accesoFinca-service');
+const { normalizarModulosResumen } = require('./permisosResumenEmail-service');
 
 const obtenerPartesLocales = (fecha, zonaHoraria) => {
     const partes = new Intl.DateTimeFormat('en-CA', {
@@ -38,32 +43,49 @@ const debeEnviarResumen = (configuracion, fecha = new Date(), zonaHoraria = 'Ame
     return { enviar: configuracion.ultimoPeriodo !== periodo, periodo };
 };
 
-const recopilarResumen = async ({ usuarioId, frecuencia, modulos, ahora = new Date() }) => {
+const normalizarFincaIds = (fincaIds = []) => [...new Set(fincaIds.map((finca) => String(finca?._id || finca)).filter(Boolean))]
+    .filter((id) => Types.ObjectId.isValid(id))
+    .map((id) => new Types.ObjectId(id));
+
+const recopilarResumen = async ({ usuarioId, frecuencia, modulos, fincaIds, ahora = new Date() }) => {
     const desde = new Date(ahora.getTime() - (frecuencia === 'Semanal' ? 7 : 1) * 24 * 60 * 60 * 1000);
+    const fincasAutorizadas = normalizarFincaIds(fincaIds);
+    if (!fincasAutorizadas.length) {
+        throw Object.assign(new Error('El destinatario no tiene fincas activas autorizadas para el resumen.'), {
+            code: 'EMAIL_FARM_SCOPE_EMPTY'
+        });
+    }
+    const filtroFincas = { fincaId: { $in: fincasAutorizadas } };
     const resultado = {};
     if (modulos.resumenGanadero) {
         const inventario = await Animal.aggregate([
-            { $match: { estado: 'Activo' } },
+            { $match: { ...filtroFincas, estado: 'Activo' } },
             { $group: { _id: { $ifNull: ['$especie', 'Bovino'] }, cantidad: { $sum: 1 } } }
-        ]).option({ omitirAislamientoFinca: true });
+        ]);
         resultado.ganado = Object.fromEntries(inventario.map((item) => [item._id, item.cantidad]));
     }
     if (modulos.finanzas) {
-        const [finanzas = {}] = await MovimientoFinanciero.aggregate([
-            { $match: { fecha: { $gte: desde, $lte: ahora }, excluirConsolidacion: { $ne: true } } },
+        const filasFinanzas = await MovimientoFinanciero.aggregate([
+            { $match: { ...filtroFincas, fecha: { $gte: desde, $lte: ahora }, excluirConsolidacion: { $ne: true } } },
             { $group: {
-                _id: null,
+                _id: { moneda: { $ifNull: ['$moneda', 'CRC'] } },
                 ingresos: { $sum: { $cond: [{ $eq: ['$naturaleza', 'Ingreso'] }, '$monto', 0] } },
                 egresos: { $sum: { $cond: [{ $eq: ['$naturaleza', 'Egreso'] }, '$monto', 0] } }
             } }
-        ]).option({ omitirAislamientoFinca: true });
-        resultado.finanzas = { ingresos: Number(finanzas.ingresos || 0), egresos: Number(finanzas.egresos || 0) };
+        ]);
+        resultado.finanzas = crearMapaMonedas(() => ({ ingresos: 0, egresos: 0, balance: 0 }));
+        filasFinanzas.forEach((item) => {
+            const moneda = normalizarMoneda(item._id?.moneda);
+            const ingresos = Number(item.ingresos || 0);
+            const egresos = Number(item.egresos || 0);
+            resultado.finanzas[moneda] = { ingresos, egresos, balance: ingresos - egresos };
+        });
     }
     if (modulos.tareasPendientes) {
-        const filtro = { asignadoA: usuarioId, estado: { $nin: ['Completada', 'Cancelada'] } };
+        const filtro = { ...filtroFincas, asignadoA: usuarioId, estado: { $nin: ['Completada', 'Cancelada'] } };
         const [pendientes, vencidas] = await Promise.all([
-            Tarea.countDocuments(filtro).setOptions({ omitirAislamientoFinca: true }),
-            Tarea.countDocuments({ ...filtro, $or: [{ fechaLimite: { $lt: ahora } }, { fechaLimite: null, fechaProgramada: { $lt: ahora } }] }).setOptions({ omitirAislamientoFinca: true })
+            Tarea.countDocuments(filtro),
+            Tarea.countDocuments({ ...filtro, $or: [{ fechaLimite: { $lt: ahora } }, { fechaLimite: null, fechaProgramada: { $lt: ahora } }] })
         ]);
         resultado.tareas = { pendientes, vencidas };
     }
@@ -73,7 +95,12 @@ const recopilarResumen = async ({ usuarioId, frecuencia, modulos, ahora = new Da
 const crearContenido = ({ usuario, organizacion, resumen, frecuencia }) => {
     const bloques = [];
     if (resumen.ganado) bloques.push(`<h3>Inventario activo</h3><p>Bovinos: ${resumen.ganado.Bovino || 0}<br>Porcinos: ${resumen.ganado.Porcino || 0}</p>`);
-    if (resumen.finanzas) bloques.push(`<h3>Finanzas del período</h3><p>Ingresos: ${resumen.finanzas.ingresos}<br>Egresos: ${resumen.finanzas.egresos}<br>Balance: ${resumen.finanzas.ingresos - resumen.finanzas.egresos}</p>`);
+    if (resumen.finanzas) {
+        const lineas = Object.entries(resumen.finanzas).map(([moneda, datos]) => (
+            `<strong>${moneda}</strong>: Ingresos ${datos.ingresos}, Egresos ${datos.egresos}, Balance ${datos.balance}`
+        ));
+        bloques.push(`<h3>Finanzas del período</h3><p>${lineas.join('<br>')}</p>`);
+    }
     if (resumen.tareas) bloques.push(`<h3>Tareas</h3><p>Pendientes: ${resumen.tareas.pendientes}<br>Vencidas: ${resumen.tareas.vencidas}</p>`);
     return {
         subject: `Resumen ${frecuencia.toLowerCase()} - ${organizacion.nombre}`,
@@ -88,12 +115,23 @@ const procesarResumenesOrganizacion = async (organizacion, ahora = new Date()) =
     const resultados = [];
     for (const configuracion of configuraciones) {
         if (!configuracion.usuario) continue;
+        const membresia = await Membresia.findOne({
+            organizacionId: organizacion._id,
+            usuario: configuracion.usuario._id,
+            estado: 'Activo'
+        }).lean();
+        if (!membresia) continue;
         const decision = debeEnviarResumen(configuracion, ahora, organizacion.zonaHoraria);
         if (!decision.enviar) continue;
+        const fincas = await listarFincasAccesibles(membresia);
+        if (!fincas.length) continue;
+        const modulos = normalizarModulosResumen(configuracion.modulos, membresia.rol);
+        if (!Object.values(modulos).some(Boolean)) continue;
         const resumen = await recopilarResumen({
             usuarioId: configuracion.usuario._id,
             frecuencia: configuracion.frecuencia,
-            modulos: configuracion.modulos,
+            modulos,
+            fincaIds: fincas.map((finca) => finca._id),
             ahora
         });
         const correo = await enviarCorreoResend({
@@ -128,6 +166,7 @@ const procesarResumenesTodasOrganizaciones = async (ahora = new Date()) => {
 module.exports = {
     clavePeriodoResumen,
     debeEnviarResumen,
+    normalizarFincaIds,
     procesarResumenesOrganizacion,
     procesarResumenesTodasOrganizaciones,
     recopilarResumen

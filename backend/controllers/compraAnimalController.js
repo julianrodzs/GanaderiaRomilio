@@ -14,6 +14,15 @@ const { agregarAnimalesAlLote, crearLoteRapido } = require('../services/lote-ser
 const { obtenerCategoriaAnimal } = require('../services/categoriaAnimal-service');
 const { prepararObjetivoProductivo } = require('../config/objetivosProductivos');
 const { prepararDatosRaciales } = require('../services/raza-service');
+const Pesaje = require('../models/Pesaje');
+const EventoAnimal = require('../models/EventoAnimal');
+const AplicacionSanitaria = require('../models/AplicacionSanitaria');
+const { TratamientoSanitario } = require('../models/TratamientoSanitario');
+const RegistroSanitario = require('../models/RegistroSanitario');
+const RegistroReproductivo = require('../models/RegistroReproductivo');
+const { Tarea } = require('../models/Tarea');
+const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
+const { preservarIdentidadAnimalesCompra } = require('../services/compraAnimal-integridad-service');
 
 const compraAnimalCtrl = {};
 
@@ -35,6 +44,15 @@ const parseLoteRapido = (loteRapido) => {
     return loteRapido;
 };
 
+const extraerDatosCompra = (body = {}) => ({
+    fechaCompra: body.fechaCompra,
+    proveedor: body.proveedor,
+    identificacionProveedor: body.identificacionProveedor,
+    telefonoProveedor: body.telefonoProveedor,
+    observaciones: body.observaciones,
+    montoFinal: body.montoFinal
+});
+
 const prepararAnimalesCompra = (animales) => parseAnimales(animales).map((item) => ({
     ...item,
     diio: normalizarTexto(item.diio || item.identificadorFinca),
@@ -52,7 +70,7 @@ const crearFiltroEspecie = (especie) => {
     return {};
 };
 
-const validarAnimalesCompra = async (animales = [], compraIdIgnorada = null) => {
+const validarAnimalesCompra = async (animales = [], compraIdIgnorada = null, session = null) => {
     if (!Array.isArray(animales) || animales.length === 0) {
         return { valido: false, status: 400, mensaje: 'Debe agregar al menos un animal' };
     }
@@ -92,7 +110,7 @@ const validarAnimalesCompra = async (animales = [], compraIdIgnorada = null) => 
     };
     if (compraIdIgnorada) filtroDuplicado.compraId = { $ne: compraIdIgnorada };
 
-    const duplicado = await Animal.findOne(filtroDuplicado).select('diio identificadorFinca');
+    const duplicado = await Animal.findOne(filtroDuplicado).select('diio identificadorFinca').session(session);
 
     if (duplicado) {
         return {
@@ -135,20 +153,11 @@ const validarObjetivosCompraEnFinca = async ({ fincaId, especie, animales }) => 
     })));
 };
 
-const crearAnimalesCompra = async (compra, usuarioId) => {
+const crearAnimalesCompra = async (compra, usuarioId, session) => {
     const animalesActualizados = [];
-    const cantidadNuevos = (compra.animales || []).filter((item) => !item.animal).length;
-    let permiso = null;
-    if (cantidadNuevos > 0) {
-        permiso = await asegurarPuedeCrearAnimal({
-            especie: compra.especie || 'Bovino',
-            cantidad: cantidadNuevos
-        });
-    }
-    const crear = async () => {
-      for (const item of compra.animales || []) {
+    for (const item of compra.animales || []) {
         const proporcion = compra.montoCalculado ? Number(item.subtotal || 0) / compra.montoCalculado : 0;
-        const montoAsignado = compra.montoTotal ? compra.montoTotal * proporcion : item.subtotal;
+        const montoAsignado = Number(compra.montoTotal || 0) * proporcion;
 
         if (item.animal) {
             animalesActualizados.push(item);
@@ -156,7 +165,7 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
         }
 
         const identificador = normalizarTexto(item.identificadorFinca || item.diio);
-        const animal = await Animal.create(prepararDatosRaciales({
+        const animalesCreados = await Animal.create([prepararDatosRaciales({
             identificadorFinca: identificador,
             diio: normalizarTexto(item.diio) || undefined,
             especie: compra.especie || 'Bovino',
@@ -176,7 +185,8 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
             estado: 'Activo',
             origenGenealogico: 'Externo',
             observaciones: item.observaciones
-        }));
+        })], { session });
+        const [animal] = animalesCreados;
 
         item.animal = animal._id;
         animalesActualizados.push(item);
@@ -201,19 +211,52 @@ const crearAnimalesCompra = async (compra, usuarioId) => {
                 compraAnimal: compra._id,
                 objetivoProductivo: item.objetivoProductivo
             }
-        });
-      }
-      compra.animales = animalesActualizados;
-      await compra.save();
-    };
-    if (permiso) {
-        await ejecutarConReservaCuota({ permiso, recurso: 'animales', cantidad: cantidadNuevos, operacion: crear });
-    } else {
-        await crear();
+        }, { session });
     }
+    compra.animales = animalesActualizados;
+    await compra.save({ session });
 };
 
-const crearMovimientoCompra = async (compra) => {
+const sincronizarDatosComercialesAnimalesCompra = async (compra, usuarioId, session) => {
+    await Promise.all((compra.animales || []).map(async (item) => {
+        const proporcion = compra.montoCalculado ? Number(item.subtotal || 0) / compra.montoCalculado : 0;
+        const montoAsignado = Number(compra.montoTotal || 0) * proporcion;
+        await Animal.findOneAndUpdate(
+            { _id: item.animal, compraId: compra._id },
+            { $set: {
+                pesoCompra: item.pesoCompraKg,
+                precioCompraPorKg: item.precioKg,
+                montoCompra: montoAsignado,
+                fechaCompra: compra.fechaCompra,
+                proveedorCompra: compra.proveedor
+            } },
+            { session, runValidators: true }
+        );
+        await upsertEventoAnimal({
+            animal: item.animal,
+            tipoEvento: 'Compra',
+            fecha: compra.fechaCompra,
+            titulo: 'Animal comprado',
+            descripcion: `Compra registrada por ₡${Number(montoAsignado || 0).toLocaleString('es-CR')} con peso de ${item.pesoCompraKg} kg.`,
+            moduloOrigen: 'Compras',
+            referenciaId: compra._id,
+            creadoPor: usuarioId,
+            metadata: {
+                proveedor: compra.proveedor,
+                pesoCompraKg: item.pesoCompraKg,
+                precioKg: item.precioKg,
+                subtotal: item.subtotal,
+                montoAsignado,
+                montoFinalCompra: compra.montoFinal,
+                ajusteMontoCompra: compra.ajusteMonto,
+                compraAnimal: compra._id,
+                objetivoProductivo: item.objetivoProductivo
+            }
+        }, { session });
+    }));
+};
+
+const crearMovimientoCompra = async (compra, session) => {
     if (compra.estado !== 'Confirmada') return;
 
     await MovimientoFinanciero.findOneAndUpdate(
@@ -236,13 +279,13 @@ const crearMovimientoCompra = async (compra) => {
             referenciaId: compra._id,
             referenciaModelo: 'CompraAnimal'
         },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { upsert: true, new: true, setDefaultsOnInsert: true, session }
     );
 };
 
-const aplicarCompraConfirmada = async (compra, usuarioId, loteRapido = null) => {
+const aplicarCompraConfirmada = async (compra, usuarioId, loteRapido = null, session) => {
     if (compra.estado !== 'Confirmada') return;
-    await crearAnimalesCompra(compra, usuarioId);
+    await crearAnimalesCompra(compra, usuarioId, session);
     if (loteRapido) {
         if (compra.loteAsignado) {
             const error = new Error('Esta compra ya fue asignada a un lote.');
@@ -254,22 +297,22 @@ const aplicarCompraConfirmada = async (compra, usuarioId, loteRapido = null) => 
             especie: compra.especie,
             proposito: loteRapido.objetivoProductivo,
             fechaInicio: compra.fechaCompra
-        }, usuarioId);
+        }, usuarioId, { session });
         await agregarAnimalesAlLote(lote._id, {
             animales: compra.animales.map((item) => item.animal).filter(Boolean),
             fechaEntrada: compra.fechaCompra,
             motivoEntrada: `Ingreso desde compra ${compra._id}`,
             permitirMover: false
-        }, usuarioId);
+        }, usuarioId, { session });
         compra.loteAsignado = lote._id;
-        await compra.save();
+        await compra.save({ session });
     }
-    await crearMovimientoCompra(compra);
+    await crearMovimientoCompra(compra, session);
 };
 
-const asegurarCompraReversible = async (compra) => {
+const asegurarCompraReversible = async (compra, session) => {
     const ids = (compra.animales || []).map((item) => item.animal).filter(Boolean);
-    const pertenencia = ids.length ? await PertenenciaLote.findOne({ animal: { $in: ids } }).populate('lote', 'codigo nombre') : null;
+    const pertenencia = ids.length ? await PertenenciaLote.findOne({ animal: { $in: ids } }).populate('lote', 'codigo nombre').session(session) : null;
     if (pertenencia) {
         const error = new Error(`No se puede revertir la compra porque sus animales tienen historial en el lote ${pertenencia.lote?.codigo || 'asignado'}.`);
         error.status = 409;
@@ -279,26 +322,49 @@ const asegurarCompraReversible = async (compra) => {
         _id: { $in: ids },
         compraId: compra._id,
         estado: { $in: ['Vendido', 'Muerto'] }
-    });
+    }).session(session);
 
     if (bloqueado) {
         const error = new Error(`No se puede revertir la compra porque el animal ${bloqueado.diio || bloqueado.identificadorFinca} ya fue vendido o marcado como muerto.`);
         error.status = 400;
         throw error;
     }
+
+    if (!ids.length) return;
+    const [pesaje, aplicacion, tratamiento, registroSanitario, reproduccion, tarea, eventoPosterior, descendiente] = await Promise.all([
+        Pesaje.exists({ animal: { $in: ids } }).session(session),
+        AplicacionSanitaria.exists({ animales: { $in: ids } }).session(session),
+        TratamientoSanitario.exists({ animales: { $in: ids } }).session(session),
+        RegistroSanitario.exists({ animal: { $in: ids } }).session(session),
+        RegistroReproductivo.exists({ animal: { $in: ids } }).session(session),
+        Tarea.exists({ animal: { $in: ids } }).session(session),
+        EventoAnimal.exists({
+            animal: { $in: ids },
+            $or: [
+                { moduloOrigen: { $ne: 'Compras' } },
+                { referenciaId: { $ne: compra._id } }
+            ]
+        }).session(session),
+        Animal.exists({ $or: [{ madre: { $in: ids } }, { padre: { $in: ids } }] }).session(session)
+    ]);
+    if (pesaje || aplicacion || tratamiento || registroSanitario || reproduccion || tarea || eventoPosterior || descendiente) {
+        const error = new Error('No se puede anular o eliminar la compra porque uno o más animales ya tienen historial productivo, sanitario o reproductivo.');
+        error.status = 409;
+        throw error;
+    }
 };
 
-const revertirCompra = async (compra) => {
-    await asegurarCompraReversible(compra);
+const revertirCompra = async (compra, session) => {
+    await asegurarCompraReversible(compra, session);
     const ids = (compra.animales || []).map((item) => item.animal).filter(Boolean);
 
     await Animal.deleteMany({
         _id: { $in: ids },
         compraId: compra._id,
         estado: 'Activo'
-    });
-    await MovimientoFinanciero.deleteMany({ referenciaId: compra._id, referenciaModelo: 'CompraAnimal' });
-    await eliminarEventosPorReferencia({ moduloOrigen: 'Compras', referenciaId: compra._id });
+    }, { session });
+    await MovimientoFinanciero.deleteMany({ referenciaId: compra._id, referenciaModelo: 'CompraAnimal' }, { session });
+    await eliminarEventosPorReferencia({ moduloOrigen: 'Compras', referenciaId: compra._id, session });
 };
 
 compraAnimalCtrl.getCompras = async (req, res) => {
@@ -347,15 +413,32 @@ compraAnimalCtrl.crearCompra = async (req, res) => {
             animales
         });
 
-        const compra = new CompraAnimal({
-            ...req.body,
-            animales,
-            registradoPor: req.usuario?.id
+        const permiso = await asegurarPuedeCrearAnimal({
+            organizacionId: req.organizacionId,
+            especie: req.body.especie || 'Bovino',
+            cantidad: animales.length
         });
-        const compraGuardada = await compra.save();
-        await aplicarCompraConfirmada(compraGuardada, req.usuario?.id, loteRapido);
+        const compraId = await ejecutarConReservaCuota({
+            permiso,
+            recurso: 'animales',
+            organizacionId: req.organizacionId,
+            cantidad: animales.length,
+            operacion: () => ejecutarEnTransaccion(async (session) => {
+                const [compraGuardada] = await CompraAnimal.create([{
+                    ...extraerDatosCompra(req.body),
+                    especie: req.body.especie || 'Bovino',
+                    animales,
+                    estado: 'Confirmada',
+                    registradoPor: req.usuario?.id,
+                    organizacionId: req.organizacionId,
+                    fincaId: req.fincaId
+                }], { session });
+                await aplicarCompraConfirmada(compraGuardada, req.usuario?.id, loteRapido, session);
+                return compraGuardada._id;
+            })
+        });
 
-        const compraPoblada = await poblarCompra(CompraAnimal.findById(compraGuardada._id));
+        const compraPoblada = await poblarCompra(CompraAnimal.findById(compraId));
         res.status(201).json(compraPoblada);
     } catch (error) {
         if (respuestaErrorPlan(error, res)) return;
@@ -365,30 +448,51 @@ compraAnimalCtrl.crearCompra = async (req, res) => {
 
 compraAnimalCtrl.actualizarCompra = async (req, res) => {
     try {
-        const compraAnterior = await CompraAnimal.findById(req.params.id);
-        if (!compraAnterior) return res.status(404).json({ mensaje: 'Compra no encontrada' });
-        if (compraAnterior.estado === 'Anulada') return res.status(400).json({ mensaje: 'No se puede editar una compra anulada' });
-
         if (req.body.loteRapido) return res.status(409).json({ mensaje: 'El lote rápido solo puede crearse al registrar una compra nueva.' });
-        const animales = prepararAnimalesCompra(req.body.animales);
-        const validacion = await validarAnimalesCompra(animales, req.params.id);
-        if (!validacion.valido) {
-            return res.status(validacion.status).json({ mensaje: validacion.mensaje });
-        }
-        await validarObjetivosCompraEnFinca({
-            fincaId: req.fincaId,
-            especie: req.body.especie || compraAnterior.especie || 'Bovino',
-            animales
-        });
+        const compraId = await ejecutarEnTransaccion(async (session) => {
+            const compraAnterior = await CompraAnimal.findById(req.params.id).session(session);
+            if (!compraAnterior) {
+                const error = new Error('Compra no encontrada');
+                error.status = 404;
+                throw error;
+            }
+            if (compraAnterior.estado === 'Anulada') {
+                const error = new Error('No se puede editar una compra anulada');
+                error.status = 400;
+                throw error;
+            }
 
-        await revertirCompra(compraAnterior);
-        const datos = {
-            ...req.body,
-            animales
-        };
-        const compra = await CompraAnimal.findByIdAndUpdate(req.params.id, datos, { new: true, runValidators: true });
-        await aplicarCompraConfirmada(compra, req.usuario?.id);
-        const compraPoblada = await poblarCompra(CompraAnimal.findById(compra._id));
+            const recibidos = req.body.animales === undefined
+                ? compraAnterior.animales
+                : prepararAnimalesCompra(req.body.animales);
+            const animales = preservarIdentidadAnimalesCompra(recibidos, compraAnterior.animales);
+            const validacion = await validarAnimalesCompra(animales, req.params.id, session);
+            if (!validacion.valido) {
+                const error = new Error(validacion.mensaje);
+                error.status = validacion.status;
+                throw error;
+            }
+            await validarObjetivosCompraEnFinca({
+                fincaId: req.fincaId,
+                especie: compraAnterior.especie || 'Bovino',
+                animales
+            });
+
+            const compra = await CompraAnimal.findByIdAndUpdate(req.params.id, {
+                $set: {
+                    ...extraerDatosCompra(req.body),
+                    montoFinal: Object.prototype.hasOwnProperty.call(req.body, 'montoFinal')
+                        ? req.body.montoFinal
+                        : compraAnterior.montoFinal,
+                    especie: compraAnterior.especie,
+                    animales
+                }
+            }, { new: true, runValidators: true, session });
+            await sincronizarDatosComercialesAnimalesCompra(compra, req.usuario?.id, session);
+            await crearMovimientoCompra(compra, session);
+            return compra._id;
+        });
+        const compraPoblada = await poblarCompra(CompraAnimal.findById(compraId));
         res.json(compraPoblada);
     } catch (error) {
         if (respuestaErrorPlan(error, res)) return;
@@ -398,15 +502,22 @@ compraAnimalCtrl.actualizarCompra = async (req, res) => {
 
 compraAnimalCtrl.anularCompra = async (req, res) => {
     try {
-        const compra = await CompraAnimal.findById(req.params.id);
-        if (!compra) return res.status(404).json({ mensaje: 'Compra no encontrada' });
-        if (compra.estado === 'Anulada') return res.json(compra);
+        const compraId = await ejecutarEnTransaccion(async (session) => {
+            const compra = await CompraAnimal.findById(req.params.id).session(session);
+            if (!compra) {
+                const error = new Error('Compra no encontrada');
+                error.status = 404;
+                throw error;
+            }
+            if (compra.estado === 'Anulada') return compra._id;
 
-        await revertirCompra(compra);
-        compra.estado = 'Anulada';
-        compra.observaciones = [compra.observaciones, req.body?.motivoAnulacion].filter(Boolean).join(' | ');
-        await compra.save();
-        const compraPoblada = await poblarCompra(CompraAnimal.findById(compra._id));
+            await revertirCompra(compra, session);
+            compra.estado = 'Anulada';
+            compra.observaciones = [compra.observaciones, req.body?.motivoAnulacion].filter(Boolean).join(' | ');
+            await compra.save({ session });
+            return compra._id;
+        });
+        const compraPoblada = await poblarCompra(CompraAnimal.findById(compraId));
         res.json(compraPoblada);
     } catch (error) {
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al anular compra', error: error.message });
@@ -415,11 +526,16 @@ compraAnimalCtrl.anularCompra = async (req, res) => {
 
 compraAnimalCtrl.deleteCompra = async (req, res) => {
     try {
-        const compra = await CompraAnimal.findById(req.params.id);
-        if (!compra) return res.status(404).json({ mensaje: 'Compra no encontrada' });
-
-        await revertirCompra(compra);
-        await CompraAnimal.findByIdAndDelete(req.params.id);
+        await ejecutarEnTransaccion(async (session) => {
+            const compra = await CompraAnimal.findById(req.params.id).session(session);
+            if (!compra) {
+                const error = new Error('Compra no encontrada');
+                error.status = 404;
+                throw error;
+            }
+            await revertirCompra(compra, session);
+            await CompraAnimal.deleteOne({ _id: compra._id }, { session });
+        });
         res.json({ mensaje: 'Compra eliminada' });
     } catch (error) {
         res.status(error.status || 500).json({ mensaje: error.message || 'Error al eliminar compra', error: error.message });

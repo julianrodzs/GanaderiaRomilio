@@ -1,10 +1,11 @@
 const DB_NAME = 'ganaderia-romilio-offline';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORES = {
   tareas: 'tareas',
   inventario: 'inventario',
   potreros: 'potreros',
+  eventosAnimal: 'eventosAnimal',
   cambiosPendientes: 'cambiosPendientes',
   metadata: 'metadata'
 };
@@ -64,13 +65,18 @@ const abrirDB = () => new Promise((resolve, reject) => {
 
   const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-  request.onupgradeneeded = () => {
+  request.onupgradeneeded = (evento) => {
     const db = request.result;
 
-    // La version anterior no aislaba datos por cliente. Es mas seguro descartar
-    // esos caches locales y volverlos a descargar que intentar adivinar su dueño.
-    Array.from(db.objectStoreNames).forEach((storeName) => db.deleteObjectStore(storeName));
-    Object.values(STORES).forEach((storeName) => db.createObjectStore(storeName, { keyPath: 'id' }));
+    if (evento.oldVersion < 2) {
+      // La version inicial no aislaba datos por cliente.
+      Array.from(db.objectStoreNames).forEach((storeName) => db.deleteObjectStore(storeName));
+    }
+    Object.values(STORES).forEach((storeName) => {
+      if (!db.objectStoreNames.contains(storeName)) {
+        db.createObjectStore(storeName, { keyPath: 'id' });
+      }
+    });
   };
 
   request.onsuccess = () => resolve(request.result);
@@ -244,6 +250,16 @@ export const obtenerInventarioOffline = (opciones = {}) => obtenerColeccion(
 
 export const guardarPotrerosOffline = (potreros) => guardarColeccion(STORES.potreros, potreros);
 export const obtenerPotrerosOffline = () => obtenerColeccion(STORES.potreros);
+
+export const guardarEventosAnimalOffline = (animalId, eventos) => guardarColeccion(
+  STORES.eventosAnimal,
+  eventos,
+  { animalId: normalizarId(animalId) }
+);
+export const obtenerEventosAnimalOffline = (animalId) => obtenerColeccion(
+  STORES.eventosAnimal,
+  { animalId: normalizarId(animalId) }
+);
 
 export const guardarCambiosPendientes = (cambio) => guardarCambio(cambio);
 

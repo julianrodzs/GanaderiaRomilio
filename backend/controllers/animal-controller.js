@@ -4,7 +4,7 @@ const Animal = require('../models/Animal');
 const Camada = require('../models/Camada');
 const EventoAnimal = require('../models/EventoAnimal');
 const { TratamientoSanitario } = require('../models/TratamientoSanitario');
-const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
+const { upsertEventoAnimal } = require('../services/eventoAnimal-service');
 const {
     actualizarEstadoSanitarioAnimal,
     actualizarEstadoSanitarioAnimales,
@@ -25,6 +25,8 @@ const { obtenerCategoriaAnimal, validarYPrepararCategoriaAnimal } = require('../
 const { prepararObjetivoProductivo } = require('../config/objetivosProductivos');
 const { sanitizarAnimal } = require('../services/animal-dto');
 const { limpiarFotoAnimalEliminado } = require('../services/fotoAnimal-service');
+const { asegurarAnimalSinHistorial } = require('../services/animal-dependencias-service');
+const { liberarCriasCamada, reservarCriasCamada } = require('../services/camada-service');
 
 const limpiarDiio = (diio) => {
     if (diio === undefined) return undefined;
@@ -261,11 +263,36 @@ animalCtrl.createAnimal = async (req, res) => {
         });
         await validarDiioDisponible(datos.diio);
         await validarRelacionGenealogica(null, datos.padre, datos.madre);
-        const guardar = async () => new Animal(datos).save();
+        const esIndividualizacionCamada = Boolean(datos.camadaOrigen);
+        const guardar = async () => {
+            if (!esIndividualizacionCamada) return new Animal(datos).save();
+            await reservarCriasCamada({
+                camadaId: datos.camadaOrigen,
+                cantidad: 1,
+                destino: 'individualizacion'
+            });
+            try {
+                return await new Animal(datos).save();
+            } catch (error) {
+                await liberarCriasCamada({
+                    camadaId: datos.camadaOrigen,
+                    cantidad: 1,
+                    destino: 'individualizacion'
+                }).catch(() => null);
+                throw error;
+            }
+        };
         const animalGuardado = (datos.estado || 'Activo') === 'Activo'
             ? await ejecutarConReservaCuota({
-                permiso: await asegurarPuedeCrearAnimal({ organizacionId: req.organizacionId, especie: datos.especie || 'Bovino' }),
-                recurso: 'animales', organizacionId: req.organizacionId, operacion: guardar
+                permiso: await asegurarPuedeCrearAnimal({
+                    organizacionId: req.organizacionId,
+                    especie: datos.especie || 'Bovino',
+                    cantidad: esIndividualizacionCamada ? 0 : 1
+                }),
+                recurso: 'animales',
+                organizacionId: req.organizacionId,
+                cantidad: esIndividualizacionCamada ? 0 : 1,
+                operacion: guardar
             })
             : await guardar();
         await crearEventosInventario({ animal: animalGuardado, usuarioId: req.usuario?.id });
@@ -464,18 +491,36 @@ animalCtrl.updateEstadoSanitarioLote = async (req, res) => {
 
 animalCtrl.deleteAnimal = async (req, res) => {
     try {
+        const existente = await Animal.findById(req.params.id);
+
+        if (!existente) {
+            return res.status(404).json({ mensaje: 'Animal no encontrado' });
+        }
+
+        await asegurarAnimalSinHistorial(existente._id);
         const animal = await Animal.findByIdAndDelete(req.params.id);
 
         if (!animal) {
             return res.status(404).json({ mensaje: 'Animal no encontrado' });
         }
 
-        await eliminarEventosPorReferencia({ moduloOrigen: 'Inventario', referenciaId: animal._id });
+        if (animal.camadaOrigen) {
+            await liberarCriasCamada({
+                camadaId: animal.camadaOrigen,
+                cantidad: 1,
+                destino: 'individualizacion'
+            });
+        }
         await limpiarFotoAnimalEliminado(animal.fotoPrincipal);
 
         res.json({ mensaje: 'Animal eliminado' });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al eliminar animal', error: error.message });
+        res.status(error.status || 500).json({
+            mensaje: error.message || 'Error al eliminar animal',
+            error: error.message,
+            code: error.code,
+            dependencias: error.dependencias
+        });
     }
 };
 

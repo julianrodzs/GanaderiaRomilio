@@ -629,14 +629,19 @@ export const eliminarPesaje = (id) => {
   });
 };
 
-export const obtenerEventosAnimal = (animalId) => request(`/eventos-animal/animal/${animalId}`);
+export const obtenerEventosAnimal = (animalId, opciones = {}) => (
+  request(`/eventos-animal/animal/${animalId}${construirQuery(opciones)}`)
+);
 
 export const obtenerEventosCamada = (camadaId) => request(`/eventos-camada/camada/${camadaId}`);
 
-export const crearEventoAnimal = (evento) => {
+export const crearEventoAnimal = (evento, opciones = {}) => {
   return request('/eventos-animal', {
     method: 'POST',
-    body: JSON.stringify(evento)
+    body: JSON.stringify(evento),
+    headers: opciones.idempotencyKey
+      ? { 'Idempotency-Key': opciones.idempotencyKey }
+      : undefined
   });
 };
 
@@ -846,6 +851,7 @@ export const eliminarRegistroReproductivo = (id) => {
 };
 
 export const obtenerRegistrosReproductivosPorAnimal = (animalId) => request(`/reproduccion/animal/${animalId}`);
+export const obtenerSemenReproductivoDisponible = (fecha = '') => request(`/reproduccion/insumos/semen${fecha ? `?fecha=${encodeURIComponent(fecha)}` : ''}`);
 
 export const obtenerProtocolosIATF = (incluirInactivos = false) => request(`/iatf/protocolos${incluirInactivos ? '?incluirInactivos=true' : ''}`);
 export const crearProtocoloIATF = (datos) => request('/iatf/protocolos', { method: 'POST', body: JSON.stringify(datos) });

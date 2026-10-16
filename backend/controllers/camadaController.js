@@ -9,9 +9,14 @@ const {
     cancelarTareasCamada,
     completarTareasDesteteCamada,
     cancelarTareasEstimadasDelRegistro,
-    registrarEventoCamada
+    inicializarControlPoblacionCamada,
+    registrarEventoCamada,
+    saldoColectivoCamada,
+    validarCantidadesCamada
 } = require('../services/camada-service');
 const { upsertEventoCamada } = require('../services/eventoCamada-service');
+const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota } = require('../services/plan-service');
+const { respuestaErrorPlan } = require('../middleware/plan');
 
 const camadaCtrl = {};
 
@@ -167,7 +172,7 @@ const prepararDatosCamada = async (body) => {
         throw error;
     }
 
-    return {
+    return validarCantidadesCamada({
         ...body,
         codigoCamada: body.codigoCamada || await generarCodigoCamada(fechaNacimiento),
         fechaNacimiento,
@@ -184,7 +189,7 @@ const prepararDatosCamada = async (body) => {
         pesoPromedioNacimiento: body.pesoPromedioNacimiento === '' ? null : body.pesoPromedioNacimiento,
         pesoPromedioDestete: body.pesoPromedioDestete === '' ? null : body.pesoPromedioDestete,
         pesoTotalDestete: body.pesoTotalDestete === '' ? null : body.pesoTotalDestete
-    };
+    });
 };
 
 camadaCtrl.getCamadas = async (req, res) => {
@@ -240,8 +245,24 @@ camadaCtrl.createCamada = async (req, res) => {
             ...req.body,
             asignadoA: req.body.asignadoA || registro?.asignadoA
         });
-        const camada = new Camada(datos);
-        const camadaGuardada = await camada.save();
+        const poblacionInicial = Math.max(datos.nacidosVivos - datos.muertosPreDestete, 0);
+        const permiso = await asegurarPuedeCrearAnimal({
+            organizacionId: req.organizacionId,
+            especie: 'Porcino',
+            cantidad: poblacionInicial
+        });
+        const camadaGuardada = await ejecutarConReservaCuota({
+            permiso,
+            recurso: 'animales',
+            organizacionId: req.organizacionId,
+            cantidad: poblacionInicial,
+            operacion: () => new Camada({
+                ...datos,
+                controlPoblacionInicializado: true,
+                criasIndividualizadas: 0,
+                criasVendidas: 0
+            }).save()
+        });
 
         if (camadaGuardada.registroReproductivo) {
             await RegistroReproductivo.findByIdAndUpdate(camadaGuardada.registroReproductivo, {
@@ -257,6 +278,7 @@ camadaCtrl.createCamada = async (req, res) => {
         const camadaRespuesta = await poblarCamada(Camada.findById(camadaGuardada._id));
         res.status(201).json(await anexarContadoresInventario(camadaRespuesta));
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al crear camada', error: error.message });
     }
 };
@@ -268,22 +290,53 @@ camadaCtrl.updateCamada = async (req, res) => {
             return res.status(404).json({ mensaje: 'Camada no encontrada' });
         }
 
+        const actualConciliada = await inicializarControlPoblacionCamada(actual._id);
         const madre = req.body.madre ? await validarMadrePorcina(req.body.madre) : await Animal.findById(actual.madre);
         const datos = await prepararDatosCamada({
-            ...actual.toObject(),
+            ...actualConciliada.toObject(),
             ...req.body,
             codigoCamada: req.body.codigoCamada || actual.codigoCamada
         });
+
+        const baseVivaNueva = datos.nacidosVivos - datos.muertosPreDestete;
+        const comprometidas = Number(actualConciliada.criasIndividualizadas || 0) + Number(actualConciliada.criasVendidas || 0);
+        if (comprometidas > baseVivaNueva) {
+            return res.status(409).json({
+                mensaje: `La camada ya tiene ${comprometidas} cria(s) individualizadas o vendidas; no puede reducir la poblacion viva por debajo de ese valor.`
+            });
+        }
+        const poblacionAnterior = actualConciliada.estado === 'Cancelada' ? 0 : saldoColectivoCamada(actualConciliada);
+        const poblacionNueva = datos.estado === 'Cancelada' ? 0 : Math.max(baseVivaNueva - comprometidas, 0);
+        const aumentoPoblacion = Math.max(poblacionNueva - poblacionAnterior, 0);
 
         delete datos._id;
         delete datos.__v;
         delete datos.createdAt;
         delete datos.updatedAt;
 
-        const camada = await Camada.findByIdAndUpdate(req.params.id, datos, {
-            new: true,
-            runValidators: true
+        const permiso = await asegurarPuedeCrearAnimal({
+            organizacionId: req.organizacionId,
+            especie: 'Porcino',
+            cantidad: aumentoPoblacion
         });
+        const camada = await ejecutarConReservaCuota({
+            permiso,
+            recurso: 'animales',
+            organizacionId: req.organizacionId,
+            cantidad: aumentoPoblacion,
+            operacion: () => Camada.findOneAndUpdate({
+                _id: req.params.id,
+                $expr: {
+                    $lte: [
+                        { $add: [{ $ifNull: ['$criasIndividualizadas', 0] }, { $ifNull: ['$criasVendidas', 0] }] },
+                        baseVivaNueva
+                    ]
+                }
+            }, { $set: datos }, { new: true, runValidators: true })
+        });
+        if (!camada) {
+            return res.status(409).json({ mensaje: 'La poblacion de la camada cambio durante la actualizacion. Recarga e intenta nuevamente.' });
+        }
 
         if (camada.estado === 'Activa') {
             await sincronizarTareasCamada({ camada, madre, usuarioId: req.usuario?.id });
@@ -312,6 +365,7 @@ camadaCtrl.updateCamada = async (req, res) => {
 
         res.json(await anexarContadoresInventario(await poblarCamada(Camada.findById(camada._id))));
     } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al actualizar camada', error: error.message });
     }
 };
@@ -323,14 +377,49 @@ camadaCtrl.registrarDestete = async (req, res) => {
             return res.status(404).json({ mensaje: 'Camada no encontrada' });
         }
 
-        camada.fechaDesteteReal = req.body.fechaDesteteReal || new Date();
-        camada.destetados = normalizarNumero(req.body.destetados, camada.destetados);
-        camada.muertosPreDestete = normalizarNumero(req.body.muertosPreDestete, camada.muertosPreDestete);
-        camada.pesoPromedioDestete = req.body.pesoPromedioDestete === '' ? camada.pesoPromedioDestete : req.body.pesoPromedioDestete;
-        camada.pesoTotalDestete = req.body.pesoTotalDestete === '' ? camada.pesoTotalDestete : req.body.pesoTotalDestete;
-        camada.estado = 'Destetada';
-
-        const guardada = await camada.save();
+        const conciliada = await inicializarControlPoblacionCamada(camada._id);
+        const datosPoblacion = validarCantidadesCamada({
+            nacidosVivos: conciliada.nacidosVivos,
+            criasParaFinca: conciliada.criasParaFinca,
+            criasParaVenta: conciliada.criasParaVenta,
+            criasParaEngorde: conciliada.criasParaEngorde,
+            destetados: normalizarNumero(req.body.destetados, conciliada.destetados),
+            muertosPreDestete: normalizarNumero(req.body.muertosPreDestete, conciliada.muertosPreDestete)
+        });
+        const comprometidas = Number(conciliada.criasIndividualizadas || 0) + Number(conciliada.criasVendidas || 0);
+        const baseVivaNueva = datosPoblacion.nacidosVivos - datosPoblacion.muertosPreDestete;
+        if (comprometidas > baseVivaNueva || datosPoblacion.destetados > baseVivaNueva) {
+            return res.status(409).json({ mensaje: 'El destete o las muertes superan la poblacion disponible de la camada.' });
+        }
+        const poblacionAnterior = saldoColectivoCamada(conciliada);
+        const poblacionNueva = Math.max(baseVivaNueva - comprometidas, 0);
+        const aumentoPoblacion = Math.max(poblacionNueva - poblacionAnterior, 0);
+        const permiso = await asegurarPuedeCrearAnimal({ organizacionId: req.organizacionId, especie: 'Porcino', cantidad: aumentoPoblacion });
+        const guardada = await ejecutarConReservaCuota({
+            permiso,
+            recurso: 'animales',
+            organizacionId: req.organizacionId,
+            cantidad: aumentoPoblacion,
+            operacion: () => Camada.findOneAndUpdate({
+                _id: camada._id,
+                $expr: {
+                    $lte: [
+                        { $add: [{ $ifNull: ['$criasIndividualizadas', 0] }, { $ifNull: ['$criasVendidas', 0] }] },
+                        baseVivaNueva
+                    ]
+                }
+            }, {
+                $set: {
+                    fechaDesteteReal: req.body.fechaDesteteReal || new Date(),
+                    destetados: datosPoblacion.destetados,
+                    muertosPreDestete: datosPoblacion.muertosPreDestete,
+                    pesoPromedioDestete: req.body.pesoPromedioDestete === '' ? conciliada.pesoPromedioDestete : req.body.pesoPromedioDestete,
+                    pesoTotalDestete: req.body.pesoTotalDestete === '' ? conciliada.pesoTotalDestete : req.body.pesoTotalDestete,
+                    estado: 'Destetada'
+                }
+            }, { new: true, runValidators: true })
+        });
+        if (!guardada) return res.status(409).json({ mensaje: 'La poblacion de la camada cambio durante el destete. Recarga e intenta nuevamente.' });
         const madre = await Animal.findById(guardada.madre);
         await completarTareasDesteteCamada(guardada._id, guardada.fechaDesteteReal);
         await sincronizarTareasCamada({ camada: guardada, madre, usuarioId: req.usuario?.id });
@@ -353,7 +442,8 @@ camadaCtrl.registrarDestete = async (req, res) => {
 
         res.json(await anexarContadoresInventario(await poblarCamada(Camada.findById(guardada._id))));
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al registrar destete', error: error.message });
+        if (respuestaErrorPlan(error, res)) return;
+        res.status(error.status || 400).json({ mensaje: 'Error al registrar destete', error: error.message });
     }
 };
 

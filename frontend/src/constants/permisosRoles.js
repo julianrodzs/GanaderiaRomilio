@@ -37,6 +37,11 @@ export const rolesGestionPorModulo = {
   Usuarios: ['Administrador']
 };
 
+export const permisosPorAccion = {
+  'finanzas.administrarCatalogos': ['Administrador'],
+  'bitacora.crearNotas': ['Administrador', 'Encargado', 'Veterinario']
+};
+
 export const puedeAccederModulo = (rol, modulo) => {
   if (modulo === 'Mis tareas') return (permisosPorModulo[modulo] || []).includes(rol);
   if (rol === 'Administrador') return true;
@@ -46,4 +51,9 @@ export const puedeAccederModulo = (rol, modulo) => {
 export const puedeGestionarModulo = (rol, modulo) => {
   if (rol === 'Administrador') return true;
   return (rolesGestionPorModulo[modulo] || []).includes(rol);
+};
+
+export const puedeRealizarAccion = (rol, permiso) => {
+  if (rol === 'Administrador') return true;
+  return (permisosPorAccion[permiso] || []).includes(rol);
 };

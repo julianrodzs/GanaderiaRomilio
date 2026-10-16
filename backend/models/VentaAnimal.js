@@ -22,6 +22,8 @@ const detalleVentaCamadaSchema = new Schema(
     { _id: false }
 );
 
+detalleVentaCamadaSchema.path('cantidad').validate(Number.isInteger, 'La cantidad vendida por camada debe ser un numero entero');
+
 const ventaAnimalSchema = new Schema(
     {
         especie: { type: String, enum: ['Bovino', 'Porcino'], default: 'Bovino' },

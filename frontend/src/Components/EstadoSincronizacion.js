@@ -80,7 +80,7 @@ const EstadoSincronizacion = ({ estado, onSincronizar, onReintentar, onDescartar
               {cambios.map((cambio) => (
                 <article key={cambio.id}>
                   <div>
-                    <strong>{cambio.titulo || 'Completar tarea'}</strong>
+                    <strong>{cambio.titulo || (cambio.tipo === 'crear-nota-bitacora' ? 'Nota de bitácora' : 'Completar tarea')}</strong>
                     <span className={`offline-change-state estado-${(cambio.estadoSincronizacion || 'Pendiente').toLowerCase()}`}>
                       {etiquetasEstado[cambio.estadoSincronizacion] || cambio.estadoSincronizacion}
                     </span>
@@ -114,7 +114,7 @@ const EstadoSincronizacion = ({ estado, onSincronizar, onReintentar, onDescartar
             </div>
           )}
 
-          <p className="offline-scope-note">Offline: inventario, potreros y finalizacion de tareas asignadas.</p>
+          <p className="offline-scope-note">Offline: inventario, potreros, bitácora y finalización de tareas asignadas.</p>
         </section>
       )}
     </div>

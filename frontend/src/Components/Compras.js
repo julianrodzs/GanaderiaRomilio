@@ -92,6 +92,7 @@ const normalizarCompraFormulario = (compra) => ({
   observaciones: compra.observaciones || '',
   montoFinal: compra.montoFinal ?? '',
   animales: (compra.animales || []).map((item) => ({
+    animal: item.animal?._id || item.animal || '',
     diio: item.diio || item.animal?.diio || item.identificadorFinca || item.animal?.identificadorFinca || '',
     nombre: item.nombre || item.animal?.nombre || '',
     sexo: item.sexo || item.animal?.sexo || 'Hembra',
@@ -136,14 +137,12 @@ const Compras = ({ soloLectura = false }) => {
     try {
       setCargando(true);
       setError('');
-      const [comprasData, resumenData, lotesData] = await Promise.all([
+      const [comprasData, resumenData] = await Promise.all([
         obtenerCompras({ ...filtros, especie }),
-        obtenerResumenCompras({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie }),
-        obtenerLotes({ especie, estado: 'ACTIVO' })
+        obtenerResumenCompras({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie })
       ]);
       setCompras(comprasData);
       setResumen(resumenData);
-      setLotes(lotesData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -154,6 +153,19 @@ const Compras = ({ soloLectura = false }) => {
   useEffect(() => {
     cargarDatos();
   }, [filtros.fechaInicio, filtros.fechaFin, filtros.proveedor, filtros.estado, especie]);
+
+  const abrirDetalle = async (compra) => {
+    setDetalle(compra);
+    setLoteDestino('');
+    setLotes([]);
+    if (soloLectura || compra.estado !== 'Confirmada' || compra.loteAsignado) return;
+
+    try {
+      setLotes(await obtenerLotes({ especie: compra.especie || especie, estado: 'ACTIVO' }));
+    } catch (err) {
+      setError(`La compra puede consultarse, pero no fue posible cargar los lotes: ${err.message}`);
+    }
+  };
 
   const asignarDetalleALote = async () => {
     if (!detalle?._id || !loteDestino) return;
@@ -324,6 +336,7 @@ const Compras = ({ soloLectura = false }) => {
           {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
           <SelectorEspecie
             valor={formulario.especie}
+            disabled={Boolean(compraSeleccionada)}
             onChange={(valor) => {
               cambiarEspecie(valor);
               setFormulario((actual) => ({ ...actual, especie: valor }));
@@ -345,8 +358,9 @@ const Compras = ({ soloLectura = false }) => {
                 <p className="eyebrow">Animales</p>
                 <h2>{textoEspecie(formulario.especie, 'ingreso')}</h2>
               </div>
-              <button className="boton-primario compacto" type="button" onClick={agregarAnimal}>{textoEspecie(formulario.especie, 'botonAgregar')}</button>
+              {!compraSeleccionada && <button className="boton-primario compacto" type="button" onClick={agregarAnimal}>{textoEspecie(formulario.especie, 'botonAgregar')}</button>}
             </div>
+            {compraSeleccionada && <p className="texto-ayuda">La edición conserva los animales y su historial. Corrige aquí únicamente los datos comerciales de la compra.</p>}
 
             <div className="tabla-scroll tabla-dinamica venta-detalle-tabla compra-formulario-tabla">
               <table>
@@ -369,25 +383,25 @@ const Compras = ({ soloLectura = false }) => {
                     const subtotal = Number(item.pesoCompraKg || 0) * Number(item.precioKg || 0);
                     return (
                       <tr key={`${indice}-${item.diio}`}>
-                        <td><input value={item.diio} onChange={(evento) => actualizarAnimal(indice, 'diio', evento.target.value)} required /></td>
-                        <td><input value={item.nombre} onChange={(evento) => actualizarAnimal(indice, 'nombre', evento.target.value)} /></td>
+                        <td><input value={item.diio} onChange={(evento) => actualizarAnimal(indice, 'diio', evento.target.value)} disabled={Boolean(compraSeleccionada)} required /></td>
+                        <td><input value={item.nombre} onChange={(evento) => actualizarAnimal(indice, 'nombre', evento.target.value)} disabled={Boolean(compraSeleccionada)} /></td>
                         <td>
-                          <select value={item.sexo} onChange={(evento) => actualizarAnimal(indice, 'sexo', evento.target.value)} required>
+                          <select value={item.sexo} onChange={(evento) => actualizarAnimal(indice, 'sexo', evento.target.value)} disabled={Boolean(compraSeleccionada)} required>
                             <option value="Hembra">Hembra</option>
                             <option value="Macho">Macho</option>
                           </select>
                         </td>
                         <td>
-                          <select value={item.objetivoProductivo} onChange={(evento) => actualizarAnimal(indice, 'objetivoProductivo', evento.target.value)} disabled={formulario.crearLoteRapido} required>
+                          <select value={item.objetivoProductivo} onChange={(evento) => actualizarAnimal(indice, 'objetivoProductivo', evento.target.value)} disabled={Boolean(compraSeleccionada) || formulario.crearLoteRapido} required>
                             {OBJETIVOS_PRODUCTIVOS.map((objetivo) => <option key={objetivo} value={objetivo}>{ETIQUETAS_OBJETIVO_PRODUCTIVO[objetivo]}</option>)}
                           </select>
                         </td>
-                        <td><input value={item.raza} onChange={(evento) => actualizarAnimal(indice, 'raza', evento.target.value)} /></td>
-                        <td><input type="date" value={item.fechaNacimiento} onChange={(evento) => actualizarAnimal(indice, 'fechaNacimiento', evento.target.value)} /></td>
+                        <td><input value={item.raza} onChange={(evento) => actualizarAnimal(indice, 'raza', evento.target.value)} disabled={Boolean(compraSeleccionada)} /></td>
+                        <td><input type="date" value={item.fechaNacimiento} onChange={(evento) => actualizarAnimal(indice, 'fechaNacimiento', evento.target.value)} disabled={Boolean(compraSeleccionada)} /></td>
                         <td><input type="number" min="0.01" step="0.01" value={item.pesoCompraKg} onChange={(evento) => actualizarAnimal(indice, 'pesoCompraKg', evento.target.value)} required /></td>
                         <td><input type="number" min="0.01" step="0.01" value={item.precioKg} onChange={(evento) => actualizarAnimal(indice, 'precioKg', evento.target.value)} required /></td>
                         <td>{formatearMoneda(subtotal)}</td>
-                        <td><button className="boton-link" type="button" onClick={() => quitarAnimal(indice)} disabled={formulario.animales.length === 1}>Quitar</button></td>
+                        <td>{!compraSeleccionada && <button className="boton-link" type="button" onClick={() => quitarAnimal(indice)} disabled={formulario.animales.length === 1}>Quitar</button>}</td>
                       </tr>
                     );
                   })}
@@ -503,7 +517,7 @@ const Compras = ({ soloLectura = false }) => {
                 <td><span className={`estado-badge estado-${compra.estado}`}>{compra.estado}</span></td>
                 <td>
                   <div className="acciones-tabla acciones-tabla-amplia">
-                    <button type="button" title="Ver detalle" onClick={() => setDetalle(compra)}>⊙</button>
+                    <button type="button" title="Ver detalle" onClick={() => abrirDetalle(compra)}>⊙</button>
                     {!soloLectura && compra.estado !== 'Anulada' && <button type="button" title="Editar" onClick={() => abrirEdicion(compra)}>✎</button>}
                     {!soloLectura && compra.estado !== 'Anulada' && <button type="button" title="Anular" onClick={() => anularCompra(compra)}>↺</button>}
                     {!soloLectura && <button type="button" title="Eliminar" onClick={() => borrarCompra(compra)}>⌫</button>}

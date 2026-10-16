@@ -5247,13 +5247,17 @@
   text-transform: uppercase;
 }
 
-.bitacora-form textarea {
+.bitacora-form textarea,
+.bitacora-form input {
   width: 100%;
   border: 1px solid #d9ddd5;
   border-radius: 2px;
   padding: 10px 12px;
   background: #fffdf7;
   color: #09160e;
+}
+
+.bitacora-form textarea {
   resize: vertical;
 }
 
@@ -5329,6 +5333,69 @@
 
 .bitacora-referencia {
   padding: 0;
+}
+
+.bitacora-finca-badge,
+.bitacora-pendiente-badge {
+  border: 1px solid #c8d3ca;
+  border-radius: 3px;
+  padding: 4px 8px;
+  background: #edf3eb;
+  color: #163c25;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.bitacora-pendiente-badge {
+  border-color: #d8b968;
+  background: #fff4d8;
+  color: #74510b;
+}
+
+.bitacora-autor {
+  color: #5e6b62;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bitacora-cargar-mas {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.bitacora-detalle-modal {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.bitacora-detalle-resumen,
+.bitacora-metadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bitacora-detalle-resumen article,
+.bitacora-metadata article {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #dfe3dc;
+  padding: 11px;
+  background: #f8f9f5;
+}
+
+.bitacora-detalle-resumen span,
+.bitacora-metadata span {
+  color: #5e6b62;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.bitacora-detalle-resumen strong,
+.bitacora-metadata strong {
+  overflow-wrap: anywhere;
+  color: #102c1d;
 }
 
 .modal-actions {
@@ -5551,6 +5618,11 @@
   }
 
   .bitacora-evento {
+    grid-template-columns: 1fr;
+  }
+
+  .bitacora-detalle-resumen,
+  .bitacora-metadata {
     grid-template-columns: 1fr;
   }
 }

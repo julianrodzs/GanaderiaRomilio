@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   activarCatalogoFinanciero,
   actualizarMovimientoFinanciero,
@@ -11,7 +11,6 @@ import {
   obtenerCatalogosFinancierosAdmin,
   obtenerMovimientosFinancieros,
   obtenerResumenConsumoFinanciero,
-  obtenerResumenFinanciero,
   obtenerResumenInversionesFinancieras,
   obtenerResumenPlanillaFinanciera
 } from '../services/api';
@@ -20,6 +19,7 @@ import TablaDinamica from './TablaDinamica';
 import { ContenidoPaginado } from './PaginacionTabla';
 import OperacionesFinancierasMultiFinca from './OperacionesFinancierasMultiFinca';
 import { usePlan } from '../context/PlanContext';
+import { puedeRealizarAccion } from '../constants/permisosRoles';
 
 const tipos = ['Todos', 'Planilla', 'Inversion', 'Compra'];
 
@@ -150,13 +150,17 @@ const sumarPorTipoYMoneda = (movimientos) => {
 
 const estaVacio = (valor) => valor === null || valor === undefined || String(valor).trim() === '';
 
-const formatearTotalesMoneda = (totales = {}) => {
+const formatearTotalesMoneda = (totales = {}, mostrarCero = false) => {
   const partes = Object.entries(totales)
-    .filter(([, total]) => total > 0)
+    .filter(([, total]) => Number(total || 0) !== 0)
     .map(([moneda, total]) => formatearNumero(total, moneda));
 
-  return partes.length ? partes.join(' / ') : '--';
+  return partes.length ? partes.join(' / ') : (mostrarCero ? formatearNumero(0, 'CRC') : '--');
 };
+
+const obtenerCampoPorMoneda = (monedas = {}, campo = 'total') => Object.fromEntries(
+  Object.entries(monedas).map(([moneda, datos]) => [moneda, Number(datos?.[campo] || 0)])
+);
 
 const reglasRevisionFinanciera = [
   {
@@ -392,10 +396,11 @@ const EditorCatalogosFinancieros = ({ onCerrar }) => {
   );
 };
 
-const Finanzas = () => {
+const Finanzas = ({ rolUsuario = 'Consulta' }) => {
   const { tieneFeature } = usePlan();
+  const puedeAdministrarCatalogos = puedeRealizarAccion(rolUsuario, 'finanzas.administrarCatalogos');
   const [movimientos, setMovimientos] = useState([]);
-  const [resumen, setResumen] = useState(null);
+  const [movimientosTablaFiltrados, setMovimientosTablaFiltrados] = useState([]);
   const [consumo, setConsumo] = useState([]);
   const [resumenPlanilla, setResumenPlanilla] = useState(null);
   const [resumenInversiones, setResumenInversiones] = useState(null);
@@ -414,16 +419,14 @@ const Finanzas = () => {
     try {
       setCargando(true);
       setError('');
-      const [movimientosData, resumenData, consumoData, planillaData, inversionesData] = await Promise.all([
+      const [movimientosData, consumoData, planillaData, inversionesData] = await Promise.all([
         obtenerMovimientosFinancieros(),
-        obtenerResumenFinanciero(),
         obtenerResumenConsumoFinanciero(),
         obtenerResumenPlanillaFinanciera(),
         obtenerResumenInversionesFinancieras()
       ]);
 
       setMovimientos(movimientosData);
-      setResumen(resumenData);
       setConsumo(consumoData);
       setResumenPlanilla(planillaData);
       setResumenInversiones(inversionesData);
@@ -451,15 +454,30 @@ const Finanzas = () => {
     });
   }, [movimientos, rangoFechas, tipoActivo]);
 
-  const totalPorMoneda = useMemo(() => {
-    return movimientosFiltrados.reduce((acumulado, movimiento) => {
-      const moneda = movimiento.moneda || 'CRC';
-      acumulado[moneda] = (acumulado[moneda] || 0) + (movimiento.monto || 0);
-      return acumulado;
-    }, {});
+  useEffect(() => {
+    setMovimientosTablaFiltrados(movimientosFiltrados);
   }, [movimientosFiltrados]);
 
-  const totalesPorTipo = useMemo(() => sumarPorTipoYMoneda(movimientos), [movimientos]);
+  const actualizarDatosVisibles = useCallback((datos) => {
+    setMovimientosTablaFiltrados(datos);
+  }, []);
+
+  const resumenVisible = useMemo(() => {
+    return movimientosTablaFiltrados.reduce((acumulado, movimiento) => {
+      const moneda = movimiento.moneda || 'CRC';
+      const monto = Number(movimiento.monto || 0);
+      if (!acumulado[moneda]) acumulado[moneda] = { ingresos: 0, egresos: 0, balance: 0 };
+      if (movimiento.naturaleza === 'Ingreso') acumulado[moneda].ingresos += monto;
+      if (movimiento.naturaleza === 'Egreso') acumulado[moneda].egresos += monto;
+      acumulado[moneda].balance = acumulado[moneda].ingresos - acumulado[moneda].egresos;
+      return acumulado;
+    }, {
+      CRC: { ingresos: 0, egresos: 0, balance: 0 },
+      USD: { ingresos: 0, egresos: 0, balance: 0 }
+    });
+  }, [movimientosTablaFiltrados]);
+
+  const totalesPorTipo = useMemo(() => sumarPorTipoYMoneda(movimientosTablaFiltrados), [movimientosTablaFiltrados]);
 
   const resumenPorDestino = useMemo(() => {
     const destinos = movimientosFiltrados.reduce((acumulado, movimiento) => {
@@ -523,6 +541,10 @@ const Finanzas = () => {
   };
 
   const abrirEdicion = (movimiento) => {
+    if (movimiento.soloLectura) {
+      setError(`Este movimiento proviene de ${movimiento.origenMovimiento || 'otro módulo'} y debe modificarse desde su origen.`);
+      return;
+    }
     setMovimientoSeleccionado(movimiento);
     setErrorFormulario('');
     setModoFormulario(true);
@@ -562,6 +584,10 @@ const Finanzas = () => {
   };
 
   const eliminarMovimiento = async (movimiento) => {
+    if (movimiento.soloLectura) {
+      setError(`Este movimiento proviene de ${movimiento.origenMovimiento || 'otro módulo'} y no puede eliminarse desde Finanzas.`);
+      return;
+    }
     const confirmar = window.confirm(`¿Eliminar el movimiento "${movimiento.descripcion || movimiento.tipoMovimiento}"? Esta accion no se puede deshacer.`);
     if (!confirmar) return;
 
@@ -588,7 +614,7 @@ const Finanzas = () => {
     );
   }
 
-  if (modoCatalogos) {
+  if (modoCatalogos && puedeAdministrarCatalogos) {
     return <EditorCatalogosFinancieros onCerrar={() => setModoCatalogos(false)} />;
   }
 
@@ -609,9 +635,11 @@ const Finanzas = () => {
               Multi-finca
             </button>
           )}
-          <button className="boton-secundario compacto boton-catalogos-finanzas" type="button" onClick={() => setModoCatalogos(true)}>
-            Catálogos
-          </button>
+          {puedeAdministrarCatalogos && (
+            <button className="boton-secundario compacto boton-catalogos-finanzas" type="button" onClick={() => setModoCatalogos(true)}>
+              Catálogos
+            </button>
+          )}
           <button className="boton-primario compacto boton-actualizar-finanzas" type="button" onClick={cargarFinanzas} disabled={cargando}>
             {cargando ? 'Actualizando...' : 'Actualizar'}
           </button>
@@ -620,14 +648,24 @@ const Finanzas = () => {
 
       <section className="finanzas-resumen">
         <article>
-          <span>Registros totales</span>
-          <strong>{movimientos.length}</strong>
-          <small>{formatearNumero(resumen?.totalEgresos, 'CRC')} en egresos</small>
+          <span>Registros visibles</span>
+          <strong>{movimientosTablaFiltrados.length}</strong>
+          <small>Mismo período, búsqueda y filtros de la tabla</small>
         </article>
         <article>
           <span>Ingresos</span>
-          <strong>{formatearNumero(resumen?.totalIngresos, 'CRC')}</strong>
-          <small>Aportes u otros movimientos de entrada</small>
+          <strong>{formatearTotalesMoneda(obtenerCampoPorMoneda(resumenVisible, 'ingresos'), true)}</strong>
+          <small>Movimientos visibles de entrada</small>
+        </article>
+        <article>
+          <span>Egresos</span>
+          <strong>{formatearTotalesMoneda(obtenerCampoPorMoneda(resumenVisible, 'egresos'), true)}</strong>
+          <small>Movimientos visibles de salida</small>
+        </article>
+        <article>
+          <span>Balance</span>
+          <strong>{formatearTotalesMoneda(obtenerCampoPorMoneda(resumenVisible, 'balance'), true)}</strong>
+          <small>Ingresos menos egresos visibles</small>
         </article>
         <article>
           <span>Compras</span>
@@ -649,15 +687,16 @@ const Finanzas = () => {
             <div>
               <p className="eyebrow">Compras físicas</p>
               <h2>Productos e insumos comprados</h2>
+              <small>Histórico total de la finca</small>
             </div>
           </div>
           <div className="finanzas-consumo-grid">
             {consumo.slice(0, 6).map((item) => (
-              <article key={`${item.producto}-${item.unidad}-${item.categoria}`}>
+              <article key={`${item.producto}-${item.unidad}-${item.categoria}-${item.moneda}`}>
                 <span>{item.categoria || 'Sin categoría'}</span>
                 <strong>{item.producto}</strong>
                 <small>
-                  {formatearCantidad(item.cantidadTotal, item.unidad)} · {formatearNumero(item.montoTotal, 'CRC')}
+                  {formatearCantidad(item.cantidadTotal, item.unidad)} · {formatearNumero(item.montoTotal, item.moneda)}
                 </small>
               </article>
             ))}
@@ -671,30 +710,29 @@ const Finanzas = () => {
             <div>
               <p className="eyebrow">Control interno</p>
               <h2>Planilla e inversiones</h2>
+              <small>Histórico total de la finca</small>
             </div>
           </div>
           <div className="finanzas-consumo-grid">
             <article>
               <span>Planilla registrada</span>
-              <strong>{formatearNumero(resumenPlanilla?.total, 'CRC')}</strong>
-              <small>
-                {resumenPlanilla?.registros || 0} registros · {resumenPlanilla?.totalDias || 0} dias · {resumenPlanilla?.totalHoras || 0} horas
-              </small>
+              <strong>{formatearTotalesMoneda(obtenerCampoPorMoneda(resumenPlanilla?.monedas))}</strong>
+              <small>{resumenPlanilla?.registros || 0} egresos de mano de obra</small>
             </article>
             <article>
-              <span>Principal tipo de trabajo</span>
-              <strong>{resumenPlanilla?.porTipoTrabajo?.[0]?.tipoTrabajo || '--'}</strong>
-              <small>{formatearNumero(resumenPlanilla?.porTipoTrabajo?.[0]?.total, 'CRC')}</small>
+              <span>Categoría principal de mano de obra</span>
+              <strong>{resumenPlanilla?.porCategoria?.[0]?.categoria || '--'}</strong>
+              <small>{resumenPlanilla?.porCategoria?.[0] ? formatearNumero(resumenPlanilla.porCategoria[0].total, resumenPlanilla.porCategoria[0].moneda) : '--'}</small>
             </article>
             <article>
               <span>Inversion acumulada</span>
-              <strong>{formatearNumero(resumenInversiones?.total, 'CRC')}</strong>
+              <strong>{formatearTotalesMoneda(obtenerCampoPorMoneda(resumenInversiones?.monedas))}</strong>
               <small>{resumenInversiones?.registros || 0} registros de inversion</small>
             </article>
             <article>
-              <span>Depreciacion mensual</span>
-              <strong>{formatearNumero(resumenInversiones?.depreciacionMensual, 'CRC')}</strong>
-              <small>{resumenInversiones?.depreciables?.registros || 0} activos depreciables</small>
+              <span>Categoría principal de inversión</span>
+              <strong>{resumenInversiones?.porCategoria?.[0]?.categoria || '--'}</strong>
+              <small>{resumenInversiones?.porCategoria?.[0] ? formatearNumero(resumenInversiones.porCategoria[0].total, resumenInversiones.porCategoria[0].moneda) : '--'}</small>
             </article>
           </div>
         </section>
@@ -733,21 +771,6 @@ const Finanzas = () => {
               min={rangoFechas.fechaInicio || undefined}
             />
           </label>
-        </div>
-
-        <div className="finanzas-subresumen">
-          <article>
-            <span>Registros visibles</span>
-            <strong>{movimientosFiltrados.length}</strong>
-          </article>
-          <article>
-            <span>Total CRC</span>
-            <strong>{formatearNumero(totalPorMoneda.CRC, 'CRC')}</strong>
-          </article>
-          <article>
-            <span>Total USD</span>
-            <strong>{formatearNumero(totalPorMoneda.USD, 'USD')}</strong>
-          </article>
         </div>
 
         {resumenPorDestino.length > 0 && (
@@ -814,8 +837,8 @@ const Finanzas = () => {
                       <td>{movimiento.producto || '--'}</td>
                       <td>{problemas.join(', ')}</td>
                       <td>
-                        <button className="boton-secundario compacto" type="button" onClick={() => abrirEdicion(movimiento)}>
-                          Editar
+                        <button className="boton-secundario compacto" type="button" onClick={() => abrirEdicion(movimiento)} disabled={movimiento.soloLectura} title={movimiento.soloLectura ? `Solo lectura: ${movimiento.origenMovimiento}` : 'Editar movimiento'}>
+                          {movimiento.soloLectura ? 'Solo lectura' : 'Editar'}
                         </button>
                       </td>
                     </tr>
@@ -840,6 +863,11 @@ const Finanzas = () => {
           onAgregar={abrirNuevoMovimiento}
           onEditar={abrirEdicion}
           onEliminar={eliminarMovimiento}
+          puedeEditar={(movimiento) => !movimiento.soloLectura}
+          puedeEliminar={(movimiento) => !movimiento.soloLectura}
+          tituloEditarNoDisponible="Debe editarse desde el módulo que generó el movimiento"
+          tituloEliminarNoDisponible="Debe eliminarse o anularse desde el módulo que generó el movimiento"
+          onDatosFiltrados={actualizarDatosVisibles}
         />
       </section>
     </section>

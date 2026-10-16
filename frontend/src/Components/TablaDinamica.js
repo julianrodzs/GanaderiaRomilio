@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PaginacionTabla, { usePaginacionTabla } from './PaginacionTabla';
 
 const obtenerValor = (fila, columna) => {
@@ -47,9 +47,14 @@ const TablaDinamica = ({
   agregarTitulo = '',
   onEditar,
   onEliminar,
+  puedeEditar = () => true,
+  puedeEliminar = () => true,
+  tituloEditarNoDisponible = 'Este registro es de solo lectura',
+  tituloEliminarNoDisponible = 'Este registro es de solo lectura',
   accionesExtra,
   mostrarAcciones = true,
-  clavePaginacion = ''
+  clavePaginacion = '',
+  onDatosFiltrados
 }) => {
   const [busqueda, setBusqueda] = useState('');
   const [filtrosActivos, setFiltrosActivos] = useState({});
@@ -87,6 +92,10 @@ const TablaDinamica = ({
       return orden.direccion === 'asc' ? resultado : -resultado;
     });
   }, [busqueda, columnas, datos, filtros, filtrosActivos, orden]);
+
+  useEffect(() => {
+    onDatosFiltrados?.(datosFiltrados);
+  }, [datosFiltrados, onDatosFiltrados]);
 
   const opcionesFiltros = useMemo(() => {
     return Object.fromEntries(filtros.map((filtro) => [
@@ -176,8 +185,8 @@ const TablaDinamica = ({
                   <td>
                     <div className="acciones-tabla">
                       {accionesExtra?.(fila)}
-                      {onEditar && <button type="button" aria-label="Editar" title="Editar" onClick={() => onEditar(fila)}>✎</button>}
-                      {onEliminar && <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => onEliminar(fila)}>⌫</button>}
+                      {onEditar && <button type="button" aria-label="Editar" title={puedeEditar(fila) ? 'Editar' : tituloEditarNoDisponible} disabled={!puedeEditar(fila)} onClick={() => onEditar(fila)}>✎</button>}
+                      {onEliminar && <button type="button" aria-label="Eliminar" title={puedeEliminar(fila) ? 'Eliminar' : tituloEliminarNoDisponible} disabled={!puedeEliminar(fila)} onClick={() => onEliminar(fila)}>⌫</button>}
                     </div>
                   </td>
                 )}

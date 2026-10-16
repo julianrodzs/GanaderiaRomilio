@@ -95,6 +95,7 @@ const Ventas = ({ soloLectura = false }) => {
   const [detalle, setDetalle] = useState(null);
   const [modoFormulario, setModoFormulario] = useState(false);
   const [cargando, setCargando] = useState(true);
+  const [cargandoSelectores, setCargandoSelectores] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [errorFormulario, setErrorFormulario] = useState('');
@@ -113,16 +114,12 @@ const Ventas = ({ soloLectura = false }) => {
     try {
       setCargando(true);
       setError('');
-      const [ventasData, animalesData, resumenData, camadasData] = await Promise.all([
+      const [ventasData, resumenData] = await Promise.all([
         obtenerVentas({ ...filtros, especie }),
-        obtenerAnimales({ especie }),
-        obtenerResumenVentas({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie }),
-        especie === 'Porcino' ? obtenerCamadas() : Promise.resolve([])
+        obtenerResumenVentas({ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie })
       ]);
       setVentas(ventasData);
-      setAnimales(animalesData);
       setResumen(resumenData);
-      setCamadas(camadasData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -134,13 +131,38 @@ const Ventas = ({ soloLectura = false }) => {
     cargarDatos();
   }, [filtros.fechaInicio, filtros.fechaFin, filtros.comprador, filtros.estado, especie]);
 
+  const cargarSelectoresVenta = async (especieObjetivo) => {
+    if (soloLectura) return false;
+    try {
+      setCargandoSelectores(true);
+      setErrorFormulario('');
+      const [animalesData, camadasData] = await Promise.all([
+        obtenerAnimales({ especie: especieObjetivo }),
+        especieObjetivo === 'Porcino' ? obtenerCamadas() : Promise.resolve([])
+      ]);
+      setAnimales(animalesData);
+      setCamadas(camadasData);
+      return true;
+    } catch (err) {
+      setErrorFormulario(err.message);
+      return false;
+    } finally {
+      setCargandoSelectores(false);
+    }
+  };
+
   useEffect(() => {
     try {
       const accion = JSON.parse(sessionStorage.getItem('ganaderiaAccionLote') || 'null');
       if (accion?.modulo !== 'Ventas') return;
       sessionStorage.removeItem('ganaderiaAccionLote');
+      if (soloLectura) {
+        setError('No tienes permisos para preparar una venta desde un lote.');
+        return;
+      }
       setEspecie(accion.especie || 'Bovino');
       setPreseleccionLote(accion);
+      cargarSelectoresVenta(accion.especie || 'Bovino');
     } catch (_) { sessionStorage.removeItem('ganaderiaAccionLote'); }
   }, []);
 
@@ -212,7 +234,8 @@ const Ventas = ({ soloLectura = false }) => {
     return formulario.animales.length + (formulario.camadas || []).reduce((total, item) => total + Number(item.cantidad || 0), 0);
   }, [formulario.animales, formulario.camadas]);
 
-  const abrirNuevo = () => {
+  const abrirNuevo = async () => {
+    if (!await cargarSelectoresVenta(especie)) return;
     setVentaSeleccionada(null);
     setFormulario({ ...estadoInicial, especie });
     setBusquedaAnimal('');
@@ -221,8 +244,9 @@ const Ventas = ({ soloLectura = false }) => {
     setModoFormulario(true);
   };
 
-  const abrirEdicion = (venta) => {
+  const abrirEdicion = async (venta) => {
     const especieVenta = venta.especie || especie;
+    if (!await cargarSelectoresVenta(especieVenta)) return;
     cambiarEspecie(especieVenta);
     setVentaSeleccionada(venta);
     setFormulario({
@@ -383,7 +407,9 @@ const Ventas = ({ soloLectura = false }) => {
           {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
           <SelectorEspecie
             valor={formulario.especie || especie}
-            onChange={(valor) => {
+            disabled={cargandoSelectores}
+            onChange={async (valor) => {
+              if (!await cargarSelectoresVenta(valor)) return;
               cambiarEspecie(valor);
               setFormulario((actual) => ({ ...actual, especie: valor, animales: [], camadas: [] }));
               setBusquedaAnimal('');
@@ -575,7 +601,7 @@ const Ventas = ({ soloLectura = false }) => {
           <p className="eyebrow">Ventas</p>
           <h2>{textoEspecie(especie, 'titulo')}</h2>
         </div>
-        {!soloLectura && <button className="boton-primario compacto" type="button" onClick={abrirNuevo}>+ Nueva venta</button>}
+        {!soloLectura && <button className="boton-primario compacto" type="button" onClick={abrirNuevo} disabled={cargandoSelectores}>{cargandoSelectores ? 'Cargando...' : '+ Nueva venta'}</button>}
       </div>
 
       <SelectorEspecie valor={especie} onChange={cambiarEspecie} />

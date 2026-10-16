@@ -22,21 +22,22 @@ const baseCatalogos = [
 ];
 
 const asegurarCatalogosBase = async () => {
-    const tipos = [...new Set(baseCatalogos.map((item) => item.tipo))];
-
-    await Promise.all(tipos.map(async (tipo) => {
-        const existeCatalogoDelTipo = await CatalogoFinanciero.exists({ tipo });
-        if (existeCatalogoDelTipo) return;
-
-        const catalogosDelTipo = baseCatalogos.filter((item) => item.tipo === tipo);
-        await CatalogoFinanciero.insertMany(catalogosDelTipo.map((item) => ({
+    await Promise.all(baseCatalogos.map((item) => CatalogoFinanciero.updateOne(
+        {
             tipo: item.tipo,
-            nombre: item.nombre,
-            nombreNormalizado: normalizarTexto(item.nombre),
-            activo: true,
-            protegido: true
-        })), { ordered: false });
-    }));
+            nombreNormalizado: normalizarTexto(item.nombre)
+        },
+        {
+            $setOnInsert: {
+                tipo: item.tipo,
+                nombre: item.nombre,
+                nombreNormalizado: normalizarTexto(item.nombre),
+                activo: true,
+                protegido: true
+            }
+        },
+        { upsert: true, runValidators: true }
+    )));
 };
 
 const filtroUsoPorCatalogo = (catalogo) => {

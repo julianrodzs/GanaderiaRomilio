@@ -50,6 +50,10 @@ const permisosPorModulo = {
         gestionar: ['Administrador', 'Encargado', 'Veterinario'],
         eliminar: ['Administrador']
     },
+    bitacora: {
+        ver: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Consulta'],
+        crearNotas: ['Administrador', 'Encargado', 'Veterinario']
+    },
     reproduccion: {
         ver: ['Administrador', 'Encargado', 'Veterinario', 'Consulta'],
         gestionar: ['Administrador', 'Encargado', 'Veterinario'],

@@ -1,4 +1,4 @@
-import { completarTarea } from './api';
+import { completarTarea, crearEventoAnimal } from './api';
 import {
   actualizarCambioPendiente,
   eliminarCambioPendiente,
@@ -29,16 +29,18 @@ const sincronizarCambio = async (cambio) => {
   });
 
   try {
-    if (cambio.tipo !== 'completar-tarea') {
+    if (cambio.tipo === 'completar-tarea') {
+      await completarTarea({
+        id: cambio.referenciaId,
+        observaciones: cambio.payload?.observaciones || '',
+        idempotencyKey: cambio.idempotencyKey,
+        versionEsperada: cambio.payload?.versionEsperada || ''
+      });
+    } else if (cambio.tipo === 'crear-nota-bitacora') {
+      await crearEventoAnimal(cambio.payload, { idempotencyKey: cambio.idempotencyKey });
+    } else {
       throw new Error(`Operacion offline no soportada: ${cambio.tipo}`);
     }
-
-    await completarTarea({
-      id: cambio.referenciaId,
-      observaciones: cambio.payload?.observaciones || '',
-      idempotencyKey: cambio.idempotencyKey,
-      versionEsperada: cambio.payload?.versionEsperada || ''
-    });
     await eliminarCambioPendiente(cambio.id);
     return { id: cambio.id, estado: 'Sincronizado' };
   } catch (error) {

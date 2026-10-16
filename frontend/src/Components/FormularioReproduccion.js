@@ -13,6 +13,8 @@ const estadoInicial = {
   diasDestetePorcino: 28,
   diasCeloPostDestetePorcino: 5,
   tipoRegistro: 'Inseminación/Monta',
+  semenUtilizado: '',
+  cantidadPajuelas: 1,
   destinoCrias: 'No definido',
   cantidadCriasEstimada: '',
   cantidadCrias: '',
@@ -78,6 +80,8 @@ const normalizarRegistro = (registro) => ({
   ...registro,
   animal: obtenerAnimalId(registro?.animal),
   asignadoA: registro?.asignadoA?._id || registro?.asignadoA || '',
+  semenUtilizado: registro?.semenUtilizado?._id || registro?.semenUtilizado || '',
+  cantidadPajuelas: registro?.cantidadPajuelas || 1,
   fechaInseminacion: formatearFechaInput(registro?.fechaInseminacion || registro?.fechaMonta),
   fechaMonta: formatearFechaInput(registro?.fechaMonta),
   fechaPartoEstimada: formatearFechaInput(registro?.fechaPartoEstimada),
@@ -120,7 +124,8 @@ const FormularioReproduccion = ({
   guardando,
   error,
   especie = 'Bovino',
-  usuariosAsignables = []
+  usuariosAsignables = [],
+  semenDisponible = []
 }) => {
   const hembras = animales.filter((animal) => animal.sexo === 'Hembra');
   const [formulario, setFormulario] = useState(() => {
@@ -132,6 +137,7 @@ const FormularioReproduccion = ({
     };
   });
   const esPorcino = formulario.especie === 'Porcino';
+  const esInseminacion = formulario.tipoRegistro === 'Inseminación';
   const fechaBasePorcina = formulario.fechaInseminacion || formulario.fechaMonta;
   const fechasPorcinas = fechaBasePorcina ? {
     revisionCelo: sumarDiasInput(fechaBasePorcina, 21),
@@ -180,7 +186,15 @@ const FormularioReproduccion = ({
 
   const enviarFormulario = (evento) => {
     evento.preventDefault();
-    onGuardar(normalizarEnvio(formulario));
+    const datos = normalizarEnvio(formulario);
+    if (esInseminacion) {
+      datos.tipoInseminacion = 'IA_CONVENCIONAL';
+      datos.cantidadPajuelas = Number(formulario.cantidadPajuelas || 1);
+    } else {
+      delete datos.semenUtilizado;
+      delete datos.cantidadPajuelas;
+    }
+    onGuardar(datos);
   };
 
   return (
@@ -227,17 +241,35 @@ const FormularioReproduccion = ({
             </select>
           </label>
 
-          {esPorcino && (
+          <label>
+            Tipo de servicio
+            <select name="tipoRegistro" value={formulario.tipoRegistro} onChange={actualizarCampo}>
+              <option value="Inseminación/Monta">Sin especificar</option>
+              <option value="Inseminación">Inseminación artificial</option>
+              <option value="Monta">Monta natural</option>
+            </select>
+          </label>
+        </div>
+
+        {esInseminacion && (
+          <div className="form-grid">
             <label>
-              Tipo registro
-              <select name="tipoRegistro" value={formulario.tipoRegistro} onChange={actualizarCampo}>
-                <option value="Inseminación/Monta">Inseminación/Monta</option>
-                <option value="Inseminación">Inseminación</option>
-                <option value="Monta">Monta</option>
+              Lote de semen
+              <select name="semenUtilizado" value={formulario.semenUtilizado} onChange={actualizarCampo} required disabled={Boolean(registroInicial?.semenUtilizado)}>
+                <option value="">Seleccionar semen</option>
+                {semenDisponible.map((semen) => (
+                  <option key={semen._id} value={semen._id}>
+                    {semen.toro || semen.nombre} · {semen.lote || 'Sin lote'} · {semen.cantidadDisponible} pajuelas
+                  </option>
+                ))}
               </select>
             </label>
-          )}
-        </div>
+            <label>
+              Pajuelas utilizadas
+              <input name="cantidadPajuelas" type="number" min="1" step="1" value={formulario.cantidadPajuelas} onChange={actualizarCampo} required disabled={Boolean(registroInicial?.semenUtilizado)} />
+            </label>
+          </div>
+        )}
 
         {esPorcino ? (
           <>

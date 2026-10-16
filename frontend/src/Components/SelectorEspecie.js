@@ -7,7 +7,7 @@ const opcionesBase = [
   { valor: 'Porcino', etiqueta: 'Porcinos' }
 ];
 
-const SelectorEspecie = ({ valor, onChange, incluirTodos = false }) => {
+const SelectorEspecie = ({ valor, onChange, incluirTodos = false, disabled = false }) => {
   const { plan, puedeUsarEspecie } = usePlan();
   const permiteTodas = !plan || plan.plan?.modoEspecies === 'AMBAS';
   const opciones = incluirTodos
@@ -34,6 +34,7 @@ const SelectorEspecie = ({ valor, onChange, incluirTodos = false }) => {
           key={opcion.valor}
           type="button"
           className={valor === opcion.valor ? 'activo' : ''}
+          disabled={disabled}
           onClick={() => onChange(opcion.valor)}
         >
           {opcion.etiqueta}

@@ -9,6 +9,7 @@ const {
     getRegistros,
     createRegistro,
     getRegistro,
+    getSemenDisponible,
     getRegistrosPorAnimal,
     registrarTerneroDesdeParto,
     updateRegistro,
@@ -24,6 +25,7 @@ router.route('/')
     .post(puedeGestionar, createRegistro);
 
 router.get('/animal/:animalId', puedeVer, getRegistrosPorAnimal);
+router.get('/insumos/semen', puedeVer, getSemenDisponible);
 router.post('/:id/ternero', puedeGestionar, registrarTerneroDesdeParto);
 router.patch('/:id/cerrar-ciclo', puedeGestionar, cerrarCiclo);
 router.patch('/:id/reabrir-ciclo', puedeGestionar, reabrirCiclo);

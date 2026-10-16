@@ -29,6 +29,14 @@ const {
 const { obtenerReportePesoDestete } = require('../services/reportePesoDestete-service');
 const { obtenerCategoriaAnimal } = require('../services/categoriaAnimal-service');
 const { calcularProductividadPorcina } = require('../services/productividadCria-service');
+const {
+    asignarEconomiaPorCamada,
+    calcularTotalCompraAnimal,
+    crearMapaMonedas,
+    esMovimientoInversionOperativa,
+    normalizarMoneda,
+    sumarMovimientosPorMoneda
+} = require('../services/finanzas-calculos-service');
 
 const reporteCtrl = {};
 const { obtenerRendimientoForrajes } = require('../services/forrajeRendimiento-service');
@@ -460,14 +468,6 @@ const esAnimalConsideradoActivoEnPeriodo = (animal, fechaInicio, fechaFin) => {
     return new Date(animal.fechaVenta).getTime() >= new Date(fechaInicio).getTime();
 };
 
-const calcularTotalCompraAnimal = (animal) => {
-    if (!animal.fechaCompra) return 0;
-    if (animal.pesoCompra && animal.precioCompraPorKg) {
-        return animal.pesoCompra * animal.precioCompraPorKg;
-    }
-    return animal.montoCompra || 0;
-};
-
 const calcularTotalVentaAnimal = (animal) => {
     if (animal.pesoVenta && animal.precioVentaPorKg) {
         return animal.pesoVenta * animal.precioVentaPorKg;
@@ -694,11 +694,15 @@ reporteCtrl.getFinanzasCria = async (req, res) => {
             Animal.find().lean()
         ]);
 
-        const inversionAcumulada = sumarMovimientos(movimientos.filter((movimiento) => {
-            return movimiento.naturaleza !== 'Ingreso' && esMovimientoInversion(movimiento);
+        const inversionOperativaHistorica = sumarMovimientosPorMoneda(movimientos, esMovimientoInversionOperativa);
+        const gastosOperativosPeriodo = sumarMovimientosPorMoneda(movimientosPeriodo, esMovimientoGastoOperativo);
+        const ingresosPeriodo = sumarMovimientosPorMoneda(movimientosPeriodo, esMovimientoIngreso);
+        const monedas = crearMapaMonedas((moneda) => ({
+            inversionOperativaHistorica: redondear(inversionOperativaHistorica[moneda]),
+            gastosOperativosPeriodo: redondear(gastosOperativosPeriodo[moneda]),
+            ingresosPeriodo: redondear(ingresosPeriodo[moneda]),
+            balanceOperativo: redondear(ingresosPeriodo[moneda] - gastosOperativosPeriodo[moneda])
         }));
-        const gastosOperativosPeriodo = sumarMovimientos(movimientosPeriodo.filter(esMovimientoGastoOperativo));
-        const ingresosPeriodo = sumarMovimientos(movimientosPeriodo.filter(esMovimientoIngreso));
         const animalesActivos = animales.filter((animal) => !['Muerto', 'Vendido'].includes(animal.estado));
         const animalesActuales = animalesActivos.length;
         const animalesInicioPeriodo = animales.filter((animal) => {
@@ -709,15 +713,13 @@ reporteCtrl.getFinanzasCria = async (req, res) => {
         const valorEstimadoHato = sumarMovimientos(animalesActivos.map((animal) => ({ monto: calcularValorAnimal(animal) })));
 
         res.json({
-            inversionAcumulada: redondear(inversionAcumulada),
-            gastosOperativosPeriodo: redondear(gastosOperativosPeriodo),
-            ingresosPeriodo: redondear(ingresosPeriodo),
-            balanceOperativo: redondear(ingresosPeriodo - gastosOperativosPeriodo),
+            monedas,
             valorEstimadoHato: redondear(valorEstimadoHato),
             crecimientoHato: animalesActuales - animalesInicioPeriodo,
             animalesInicioPeriodo,
             animalesActuales,
-            patrimonioGanaderoEstimado: redondear(valorEstimadoHato + inversionAcumulada)
+            patrimonioGanaderoEstimado: redondear(valorEstimadoHato),
+            metodologiaPatrimonio: 'El valor del hato activo se presenta por separado del flujo histórico de inversión operativa.'
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener finanzas de cria', error: error.message });
@@ -736,10 +738,12 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
 
         const mesesPeriodo = calcularMesesPeriodo(fechaInicio, fechaFin);
         const animalesActivosCosto = animales.filter((animal) => esAnimalConsideradoActivoEnPeriodo(animal, fechaInicio, fechaFin));
-        const gastosOperativosPeriodo = sumarMovimientos(movimientosPeriodo.filter(esMovimientoGastoOperativo));
-        const costoProduccionMensualPorAnimal = animalesActivosCosto.length
-            ? gastosOperativosPeriodo / animalesActivosCosto.length / mesesPeriodo
-            : 0;
+        const gastosOperativosPeriodo = sumarMovimientosPorMoneda(movimientosPeriodo, esMovimientoGastoOperativo);
+        const costoProduccionMensualPorAnimal = crearMapaMonedas((moneda) => (
+            animalesActivosCosto.length
+                ? gastosOperativosPeriodo[moneda] / animalesActivosCosto.length / mesesPeriodo
+                : 0
+        ));
         const animalesVendidos = animales.filter((animal) => {
             return animal.estado === 'Vendido'
                 && estaFechaEnPeriodo(animal.fechaVenta, fechaInicio, fechaFin)
@@ -751,8 +755,13 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
             const duracionMeses = calcularMesesEntre(fechaIngreso, animal.fechaVenta) || 0;
             const totalCompra = calcularTotalCompraAnimal(animal);
             const totalVenta = calcularTotalVentaAnimal(animal);
-            const costoProduccionAsignado = costoProduccionMensualPorAnimal * duracionMeses;
-            const utilidadPerdida = totalVenta - totalCompra - costoProduccionAsignado;
+            const costosProduccionAsignados = crearMapaMonedas((moneda) => (
+                costoProduccionMensualPorAnimal[moneda] * duracionMeses
+            ));
+            const utilidadPerdidaPorMoneda = {
+                CRC: totalVenta - totalCompra - costosProduccionAsignados.CRC,
+                USD: -costosProduccionAsignados.USD
+            };
 
             return {
                 animalId: animal._id,
@@ -768,14 +777,28 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
                 totalCompra: redondear(totalCompra),
                 totalVenta: redondear(totalVenta),
                 duracionMeses,
-                costoProduccionAsignado: redondear(costoProduccionAsignado),
-                utilidadPerdida: redondear(utilidadPerdida)
+                costosProduccionAsignados: crearMapaMonedas((moneda) => redondear(costosProduccionAsignados[moneda])),
+                utilidadPerdidaPorMoneda: crearMapaMonedas((moneda) => redondear(utilidadPerdidaPorMoneda[moneda]))
             };
         });
         const montoComprasAnimales = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.totalCompra })));
         const montoVentasAnimales = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.totalVenta })));
-        const costoProduccionAsignado = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.costoProduccionAsignado })));
-        const margenSustentabilidad = montoVentasAnimales - montoComprasAnimales - costoProduccionAsignado;
+        const costoProduccionAsignado = crearMapaMonedas((moneda) => animalesAnalizados.reduce(
+            (total, animal) => total + Number(animal.costosProduccionAsignados?.[moneda] || 0),
+            0
+        ));
+        const margenSustentabilidad = {
+            CRC: montoVentasAnimales - montoComprasAnimales - costoProduccionAsignado.CRC,
+            USD: -costoProduccionAsignado.USD
+        };
+        const monedas = crearMapaMonedas((moneda) => ({
+            montoVentasAnimales: moneda === 'CRC' ? redondear(montoVentasAnimales) : 0,
+            montoComprasAnimales: moneda === 'CRC' ? redondear(montoComprasAnimales) : 0,
+            gastosOperativosPeriodo: redondear(gastosOperativosPeriodo[moneda]),
+            costoProduccionAsignado: redondear(costoProduccionAsignado[moneda]),
+            costoProduccionMensualPorAnimal: redondear(costoProduccionMensualPorAnimal[moneda]),
+            margenSustentabilidad: redondear(margenSustentabilidad[moneda])
+        }));
         const pesoCompraTotal = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.pesoCompra })));
         const pesoVentaTotal = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.pesoVenta })));
         const duracionPromedioMeses = animalesAnalizados.length
@@ -785,13 +808,9 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
         const precioCompraPromedioKg = pesoCompraTotal ? montoComprasAnimales / pesoCompraTotal : 0;
 
         res.json({
+            monedas,
             montoVentasAnimales: redondear(montoVentasAnimales),
             montoComprasAnimales: redondear(montoComprasAnimales),
-            gastosOperativosPeriodo: redondear(gastosOperativosPeriodo),
-            costoProduccionAsignado: redondear(costoProduccionAsignado),
-            costoProduccionMensualPorAnimal: redondear(costoProduccionMensualPorAnimal),
-            margenSustentabilidad: redondear(margenSustentabilidad),
-            utilidadPerdida: redondear(margenSustentabilidad),
             animalesCompradosPeriodo: animalesAnalizados.filter((animal) => animal.origen === 'Comprado').length,
             animalesVendidosPeriodo: animalesAnalizados.length,
             animalesActivosCosto: animalesActivosCosto.length,
@@ -1224,7 +1243,7 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 { $match: filtro },
                 {
                     $group: {
-                        _id: null,
+                        _id: { moneda: { $ifNull: ['$moneda', 'CRC'] } },
                         montoTotal: { $sum: '$monto' },
                         cantidadMovimientos: { $sum: 1 }
                     }
@@ -1235,7 +1254,10 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 ...agregarCantidadProductoPipeline,
                 {
                     $group: {
-                        _id: '$producto',
+                        _id: {
+                            producto: '$producto',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         cantidadRegistros: { $sum: 1 },
                         cantidadTotal: { $sum: '$cantidadCompra' },
                         cantidadFisicaTotal: { $sum: '$cantidadFisica' },
@@ -1252,7 +1274,10 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 { $match: filtro },
                 {
                     $group: {
-                        _id: '$categoria',
+                        _id: {
+                            categoria: '$categoria',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         cantidadRegistros: { $sum: 1 },
                         montoTotal: { $sum: '$monto' }
                     }
@@ -1264,7 +1289,10 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 { $match: { ...filtro, proveedor: { $exists: true, $nin: [null, ''] } } },
                 {
                     $group: {
-                        _id: '$proveedor',
+                        _id: {
+                            proveedor: '$proveedor',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         cantidadRegistros: { $sum: 1 },
                         montoTotal: { $sum: '$monto' },
                         ultimaCompra: { $max: '$fecha' }
@@ -1277,7 +1305,10 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 { $match: filtro },
                 {
                     $group: {
-                        _id: '$categoria',
+                        _id: {
+                            categoria: '$categoria',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -1286,11 +1317,20 @@ reporteCtrl.getProductosResumen = async (req, res) => {
             ])
         ]);
 
+        const monedas = crearMapaMonedas(() => ({ montoTotal: 0, cantidadMovimientos: 0 }));
+        general.forEach((item) => {
+            monedas[normalizarMoneda(item._id?.moneda)] = {
+                montoTotal: item.montoTotal || 0,
+                cantidadMovimientos: item.cantidadMovimientos || 0
+            };
+        });
+
         res.json({
-            montoTotal: general[0]?.montoTotal || 0,
-            cantidadMovimientos: general[0]?.cantidadMovimientos || 0,
+            monedas,
+            cantidadMovimientos: Object.values(monedas).reduce((total, item) => total + item.cantidadMovimientos, 0),
             productosMasRegistrados: productosMasRegistrados.map((item) => ({
-                producto: item._id || 'Sin producto',
+                producto: item._id.producto || 'Sin producto',
+                moneda: normalizarMoneda(item._id.moneda),
                 categoria: item.categoria || 'Otros',
                 unidadMedida: item.unidadMedida || 'sin unidad',
                 cantidadTotal: item.cantidadTotal || 0,
@@ -1300,18 +1340,21 @@ reporteCtrl.getProductosResumen = async (req, res) => {
                 cantidadRegistros: item.cantidadRegistros || 0
             })),
             categoriasMasRegistradas: categoriasMasRegistradas.map((item) => ({
-                categoria: item._id || 'Otros',
+                categoria: item._id.categoria || 'Otros',
+                moneda: normalizarMoneda(item._id.moneda),
                 cantidadRegistros: item.cantidadRegistros || 0,
                 montoTotal: item.montoTotal || 0
             })),
             proveedoresMasUsados: proveedoresMasUsados.map((item) => ({
-                proveedor: item._id || 'Sin proveedor',
+                proveedor: item._id.proveedor || 'Sin proveedor',
+                moneda: normalizarMoneda(item._id.moneda),
                 cantidadRegistros: item.cantidadRegistros || 0,
                 montoTotal: item.montoTotal || 0,
                 ultimaCompra: item.ultimaCompra || null
             })),
             totalPorCategoria: totalPorCategoria.map((item) => ({
-                categoria: item._id || 'Otros',
+                categoria: item._id.categoria || 'Otros',
+                moneda: normalizarMoneda(item._id.moneda),
                 total: item.total || 0,
                 cantidad: item.cantidad || 0
             }))
@@ -1336,7 +1379,8 @@ reporteCtrl.getProductosPorProducto = async (req, res) => {
                         producto: '$producto',
                         categoria: '$categoria',
                         unidadMedida: '$unidadNormalizada',
-                        unidadBase: '$unidadBase'
+                        unidadBase: '$unidadBase',
+                        moneda: { $ifNull: ['$moneda', 'CRC'] }
                     },
                     cantidadTotal: { $sum: '$cantidadCompra' },
                     cantidadFisicaTotal: { $sum: '$cantidadFisica' },
@@ -1351,6 +1395,7 @@ reporteCtrl.getProductosPorProducto = async (req, res) => {
                     categoria: { $ifNull: ['$_id.categoria', 'Otros'] },
                     unidadMedida: '$_id.unidadMedida',
                     unidadBase: '$_id.unidadBase',
+                    moneda: '$_id.moneda',
                     cantidadTotal: 1,
                     cantidadFisicaTotal: 1,
                     montoTotal: 1,
@@ -1399,7 +1444,10 @@ reporteCtrl.getProductosPorCategoria = async (req, res) => {
             ...agregarCantidadProductoPipeline,
             {
                 $group: {
-                    _id: '$categoria',
+                    _id: {
+                        categoria: '$categoria',
+                        moneda: { $ifNull: ['$moneda', 'CRC'] }
+                    },
                     cantidadTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' },
                     productosIncluidos: { $addToSet: '$producto' },
@@ -1408,6 +1456,7 @@ reporteCtrl.getProductosPorCategoria = async (req, res) => {
             },
             {
                 $setWindowFields: {
+                    partitionBy: '$_id.moneda',
                     output: {
                         totalGeneral: { $sum: '$montoTotal' }
                     }
@@ -1416,7 +1465,8 @@ reporteCtrl.getProductosPorCategoria = async (req, res) => {
             {
                 $project: {
                     _id: 0,
-                    categoria: { $ifNull: ['$_id', 'Otros'] },
+                    categoria: { $ifNull: ['$_id.categoria', 'Otros'] },
+                    moneda: '$_id.moneda',
                     cantidadTotal: 1,
                     montoTotal: 1,
                     productosIncluidos: 1,
@@ -1452,7 +1502,7 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
                 ...agregarCantidadProductoPipeline,
                 {
                     $group: {
-                        _id: null,
+                        _id: { moneda: { $ifNull: ['$moneda', 'CRC'] } },
                         litrosTotales: { $sum: '$cantidadFisica' },
                         montoTotal: { $sum: '$monto' },
                         registros: { $sum: 1 }
@@ -1461,6 +1511,7 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
                 {
                     $project: {
                         _id: 0,
+                        moneda: '$_id.moneda',
                         litrosTotales: 1,
                         montoTotal: 1,
                         registros: 1,
@@ -1481,7 +1532,8 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
                     $group: {
                         _id: {
                             anio: { $year: '$fecha' },
-                            mes: { $month: '$fecha' }
+                            mes: { $month: '$fecha' },
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
                         },
                         litros: { $sum: '$cantidadFisica' },
                         montoTotal: { $sum: '$monto' },
@@ -1494,6 +1546,7 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
                         _id: 0,
                         anio: '$_id.anio',
                         mes: '$_id.mes',
+                        moneda: '$_id.moneda',
                         litros: 1,
                         montoTotal: 1,
                         registros: 1
@@ -1504,23 +1557,39 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
                 { $match: { ...filtro, proveedor: { $exists: true, $nin: [null, ''] } } },
                 {
                     $group: {
-                        _id: '$proveedor',
+                        _id: {
+                            proveedor: '$proveedor',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         registros: { $sum: 1 },
                         montoTotal: { $sum: '$monto' }
                     }
                 },
-                { $sort: { registros: -1, montoTotal: -1 } },
-                { $limit: 1 }
+                { $sort: { registros: -1, montoTotal: -1 } }
             ])
         ]);
 
+        const monedas = crearMapaMonedas(() => ({
+            litrosTotales: 0,
+            montoTotal: 0,
+            precioPromedioLitro: 0,
+            registros: 0,
+            proveedorMasUsado: null
+        }));
+        general.forEach((item) => {
+            const moneda = normalizarMoneda(item.moneda);
+            monedas[moneda] = {
+                litrosTotales: item.litrosTotales || 0,
+                montoTotal: item.montoTotal || 0,
+                precioPromedioLitro: item.precioPromedioLitro || 0,
+                registros: item.registros || 0,
+                proveedorMasUsado: proveedores.find((proveedor) => normalizarMoneda(proveedor._id?.moneda) === moneda)?._id?.proveedor || null
+            };
+        });
         res.json({
-            litrosTotales: general[0]?.litrosTotales || 0,
-            montoTotal: general[0]?.montoTotal || 0,
-            precioPromedioLitro: general[0]?.precioPromedioLitro || 0,
-            registros: general[0]?.registros || 0,
+            monedas,
             consumoPorMes,
-            proveedorMasUsado: proveedores[0]?._id || null
+            registros: Object.values(monedas).reduce((total, item) => total + item.registros, 0)
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener reporte de combustibles', error: error.message });
@@ -1539,7 +1608,8 @@ reporteCtrl.getProductosPrecioPromedio = async (req, res) => {
                         anio: { $year: '$fecha' },
                         mes: { $month: '$fecha' },
                         producto: '$producto',
-                        unidadMedida: '$unidadBase'
+                        unidadMedida: '$unidadBase',
+                        moneda: { $ifNull: ['$moneda', 'CRC'] }
                     },
                     cantidadTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' }
@@ -1552,6 +1622,7 @@ reporteCtrl.getProductosPrecioPromedio = async (req, res) => {
                     mes: '$_id.mes',
                     producto: '$_id.producto',
                     unidadMedida: '$_id.unidadMedida',
+                    moneda: '$_id.moneda',
                     cantidadTotal: 1,
                     montoTotal: 1,
                     precioPromedio: {
@@ -1579,7 +1650,10 @@ reporteCtrl.getProductosProveedores = async (req, res) => {
             { $match: { ...filtro, proveedor: { $exists: true, $nin: [null, ''] } } },
             {
                 $group: {
-                    _id: '$proveedor',
+                    _id: {
+                        proveedor: '$proveedor',
+                        moneda: { $ifNull: ['$moneda', 'CRC'] }
+                    },
                     montoTotal: { $sum: '$monto' },
                     cantidadRegistros: { $sum: 1 },
                     productosComprados: { $addToSet: '$producto' },
@@ -1589,7 +1663,8 @@ reporteCtrl.getProductosProveedores = async (req, res) => {
             {
                 $project: {
                     _id: 0,
-                    proveedor: '$_id',
+                    proveedor: '$_id.proveedor',
+                    moneda: '$_id.moneda',
                     montoTotal: 1,
                     cantidadRegistros: 1,
                     productosComprados: 1,
@@ -1618,7 +1693,10 @@ reporteCtrl.getProductosDestinos = async (req, res) => {
             },
             {
                 $group: {
-                    _id: '$destino',
+                    _id: {
+                        destino: '$destino',
+                        moneda: { $ifNull: ['$moneda', 'CRC'] }
+                    },
                     productos: { $addToSet: '$producto' },
                     cantidadTotal: { $sum: '$cantidadFisica' },
                     montoTotal: { $sum: '$monto' },
@@ -1628,7 +1706,8 @@ reporteCtrl.getProductosDestinos = async (req, res) => {
             {
                 $project: {
                     _id: 0,
-                    destino: '$_id',
+                    destino: '$_id.destino',
+                    moneda: '$_id.moneda',
                     productos: 1,
                     cantidadTotal: 1,
                     montoTotal: 1,
@@ -1657,7 +1736,8 @@ reporteCtrl.getProductosTop = async (req, res) => {
                         producto: '$producto',
                         categoria: '$categoria',
                         unidadMedida: '$unidadNormalizada',
-                        unidadBase: '$unidadBase'
+                        unidadBase: '$unidadBase',
+                        moneda: { $ifNull: ['$moneda', 'CRC'] }
                     },
                     cantidadTotal: { $sum: '$cantidadCompra' },
                     cantidadFisicaTotal: { $sum: '$cantidadFisica' },
@@ -1672,6 +1752,7 @@ reporteCtrl.getProductosTop = async (req, res) => {
                     categoria: { $ifNull: ['$_id.categoria', 'Otros'] },
                     unidadMedida: '$_id.unidadMedida',
                     unidadBase: '$_id.unidadBase',
+                    moneda: '$_id.moneda',
                     cantidadTotal: 1,
                     cantidadFisicaTotal: 1,
                     montoTotal: 1,
@@ -1999,52 +2080,68 @@ reporteCtrl.getReporteEconomicoCamadas = async (req, res) => {
             ...movimientosDirectos,
             ...movimientosPorcinos.filter((movimiento) => !idsDirectos.has(movimiento._id.toString()))
         ];
-        const ingresos = movimientos.filter((movimiento) => movimiento.naturaleza === 'Ingreso');
-        const egresos = movimientos.filter((movimiento) => movimiento.naturaleza === 'Egreso');
-        const totalIngresos = sumarMovimientos(ingresos);
-        const totalEgresos = sumarMovimientos(egresos);
-        const egresoProrrateado = camadas.length ? totalEgresos / camadas.length : 0;
-        const ingresoProrrateado = camadas.length ? totalIngresos / camadas.length : 0;
-
-        const movimientosPorCamada = new Map();
-        movimientosDirectos.forEach((movimiento) => {
-            const key = movimiento.referenciaId?.toString();
-            const actual = movimientosPorCamada.get(key) || [];
-            actual.push(movimiento);
-            movimientosPorCamada.set(key, actual);
+        const { asignaciones, resumenMonedas } = asignarEconomiaPorCamada({ camadaIds, movimientos });
+        const totalCriasVivas = camadas.reduce((total, camada) => total + (camada.nacidosVivos || 0), 0);
+        const totalCriasDestetadas = camadas.reduce((total, camada) => total + (camada.destetados || 0), 0);
+        Object.values(resumenMonedas).forEach((resumen) => {
+            resumen.costoPromedioPorCamada = camadas.length
+                ? redondear(resumen.egresosPorcinos / camadas.length)
+                : 0;
+            resumen.ingresoPromedioPorCamada = camadas.length
+                ? redondear(resumen.ingresosPorcinos / camadas.length)
+                : 0;
+            resumen.costoPorCriaViva = totalCriasVivas
+                ? redondear(resumen.egresosPorcinos / totalCriasVivas)
+                : 0;
+            resumen.costoPorCriaDestetada = totalCriasDestetadas
+                ? redondear(resumen.egresosPorcinos / totalCriasDestetadas)
+                : 0;
+        });
+        const detalleCamadas = camadas.map((camada) => {
+            const asignacion = asignaciones[camada._id.toString()] || {
+                monedas: crearMapaMonedas(() => ({
+                    ingresosDirectos: 0,
+                    egresosDirectos: 0,
+                    ingresoIndirectoAsignado: 0,
+                    egresoIndirectoAsignado: 0,
+                    ingresoAsignado: 0,
+                    costoAsignado: 0
+                })),
+                movimientosDirectos: 0
+            };
+            const monedas = crearMapaMonedas((moneda) => {
+                const datos = asignacion.monedas[moneda];
+                return {
+                    ingresosDirectos: datos.ingresosDirectos,
+                    egresosDirectos: datos.egresosDirectos,
+                    ingresoIndirectoAsignado: datos.ingresoIndirectoAsignado,
+                    egresoIndirectoAsignado: datos.egresoIndirectoAsignado,
+                    costoEstimado: datos.costoAsignado,
+                    ingresoEstimado: datos.ingresoAsignado,
+                    margenEstimado: redondear(datos.ingresoAsignado - datos.costoAsignado),
+                    costoPorCriaViva: camada.nacidosVivos
+                        ? redondear(datos.costoAsignado / camada.nacidosVivos)
+                        : 0,
+                    costoPorCriaDestetada: camada.destetados
+                        ? redondear(datos.costoAsignado / camada.destetados)
+                        : 0
+                };
+            });
+            return {
+                ...mapearCamadaResumen(camada),
+                monedas,
+                movimientosDirectos: asignacion.movimientosDirectos
+            };
         });
 
         res.json({
             resumen: {
                 camadasEvaluadas: camadas.length,
                 movimientosPorcinos: movimientos.length,
-                ingresosPorcinos: totalIngresos,
-                egresosPorcinos: totalEgresos,
-                balancePorcino: totalIngresos - totalEgresos,
-                costoPromedioPorCamada: redondear(egresoProrrateado),
-                ingresoPromedioPorCamada: redondear(ingresoProrrateado),
-                costoPorCriaViva: redondear(totalEgresos / Math.max(camadas.reduce((total, camada) => total + (camada.nacidosVivos || 0), 0), 1)),
-                costoPorCriaDestetada: redondear(totalEgresos / Math.max(camadas.reduce((total, camada) => total + (camada.destetados || 0), 0), 1))
+                monedas: resumenMonedas,
+                criterioAsignacionIndirecta: 'Distribución equitativa entre las camadas evaluadas; los costos directos permanecen en su camada.'
             },
-            camadas: camadas.map((camada) => {
-                const directos = movimientosPorCamada.get(camada._id.toString()) || [];
-                const ingresosDirectos = sumarMovimientos(directos.filter((movimiento) => movimiento.naturaleza === 'Ingreso'));
-                const egresosDirectos = sumarMovimientos(directos.filter((movimiento) => movimiento.naturaleza === 'Egreso'));
-                const costoEstimado = egresosDirectos || egresoProrrateado;
-                const ingresoEstimado = ingresosDirectos || ingresoProrrateado;
-
-                return {
-                    ...mapearCamadaResumen(camada),
-                    ingresosDirectos,
-                    egresosDirectos,
-                    costoEstimado,
-                    ingresoEstimado,
-                    margenEstimado: ingresoEstimado - costoEstimado,
-                    costoPorCriaViva: redondear(costoEstimado / Math.max(camada.nacidosVivos || 0, 1)),
-                    costoPorCriaDestetada: redondear(costoEstimado / Math.max(camada.destetados || 0, 1)),
-                    movimientosDirectos: directos.length
-                };
-            })
+            camadas: detalleCamadas
         });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener reporte economico por camada', error: error.message });
@@ -2259,7 +2356,10 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                 { $match: filtroFinanzas },
                 {
                     $group: {
-                        _id: '$naturaleza',
+                        _id: {
+                            naturaleza: '$naturaleza',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -2270,7 +2370,10 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                 { $match: filtroFinanzas },
                 {
                     $group: {
-                        _id: '$tipoMovimiento',
+                        _id: {
+                            tipoMovimiento: '$tipoMovimiento',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -2281,7 +2384,10 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                 { $match: { ...filtroFinanzas, naturaleza: 'Egreso' } },
                 {
                     $group: {
-                        _id: '$categoria',
+                        _id: {
+                            categoria: '$categoria',
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
+                        },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
                     }
@@ -2295,7 +2401,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                     $group: {
                         _id: {
                             anio: { $year: '$fecha' },
-                            mes: { $month: '$fecha' }
+                            mes: { $month: '$fecha' },
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
                         },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
@@ -2309,7 +2416,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                     $group: {
                         _id: {
                             anio: { $year: '$fecha' },
-                            mes: { $month: '$fecha' }
+                            mes: { $month: '$fecha' },
+                            moneda: { $ifNull: ['$moneda', 'CRC'] }
                         },
                         total: { $sum: '$monto' },
                         cantidad: { $sum: 1 }
@@ -2363,29 +2471,34 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             },
             finanzas: {
                 porNaturaleza: finanzasPorNaturaleza.map((item) => ({
-                    naturaleza: item._id || 'Sin definir',
+                    naturaleza: item._id.naturaleza || 'Sin definir',
+                    moneda: normalizarMoneda(item._id.moneda),
                     total: item.total,
                     cantidad: item.cantidad
                 })),
                 porTipo: finanzasPorTipo.map((item) => ({
-                    tipoMovimiento: item._id || 'Sin definir',
+                    tipoMovimiento: item._id.tipoMovimiento || 'Sin definir',
+                    moneda: normalizarMoneda(item._id.moneda),
                     total: item.total,
                     cantidad: item.cantidad
                 })),
                 porCategoria: finanzasPorCategoria.map((item) => ({
-                    categoria: item._id || 'Sin definir',
+                    categoria: item._id.categoria || 'Sin definir',
+                    moneda: normalizarMoneda(item._id.moneda),
                     total: item.total,
                     cantidad: item.cantidad
                 })),
                 porMes: finanzasPorMes.map((item) => ({
                     anio: item._id.anio,
                     mes: item._id.mes,
+                    moneda: normalizarMoneda(item._id.moneda),
                     total: item.total,
                     cantidad: item.cantidad
                 })),
                 gastosPorMes: gastosPorMes.map((item) => ({
                     anio: item._id.anio,
                     mes: item._id.mes,
+                    moneda: normalizarMoneda(item._id.moneda),
                     total: item.total,
                     cantidad: item.cantidad
                 }))

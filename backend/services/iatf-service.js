@@ -6,6 +6,7 @@ const EjecucionPasoIATF = require('../models/EjecucionPasoIATF');
 const EventoCampanaIATF = require('../models/EventoCampanaIATF');
 const Finca = require('../models/Finca');
 const { InsumoReproductivo } = require('../models/InsumoReproductivo');
+const { consumirSemen } = require('./semen-reproductivo-service');
 const Lote = require('../models/Lote');
 const PertenenciaLote = require('../models/PertenenciaLote');
 const { PlantillaProtocoloIATF } = require('../models/PlantillaProtocoloIATF');
@@ -365,6 +366,9 @@ const consumirInsumos = async ({ productos = [], tipoAccion, session }) => {
         if (!(cantidad > 0)) throw errorIatf('La cantidad utilizada debe ser mayor que cero.');
         const actual = await InsumoReproductivo.findById(uso.producto).session(session);
         if (!actual || !actual.activo) throw errorIatf('Inventario insuficiente o insumo no disponible.', 422, 'IATF_STOCK_INSUFICIENTE');
+        if (actual.categoria === 'SEMEN') {
+            throw errorIatf('El semen se descuenta al confirmar la inseminacion, no desde un paso generico.', 422, 'IATF_SEMEN_DOUBLE_CONSUMPTION');
+        }
         const esReutilizable = actual.categoria === 'DISPOSITIVO_REPRODUCTIVO' && actual.tipoDispositivo === 'REUTILIZABLE_CONTROLADO';
         const esRetiro = tipoAccion === 'RETIRAR_DISPOSITIVO';
         let filtro = { _id: uso.producto, activo: true };
@@ -522,13 +526,14 @@ const registrarIATF = async ({ campanaId, datos, usuarioId, rolUsuario }) => {
                 if (!animalesConPasoEjecutado.has(idTexto(participante.animal))) {
                     throw errorIatf('Primero registra la ejecución del paso IATF para los animales seleccionados.', 409, 'IATF_PASO_NO_EJECUTADO');
                 }
-                const semen = await InsumoReproductivo.findOneAndUpdate(
-                    { _id: item.semen, categoria: 'SEMEN', activo: true, cantidadDisponible: { $gte: 1 } },
-                    { $inc: { cantidadDisponible: -1 } },
-                    { new: true, session }
-                );
-                if (!semen) throw errorIatf('No hay pajuelas disponibles para una de las inseminaciones.', 422, 'IATF_SEMEN_INSUFICIENTE');
                 const fecha = new Date(item.fechaHoraReal || datos.fechaHoraReal || new Date());
+                const consumoSemen = await consumirSemen({
+                    semenId: item.semen,
+                    cantidad: item.cantidadPajuelas ?? 1,
+                    fechaInseminacion: fecha,
+                    session
+                });
+                const semen = consumoSemen.insumo;
                 const diasGestacion = await obtenerDuracionGestacionBovina({ fincaId: campana.fincaId, session });
                 let ciclo = await RegistroReproductivo.findOne({ animal: participante.animal, estadoCiclo: 'Activo', activoParaAlertas: true }).session(session);
                 if (ciclo && idTexto(ciclo.campanaIATF) !== idTexto(campana._id)) throw errorIatf('El animal ya tiene un ciclo reproductivo activo. Ciérralo antes de registrar la IATF.', 409);
@@ -539,6 +544,9 @@ const registrarIATF = async ({ campanaId, datos, usuarioId, rolUsuario }) => {
                     tipoInseminacion: 'IATF',
                     campanaIATF: campana._id,
                     origenGestacion: 'IATF',
+                    semenUtilizado: semen._id,
+                    semenSnapshot: consumoSemen.snapshot,
+                    cantidadPajuelas: consumoSemen.cantidad,
                     fechaInseminacion: fecha,
                     fechaMonta: fecha,
                     fechaPartoEstimada: undefined,
@@ -801,9 +809,21 @@ const listarProtocolos = (incluirInactivos = false) => PlantillaProtocoloIATF.fi
     ]
 }).sort({ nombre: 1 });
 const listarInsumos = (incluirInactivos = false) => InsumoReproductivo.find(incluirInactivos ? {} : { activo: true }).sort({ categoria: 1, nombre: 1 });
-const guardarInsumo = async ({ id, datos, usuarioId }) => id
-    ? InsumoReproductivo.findByIdAndUpdate(id, limpiarDatosInsumo(datos), { new: true, runValidators: true })
-    : InsumoReproductivo.create({ ...limpiarDatosInsumo(datos), creadoPor: usuarioId });
+const guardarInsumo = async ({ id, datos, usuarioId }) => {
+    const limpios = limpiarDatosInsumo(datos);
+    const existente = id ? await InsumoReproductivo.findById(id) : null;
+    const categoria = limpios.categoria || existente?.categoria;
+    if (categoria === 'SEMEN') {
+        ['cantidadDisponible', 'cantidadEnUso'].forEach((campo) => {
+            if (limpios[campo] !== undefined && (!Number.isInteger(Number(limpios[campo])) || Number(limpios[campo]) < 0)) {
+                throw errorIatf('Las existencias de semen deben registrarse como pajuelas enteras.', 422, 'SEMEN_QUANTITY_INVALID');
+            }
+        });
+    }
+    return id
+        ? InsumoReproductivo.findByIdAndUpdate(id, limpios, { new: true, runValidators: true })
+        : InsumoReproductivo.create({ ...limpios, creadoPor: usuarioId });
+};
 
 const consolidarMetricas = async ({ fincasAutorizadas = [] }) => {
     const filtro = fincasAutorizadas.length ? { fincaId: { $in: fincasAutorizadas } } : {};

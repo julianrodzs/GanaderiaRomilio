@@ -36,7 +36,8 @@ const construirPrefijoCodigoLote = (especie, proposito, fecha = new Date()) => {
     return `${especieCodigo}-${ABREVIATURAS_PROPOSITO[proposito] || 'OTR'}-${anio}`;
 };
 
-const crearLoteRapido = async ({ nombre, especie, proposito, fechaInicio }, usuarioId) => {
+const crearLoteRapido = async ({ nombre, especie, proposito, fechaInicio }, usuarioId, opciones = {}) => {
+    const { session } = opciones;
     const nombreLimpio = String(nombre || '').trim();
     const propositoNormalizado = normalizarPropositoLote(proposito);
     if (!nombreLimpio) throw crearError('Indica el nombre del lote.');
@@ -46,17 +47,18 @@ const crearLoteRapido = async ({ nombre, especie, proposito, fechaInicio }, usua
     const prefijo = construirPrefijoCodigoLote(especie, propositoNormalizado, fechaInicio);
     let lote;
     for (let intento = 0; intento < 5 && !lote; intento += 1) {
-        const ultimo = await Lote.findOne({ codigo: { $regex: `^${prefijo}-\\d{3}$` } }).sort({ codigo: -1 }).select('codigo').lean();
+        const ultimo = await Lote.findOne({ codigo: { $regex: `^${prefijo}-\\d{3}$` } }).sort({ codigo: -1 }).select('codigo').session(session || null).lean();
         const consecutivo = Number(ultimo?.codigo?.split('-').at(-1) || 0) + 1;
         try {
-            lote = await Lote.create({
+            const creados = await Lote.create([{
                 codigo: `${prefijo}-${String(consecutivo).padStart(3, '0')}`,
                 nombre: nombreLimpio,
                 especie,
                 proposito: propositoNormalizado,
                 fechaInicio: fechaInicio || new Date(),
                 creadoPor: usuarioId
-            });
+            }], session ? { session } : {});
+            [lote] = creados;
         } catch (error) {
             if (error?.code !== 11000 || intento === 4) throw error;
         }
@@ -68,22 +70,30 @@ const crearLoteRapido = async ({ nombre, especie, proposito, fechaInicio }, usua
         titulo: 'Lote creado desde compra',
         descripcion: lote.nombre,
         fecha: lote.fechaInicio,
-        usuarioId
+        usuarioId,
+        session
     });
     return lote;
 };
 
-const registrarEventoOperativoLote = (datos) => EventoLote.create({
-    lote: datos.lote,
-    tipo: datos.tipo,
-    fecha: datos.fecha || new Date(),
-    titulo: datos.titulo,
-    descripcion: datos.descripcion,
-    referenciaId: datos.referenciaId,
-    entidadTipo: datos.entidadTipo,
-    registradoPor: datos.usuarioId,
-    metadata: datos.metadata || {}
-});
+const registrarEventoOperativoLote = async (datos) => {
+    const documento = {
+        lote: datos.lote,
+        tipo: datos.tipo,
+        fecha: datos.fecha || new Date(),
+        titulo: datos.titulo,
+        descripcion: datos.descripcion,
+        referenciaId: datos.referenciaId,
+        entidadTipo: datos.entidadTipo,
+        registradoPor: datos.usuarioId,
+        metadata: datos.metadata || {}
+    };
+    if (datos.session) {
+        const creados = await EventoLote.create([documento], { session: datos.session });
+        return creados[0];
+    }
+    return EventoLote.create(documento);
+};
 
 const validarAnimalParaLote = (animal, lote) => {
     if (!animal) throw crearError('Animal no encontrado.', 404, 'ANIMAL_NO_ENCONTRADO');
@@ -98,7 +108,7 @@ const validarAnimalParaLote = (animal, lote) => {
     }
 };
 
-const registrarEventoLote = ({ animal, lote, pertenencia, titulo, descripcion, usuarioId, metadata = {} }) => (
+const registrarEventoLote = ({ animal, lote, pertenencia, titulo, descripcion, usuarioId, metadata = {}, session }) => (
     upsertEventoAnimal({
         animal: animal._id,
         tipoEvento: 'Cambio de lote',
@@ -109,7 +119,7 @@ const registrarEventoLote = ({ animal, lote, pertenencia, titulo, descripcion, u
         referenciaId: pertenencia?._id,
         creadoPor: usuarioId,
         metadata: { loteId: lote?._id, codigoLote: lote?.codigo, ...metadata }
-    })
+    }, { session })
 );
 
 const cambiarEtapa = async (loteId, etapa, usuarioId, fechaCambio = new Date()) => {
@@ -144,40 +154,43 @@ const obtenerLote = async (loteId) => {
     return lote;
 };
 
-const cerrarPertenencia = async (pertenencia, { fechaSalida = new Date(), motivoSalida, usuarioId, lote }) => {
+const cerrarPertenencia = async (pertenencia, { fechaSalida = new Date(), motivoSalida, usuarioId, lote, session }) => {
     pertenencia.activo = false;
     pertenencia.fechaSalida = fechaSalida;
     pertenencia.motivoSalida = motivoSalida || 'Salida del lote';
-    await pertenencia.save();
-    const animal = await Animal.findById(pertenencia.animal);
+    await pertenencia.save(session ? { session } : {});
+    const animal = await Animal.findById(pertenencia.animal).session(session || null);
     if (animal && String(animal.loteActual || '') === String(pertenencia.lote)) {
         animal.loteActual = null;
-        await animal.save();
+        await animal.save(session ? { session } : {});
     }
     if (animal) {
         await registrarEventoLote({
             animal,
-            lote: lote || await Lote.findById(pertenencia.lote),
+            lote: lote || await Lote.findById(pertenencia.lote).session(session || null),
             pertenencia,
             titulo: 'Salida de lote',
             descripcion: pertenencia.motivoSalida,
             usuarioId,
-            metadata: { fecha: fechaSalida, accion: 'SALIDA' }
+            metadata: { fecha: fechaSalida, accion: 'SALIDA' },
+            session
         });
     }
     return pertenencia;
 };
 
-const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId) => {
-    const lote = await obtenerLote(loteId);
+const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
+    const { session } = opciones;
+    const lote = await Lote.findById(loteId).session(session || null);
+    if (!lote) throw crearError('Lote no encontrado.', 404);
     if (lote.estado !== 'ACTIVO') throw crearError('Solo se pueden agregar animales a un lote activo.', 409);
     const ids = [...new Set((datos.animales || []).map(String))];
     if (!ids.length) throw crearError('Selecciona al menos un animal.');
-    const animales = await Animal.find({ _id: { $in: ids } });
+    const animales = await Animal.find({ _id: { $in: ids } }).session(session || null);
     if (animales.length !== ids.length) throw crearError('Uno o más animales no existen.', 404);
     animales.forEach((animal) => validarAnimalParaLote(animal, lote));
 
-    const activas = await PertenenciaLote.find({ animal: { $in: ids }, activo: true }).populate('lote', 'codigo nombre');
+    const activas = await PertenenciaLote.find({ animal: { $in: ids }, activo: true }).populate('lote', 'codigo nombre').session(session || null);
     if (activas.length && !datos.permitirMover) {
         throw crearError('Uno o más animales ya pertenecen a un lote activo. Usa la acción Mover.', 409, 'ANIMAL_CON_LOTE_ACTIVO');
     }
@@ -194,18 +207,20 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId) => {
                 fechaSalida: datos.fechaEntrada || new Date(),
                 motivoSalida: datos.motivoSalida || `Movido al lote ${lote.codigo}`,
                 usuarioId,
-                lote: anterior.lote
+                lote: anterior.lote,
+                session
             });
         }
-        const pertenencia = await PertenenciaLote.create({
+        const pertenencias = await PertenenciaLote.create([{
             animal: animal._id,
             lote: lote._id,
             fechaEntrada: datos.fechaEntrada || new Date(),
             motivoEntrada: datos.motivoEntrada || (anterior ? 'Movimiento entre lotes' : 'Ingreso al lote'),
             registradoPor: usuarioId
-        });
+        }], session ? { session } : {});
+        const [pertenencia] = pertenencias;
         animal.loteActual = lote._id;
-        await animal.save();
+        await animal.save(session ? { session } : {});
         await registrarEventoLote({
             animal,
             lote,
@@ -215,7 +230,8 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId) => {
                 ? `Movido de ${anterior.lote?.codigo || 'otro lote'} a ${lote.codigo}.`
                 : `Ingresó al lote ${lote.codigo}.`,
             usuarioId,
-            metadata: { accion: anterior ? 'MOVIMIENTO' : 'ENTRADA', loteAnteriorId: anterior?.lote?._id }
+            metadata: { accion: anterior ? 'MOVIMIENTO' : 'ENTRADA', loteAnteriorId: anterior?.lote?._id },
+            session
         });
         resultados.push(pertenencia);
     }

@@ -16,5 +16,7 @@ const costoSchema = new Schema(
 );
 
 costoSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+costoSchema.statics.esModeloLegado = true;
+costoSchema.statics.modeloReemplazo = 'MovimientoFinanciero';
 
 module.exports = model('Costo', costoSchema);

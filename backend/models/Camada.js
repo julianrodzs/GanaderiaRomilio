@@ -3,6 +3,10 @@ const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugi
 
 const ESTADOS_CAMADA = ['Activa', 'Destetada', 'Vendida', 'Cerrada', 'Cancelada'];
 const DESTINOS_CAMADA = ['Se quedan', 'Se venden', 'Engorde', 'Mixto', 'No definido'];
+const enteroNoNegativo = {
+    validator: Number.isInteger,
+    message: '{PATH} debe ser un numero entero no negativo'
+};
 
 const camadaSchema = new Schema(
     {
@@ -13,15 +17,18 @@ const camadaSchema = new Schema(
         fechaNacimiento: { type: Date, required: true },
         fechaDesteteEstimada: { type: Date },
         fechaDesteteReal: { type: Date },
-        nacidosTotales: { type: Number, min: 0, default: 0 },
-        nacidosVivos: { type: Number, min: 0, default: 0 },
-        nacidosMuertos: { type: Number, min: 0, default: 0 },
-        momias: { type: Number, min: 0, default: 0 },
-        destetados: { type: Number, min: 0, default: 0 },
-        muertosPreDestete: { type: Number, min: 0, default: 0 },
-        criasParaFinca: { type: Number, min: 0, default: 0 },
-        criasParaVenta: { type: Number, min: 0, default: 0 },
-        criasParaEngorde: { type: Number, min: 0, default: 0 },
+        nacidosTotales: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        nacidosVivos: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        nacidosMuertos: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        momias: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        destetados: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        muertosPreDestete: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        criasParaFinca: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        criasParaVenta: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        criasParaEngorde: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        criasIndividualizadas: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        criasVendidas: { type: Number, min: 0, default: 0, validate: enteroNoNegativo },
+        controlPoblacionInicializado: { type: Boolean, default: false },
         destino: { type: String, enum: DESTINOS_CAMADA, default: 'No definido' },
         estado: { type: String, enum: ESTADOS_CAMADA, default: 'Activa' },
         pesoPromedioNacimiento: { type: Number, min: 0 },

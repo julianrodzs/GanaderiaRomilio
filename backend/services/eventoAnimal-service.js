@@ -30,9 +30,9 @@ const upsertEventoAnimal = async (datosEvento, opciones = {}) => {
     );
 };
 
-const eliminarEventosPorReferencia = async ({ moduloOrigen, referenciaId }) => {
+const eliminarEventosPorReferencia = async ({ moduloOrigen, referenciaId, session }) => {
     if (!moduloOrigen || !referenciaId) return;
-    await EventoAnimal.deleteMany({ moduloOrigen, referenciaId });
+    await EventoAnimal.deleteMany({ moduloOrigen, referenciaId }, session ? { session } : {});
 };
 
 module.exports = {

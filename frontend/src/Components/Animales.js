@@ -23,7 +23,13 @@ import {
   registrarDesteteCamada,
   subirFotoPrincipalAnimal
 } from '../services/api';
-import { guardarInventarioOffline, obtenerInventarioOffline } from '../services/offlineStorage';
+import {
+  guardarCambiosPendientes,
+  guardarEventosAnimalOffline,
+  guardarInventarioOffline,
+  obtenerEventosAnimalOffline,
+  obtenerInventarioOffline
+} from '../services/offlineStorage';
 import FormularioAnimal from './FormularioAnimal';
 import FormularioCamada from './FormularioCamada';
 import FormularioEstadoSanitario from './FormularioEstadoSanitario';
@@ -38,6 +44,28 @@ import { usePlan } from '../context/PlanContext';
 import { useApariencia } from '../context/AparienciaContext';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
+const LIMITE_EVENTOS_BITACORA = 20;
+
+const fechaHoraLocalInput = (fecha = new Date()) => {
+  const desplazamiento = fecha.getTimezoneOffset() * 60 * 1000;
+  return new Date(fecha.getTime() - desplazamiento).toISOString().slice(0, 16);
+};
+
+const obtenerSesionLocal = () => {
+  try {
+    return JSON.parse(localStorage.getItem('ganaderiaSesion') || 'null');
+  } catch (error) {
+    return null;
+  }
+};
+
+const combinarEventos = (actuales, nuevos) => {
+  const porId = new Map();
+  [...actuales, ...nuevos].forEach((evento) => porId.set(String(evento._id), evento));
+  return [...porId.values()].sort((a, b) => (
+    new Date(b.fecha || b.createdAt || 0) - new Date(a.fecha || a.createdAt || 0)
+  ));
+};
 
 const formatearEdad = (fechaNacimiento) => {
   const meses = calcularEdadMeses(fechaNacimiento);
@@ -64,6 +92,48 @@ const formatearFecha = (fecha) => {
     month: '2-digit',
     day: '2-digit'
   });
+};
+
+const formatearFechaHora = (fecha) => {
+  if (!fecha) return '--';
+  return new Date(fecha).toLocaleString('es-CR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+const etiquetaAutorEvento = (evento) => {
+  const autor = evento?.creadoPor;
+  if (!autor || typeof autor !== 'object') return evento?.pendienteSincronizacion ? 'Pendiente de sincronizar' : 'Sistema';
+  const nombre = [autor.nombre, autor.apellido].filter(Boolean).join(' ') || autor.correo || 'Usuario';
+  return autor.rol ? `${nombre} · ${autor.rol}` : nombre;
+};
+
+const etiquetaFincaEvento = (evento) => {
+  const finca = evento?.fincaId;
+  if (!finca || typeof finca !== 'object') return 'Finca no identificada';
+  return finca.nombre || finca.codigo || 'Finca no identificada';
+};
+
+const VISTA_POR_MODULO_EVENTO = {
+  Pesajes: 'Pesajes',
+  Sanidad: 'Sanidad',
+  Reproduccion: 'Reproduccion',
+  Compras: 'Compras',
+  Ventas: 'Ventas',
+  Lotes: 'Inventario',
+  Inventario: 'Inventario',
+  Fincas: 'Inventario'
+};
+
+const formatearDatoEvento = (valor) => {
+  if (valor === null || valor === undefined || valor === '') return '--';
+  if (typeof valor === 'boolean') return valor ? 'Sí' : 'No';
+  if (typeof valor === 'object') return JSON.stringify(valor);
+  return String(valor);
 };
 
 const calcularDiasDestete = (animal) => {
@@ -257,7 +327,13 @@ const filtrosCamadas = [
   { id: 'destino', accessor: (camada) => camada.destino }
 ];
 
-const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavegar }) => {
+const Animales = ({
+  soloLectura = false,
+  puedeGestionarSanidad = false,
+  puedeCrearNotaBitacora = false,
+  estaOnline = true,
+  onNavegar
+}) => {
   const { capacidadDisponible, tieneFeature } = usePlan();
   const { almacenamientoDisponible } = useApariencia();
   const [animales, setAnimales] = useState([]);
@@ -276,6 +352,13 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
   const [eventosCamada, setEventosCamada] = useState([]);
   const [animalDetalle, setAnimalDetalle] = useState(null);
   const [eventosAnimal, setEventosAnimal] = useState([]);
+  const [paginacionEventos, setPaginacionEventos] = useState({
+    pagina: 1,
+    limite: LIMITE_EVENTOS_BITACORA,
+    total: 0,
+    hayMas: false
+  });
+  const [eventoDetalle, setEventoDetalle] = useState(null);
   const [historialFincasAnimal, setHistorialFincasAnimal] = useState([]);
   const [pesajesAnimal, setPesajesAnimal] = useState([]);
   const [arbolGenealogico, setArbolGenealogico] = useState(null);
@@ -289,6 +372,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
   const [errorPesajes, setErrorPesajes] = useState('');
   const [errorGenealogia, setErrorGenealogia] = useState('');
   const [observacionManual, setObservacionManual] = useState('');
+  const [fechaObservacionManual, setFechaObservacionManual] = useState(fechaHoraLocalInput);
   const [guardandoEvento, setGuardandoEvento] = useState(false);
   const [cambiandoEstadoSanitario, setCambiandoEstadoSanitario] = useState(false);
   const [errorEstadoSanitario, setErrorEstadoSanitario] = useState('');
@@ -461,18 +545,66 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
     setErrorEventosCamada('');
   };
 
-  const cargarEventosAnimal = async (animalId) => {
+  const cargarEventosAnimal = async (animalId, opciones = {}) => {
+    const pagina = opciones.pagina || 1;
+    const acumular = opciones.acumular === true;
     try {
       setCargandoEventos(true);
       setErrorEventos('');
-      const eventos = await obtenerEventosAnimal(animalId);
-      setEventosAnimal(eventos);
+      if (!estaOnline || !navigator.onLine) throw new Error('Sin conexión');
+
+      const respuesta = await obtenerEventosAnimal(animalId, {
+        pagina,
+        limite: LIMITE_EVENTOS_BITACORA
+      });
+      const nuevos = Array.isArray(respuesta) ? respuesta : respuesta.eventos || [];
+      const combinados = acumular ? combinarEventos(eventosAnimal, nuevos) : nuevos;
+      setEventosAnimal(combinados);
+      setPaginacionEventos(respuesta.paginacion || {
+        pagina,
+        limite: LIMITE_EVENTOS_BITACORA,
+        total: combinados.length,
+        hayMas: false
+      });
+      await guardarEventosAnimalOffline(animalId, combinados).catch(() => {});
     } catch (err) {
-      setErrorEventos(err.message);
+      if (pagina === 1) {
+        const eventosGuardados = await obtenerEventosAnimalOffline(animalId).catch(() => []);
+        setEventosAnimal(eventosGuardados);
+        setPaginacionEventos({
+          pagina: 1,
+          limite: LIMITE_EVENTOS_BITACORA,
+          total: eventosGuardados.length,
+          hayMas: false
+        });
+        setErrorEventos(eventosGuardados.length
+          ? 'Sin conexión. Mostrando la bitácora guardada en este dispositivo.'
+          : err.message);
+      } else {
+        setErrorEventos(err.message);
+      }
     } finally {
       setCargandoEventos(false);
     }
   };
+
+  const cargarMasEventos = () => {
+    if (!animalDetalle?._id || !paginacionEventos.hayMas || cargandoEventos) return;
+    cargarEventosAnimal(animalDetalle._id, {
+      pagina: paginacionEventos.pagina + 1,
+      acumular: true
+    });
+  };
+
+  useEffect(() => {
+    const recargarTrasSincronizar = () => {
+      if (animalDetalle?._id && navigator.onLine) {
+        cargarEventosAnimal(animalDetalle._id);
+      }
+    };
+    window.addEventListener('ganaderiaOfflineSincronizado', recargarTrasSincronizar);
+    return () => window.removeEventListener('ganaderiaOfflineSincronizado', recargarTrasSincronizar);
+  }, [animalDetalle?._id, estaOnline]);
 
   const cargarPesajesAnimal = async (animalId) => {
     try {
@@ -507,14 +639,19 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
   const abrirDetalleAnimal = async (animal) => {
     setAnimalDetalle(animal);
     setObservacionManual('');
+    setFechaObservacionManual(fechaHoraLocalInput());
     setEventosAnimal([]);
+    setPaginacionEventos({ pagina: 1, limite: LIMITE_EVENTOS_BITACORA, total: 0, hayMas: false });
+    setEventoDetalle(null);
     setPesajesAnimal([]);
     setArbolGenealogico(null);
     setDescendenciaAnimal(null);
     setHistorialFincasAnimal([]);
     setErrorFoto('');
     const [detalle] = await Promise.all([
-      obtenerAnimal(animal._id),
+      estaOnline && navigator.onLine
+        ? obtenerAnimal(animal._id).catch(() => animal)
+        : Promise.resolve(animal),
       cargarEventosAnimal(animal._id),
       cargarPesajesAnimal(animal._id),
       cargarGenealogiaAnimal(animal._id),
@@ -528,11 +665,14 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
   const cerrarDetalleAnimal = () => {
     setAnimalDetalle(null);
     setEventosAnimal([]);
+    setPaginacionEventos({ pagina: 1, limite: LIMITE_EVENTOS_BITACORA, total: 0, hayMas: false });
+    setEventoDetalle(null);
     setPesajesAnimal([]);
     setArbolGenealogico(null);
     setDescendenciaAnimal(null);
     setHistorialFincasAnimal([]);
     setObservacionManual('');
+    setFechaObservacionManual(fechaHoraLocalInput());
     setErrorEventos('');
     setErrorPesajes('');
     setErrorGenealogia('');
@@ -604,19 +744,60 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
     evento.preventDefault();
     if (!observacionManual.trim() || !animalDetalle?._id) return;
 
+    const fecha = fechaObservacionManual
+      ? new Date(fechaObservacionManual).toISOString()
+      : new Date().toISOString();
+    const payload = {
+      animal: animalDetalle._id,
+      tipoEvento: 'Observacion',
+      fecha,
+      titulo: 'Observación manual',
+      descripcion: observacionManual.trim(),
+      moduloOrigen: 'Manual'
+    };
+    const idempotencyKey = globalThis.crypto?.randomUUID?.()
+      || `nota-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
     try {
       setGuardandoEvento(true);
       setErrorEventos('');
-      await crearEventoAnimal({
-        animal: animalDetalle._id,
-        tipoEvento: 'Observacion',
-        fecha: new Date().toISOString(),
-        titulo: 'Observación manual',
-        descripcion: observacionManual.trim(),
-        moduloOrigen: 'Manual'
-      });
+
+      if (estaOnline && navigator.onLine) {
+        await crearEventoAnimal(payload, { idempotencyKey });
+      } else {
+        const cambio = await guardarCambiosPendientes({
+          tipo: 'crear-nota-bitacora',
+          referenciaId: animalDetalle._id,
+          idempotencyKey,
+          payload,
+          titulo: 'Nota de bitácora',
+          descripcion: `Nota de bitácora · ${animalDetalle.diio || animalDetalle.nombre || 'animal'}`
+        });
+        const sesion = obtenerSesionLocal();
+        const usuario = sesion?.usuario || {};
+        const finca = sesion?.fincaActiva || sesion?.finca || {};
+        const eventoLocal = {
+          ...payload,
+          _id: `offline-${cambio.id}`,
+          creadoPor: {
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+            correo: usuario.correo,
+            rol: usuario.rol || sesion?.rol
+          },
+          fincaId: { nombre: finca.nombre, codigo: finca.codigo },
+          pendienteSincronizacion: true,
+          createdAt: new Date().toISOString()
+        };
+        const eventosActualizados = combinarEventos(eventosAnimal, [eventoLocal]);
+        setEventosAnimal(eventosActualizados);
+        setPaginacionEventos((actual) => ({ ...actual, total: actual.total + 1 }));
+        await guardarEventosAnimalOffline(animalDetalle._id, eventosActualizados);
+        setErrorEventos('Nota guardada en este dispositivo. Se sincronizará al recuperar conexión.');
+      }
       setObservacionManual('');
-      await cargarEventosAnimal(animalDetalle._id);
+      setFechaObservacionManual(fechaHoraLocalInput());
+      if (estaOnline && navigator.onLine) await cargarEventosAnimal(animalDetalle._id);
     } catch (err) {
       setErrorEventos(err.message);
     } finally {
@@ -1250,6 +1431,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
                     <thead>
                       <tr>
                         <th>Fecha</th>
+                        <th>Finca</th>
                         <th>Peso</th>
                         <th>Diferencia</th>
                         <th>Observaciones</th>
@@ -1259,6 +1441,7 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
                       {pesajesPagina.map((pesaje) => (
                         <tr key={pesaje._id}>
                           <td>{formatearFecha(pesaje.fecha)}</td>
+                          <td>{pesaje.fincaId?.nombre || pesaje.fincaId?.codigo || 'Sin finca histórica'}</td>
                           <td>{formatearPeso(pesaje.peso)}</td>
                           <td>
                             <span className={pesaje.diferencia >= 0 ? 'peso-diferencia positiva' : 'peso-diferencia negativa'}>
@@ -1284,8 +1467,18 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
                 </div>
               </div>
 
-              {!soloLectura && (
+              {puedeCrearNotaBitacora && (
                 <form className="bitacora-form" onSubmit={crearObservacionManual}>
+                  <label>
+                    Fecha y hora de la observación
+                    <input
+                      type="datetime-local"
+                      value={fechaObservacionManual}
+                      max={fechaHoraLocalInput()}
+                      onChange={(evento) => setFechaObservacionManual(evento.target.value)}
+                      required
+                    />
+                  </label>
                   <label>
                     Nueva observación
                     <textarea
@@ -1296,7 +1489,9 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
                     />
                   </label>
                   <button className="boton-primario compacto" type="submit" disabled={guardandoEvento || !observacionManual.trim()}>
-                    {guardandoEvento ? 'Guardando...' : 'Agregar observación'}
+                    {guardandoEvento
+                      ? 'Guardando...'
+                      : estaOnline ? 'Agregar observación' : 'Guardar para sincronizar'}
                   </button>
                 </form>
               )}
@@ -1318,18 +1513,25 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
                 {eventosAnimal.map((evento) => (
                   <article className="bitacora-evento" key={evento._id}>
                     <div className="bitacora-fecha">
-                      <strong>{formatearFecha(evento.fecha)}</strong>
+                      <strong>{formatearFechaHora(evento.fecha)}</strong>
                       <span>{evento.moduloOrigen || 'Manual'}</span>
                     </div>
                     <div className="bitacora-contenido">
-                      <span className="estado-badge estado-Gestante">{evento.tipoEvento}</span>
+                      <div className="bitacora-badges">
+                        <span className="estado-badge estado-Gestante">{evento.tipoEvento}</span>
+                        <span className="bitacora-finca-badge">{etiquetaFincaEvento(evento)}</span>
+                        {evento.pendienteSincronizacion && (
+                          <span className="bitacora-pendiente-badge">Pendiente de sincronizar</span>
+                        )}
+                      </div>
                       <h3>{evento.titulo}</h3>
                       {evento.descripcion && <p>{evento.descripcion}</p>}
-                      {evento.referenciaId && (
+                      <span className="bitacora-autor">Registrado por {etiquetaAutorEvento(evento)}</span>
+                      {(evento.referenciaId || evento.metadata) && (
                         <button
                           className="boton-link bitacora-referencia"
                           type="button"
-                          onClick={() => window.alert(`${evento.moduloOrigen}: ${evento.referenciaId}`)}
+                          onClick={() => setEventoDetalle(evento)}
                         >
                           Ver detalle
                         </button>
@@ -1338,7 +1540,62 @@ const Animales = ({ soloLectura = false, puedeGestionarSanidad = false, onNavega
                   </article>
                 ))}
               </div>
+              {paginacionEventos.hayMas && (
+                <div className="bitacora-cargar-mas">
+                  <button className="boton-secundario" type="button" onClick={cargarMasEventos} disabled={cargandoEventos}>
+                    {cargandoEventos ? 'Cargando...' : `Cargar más (${eventosAnimal.length} de ${paginacionEventos.total})`}
+                  </button>
+                </div>
+              )}
             </section>
+          </section>
+        </div>
+      )}
+      {eventoDetalle && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setEventoDetalle(null)}>
+          <section
+            className="modal-panel bitacora-detalle-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bitacora-detalle-titulo"
+            onMouseDown={(evento) => evento.stopPropagation()}
+          >
+            <div className="panel-title">
+              <div>
+                <p className="eyebrow">{eventoDetalle.moduloOrigen || 'Manual'}</p>
+                <h2 id="bitacora-detalle-titulo">{eventoDetalle.titulo}</h2>
+              </div>
+              <button className="boton-link" type="button" onClick={() => setEventoDetalle(null)}>Cerrar</button>
+            </div>
+            <div className="bitacora-detalle-resumen">
+              <article><span>Fecha y hora</span><strong>{formatearFechaHora(eventoDetalle.fecha)}</strong></article>
+              <article><span>Finca</span><strong>{etiquetaFincaEvento(eventoDetalle)}</strong></article>
+              <article><span>Autor</span><strong>{etiquetaAutorEvento(eventoDetalle)}</strong></article>
+              <article><span>Tipo</span><strong>{eventoDetalle.tipoEvento}</strong></article>
+            </div>
+            {eventoDetalle.descripcion && <p>{eventoDetalle.descripcion}</p>}
+            {eventoDetalle.metadata && Object.keys(eventoDetalle.metadata).length > 0 && (
+              <div className="bitacora-metadata">
+                {Object.entries(eventoDetalle.metadata).map(([clave, valor]) => (
+                  <article key={clave}>
+                    <span>{clave.replaceAll(/([A-Z])/g, ' $1')}</span>
+                    <strong>{formatearDatoEvento(valor)}</strong>
+                  </article>
+                ))}
+              </div>
+            )}
+            <div className="modal-actions">
+              {onNavegar && VISTA_POR_MODULO_EVENTO[eventoDetalle.moduloOrigen] && (
+                <button
+                  className="boton-secundario"
+                  type="button"
+                  onClick={() => onNavegar(VISTA_POR_MODULO_EVENTO[eventoDetalle.moduloOrigen])}
+                >
+                  Ir al módulo
+                </button>
+              )}
+              <button className="boton-primario" type="button" onClick={() => setEventoDetalle(null)}>Cerrar</button>
+            </div>
           </section>
         </div>
       )}

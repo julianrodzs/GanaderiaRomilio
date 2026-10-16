@@ -7,7 +7,7 @@ const { sincronizarTareasPorcinas } = require('./reproduccionPorcina-service');
 const ESTADOS_CIERRE = ['Cerrado', 'Cancelado', 'No preñada'];
 const CANCELACION_POR_CIERRE = 'CIERRE_CICLO_REPRODUCTIVO';
 
-const obtenerCicloActivoPorAnimal = (animalId, excluirId = null) => {
+const obtenerCicloActivoPorAnimal = (animalId, excluirId = null, session = null) => {
     const filtro = {
         animal: animalId,
         $and: [
@@ -20,7 +20,8 @@ const obtenerCicloActivoPorAnimal = (animalId, excluirId = null) => {
         filtro._id = { $ne: excluirId };
     }
 
-    return RegistroReproductivo.findOne(filtro).populate('animal');
+    const consulta = RegistroReproductivo.findOne(filtro).populate('animal');
+    return session ? consulta.session(session) : consulta;
 };
 
 const cancelarTareasAutomaticasDelCiclo = async (cicloId, motivo = 'Cancelada por cierre de ciclo reproductivo', origen = 'SINCRONIZACION_REPRODUCTIVA') => {
@@ -235,8 +236,8 @@ const marcarCicloNoPrenada = (cicloId, motivo, usuarioId) => cambiarEstadoCiclo(
     usuarioId
 });
 
-const crearNuevoCicloReproductivo = async ({ data, animal, usuarioId, cerrarCicloAnterior = false }) => {
-    const cicloActivo = await obtenerCicloActivoPorAnimal(animal._id);
+const crearNuevoCicloReproductivo = async ({ data, animal, usuarioId, cerrarCicloAnterior = false, session = null }) => {
+    const cicloActivo = await obtenerCicloActivoPorAnimal(animal._id, null, session);
 
     if (cicloActivo && !cerrarCicloAnterior) {
         const error = new Error('El animal ya tiene un ciclo reproductivo activo');
@@ -260,7 +261,7 @@ const crearNuevoCicloReproductivo = async ({ data, animal, usuarioId, cerrarCicl
         especie: animal.especie || data.especie || 'Bovino',
         estadoCiclo: 'Activo',
         activoParaAlertas: true
-    }).save();
+    }).save({ session });
 };
 
 module.exports = {

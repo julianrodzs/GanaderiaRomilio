@@ -138,6 +138,13 @@ const registroReproductivoSchema = new Schema(
         diasCeloPostDestetePorcino: { type: Number, min: 1, default: 5 },
         tipoRegistro: { type: String, enum: ['Inseminación/Monta', 'Monta', 'Inseminación'], default: 'Inseminación/Monta' },
         tipoInseminacion: { type: String, enum: ['IATF', 'IA_CONVENCIONAL'] },
+        semenUtilizado: { type: Schema.Types.ObjectId, ref: 'InsumoReproductivo' },
+        semenSnapshot: { type: Schema.Types.Mixed },
+        cantidadPajuelas: {
+            type: Number,
+            min: 1,
+            validate: { validator: Number.isInteger, message: 'La cantidad de pajuelas debe ser un numero entero' }
+        },
         campanaIATF: { type: Schema.Types.ObjectId, ref: 'CampanaIATF' },
         bandaReproductivaPorcina: { type: Schema.Types.ObjectId, ref: 'BandaReproductivaPorcina' },
         historialDiagnosticos: [{

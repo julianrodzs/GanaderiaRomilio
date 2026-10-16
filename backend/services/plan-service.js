@@ -1,4 +1,6 @@
 const Animal = require('../models/Animal');
+const Camada = require('../models/Camada');
+const VentaAnimal = require('../models/VentaAnimal');
 const Finca = require('../models/Finca');
 const { Membresia } = require('../models/Membresia');
 const Organizacion = require('../models/Organizacion');
@@ -62,9 +64,11 @@ const obtenerConsumoActualReserva = async ({ recurso, organizacionId, permiso, a
 
 const reservarCuotaPlan = async ({ organizacionId, recurso, cantidad = 1, actual, limite, permiso, duracionMs = 15 * 60 * 1000 }) => {
     const id = resolverOrganizacionId(organizacionId);
-    const solicitada = Math.max(Number(cantidad) || 1, 1);
+    const solicitada = Number(cantidad ?? 1);
+    if (!Number.isInteger(solicitada) || solicitada < 0) {
+        throw crearErrorPlan('PLAN_INVALID_QUOTA_AMOUNT', 'La cantidad solicitada para el cupo debe ser un entero no negativo.', {}, 422);
+    }
     if (limite === null || limite === undefined) return null;
-    const consumoActual = await obtenerConsumoActualReserva({ recurso, organizacionId: id, permiso, actual });
     const ahora = new Date();
     const token = randomUUID();
     try {
@@ -81,30 +85,42 @@ const reservarCuotaPlan = async ({ organizacionId, recurso, cantidad = 1, actual
         { organizacionId: id, recurso },
         { $pull: { reservas: { expiraEn: { $lte: ahora } } } }
     );
-    const reservada = await ReservaCuotaPlan.findOneAndUpdate(
-        {
-            organizacionId: id,
-            recurso,
-            $expr: {
-                $lte: [
-                    {
-                        $add: [
-                            Number(consumoActual || 0),
-                            solicitada,
-                            { $sum: { $map: { input: { $ifNull: ['$reservas', []] }, as: 'reserva', in: '$$reserva.cantidad' } } }
-                        ]
-                    },
-                    Number(limite)
+
+    let bloqueo = null;
+    for (let intento = 0; intento < 80 && !bloqueo; intento += 1) {
+        const fechaIntento = new Date();
+        bloqueo = await ReservaCuotaPlan.findOneAndUpdate(
+            {
+                organizacionId: id,
+                recurso,
+                $or: [
+                    { reservas: { $size: 0 } },
+                    { reservas: { $exists: false } }
                 ]
-            }
-        },
-        { $push: { reservas: { token, cantidad: solicitada, expiraEn: new Date(ahora.getTime() + duracionMs) } } },
-        { new: true }
-    );
-    if (!reservada) {
+            },
+            { $push: { reservas: { token, cantidad: solicitada, expiraEn: new Date(fechaIntento.getTime() + duracionMs) } } },
+            { new: true }
+        );
+        if (!bloqueo) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            await ReservaCuotaPlan.updateOne(
+                { organizacionId: id, recurso },
+                { $pull: { reservas: { expiraEn: { $lte: new Date() } } } }
+            );
+        }
+    }
+    if (!bloqueo) {
+        throw crearErrorPlan('PLAN_QUOTA_BUSY', 'El cupo esta siendo actualizado por otra operacion. Intenta nuevamente.', {
+            recurso
+        }, 409);
+    }
+
+    const consumoActual = await obtenerConsumoActualReserva({ recurso, organizacionId: id, permiso, actual });
+    if (Number(consumoActual || 0) + solicitada > Number(limite)) {
+        await liberarReservaCuotaPlan({ token, recurso, organizacionId: id });
         throw crearErrorPlan(`PLAN_${recurso.toUpperCase()}_LIMIT_REACHED`, `No hay cupo disponible para ${recurso}.`, {
             recurso, actual: consumoActual, limite, cantidadSolicitada: solicitada
-        });
+        }, 422);
     }
     return { token, recurso, organizacionId: id, cantidad: solicitada };
 };
@@ -195,6 +211,36 @@ const asegurarPuedeUsarEspecie = async (especie, organizacionId) => {
     return resultado;
 };
 
+const contarCriasColectivasVivas = async () => {
+    const camadas = await Camada.find({ estado: { $ne: 'Cancelada' } })
+        .setOptions({ omitirAislamientoFinca: true })
+        .select('_id nacidosVivos muertosPreDestete')
+        .lean();
+    if (!camadas.length) return 0;
+    const ids = camadas.map((camada) => camada._id);
+    const [individualizadas, vendidas] = await Promise.all([
+        Animal.aggregate([
+            { $match: { camadaOrigen: { $in: ids } } },
+            { $group: { _id: '$camadaOrigen', cantidad: { $sum: 1 } } }
+        ]).option({ omitirAislamientoFinca: true }),
+        VentaAnimal.aggregate([
+            { $match: { estado: { $ne: 'Anulada' }, 'camadas.camada': { $in: ids } } },
+            { $unwind: '$camadas' },
+            { $match: { 'camadas.camada': { $in: ids } } },
+            { $group: { _id: '$camadas.camada', cantidad: { $sum: '$camadas.cantidad' } } }
+        ]).option({ omitirAislamientoFinca: true })
+    ]);
+    const porIndividualizadas = new Map(individualizadas.map((item) => [String(item._id), Number(item.cantidad || 0)]));
+    const porVendidas = new Map(vendidas.map((item) => [String(item._id), Number(item.cantidad || 0)]));
+    return camadas.reduce((total, camada) => total + Math.max(
+        Number(camada.nacidosVivos || 0)
+            - Number(camada.muertosPreDestete || 0)
+            - (porIndividualizadas.get(String(camada._id)) || 0)
+            - (porVendidas.get(String(camada._id)) || 0),
+        0
+    ), 0);
+};
+
 const contarAnimalesActivos = async () => {
     const grupos = await Animal.aggregate([
         { $match: { estado: 'Activo' } },
@@ -206,8 +252,10 @@ const contarAnimalesActivos = async () => {
         }
     ]).option({ omitirAislamientoFinca: true });
     const bovinos = grupos.find((item) => item._id === 'Bovino')?.cantidad || 0;
-    const porcinos = grupos.find((item) => item._id === 'Porcino')?.cantidad || 0;
-    return { bovinos, porcinos, total: bovinos + porcinos };
+    const porcinosIndividuales = grupos.find((item) => item._id === 'Porcino')?.cantidad || 0;
+    const criasPorcinasColectivas = await contarCriasColectivasVivas();
+    const porcinos = porcinosIndividuales + criasPorcinasColectivas;
+    return { bovinos, porcinos, porcinosIndividuales, criasPorcinasColectivas, total: bovinos + porcinos };
 };
 
 const obtenerLimiteAnimales = (actual) => {
@@ -226,10 +274,21 @@ const puedeCrearAnimal = async ({ organizacionId, especie, cantidad = 1 } = {}) 
     const actual = especieDisponible;
     const uso = await contarAnimalesActivos();
     const limite = obtenerLimiteAnimales(actual);
-    const cantidadSolicitada = Math.max(Number(cantidad) || 1, 1);
     const usados = actual.configuracion.especies.modo === 'UNA_ESPECIE'
         ? (actual.especiePlan === 'Porcino' ? uso.porcinos : uso.bovinos)
         : uso.total;
+    const cantidadSolicitada = Number(cantidad ?? 1);
+    if (!Number.isInteger(cantidadSolicitada) || cantidadSolicitada < 0) {
+        return {
+            ...actual,
+            permitido: false,
+            code: 'PLAN_INVALID_QUOTA_AMOUNT',
+            message: 'La cantidad solicitada debe ser un entero no negativo.',
+            actual: usados,
+            limite,
+            cantidadSolicitada
+        };
+    }
     const sobreLimite = limite !== null && usados > limite;
     const permitido = limite === null || usados + cantidadSolicitada <= limite;
 
@@ -254,7 +313,7 @@ const asegurarPuedeCrearAnimal = async (datos) => {
             actual: resultado.actual,
             limite: resultado.limite,
             especiePermitida: resultado.especiePermitida
-        });
+        }, resultado.code === 'PLAN_ANIMAL_LIMIT_REACHED' || resultado.code === 'PLAN_INVALID_QUOTA_AMOUNT' ? 422 : 403);
     }
     return resultado;
 };
@@ -548,6 +607,7 @@ module.exports = {
     asegurarPuedeUsarEspecie,
     cambiarEspeciePlanEsencial,
     contarAnimalesActivos,
+    contarCriasColectivasVivas,
     contarFincasActivas,
     contarUsuariosActivos,
     crearErrorPlan,

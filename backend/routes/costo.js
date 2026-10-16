@@ -1,24 +1,9 @@
 const { Router } = require('express');
 const router = Router();
-const { autorizarPermiso } = require('../middleware/auth');
-const puedeVer = autorizarPermiso('finanzas.ver');
-const puedeGestionar = autorizarPermiso('finanzas.gestionar');
 
-const {
-    getCostos,
-    createCosto,
-    getCosto,
-    updateCosto,
-    deleteCosto
-} = require('../controllers/costo-controller');
-
-router.route('/')
-    .get(puedeVer, getCostos)
-    .post(puedeGestionar, createCosto);
-
-router.route('/:id')
-    .get(puedeVer, getCosto)
-    .put(puedeGestionar, updateCosto)
-    .delete(puedeGestionar, deleteCosto);
+router.use((req, res) => res.status(410).json({
+    mensaje: 'El registro independiente de costos fue retirado. Use Movimientos financieros para registrar ingresos y egresos.',
+    codigo: 'COSTOS_LEGACY_RETIRED'
+}));
 
 module.exports = router;

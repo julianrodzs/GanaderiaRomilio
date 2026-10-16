@@ -9,12 +9,26 @@ const CATEGORIAS_INSUMO_REPRODUCTIVO = [
     'OTRO'
 ];
 
+const cantidadValidaSegunCategoria = function validarCantidad(valor) {
+    return this.categoria !== 'SEMEN' || Number.isInteger(valor);
+};
+
 const insumoReproductivoSchema = new Schema({
     nombre: { type: String, required: true, trim: true },
     categoria: { type: String, enum: CATEGORIAS_INSUMO_REPRODUCTIVO, required: true },
     unidad: { type: String, required: true, trim: true },
-    cantidadDisponible: { type: Number, min: 0, default: 0 },
-    cantidadEnUso: { type: Number, min: 0, default: 0 },
+    cantidadDisponible: {
+        type: Number,
+        min: 0,
+        default: 0,
+        validate: { validator: cantidadValidaSegunCategoria, message: 'Las pajuelas disponibles deben ser un numero entero' }
+    },
+    cantidadEnUso: {
+        type: Number,
+        min: 0,
+        default: 0,
+        validate: { validator: cantidadValidaSegunCategoria, message: 'Las pajuelas en uso deben ser un numero entero' }
+    },
     costoUnitario: { type: Number, min: 0, default: 0 },
     moneda: { type: String, enum: ['CRC', 'USD'], default: 'CRC' },
     lote: { type: String, trim: true },
