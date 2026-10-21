@@ -117,6 +117,49 @@ const registrarEventoCierre = async ({ ciclo, estadoCiclo, motivo, usuarioId }) 
     });
 };
 
+const conciliarCicloVacioActivo = async ({ ciclo, usuarioId, session = null, motivo }) => {
+    if (!ciclo || ciclo.resultadoDiagnosticoGestacion !== 'VACIA') return false;
+
+    ciclo.estadoCiclo = 'No preñada';
+    ciclo.activoParaAlertas = false;
+    ciclo.gestacionConfirmada = false;
+    ciclo.fechaPartoEstimada = undefined;
+    ciclo.estado = 'Vacía';
+    ciclo.fechaCierre = new Date();
+    ciclo.motivoCierre = motivo || 'Ciclo vacío legado conciliado antes de registrar un nuevo servicio.';
+    await ciclo.save({ session });
+    await Tarea.updateMany(
+        {
+            moduloOrigen: 'Reproduccion',
+            referenciaId: ciclo._id,
+            creadoAutomaticamente: true,
+            estado: { $in: ['Pendiente', 'En proceso'] }
+        },
+        {
+            $set: {
+                estado: 'Cancelada',
+                observaciones: ciclo.motivoCierre,
+                cancelacionAutomaticaOrigen: 'CIERRE_CICLO_NO_PRENADA',
+                canceladaAutomaticamenteEn: new Date()
+            }
+        },
+        { session }
+    );
+    const animalId = typeof ciclo.animal === 'object' ? ciclo.animal._id : ciclo.animal;
+    await EventoAnimal.create([{
+        animal: animalId,
+        tipoEvento: 'Diagnostico de gestacion',
+        fecha: ciclo.fechaCierre,
+        titulo: 'Ciclo vacío conciliado',
+        descripcion: ciclo.motivoCierre,
+        moduloOrigen: 'Reproduccion',
+        referenciaId: ciclo._id,
+        creadoPor: usuarioId,
+        metadata: { estadoCiclo: 'No preñada', conciliacionAutomatica: true }
+    }], { session });
+    return true;
+};
+
 const cambiarEstadoCiclo = async ({ cicloId, estadoCiclo, motivo, usuarioId }) => {
     if (!ESTADOS_CIERRE.includes(estadoCiclo)) {
         throw new Error('Estado de ciclo no válido');
@@ -140,6 +183,20 @@ const cambiarEstadoCiclo = async ({ cicloId, estadoCiclo, motivo, usuarioId }) =
             ? 'Ciclo reproductivo finalizado'
             : `Ciclo reproductivo marcado como ${estadoCiclo}`
     );
+
+    if (estadoCiclo === 'No preñada') {
+        ciclo.resultadoDiagnosticoGestacion = 'VACIA';
+        ciclo.gestacionConfirmada = false;
+        ciclo.fechaPartoEstimada = undefined;
+        ciclo.estado = 'Vacía';
+        ciclo.fechaUltimoDiagnosticoGestacion = new Date();
+        ciclo.historialDiagnosticos.push({
+            fecha: ciclo.fechaUltimoDiagnosticoGestacion,
+            resultado: 'VACIA',
+            observaciones: ciclo.motivoCierre,
+            registradoPor: usuarioId
+        });
+    }
 
     const cicloGuardado = await ciclo.save();
     const cierreBovinoConParto = estadoCiclo === 'Cerrado'
@@ -237,7 +294,11 @@ const marcarCicloNoPrenada = (cicloId, motivo, usuarioId) => cambiarEstadoCiclo(
 });
 
 const crearNuevoCicloReproductivo = async ({ data, animal, usuarioId, cerrarCicloAnterior = false, session = null }) => {
-    const cicloActivo = await obtenerCicloActivoPorAnimal(animal._id, null, session);
+    let cicloActivo = await obtenerCicloActivoPorAnimal(animal._id, null, session);
+
+    if (await conciliarCicloVacioActivo({ ciclo: cicloActivo, usuarioId, session })) {
+        cicloActivo = null;
+    }
 
     if (cicloActivo && !cerrarCicloAnterior) {
         const error = new Error('El animal ya tiene un ciclo reproductivo activo');
@@ -265,6 +326,7 @@ const crearNuevoCicloReproductivo = async ({ data, animal, usuarioId, cerrarCicl
 };
 
 module.exports = {
+    conciliarCicloVacioActivo,
     obtenerCicloActivoPorAnimal,
     cerrarCicloReproductivo,
     cancelarCicloReproductivo,

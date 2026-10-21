@@ -89,6 +89,19 @@ const resolverPastoPorTexto = async (valor, categoria = 'Pasto', uso) => {
 
 const idsUnicos = (valores = []) => [...new Set(valores.filter(Boolean).map(String))];
 
+const validarComposicionCobertura = ({ principal, secundarios = [], leguminosas = [], porcentajes = [] }) => {
+    const referencias = [principal, ...secundarios, ...leguminosas].filter(Boolean).map(String);
+    if (new Set(referencias).size !== referencias.length) {
+        throw new Error('Un mismo pasto o forraje no puede repetirse en la cobertura del area.');
+    }
+    const idsPorcentaje = porcentajes.map((item) => String(item.catalogoPasto));
+    if (new Set(idsPorcentaje).size !== idsPorcentaje.length) {
+        throw new Error('Un mismo pasto no puede tener mas de un porcentaje de cobertura.');
+    }
+    const total = porcentajes.reduce((suma, item) => suma + item.porcentajeEstimado, 0);
+    if (total > 100) throw new Error('La suma de porcentajes de cobertura no puede superar el 100%.');
+};
+
 const validarReferencias = async (principal, secundarios, leguminosas, tipoArea = 'PASTOREO') => {
     const ids = idsUnicos([principal, ...secundarios, ...leguminosas]);
     if (!ids.length) return;
@@ -105,18 +118,23 @@ const validarReferencias = async (principal, secundarios, leguminosas, tipoArea 
 
 const prepararCobertura = async (datos = {}, tipoArea = 'PASTOREO') => {
     const pastoPrincipal = datos.pastoPrincipal || null;
-    const pastosSecundarios = idsUnicos(datos.pastosSecundarios);
-    const leguminosasAsociadas = idsUnicos(datos.leguminosasAsociadas);
-    await validarReferencias(pastoPrincipal, pastosSecundarios, leguminosasAsociadas, tipoArea);
-    if (pastoPrincipal && pastosSecundarios.includes(String(pastoPrincipal))) {
-        throw new Error('El pasto principal no puede repetirse como secundario.');
-    }
+    const secundariosRecibidos = (datos.pastosSecundarios || []).filter(Boolean).map(String);
+    const leguminosasRecibidas = (datos.leguminosasAsociadas || []).filter(Boolean).map(String);
     const porcentajesCobertura = (datos.porcentajesCobertura || [])
         .filter((item) => item?.catalogoPasto && item?.porcentajeEstimado !== '' && item?.porcentajeEstimado !== null && item?.porcentajeEstimado !== undefined)
         .map((item) => ({ catalogoPasto: item.catalogoPasto, porcentajeEstimado: Number(item.porcentajeEstimado) }));
     if (porcentajesCobertura.some((item) => !Number.isFinite(item.porcentajeEstimado) || item.porcentajeEstimado < 0 || item.porcentajeEstimado > 100)) {
         throw new Error('Los porcentajes estimados deben estar entre 0 y 100.');
     }
+    validarComposicionCobertura({
+        principal: pastoPrincipal,
+        secundarios: secundariosRecibidos,
+        leguminosas: leguminosasRecibidas,
+        porcentajes: porcentajesCobertura
+    });
+    const pastosSecundarios = idsUnicos(secundariosRecibidos);
+    const leguminosasAsociadas = idsUnicos(leguminosasRecibidas);
+    await validarReferencias(pastoPrincipal, pastosSecundarios, leguminosasAsociadas, tipoArea);
     const diasDescansoObjetivo = datos.diasDescansoObjetivo === '' || datos.diasDescansoObjetivo === null || datos.diasDescansoObjetivo === undefined
         ? null
         : Number(datos.diasDescansoObjetivo);
@@ -226,5 +244,6 @@ module.exports = {
     obtenerCoberturaEnFecha,
     obtenerCoberturaPotrero,
     prepararCobertura,
+    validarComposicionCobertura,
     resolverPastoPorTexto
 };

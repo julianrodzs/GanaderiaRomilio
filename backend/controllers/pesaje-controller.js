@@ -2,61 +2,34 @@ const pesajeCtrl = {};
 
 const Pesaje = require('../models/Pesaje');
 const Animal = require('../models/Animal');
-const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../services/eventoAnimal-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
-const EventoLote = require('../models/EventoLote');
 const { Membresia } = require('../models/Membresia');
 const { listarFincasAccesibles } = require('../services/accesoFinca-service');
+const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
+const {
+    actualizarPesoActualAnimal,
+    crearErrorPesaje,
+    limpiarEventosPesaje,
+    registrarEventoPesaje,
+    sanitizarPesaje,
+    validarDatosPesaje
+} = require('../services/pesaje-integridad-service');
 
 const poblarPesaje = (query) => query
     .populate('animal')
+    .populate('lote', 'codigo nombre')
     .populate('fincaId', 'nombre codigo')
-    .populate('registradoPor', 'nombre apellido correo rol');
+    .populate('registradoPor', 'nombre apellido correo rol')
+    .populate('editadoPor', 'nombre apellido correo rol');
 
-const actualizarPesoActualAnimal = async (animalId) => {
-    if (!animalId) return;
-
-    const ultimoPesaje = await Pesaje.findOne({ animal: animalId }).sort({ fecha: -1, createdAt: -1 });
-    await Animal.findByIdAndUpdate(animalId, {
-        pesoActual: ultimoPesaje?.peso || null
-    });
-};
-
-const registrarEventoPesaje = async (pesaje, usuarioId) => {
-    if (!pesaje?.animal) return;
-
-    await upsertEventoAnimal({
-        animal: pesaje.animal,
-        tipoEvento: 'Pesaje',
-        fecha: pesaje.fecha || new Date(),
-        titulo: 'Pesaje registrado',
-        descripcion: `Peso registrado: ${pesaje.peso} kg${pesaje.observaciones ? `. ${pesaje.observaciones}` : ''}`,
-        moduloOrigen: 'Pesajes',
-        referenciaId: pesaje._id,
-        creadoPor: usuarioId,
-        metadata: {
-            pesoKg: pesaje.peso
-        }
-    });
-    const animal = await Animal.findById(pesaje.animal).select('loteActual');
-    if (animal?.loteActual) {
-        await EventoLote.findOneAndUpdate(
-            { lote: animal.loteActual, entidadTipo: 'Pesaje', referenciaId: pesaje._id },
-            { $set: { tipo: 'PESAJE_REGISTRADO', fecha: pesaje.fecha, titulo: 'Pesaje registrado', descripcion: `${pesaje.peso} kg`, registradoPor: usuarioId, metadata: { animalId: pesaje.animal, pesoKg: pesaje.peso } } },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
-    }
-};
-
-const validarPesaje = async ({ animal, peso }) => {
-    if (!animal) return { valido: false, status: 400, mensaje: 'El animal es requerido' };
-    const animalEncontrado = await Animal.findById(animal);
-    if (!animalEncontrado) return { valido: false, status: 404, mensaje: 'Animal no encontrado' };
-    if (!Number.isFinite(Number(peso)) || Number(peso) <= 0) {
-        return { valido: false, status: 400, mensaje: 'El peso debe ser mayor que cero' };
-    }
-    return { valido: true, animal: animalEncontrado };
-};
+const prepararDatosPersistencia = (datos, validacion) => ({
+    ...datos,
+    fecha: validacion.fecha,
+    peso: validacion.peso,
+    etapaProductiva: validacion.animal.especie === 'Porcino'
+        ? datos.etapaProductiva || validacion.animal.etapaProductiva || undefined
+        : undefined
+});
 
 const obtenerFiltroPesajes = async (especie) => {
     if (!['Bovino', 'Porcino'].includes(especie)) return {};
@@ -70,7 +43,7 @@ const obtenerFiltroPesajes = async (especie) => {
 pesajeCtrl.getPesajes = async (req, res) => {
     try {
         const filtro = await obtenerFiltroPesajes(req.query.especie);
-        const pesajes = await poblarPesaje(Pesaje.find(filtro).sort({ fecha: -1, createdAt: -1 }));
+        const pesajes = await poblarPesaje(Pesaje.find(filtro).sort({ fecha: -1, createdAt: -1, _id: -1 }));
         res.json(pesajes);
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener pesajes', error: error.message });
@@ -79,23 +52,25 @@ pesajeCtrl.getPesajes = async (req, res) => {
 
 pesajeCtrl.createPesaje = async (req, res) => {
     try {
-        const validacion = await validarPesaje(req.body);
-        if (!validacion.valido) {
-            return res.status(validacion.status).json({ mensaje: validacion.mensaje });
-        }
-
-        const nuevoPesaje = new Pesaje({
-            ...req.body,
-            peso: Number(req.body.peso),
-            etapaProductiva: validacion.animal.especie === 'Porcino'
-                ? req.body.etapaProductiva || validacion.animal.etapaProductiva || undefined
-                : undefined,
-            registradoPor: req.usuario?.id
+        const datos = sanitizarPesaje(req.body);
+        let pesajeId;
+        await ejecutarEnTransaccion(async (session) => {
+            const validacion = await validarDatosPesaje(datos, { session });
+            const [pesaje] = await Pesaje.create([{
+                ...prepararDatosPersistencia(datos, validacion),
+                lote: validacion.animal.loteActual || null,
+                tipoPesaje: 'Individual',
+                registradoPor: req.usuario?.id
+            }], { session });
+            await actualizarPesoActualAnimal(pesaje.animal, {
+                session,
+                organizacionId: req.organizacionId
+            });
+            await registrarEventoPesaje(pesaje, req.usuario?.id, { session });
+            pesajeId = pesaje._id;
         });
-        const pesajeGuardado = await nuevoPesaje.save();
-        await registrarEventoPesaje(pesajeGuardado, req.usuario?.id);
-        await actualizarPesoActualAnimal(pesajeGuardado.animal);
-        const pesaje = await poblarPesaje(Pesaje.findById(pesajeGuardado._id));
+
+        const pesaje = await poblarPesaje(Pesaje.findById(pesajeId));
         await notificarAccionSegura({
             actor: req.usuario,
             naturaleza: 'Informativa',
@@ -110,18 +85,14 @@ pesajeCtrl.createPesaje = async (req, res) => {
         });
         res.status(201).json(pesaje);
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al crear pesaje', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message, codigo: error.codigo });
     }
 };
 
 pesajeCtrl.getPesaje = async (req, res) => {
     try {
         const pesaje = await poblarPesaje(Pesaje.findById(req.params.id));
-
-        if (!pesaje) {
-            return res.status(404).json({ mensaje: 'Pesaje no encontrado' });
-        }
-
+        if (!pesaje) return res.status(404).json({ mensaje: 'Pesaje no encontrado' });
         res.json(pesaje);
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener pesaje', error: error.message });
@@ -148,7 +119,7 @@ pesajeCtrl.getPesajesPorAnimal = async (req, res) => {
                 ]
             })
                 .setOptions({ omitirAislamientoFinca: true })
-                .sort({ fecha: -1, createdAt: -1 })
+                .sort({ fecha: -1, createdAt: -1, _id: -1 })
         );
         res.json(pesajes);
     } catch (error) {
@@ -158,74 +129,92 @@ pesajeCtrl.getPesajesPorAnimal = async (req, res) => {
 
 pesajeCtrl.updatePesaje = async (req, res) => {
     try {
-        const pesajeAnterior = await Pesaje.findById(req.params.id);
+        const cambios = sanitizarPesaje(req.body, { parcial: true });
+        let pesajeId;
+        await ejecutarEnTransaccion(async (session) => {
+            const pesaje = await Pesaje.findById(req.params.id).session(session);
+            if (!pesaje) throw crearErrorPesaje('Pesaje no encontrado.', 404, 'PESAJE_NO_ENCONTRADO');
 
-        if (!pesajeAnterior) {
-            return res.status(404).json({ mensaje: 'Pesaje no encontrado' });
-        }
+            const animalAnterior = pesaje.animal;
+            const animalFinal = cambios.animal || pesaje.animal;
+            if (pesaje.tipoPesaje === 'Lote' && String(animalFinal) !== String(animalAnterior)) {
+                throw crearErrorPesaje('Un pesaje grupal no puede reasignarse a otro animal.', 409, 'PESAJE_LOTE_NO_REASIGNABLE');
+            }
+            const datosFinales = {
+                animal: animalFinal,
+                fecha: cambios.fecha ?? pesaje.fecha,
+                peso: cambios.peso ?? pesaje.peso,
+                etapaProductiva: cambios.etapaProductiva ?? pesaje.etapaProductiva,
+                observaciones: cambios.observaciones ?? pesaje.observaciones
+            };
+            const validacion = await validarDatosPesaje(datosFinales, { session });
+            const cambioAnimal = String(animalAnterior) !== String(animalFinal);
+            if (cambioAnimal) await limpiarEventosPesaje(pesaje._id, { session });
 
-        const validacion = await validarPesaje({
-            animal: req.body.animal || pesajeAnterior.animal,
-            peso: req.body.peso ?? pesajeAnterior.peso
+            pesaje.set({
+                ...prepararDatosPersistencia(datosFinales, validacion),
+                editadoPor: req.usuario?.id,
+                fechaEdicion: new Date()
+            });
+            if (cambioAnimal) pesaje.lote = validacion.animal.loteActual || null;
+            await pesaje.save({ session });
+
+            if (cambioAnimal) {
+                await actualizarPesoActualAnimal(animalAnterior, {
+                    session,
+                    organizacionId: req.organizacionId,
+                    forzar: true
+                });
+            }
+            await actualizarPesoActualAnimal(pesaje.animal, {
+                session,
+                organizacionId: req.organizacionId,
+                forzar: true
+            });
+            await registrarEventoPesaje(pesaje, req.usuario?.id, {
+                session,
+                crearEventoLote: pesaje.tipoPesaje !== 'Lote',
+                titulo: 'Pesaje corregido'
+            });
+            pesajeId = pesaje._id;
         });
-        if (!validacion.valido) {
-            return res.status(validacion.status).json({ mensaje: validacion.mensaje });
-        }
 
-        const animalAnterior = pesajeAnterior.animal;
-        pesajeAnterior.set({
-            ...req.body,
-            ...(req.body.peso !== undefined ? { peso: Number(req.body.peso) } : {}),
-            etapaProductiva: validacion.animal.especie === 'Porcino'
-                ? req.body.etapaProductiva || validacion.animal.etapaProductiva || undefined
-                : undefined
-        });
-        const pesaje = await pesajeAnterior.save();
-
-        if (String(animalAnterior) !== String(pesaje.animal)) {
-            await eliminarEventosPorReferencia({ moduloOrigen: 'Pesajes', referenciaId: pesaje._id });
-            await EventoLote.deleteMany({ entidadTipo: 'Pesaje', referenciaId: pesaje._id });
-            await actualizarPesoActualAnimal(animalAnterior);
-        }
-
-        await registrarEventoPesaje(pesaje, req.usuario?.id);
-        await actualizarPesoActualAnimal(pesaje.animal);
-        const pesajeActualizado = await poblarPesaje(Pesaje.findById(pesaje._id));
-
+        const pesaje = await poblarPesaje(Pesaje.findById(pesajeId));
         await notificarAccionSegura({
             actor: req.usuario,
             naturaleza: 'Informativa',
             tipo: 'PESAJE_MODIFICADO',
             titulo: 'Pesaje actualizado',
-            mensaje: `${nombreUsuario(req.usuario)} actualizó a ${pesajeActualizado.peso} kg el pesaje de ${pesajeActualizado.animal?.diio || pesajeActualizado.animal?.identificadorFinca || pesajeActualizado.animal?.nombre || 'un animal'}.`,
+            mensaje: `${nombreUsuario(req.usuario)} actualizó a ${pesaje.peso} kg el pesaje de ${pesaje.animal?.diio || pesaje.animal?.identificadorFinca || pesaje.animal?.nombre || 'un animal'}.`,
             moduloOrigen: 'Pesajes',
             entidadTipo: 'Animal',
-            entidadId: pesajeActualizado.animal?._id || pesajeActualizado.animal,
-            url: `/inventario/animal/${pesajeActualizado.animal?._id || pesajeActualizado.animal}`,
-            metadata: { pesajeId: pesajeActualizado._id, peso: pesajeActualizado.peso }
+            entidadId: pesaje.animal?._id || pesaje.animal,
+            url: `/inventario/animal/${pesaje.animal?._id || pesaje.animal}`,
+            metadata: { pesajeId: pesaje._id, peso: pesaje.peso }
         });
-
-        res.json(pesajeActualizado);
+        res.json(pesaje);
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al actualizar pesaje', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message, codigo: error.codigo });
     }
 };
 
 pesajeCtrl.deletePesaje = async (req, res) => {
     try {
-        const pesaje = await Pesaje.findByIdAndDelete(req.params.id);
-
-        if (!pesaje) {
-            return res.status(404).json({ mensaje: 'Pesaje no encontrado' });
-        }
-
-        await eliminarEventosPorReferencia({ moduloOrigen: 'Pesajes', referenciaId: pesaje._id });
-        await EventoLote.deleteMany({ entidadTipo: 'Pesaje', referenciaId: pesaje._id });
-        await actualizarPesoActualAnimal(pesaje.animal);
-
+        await ejecutarEnTransaccion(async (session) => {
+            const pesaje = await Pesaje.findById(req.params.id).session(session);
+            if (!pesaje) throw crearErrorPesaje('Pesaje no encontrado.', 404, 'PESAJE_NO_ENCONTRADO');
+            const animalId = pesaje.animal;
+            await Pesaje.deleteOne({ _id: pesaje._id }, { session });
+            await limpiarEventosPesaje(pesaje._id, { session });
+            await actualizarPesoActualAnimal(animalId, {
+                session,
+                organizacionId: req.organizacionId,
+                forzar: true
+            });
+        });
         res.json({ mensaje: 'Pesaje eliminado' });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al eliminar pesaje', error: error.message });
+        res.status(error.status || 500).json({ mensaje: error.message, codigo: error.codigo });
     }
 };
 

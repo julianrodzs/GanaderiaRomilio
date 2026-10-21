@@ -1270,6 +1270,8 @@ const Animales = ({
                 <article><span>Motivo del último cambio</span><strong>{animalDetalle.ultimoCambioEstadoSanitario?.metadata?.motivo || '--'}</strong></article>
                 <article><span>Tratamiento activo</span><strong>{animalDetalle.tratamientosActivos?.length ? animalDetalle.tratamientosActivos.map((tratamiento) => tratamiento.producto).join(', ') : 'Ninguno'}</strong></article>
                 <article><span>Próxima aplicación</span><strong>{formatearFecha(animalDetalle.tratamientosActivos?.[0]?.proximaAplicacion)}</strong></article>
+                <article><span>Retiro de carne</span><strong>{animalDetalle.fechaFinRetiroCarne && new Date(animalDetalle.fechaFinRetiroCarne) > new Date() ? `Activo hasta ${formatearFecha(animalDetalle.fechaFinRetiroCarne)}` : 'Sin retiro activo'}</strong></article>
+                <article><span>Medicamento en retiro</span><strong>{animalDetalle.fechaFinRetiroCarne && new Date(animalDetalle.fechaFinRetiroCarne) > new Date() ? animalDetalle.medicamentoEnRetiro || '--' : '--'}</strong></article>
               </div>
             </section>
 

@@ -8,14 +8,15 @@ import { tiempoRelativo } from '../Components/CampanaNotificaciones';
 
 const CentroNotificaciones = ({ onNavegar }) => {
   const [filtros, setFiltros] = useState({ leida: '', naturaleza: '', moduloOrigen: '' });
-  const [respuesta, setRespuesta] = useState({ items: [], total: 0 });
+  const [respuesta, setRespuesta] = useState({ items: [], total: 0, pages: 1 });
+  const [pagina, setPagina] = useState(1);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
   const cargar = async () => {
     try {
       setCargando(true);
-      setRespuesta(await obtenerNotificaciones({ ...filtros, limit: 100 }));
+      setRespuesta(await obtenerNotificaciones({ ...filtros, page: pagina, limit: 25 }));
       setError('');
     } catch (err) {
       setError(err.message);
@@ -24,16 +25,18 @@ const CentroNotificaciones = ({ onNavegar }) => {
     }
   };
 
-  useEffect(() => { cargar(); }, [filtros.leida, filtros.naturaleza, filtros.moduloOrigen]);
+  useEffect(() => { cargar(); }, [filtros.leida, filtros.naturaleza, filtros.moduloOrigen, pagina]);
 
   const abrir = async (notificacion) => {
-    if (!notificacion.leida) await marcarNotificacionLeida(notificacion._id).catch(() => null);
-    onNavegar?.(notificacion);
+    try {
+      if (!notificacion.leida) await marcarNotificacionLeida(notificacion._id);
+      await cargar();
+      onNavegar?.(notificacion);
+    } catch (err) { setError(err.message); }
   };
 
   const marcarTodas = async () => {
-    await marcarTodasNotificacionesLeidas();
-    await cargar();
+    try { await marcarTodasNotificacionesLeidas(); await cargar(); } catch (err) { setError(err.message); }
   };
 
   return (
@@ -45,19 +48,19 @@ const CentroNotificaciones = ({ onNavegar }) => {
       <div className="notificaciones-filtros">
         <label>
           <span>Lectura</span>
-          <select value={filtros.leida} onChange={(e) => setFiltros((f) => ({ ...f, leida: e.target.value }))}>
+          <select value={filtros.leida} onChange={(e) => { setPagina(1); setFiltros((f) => ({ ...f, leida: e.target.value })); }}>
             <option value="">Todas</option><option value="false">No leídas</option><option value="true">Leídas</option>
           </select>
         </label>
         <label>
           <span>Tipo de alerta</span>
-          <select value={filtros.naturaleza} onChange={(e) => setFiltros((f) => ({ ...f, naturaleza: e.target.value }))}>
+          <select value={filtros.naturaleza} onChange={(e) => { setPagina(1); setFiltros((f) => ({ ...f, naturaleza: e.target.value })); }}>
             <option value="">Operativas e informativas</option><option value="Operativa">Operativas</option><option value="Informativa">Informativas</option>
           </select>
         </label>
         <label>
           <span>Módulo</span>
-          <select value={filtros.moduloOrigen} onChange={(e) => setFiltros((f) => ({ ...f, moduloOrigen: e.target.value }))}>
+          <select value={filtros.moduloOrigen} onChange={(e) => { setPagina(1); setFiltros((f) => ({ ...f, moduloOrigen: e.target.value })); }}>
             <option value="">Todos los módulos</option>
             {['Tareas', 'Sanidad', 'Reproduccion', 'Pesajes', 'Finanzas'].map((modulo) => <option key={modulo} value={modulo}>{modulo === 'Reproduccion' ? 'Reproducción' : modulo}</option>)}
           </select>
@@ -66,6 +69,11 @@ const CentroNotificaciones = ({ onNavegar }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {cargando && <div className="estado-importacion">Cargando notificaciones...</div>}
       {!cargando && !respuesta.items.length && <div className="reporte-vacio">No hay notificaciones para estos filtros.</div>}
+      <nav aria-label="Páginas de notificaciones" className="form-actions">
+        <button type="button" disabled={cargando || pagina <= 1} onClick={() => setPagina((valor) => valor - 1)}>Anterior</button>
+        <span>Página {pagina} de {respuesta.pages || 1} · {respuesta.total} avisos</span>
+        <button type="button" disabled={cargando || pagina >= (respuesta.pages || 1)} onClick={() => setPagina((valor) => valor + 1)}>Siguiente</button>
+      </nav>
       <div className="centro-notificaciones-lista">
         {respuesta.items.map((notificacion) => (
           <button key={notificacion._id} type="button" className={notificacion.leida ? 'centro-notificacion' : 'centro-notificacion no-leida'} onClick={() => abrir(notificacion)}>

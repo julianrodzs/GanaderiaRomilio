@@ -1,4 +1,7 @@
+import { obtenerContextoOffline } from './offlineStorage';
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:4000/api' : '');
+const crearClaveIdempotencia = () => globalThis.crypto?.randomUUID?.()
+  || `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const obtenerSesion = () => {
   const sesionGuardada = localStorage.getItem('ganaderiaSesion');
@@ -29,7 +32,10 @@ const request = async (ruta, opciones = {}) => {
 
   const esFormData = opciones.body instanceof FormData;
   const token = obtenerTokenSesion();
-  const { headers, ...fetchOpciones } = opciones;
+  const { headers, contextoEsperado, ...fetchOpciones } = opciones;
+  if (contextoEsperado && obtenerContextoOffline().clave !== contextoEsperado.clave) {
+    throw new Error('La sesión o finca cambió; sincroniza desde el contexto de origen.');
+  }
   const headersBase = esFormData
     ? { ...(headers || {}) }
     : {
@@ -75,6 +81,7 @@ const request = async (ruta, opciones = {}) => {
     window.dispatchEvent(new CustomEvent('ganaderiaPlanActualizado', { detail: { ruta, metodo } }));
   }
 
+  if (metodo !== 'GET') window.dispatchEvent(new Event('ganaderiaNotificacionesActualizadas'));
   return data;
 };
 
@@ -172,7 +179,7 @@ export const asignarRacionLote = (id, datos) => request(`/lotes/${id}/racion`, {
 export const obtenerHistorialRacionesLote = (id) => request(`/lotes/${id}/historial-raciones`);
 export const obtenerSuministrosAlimentacion = (filtros = {}) => request(`/alimentacion/suministros${construirQuery(filtros)}`);
 export const obtenerSuministroAlimentacion = (id) => request(`/alimentacion/suministros/${id}`);
-export const crearSuministroAlimentacion = (datos) => request('/alimentacion/suministros', { method: 'POST', body: JSON.stringify(datos) });
+export const crearSuministroAlimentacion = (datos) => request('/alimentacion/suministros', { method: 'POST', headers: datos.claveIdempotencia ? { 'Idempotency-Key': datos.claveIdempotencia } : undefined, body: JSON.stringify(datos) });
 export const actualizarSuministroAlimentacion = (id, datos) => request(`/alimentacion/suministros/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
 export const obtenerCortesAlimentacion = () => request('/alimentacion/origenes/cortes');
 export const obtenerResumenAlimentacionHoy = () => request('/alimentacion/resumen-hoy');
@@ -425,17 +432,18 @@ export const actualizarTarea = (id, tarea) => {
   });
 };
 
-export const cambiarEstadoTarea = (id, estado, observaciones = '') => {
+export const cambiarEstadoTarea = (id, estado, observaciones = '', opciones = {}) => {
   return request(`/tareas/${id}/estado`, {
     method: 'PATCH',
-    body: JSON.stringify({ estado, observaciones })
+    body: JSON.stringify({ estado, observaciones, ...opciones })
   });
 };
 
-export const completarTarea = ({ id, observaciones, idempotencyKey, versionEsperada }) => {
+export const completarTarea = ({ id, observaciones, idempotencyKey, versionEsperada, fechaEjecucionReal, contextoEsperado }) => {
   return request(`/tareas/${id}/completar`, {
     method: 'PATCH',
-    body: JSON.stringify({ observaciones, versionEsperada }),
+    body: JSON.stringify({ observaciones, versionEsperada, fechaEjecucionReal }),
+    contextoEsperado,
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
   });
 };
@@ -755,10 +763,17 @@ export const eliminarPlanSanitario = (id) => {
   });
 };
 
+export const archivarPlanSanitario = (id) => request(`/plan-sanitario/${id}/archivar`, {
+  method: 'PATCH',
+  body: JSON.stringify({})
+});
+
 export const registrarAplicacionPlanSanitario = (id, datos) => {
+  const { claveIdempotencia = crearClaveIdempotencia(), ...payload } = datos;
   return request(`/plan-sanitario/${id}/registrar-aplicacion`, {
     method: 'PATCH',
-    body: JSON.stringify(datos)
+    headers: { 'Idempotency-Key': claveIdempotencia },
+    body: JSON.stringify(payload)
   });
 };
 
@@ -776,10 +791,14 @@ export const actualizarTratamientoSanitario = (id, tratamiento) => request(`/tra
   body: JSON.stringify(tratamiento)
 });
 
-export const registrarAplicacionTratamiento = (id, datos) => request(`/tratamientos-sanitarios/${id}/aplicaciones`, {
-  method: 'POST',
-  body: JSON.stringify(datos)
-});
+export const registrarAplicacionTratamiento = (id, datos) => {
+  const { claveIdempotencia = crearClaveIdempotencia(), ...payload } = datos;
+  return request(`/tratamientos-sanitarios/${id}/aplicaciones`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': claveIdempotencia },
+    body: JSON.stringify(payload)
+  });
+};
 
 export const completarTratamientoSanitario = (id, datos = {}) => request(`/tratamientos-sanitarios/${id}/completar`, {
   method: 'PATCH',
@@ -795,10 +814,14 @@ export const obtenerAplicacionesSanitarias = (filtros = {}) => request(`/aplicac
 
 export const obtenerAplicacionSanitaria = (id) => request(`/aplicaciones-sanitarias/${id}`);
 
-export const crearAplicacionSanitariaUnica = (aplicacion) => request('/aplicaciones-sanitarias/unica', {
-  method: 'POST',
-  body: JSON.stringify(aplicacion)
-});
+export const crearAplicacionSanitariaUnica = (aplicacion) => {
+  const { claveIdempotencia = crearClaveIdempotencia(), ...payload } = aplicacion;
+  return request('/aplicaciones-sanitarias/unica', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': claveIdempotencia },
+    body: JSON.stringify(payload)
+  });
+};
 
 export const obtenerRegistrosReproductivos = (filtros = {}) => request(`/reproduccion${construirQuery(filtros)}`);
 

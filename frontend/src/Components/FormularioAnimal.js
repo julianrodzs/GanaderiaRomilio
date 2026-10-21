@@ -171,7 +171,7 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
     if (creacionBloqueada) return;
     const identificador = formulario.identificadorFinca || formulario.diio;
 
-    onGuardar({
+    const datos = {
       ...formulario,
       identificadorFinca: identificador,
       objetivoProductivo: formulario.objetivoProductivo || 'SIN_DEFINIR',
@@ -181,7 +181,6 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       fechaDestete: fechaOpcional(formulario.fechaDestete),
       pesoNacimiento: numeroOpcional(formulario.pesoNacimiento),
       pesoDestete: numeroOpcional(formulario.pesoDestete),
-      pesoActual: numeroOpcional(formulario.pesoActual),
       pesoCompra: numeroOpcional(formulario.pesoCompra),
       pesoVenta: numeroOpcional(formulario.pesoVenta),
       precioCompraPorKg: numeroOpcional(formulario.precioCompraPorKg),
@@ -199,7 +198,8 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
       origenGenealogico: formulario.origenGenealogico,
       registroGenealogico: formulario.registroGenealogico || '',
       observacionesGenealogicas: formulario.observacionesGenealogicas || ''
-    });
+    };
+    onGuardar(datos);
   };
 
   const machos = animales.filter((animal) => animal.sexo === 'Macho' && (animal.especie || 'Bovino') === formulario.especie && animal._id !== animalInicial?._id);
@@ -289,7 +289,8 @@ const FormularioAnimal = ({ onCancelar, onGuardar, guardando, error, animalInici
 
           <label>
             Peso actual
-            <input name="pesoActual" type="number" min="0" value={formulario.pesoActual} onChange={actualizarCampo} />
+            <input name="pesoActual" type="number" min="0" value={formulario.pesoActual} disabled />
+            <small>Se actualiza automáticamente al registrar pesajes en báscula.</small>
           </label>
         </div>
 

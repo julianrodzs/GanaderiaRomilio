@@ -8,17 +8,19 @@ const {
 
 const fechaKey = (fecha) => new Date(fecha).toISOString().slice(0, 10);
 
-const resolverAsignado = async (usuarioPreferido) => {
+const resolverAsignado = async (usuarioPreferido, session = null) => {
     if (!usuarioPreferido) return null;
-    const membresia = await Membresia.findOne({
+    let consulta = Membresia.findOne({
         organizacionId: obtenerOrganizacionActual(),
         usuario: usuarioPreferido,
         estado: 'Activo'
-    }).populate({ path: 'usuario', match: { estado: 'Activo' }, select: '_id' });
+    });
+    if (session) consulta = consulta.session(session);
+    const membresia = await consulta.populate({ path: 'usuario', match: { estado: 'Activo' }, select: '_id' });
     return membresia?.usuario?._id || null;
 };
 
-const cancelarTareasDistintas = async ({ referenciaId, categoriaAutomatica, claveActual }) => {
+const cancelarTareasDistintas = async ({ referenciaId, categoriaAutomatica, claveActual, session = null }) => {
     await Tarea.updateMany(
         {
             referenciaId,
@@ -32,7 +34,8 @@ const cancelarTareasDistintas = async ({ referenciaId, categoriaAutomatica, clav
                 estado: 'Cancelada',
                 observaciones: 'Cancelada automáticamente por reprogramación sanitaria.'
             }
-        }
+        },
+        session ? { session } : {}
     );
 };
 
@@ -46,24 +49,30 @@ const crearOActualizarTarea = async ({
     especie,
     animal,
     asignadoPreferido,
-    usuarioId
+    usuarioId,
+    session = null,
+    omitirNotificacion = false
 }) => {
     if (!fechaProgramada) return null;
-    const asignadoA = await resolverAsignado(asignadoPreferido);
+    const asignadoA = await resolverAsignado(asignadoPreferido, session);
     if (!asignadoA) {
         console.warn(`No se creó tarea sanitaria para ${referenciaId}: no hay usuario activo asignable.`);
         return null;
     }
 
     const claveAutomatica = `${clavePrefijo}-${fechaKey(fechaProgramada)}`;
-    let tarea = await Tarea.findOne({ referenciaId, moduloOrigen: 'Sanidad', claveAutomatica });
+    let consultaExacta = Tarea.findOne({ referenciaId, moduloOrigen: 'Sanidad', claveAutomatica });
+    if (session) consultaExacta = consultaExacta.session(session);
+    let tarea = await consultaExacta;
     if (!tarea) {
-        tarea = await Tarea.findOne({
+        let consultaPendiente = Tarea.findOne({
             referenciaId,
             moduloOrigen: 'Sanidad',
             categoriaAutomatica,
             estado: { $in: ['Pendiente', 'En proceso'] }
         }).sort({ createdAt: -1 });
+        if (session) consultaPendiente = consultaPendiente.session(session);
+        tarea = await consultaPendiente;
     }
     const esNueva = !tarea;
     if (!tarea) tarea = new Tarea({ referenciaId, moduloOrigen: 'Sanidad', claveAutomatica });
@@ -89,16 +98,16 @@ const crearOActualizarTarea = async ({
         generaBitacora: false
     });
     if (tarea.asignacionModificadaManualmente) tarea.asignadoA = responsableActual;
-    await tarea.save();
-    await cancelarTareasDistintas({ referenciaId, categoriaAutomatica, claveActual: claveAutomatica });
+    await tarea.save(session ? { session } : {});
+    await cancelarTareasDistintas({ referenciaId, categoriaAutomatica, claveActual: claveAutomatica, session });
 
-    if (esNueva) {
+    if (esNueva && !omitirNotificacion) {
         await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, usuarioId));
     }
     return tarea;
 };
 
-const sincronizarTareaPlanSanitario = (plan, usuarioId) => crearOActualizarTarea({
+const sincronizarTareaPlanSanitario = (plan, usuarioId, opciones = {}) => crearOActualizarTarea({
     referenciaId: plan._id,
     fechaProgramada: plan.proximaAplicacion,
     categoriaAutomatica: 'Plan sanitario',
@@ -108,16 +117,29 @@ const sincronizarTareaPlanSanitario = (plan, usuarioId) => crearOActualizarTarea
     especie: plan.especie || 'Bovino',
     animal: plan.animales?.length === 1 ? plan.animales[0]?._id || plan.animales[0] : null,
     asignadoPreferido: plan.asignadoA,
-    usuarioId
+    usuarioId,
+    ...opciones
 });
 
-const sincronizarTareaTratamiento = (tratamiento, usuarioId) => {
-    if (tratamiento.estado !== 'Activo' || !tratamiento.proximaAplicacion) {
-        return cancelarTareasSanitariasPendientes(tratamiento._id, 'Tratamiento sanitario', 'Tratamiento finalizado o sin próxima aplicación.');
+const obtenerFechaTareaTratamiento = (tratamiento) => (
+    Number(tratamiento.aplicacionesRealizadas || 0) === 0
+        ? tratamiento.fechaInicio
+        : tratamiento.proximaAplicacion
+);
+
+const sincronizarTareaTratamiento = (tratamiento, usuarioId, opciones = {}) => {
+    const fechaProgramada = obtenerFechaTareaTratamiento(tratamiento);
+    if (tratamiento.estado !== 'Activo' || !fechaProgramada) {
+        return cancelarTareasSanitariasPendientes(
+            tratamiento._id,
+            'Tratamiento sanitario',
+            'Tratamiento finalizado o sin próxima aplicación.',
+            opciones
+        );
     }
     return crearOActualizarTarea({
         referenciaId: tratamiento._id,
-        fechaProgramada: tratamiento.proximaAplicacion,
+        fechaProgramada,
         categoriaAutomatica: 'Tratamiento sanitario',
         clavePrefijo: 'tratamiento-sanitario',
         titulo: `Aplicar ${tratamiento.producto}`,
@@ -125,33 +147,37 @@ const sincronizarTareaTratamiento = (tratamiento, usuarioId) => {
         especie: tratamiento.especie,
         animal: tratamiento.animales?.length === 1 ? tratamiento.animales[0]?._id || tratamiento.animales[0] : null,
         asignadoPreferido: tratamiento.asignadoA,
-        usuarioId
+        usuarioId,
+        ...opciones
     });
 };
 
-const completarTareasSanitariasPendientes = (referenciaId, categoriaAutomatica, fecha = new Date()) => Tarea.updateMany(
+const completarTareasSanitariasPendientes = (referenciaId, categoriaAutomatica, fecha = new Date(), opciones = {}) => Tarea.updateMany(
     {
         referenciaId,
         moduloOrigen: 'Sanidad',
         categoriaAutomatica,
         estado: { $in: ['Pendiente', 'En proceso'] }
     },
-    { $set: { estado: 'Completada', fechaCompletada: fecha } }
+    { $set: { estado: 'Completada', fechaCompletada: fecha } },
+    opciones.session ? { session: opciones.session } : {}
 );
 
-const cancelarTareasSanitariasPendientes = (referenciaId, categoriaAutomatica, motivo) => Tarea.updateMany(
+const cancelarTareasSanitariasPendientes = (referenciaId, categoriaAutomatica, motivo, opciones = {}) => Tarea.updateMany(
     {
         referenciaId,
         moduloOrigen: 'Sanidad',
         categoriaAutomatica,
         estado: { $in: ['Pendiente', 'En proceso'] }
     },
-    { $set: { estado: 'Cancelada', observaciones: motivo } }
+    { $set: { estado: 'Cancelada', observaciones: motivo } },
+    opciones.session ? { session: opciones.session } : {}
 );
 
 module.exports = {
     cancelarTareasSanitariasPendientes,
     completarTareasSanitariasPendientes,
+    obtenerFechaTareaTratamiento,
     sincronizarTareaPlanSanitario,
     sincronizarTareaTratamiento
 };

@@ -4,7 +4,7 @@ const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugi
 const detalleSchema = new Schema({
     alimento: { type: Schema.Types.ObjectId, ref: 'Alimento', required: true },
     alimentoNombreSnapshot: { type: String, required: true, trim: true },
-    cantidadIngresada: { type: Number, required: true, min: 0 },
+    cantidadIngresada: { type: Number, required: true, min: 0.001 },
     unidadIngresada: { type: String, enum: ['KG', 'TONELADA', 'SACO', 'PACA', 'BALDE', 'CARRETA', 'OTRA'], required: true },
     presentacionId: { type: Schema.Types.ObjectId, default: null },
     presentacionNombreSnapshot: { type: String, trim: true },
@@ -18,6 +18,7 @@ const detalleSchema = new Schema({
 }, { _id: true });
 
 const schema = new Schema({
+    claveIdempotencia: { type: String, trim: true, maxlength: 120 },
     lote: { type: Schema.Types.ObjectId, ref: 'Lote', required: true },
     fechaHora: { type: Date, required: true, default: Date.now },
     planAlimentacion: { type: Schema.Types.ObjectId, ref: 'PlanAlimentacion', default: null },
@@ -44,5 +45,9 @@ schema.index({ organizacionId: 1, fincaId: 1, lote: 1, fechaHora: -1 });
 schema.index({ organizacionId: 1, fincaId: 1, fechaHora: -1 });
 schema.index({ organizacionId: 1, fincaId: 1, registradoPor: 1, fechaHora: -1 });
 schema.index({ 'detalles.alimento': 1, fechaHora: -1 });
+schema.index(
+    { organizacionId: 1, fincaId: 1, claveIdempotencia: 1 },
+    { unique: true, partialFilterExpression: { claveIdempotencia: { $type: 'string' } } }
+);
 
 module.exports = model('SuministroAlimentacion', schema);

@@ -117,7 +117,11 @@ const resumirRendimientoForrajes = (cortes) => {
         },
         produccionPorForraje: agrupar(cortes, (item) => idDe(item.forraje), (item) => item.forrajeNombre),
         produccionPorBanco: agrupar(cortes, (item) => idDe(item.potrero), (item) => item.potrero?.nombre),
-        produccionPorMes: agrupar(cortes, (item) => new Date(item.fechaCorte).toISOString().slice(0, 7), (item) => new Date(item.fechaCorte).toISOString().slice(0, 7)),
+        produccionPorMes: agrupar(
+            cortes,
+            (item) => new Date(item.fechaCorte).toISOString().slice(0, 7),
+            (item) => new Date(item.fechaCorte).toISOString().slice(0, 7)
+        ).sort((a, b) => a.clave.localeCompare(b.clave)),
         destinos: agrupar(cortes, (item) => item.destino?.tipo, (item) => item.destino?.tipo?.replaceAll('_', ' ')),
         intervalos: construirSerieIntervalos(cortes)
     };

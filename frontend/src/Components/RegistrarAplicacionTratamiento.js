@@ -11,10 +11,12 @@ const RegistrarAplicacionTratamiento = ({ tratamiento, usuariosAsignables = [], 
     fechaAplicacion: fechaHoy(),
     dosis: tratamiento?.dosis || '',
     viaAplicacion: tratamiento?.viaAplicacion || '',
+    diasRetiroCarne: tratamiento?.diasRetiroCarne || 0,
     responsableUsuario: responsableInicial,
     observaciones: '',
     estadoSanitarioFinal: 'No modificar',
-    motivoCambioEstadoSanitario: ''
+    motivoCambioEstadoSanitario: '',
+    claveIdempotencia: globalThis.crypto?.randomUUID?.() || `tratamiento-${Date.now()}`
   });
 
   const actualizar = (evento) => {
@@ -59,6 +61,10 @@ const RegistrarAplicacionTratamiento = ({ tratamiento, usuariosAsignables = [], 
             <label>
               Vía de aplicación
               <input name="viaAplicacion" value={formulario.viaAplicacion} onChange={actualizar} />
+            </label>
+            <label>
+              Retiro de carne (días)
+              <input name="diasRetiroCarne" type="number" min="0" step="1" value={formulario.diasRetiroCarne} onChange={actualizar} />
             </label>
           </div>
           <label>

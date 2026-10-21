@@ -1,5 +1,5 @@
 const Notificacion = require('../models/Notificacion');
-const { obtenerOrganizacionActual } = require('../context/organizacion-context');
+const { obtenerFincaActual, obtenerOrganizacionActual } = require('../context/organizacion-context');
 const { Membresia } = require('../models/Membresia');
 
 let emisorTiempoReal = null;
@@ -9,7 +9,15 @@ const nombreUsuario = (usuario) => {
     return [usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || usuario.correo || 'Un usuario';
 };
 
-const normalizarId = (valor) => valor?._id?.toString() || valor?.toString() || null;
+const { normalizarId } = require('./identificador-service');
+const Finca = require('../models/Finca');
+const resolverFincaNotificacion = (datos = {}) => {
+    const fincaId = normalizarId(datos.fincaId || obtenerFincaActual());
+    if (!fincaId || (obtenerFincaActual() && fincaId !== obtenerFincaActual())) throw new Error('La notificación requiere la finca de origen autorizada.');
+    return fincaId;
+};
+const filtroDestinatario = (usuarioId) => ({ destinatario: normalizarId(usuarioId), fincaId: resolverFincaNotificacion() });
+const filtroAcceso = (fincaId) => ({ $or: [{ accesoTodasFincas: true }, { fincas: fincaId }] });
 
 const configurarEmisorTiempoReal = (emisor) => {
     emisorTiempoReal = typeof emisor === 'function' ? emisor : null;
@@ -23,10 +31,18 @@ const emitirNotificacionTiempoReal = async (notificacion) => {
 
 const crearNotificacion = async (datos) => {
     const destinatario = normalizarId(datos.destinatario);
+    const actor = normalizarId(datos.actor);
+    const fincaId = resolverFincaNotificacion(datos);
+    const organizacionId = obtenerOrganizacionActual();
+    const finca = await Finca.exists({ _id: fincaId, organizacionId, estado: 'Activa' });
+    const membresia = finca && await Membresia.findOne({ organizacionId, usuario: destinatario, estado: 'Activo', ...filtroAcceso(fincaId) })
+        .populate({ path: 'usuario', match: { estado: 'Activo' }, select: '_id' });
+    if (!membresia?.usuario) return { notificacion: null, creada: false, motivo: 'Destinatario sin acceso vigente a la finca.' };
+    datos = { ...datos, organizacionId, fincaId, dedupKey: datos.dedupKey ? `${fincaId}:${datos.dedupKey}` : undefined };
     if (!destinatario) throw new Error('El destinatario de la notificación es requerido');
 
     if (datos.dedupKey) {
-        const existente = await Notificacion.findOne({ destinatario, dedupKey: datos.dedupKey });
+        const existente = await Notificacion.findOne({ destinatario, fincaId, dedupKey: datos.dedupKey });
         if (existente) return { notificacion: existente, creada: false };
     }
 
@@ -34,7 +50,7 @@ const crearNotificacion = async (datos) => {
         const notificacion = await Notificacion.create({
             ...datos,
             destinatario,
-            actor: normalizarId(datos.actor) || null,
+            actor,
             leida: false,
             fechaLectura: null
         });
@@ -42,7 +58,7 @@ const crearNotificacion = async (datos) => {
         return { notificacion, creada: true };
     } catch (error) {
         if (error?.code === 11000 && datos.dedupKey) {
-            const existente = await Notificacion.findOne({ destinatario, dedupKey: datos.dedupKey });
+            const existente = await Notificacion.findOne({ destinatario, fincaId, dedupKey: datos.dedupKey });
             return { notificacion: existente, creada: false };
         }
         throw error;
@@ -59,7 +75,9 @@ const crearNotificacionesParaUsuarios = async (usuarios, datos) => {
 };
 
 const notificarPorRoles = async (roles, datos, opciones = {}) => {
+    const fincaId = resolverFincaNotificacion(datos);
     const filtro = {
+        ...filtroAcceso(fincaId),
         organizacionId: obtenerOrganizacionActual(),
         rol: { $in: [...new Set(roles || [])] },
         estado: 'Activo'
@@ -72,7 +90,7 @@ const notificarPorRoles = async (roles, datos, opciones = {}) => {
     });
     return crearNotificacionesParaUsuarios(
         membresias.map((item) => item.usuario?._id).filter(Boolean),
-        datos
+        { ...datos, fincaId }
     );
 };
 
@@ -119,9 +137,9 @@ const notificarAccionSegura = async (datos) => {
 };
 
 const obtenerNotificacionesUsuario = async (usuarioId, filtros = {}) => {
-    const page = Math.max(Number(filtros.page) || 1, 1);
-    const limit = Math.min(Math.max(Number(filtros.limit) || 20, 1), 100);
-    const consulta = { destinatario: usuarioId };
+    const page = Math.min(Math.max(Math.floor(Number(filtros.page)) || 1, 1), 100000);
+    const limit = Math.min(Math.max(Math.floor(Number(filtros.limit)) || 20, 1), 100);
+    const consulta = filtroDestinatario(usuarioId);
 
     if (filtros.leida === 'true' || filtros.leida === true) consulta.leida = true;
     if (filtros.leida === 'false' || filtros.leida === false) consulta.leida = false;
@@ -142,22 +160,22 @@ const obtenerNotificacionesUsuario = async (usuarioId, filtros = {}) => {
 };
 
 const obtenerCantidadNoLeidas = (usuarioId) => Notificacion.countDocuments({
-    destinatario: usuarioId,
+    ...filtroDestinatario(usuarioId),
     leida: false
 });
 
 const marcarComoLeida = async (notificacionId, usuarioId) => Notificacion.findOneAndUpdate(
-    { _id: notificacionId, destinatario: usuarioId },
+    { _id: normalizarId(notificacionId), ...filtroDestinatario(usuarioId) },
     { $set: { leida: true, fechaLectura: new Date() } },
     { new: true }
 ).populate('actor', 'nombre apellido correo rol');
 
 const marcarTodasComoLeidas = async (usuarioId) => Notificacion.updateMany(
-    { destinatario: usuarioId, leida: false },
+    { ...filtroDestinatario(usuarioId), leida: false },
     { $set: { leida: true, fechaLectura: new Date() } }
 );
 
-const existeDedupKey = (destinatario, dedupKey) => Notificacion.exists({ destinatario, dedupKey });
+const existeDedupKey = (destinatario, dedupKey) => Notificacion.exists({ ...filtroDestinatario(destinatario), dedupKey: `${resolverFincaNotificacion()}:${dedupKey}` });
 
 module.exports = {
     configurarEmisorTiempoReal,

@@ -60,11 +60,9 @@ const formatearPorcentaje = (valor) => `${new Intl.NumberFormat('es-CR', {
 
 const formatearFecha = (fecha) => {
   if (!fecha) return '--';
-  return new Date(fecha).toLocaleDateString('es-CR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
+  const coincidencia = String(fecha).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (coincidencia) return `${coincidencia[3]}/${coincidencia[2]}/${coincidencia[1]}`;
+  return new Date(fecha).toLocaleDateString('es-CR');
 };
 
 const formatearCantidad = (valor, unidad) => {
@@ -169,24 +167,38 @@ const LineaFinanzasMensual = ({ datos = [], maximo }) => {
 };
 
 const LineaPeso = ({ puntos = [] }) => {
-  if (!puntos || puntos.length < 2) {
+  const validos = (puntos || [])
+    .map((punto) => ({ ...punto, tiempo: new Date(punto.fecha).getTime(), pesoNumero: Number(punto.peso) }))
+    .filter((punto) => Number.isFinite(punto.tiempo) && Number.isFinite(punto.pesoNumero))
+    .sort((a, b) => a.tiempo - b.tiempo);
+  if (validos.length < 2) {
     return <span className="reporte-vacio">Se necesitan al menos dos pesajes.</span>;
   }
 
-  const pesos = puntos.map((punto) => Number(punto.peso || 0));
+  const pesos = validos.map((punto) => punto.pesoNumero);
   const minimo = Math.min(...pesos);
   const maximo = Math.max(...pesos);
   const rango = Math.max(maximo - minimo, 1);
-  const coordenadas = puntos.map((punto, indice) => {
-    const x = puntos.length === 1 ? 0 : (indice / (puntos.length - 1)) * 100;
-    const y = 90 - ((Number(punto.peso || 0) - minimo) / rango) * 80;
-    return `${x},${y}`;
-  }).join(' ');
+  const tiempoInicial = validos[0].tiempo;
+  const rangoTiempo = validos[validos.length - 1].tiempo - tiempoInicial;
+  const coordenadas = validos.map((punto, indice) => ({
+    ...punto,
+    x: rangoTiempo > 0 ? ((punto.tiempo - tiempoInicial) / rangoTiempo) * 100 : (indice / (validos.length - 1)) * 100,
+    y: 90 - ((punto.pesoNumero - minimo) / rango) * 80
+  }));
 
   return (
-    <svg className="linea-peso" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Evolución de peso">
-      <polyline points={coordenadas} fill="none" stroke="currentColor" strokeWidth="3" vectorEffect="non-scaling-stroke" />
-    </svg>
+    <div className="linea-peso-contenedor">
+      <svg className="linea-peso" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Evolución de peso en el tiempo">
+        <polyline points={coordenadas.map((punto) => `${punto.x},${punto.y}`).join(' ')} fill="none" stroke="currentColor" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+        {coordenadas.map((punto, indice) => (
+          <circle key={`${punto.fecha}-${indice}`} cx={punto.x} cy={punto.y} r="2" fill="currentColor">
+            <title>{formatearFecha(punto.fecha)} · {punto.pesoNumero} kg</title>
+          </circle>
+        ))}
+      </svg>
+      <div className="linea-peso-eje"><span>{formatearFecha(validos[0].fecha)}</span><span>{formatearFecha(validos[validos.length - 1].fecha)}</span></div>
+    </div>
   );
 };
 
@@ -1273,12 +1285,12 @@ const Reportes = ({ usuario }) => {
                 </article>
                 <article>
                   <span>Ganancia diaria prom.</span>
-                  <strong>{formatearNumero(crecimientoPesajes.resumen.gananciaDiariaPromedio)} kg</strong>
+                  <strong>{formatearDecimal(crecimientoPesajes.resumen.gananciaDiariaPromedio, 3)} kg/día</strong>
                   <small>Promedio por animal con historial</small>
                 </article>
                 <article>
                   <span>Ganancia mensual prom.</span>
-                  <strong>{formatearNumero(crecimientoPesajes.resumen.gananciaMensualPromedio)} kg</strong>
+                  <strong>{formatearDecimal(crecimientoPesajes.resumen.gananciaMensualPromedio, 2)} kg</strong>
                   <small>Proyección a 30 días</small>
                 </article>
                 <article>

@@ -1,3 +1,4 @@
+import { claveFechaTarea } from '../utils/fechasTareas.mjs';
 import React, { useEffect, useMemo, useState } from 'react';
 import { puedeGestionarModulo } from '../constants/permisosRoles';
 import { obtenerMisTareas, obtenerTareas } from '../services/api';
@@ -22,7 +23,7 @@ const sumarDias = (fechaIso, dias) => {
 };
 
 const formatearFecha = (fecha, zonaHoraria, opciones = {}) => {
-  const fechaRepresentativa = obtenerInfoLunar(fecha, zonaHoraria)?.fecha;
+  const fechaRepresentativa = obtenerInfoLunar(claveFechaTarea(fecha, zonaHoraria), zonaHoraria)?.fecha;
   if (!fechaRepresentativa) return '--';
   return new Intl.DateTimeFormat('es-CR', {
     timeZone: zonaHoraria,
@@ -69,7 +70,7 @@ const CalendarioOperativo = ({ usuario, onAbrirTarea }) => {
         setTareas(activas);
         await guardarTareasOffline(activas, { filtros }).catch(() => {});
       } catch (err) {
-        const datosOffline = await obtenerTareasOffline({ filtros }).catch(() => []);
+        const datosOffline = [401, 403].includes(err.status) ? [] : await obtenerTareasOffline({ filtros }).catch(() => []);
         if (!vigente) return;
         setTareas(datosOffline.filter((tarea) => !['Completada', 'Cancelada'].includes(tarea.estado)));
         setError(datosOffline.length ? 'Mostrando actividades guardadas en este dispositivo.' : 'No fue posible cargar las próximas actividades.');

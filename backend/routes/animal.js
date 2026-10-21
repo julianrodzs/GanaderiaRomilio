@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const router = Router();
 const { autorizarPermiso } = require('../middleware/auth');
-const { requireFeature } = require('../middleware/plan');
+const { requireFeature, requirePlanVigente } = require('../middleware/plan');
 const { recibirImagenApariencia } = require('../middleware/uploadApariencia');
 const fotoAnimalCtrl = require('../controllers/fotoAnimal-controller');
 const puedeVer = autorizarPermiso('inventario.ver');
@@ -23,10 +23,10 @@ router.route('/')
     .get(puedeVer, getAnimales)
     .post(puedeGestionar, createAnimal);
 
-router.patch('/estado-sanitario', autorizarPermiso('sanidad.gestionar'), updateEstadoSanitarioLote);
+router.patch('/estado-sanitario', autorizarPermiso('sanidad.gestionar'), requirePlanVigente(), updateEstadoSanitarioLote);
 router.get('/catalogos/razas', puedeVer, getCatalogoRacial);
 router.get('/:id/descendencia', puedeVer, getDescendenciaDirecta);
-router.patch('/:id/estado-sanitario', autorizarPermiso('sanidad.gestionar'), updateEstadoSanitario);
+router.patch('/:id/estado-sanitario', autorizarPermiso('sanidad.gestionar'), requirePlanVigente(), updateEstadoSanitario);
 router.post('/:id/foto', puedeGestionar, requireFeature('fotosAnimales'), recibirImagenApariencia, fotoAnimalCtrl.subir);
 router.delete('/:id/foto', puedeGestionar, fotoAnimalCtrl.eliminar);
 

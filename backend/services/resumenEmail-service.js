@@ -1,3 +1,4 @@
+const { escaparHtml } = require('./htmlSeguro-service');
 const { Types } = require('mongoose');
 const Animal = require('../models/Animal');
 const ConfiguracionEmail = require('../models/ConfiguracionEmail');
@@ -104,7 +105,7 @@ const crearContenido = ({ usuario, organizacion, resumen, frecuencia }) => {
     if (resumen.tareas) bloques.push(`<h3>Tareas</h3><p>Pendientes: ${resumen.tareas.pendientes}<br>Vencidas: ${resumen.tareas.vencidas}</p>`);
     return {
         subject: `Resumen ${frecuencia.toLowerCase()} - ${organizacion.nombre}`,
-        html: `<p>Hola ${usuario.nombre || ''},</p>${bloques.join('')}<p>Este resumen fue generado según tus preferencias.</p>`,
+        html: `<p>Hola ${escaparHtml(usuario.nombre || '')},</p>${bloques.join('')}<p>Este resumen fue generado según tus preferencias.</p>`,
         text: `Resumen ${frecuencia.toLowerCase()} de ${organizacion.nombre}. ${JSON.stringify(resumen)}`
     };
 };
@@ -157,8 +158,10 @@ const procesarResumenesTodasOrganizaciones = async (ahora = new Date()) => {
     }).select('_id nombre zonaHoraria');
     const resultados = [];
     for (const organizacion of organizaciones) {
-        const envios = await ejecutarConOrganizacion(organizacion._id, () => procesarResumenesOrganizacion(organizacion, ahora));
-        resultados.push({ organizacionId: organizacion._id, envios });
+        try {
+            const envios = await ejecutarConOrganizacion(organizacion._id, () => procesarResumenesOrganizacion(organizacion, ahora));
+            resultados.push({ organizacionId: organizacion._id, envios });
+        } catch (error) { resultados.push({ organizacionId: organizacion._id, envios: [], error: error.message }); }
     }
     return resultados;
 };

@@ -21,7 +21,7 @@ const notificacionSchema = new Schema(
     { timestamps: true }
 );
 
-notificacionSchema.plugin(aplicarAislamientoOrganizacion);
+notificacionSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 notificacionSchema.index({ destinatario: 1, createdAt: -1 });
 notificacionSchema.index({ destinatario: 1, leida: 1, createdAt: -1 });
 notificacionSchema.index(

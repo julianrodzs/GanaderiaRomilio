@@ -24,6 +24,11 @@ const PertenenciaLote = require('../models/PertenenciaLote');
 const { PROPOSITOS_LOTE, normalizarPropositoLote, propositoCompatibleConObjetivo } = require('../config/lotes');
 const { CATEGORIAS_POR_ESPECIE, obtenerCategoriaAnimal } = require('./categoriaAnimal-service');
 const { OBJETIVOS_PRODUCTIVOS, normalizarObjetivoProductivo } = require('../config/objetivosProductivos');
+const {
+    actualizarPesoActualAnimal,
+    registrarEventoPesaje,
+    validarDatosPesaje
+} = require('./pesaje-integridad-service');
 
 const VERSION_PLANTILLA = '1';
 const HOJAS_DATOS = ['POTREROS', 'INVENTARIO', 'FINANZAS', 'PESAJES'];
@@ -629,6 +634,14 @@ const importarAnimales = async (registros, modo, resultado, usuarioId) => {
                     resultado.duplicados += 1;
                     continue;
                 }
+                if (datos.pesoActual !== undefined) {
+                    const tienePesajes = await Pesaje.exists({ animal: existente._id })
+                        .setOptions({ omitirAislamientoFinca: true });
+                    if (tienePesajes && Number(datos.pesoActual) !== Number(existente.pesoActual)) {
+                        throw new Error(`El peso actual de ${registro.diio} se administra desde la hoja PESAJES.`);
+                    }
+                    if (tienePesajes) delete datos.pesoActual;
+                }
                 const estadoFinal = datos.estado || existente.estado;
                 const especieFinal = datos.especie || existente.especie || 'Bovino';
                 const objetivoFinal = datos.objetivoProductivo || existente.objetivoProductivo;
@@ -736,35 +749,25 @@ const importarAnimales = async (registros, modo, resultado, usuarioId) => {
     }
 };
 
-const recalcularPesajesAnimal = async (animalId) => {
-    const pesajes = await Pesaje.find({ animal: animalId }).sort({ fecha: 1, createdAt: 1 });
-    let anterior = null;
-    for (const pesaje of pesajes) {
-        if (anterior) {
-            pesaje.aumentoKg = pesaje.peso - anterior.peso;
-            pesaje.diasDesdeUltimoPesaje = Math.max(0, Math.round((pesaje.fecha - anterior.fecha) / 86400000));
-        } else {
-            pesaje.aumentoKg = undefined;
-            pesaje.diasDesdeUltimoPesaje = undefined;
-        }
-        await pesaje.save();
-        anterior = pesaje;
-    }
-    if (anterior) await Animal.findByIdAndUpdate(animalId, { pesoActual: anterior.peso });
-};
-
 const importarPesajes = async (registros, modo, resultado, usuarioId) => {
     const animalesAfectados = new Set();
     for (const registro of registros) {
         try {
-            const animal = await Animal.findOne({ $or: [{ diio: registro.diio }, { identificadorFinca: registro.diio }] }).select('_id etapaProductiva');
+            const animal = await Animal.findOne({ $or: [{ diio: registro.diio }, { identificadorFinca: registro.diio }] })
+                .select('_id etapaProductiva loteActual fechaNacimiento');
             if (!animal) throw new Error(`No existe el animal ${registro.diio}.`);
-            const inicio = new Date(registro.fecha);
-            inicio.setHours(0, 0, 0, 0);
+            const validacion = await validarDatosPesaje({
+                animal: animal._id,
+                fecha: registro.fecha,
+                peso: registro.peso
+            });
+            const claveFecha = validacion.fecha.toISOString().slice(0, 10);
+            const inicio = new Date(`${claveFecha}T00:00:00.000Z`);
             const fin = new Date(inicio);
-            fin.setDate(fin.getDate() + 1);
+            fin.setUTCDate(fin.getUTCDate() + 1);
             const existente = await Pesaje.findOne({ animal: animal._id, fecha: { $gte: inicio, $lt: fin } });
 
+            let pesajeGuardado;
             if (existente) {
                 if (modo === 'solo_crear') {
                     resultado.duplicados += 1;
@@ -773,26 +776,32 @@ const importarPesajes = async (registros, modo, resultado, usuarioId) => {
                 existente.peso = registro.peso;
                 if (registro.etapaProductiva) existente.etapaProductiva = registro.etapaProductiva;
                 if (registro.observaciones) existente.observaciones = registro.observaciones;
-                await existente.save();
+                existente.editadoPor = usuarioId;
+                existente.fechaEdicion = new Date();
+                existente.tipoPesaje = 'Importacion';
+                pesajeGuardado = await existente.save();
                 resultado.actualizados += 1;
             } else {
-                await Pesaje.create({
+                pesajeGuardado = await Pesaje.create({
                     animal: animal._id,
-                    fecha: registro.fecha,
-                    peso: registro.peso,
+                    lote: animal.loteActual || null,
+                    fecha: validacion.fecha,
+                    peso: validacion.peso,
+                    tipoPesaje: 'Importacion',
                     etapaProductiva: registro.etapaProductiva || animal.etapaProductiva,
                     observaciones: registro.observaciones,
                     registradoPor: usuarioId
                 });
                 resultado.creados += 1;
             }
+            await registrarEventoPesaje(pesajeGuardado, usuarioId, { titulo: 'Pesaje importado' });
             animalesAfectados.add(animal._id.toString());
         } catch (error) {
             registrarErrorConfirmacion(resultado, registro, error);
         }
     }
 
-    for (const animalId of animalesAfectados) await recalcularPesajesAnimal(animalId);
+    for (const animalId of animalesAfectados) await actualizarPesoActualAnimal(animalId, { forzar: true });
 };
 
 const importarFinanzas = async (registros, resultado) => {

@@ -2183,6 +2183,10 @@
   gap: 10px;
 }
 
+.potrero-informacion-ancha {
+  grid-column: 1 / -1;
+}
+
 .potrero-informacion article,
 .rendimiento-metricas article {
   display: grid;
@@ -4263,6 +4267,20 @@
   background-size: 100% 50%, 25% 100%;
 }
 
+.linea-peso-contenedor {
+  min-width: 0;
+}
+
+.linea-peso-eje {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  color: #56625a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .reportes-metricas .sustentabilidad-positiva {
   background: #e5efe7;
 }
@@ -4719,6 +4737,16 @@
   place-items: center;
   padding: 20px;
   background: rgba(8, 24, 13, 0.42);
+}
+
+.modal-panel.retiro-carne-modal {
+  width: min(100%, 680px);
+  border-top: 4px solid #a43b21;
+}
+
+.retiro-carne-modal .eyebrow,
+.retiro-carne-modal h2 {
+  color: #7d2d19;
 }
 
 .modal-panel {

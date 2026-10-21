@@ -6,35 +6,29 @@ const { upsertEventoAnimal, eliminarEventosPorReferencia } = require('../service
 const { upsertEventoCamada, eliminarEventosCamadaPorReferencia } = require('../services/eventoCamada-service');
 const {
     ejecutarNotificacionSegura,
+    notificarComentarioTarea,
     notificarTareaAsignada,
     notificarTareaCompletada,
     notificarTareaModificada
 } = require('../services/tarea-notificacion-service');
-const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
 const { construirFiltroBusquedaTareas } = require('../services/tareaBusqueda-service');
 
+const { randomUUID } = require('crypto');
+const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
+const { CAMPOS, limpiarDatosTarea, validarRelacionesTarea, esTareaEspecializada, esTareaVinculada, validarTransicionTarea, fechaEjecucionTarea, errorTarea } = require('../services/tarea-integridad-service');
 const tareaCtrl = {};
 
-const aplicarEfectosTareaCompletada = async (tarea) => {
-    if (tarea.estado !== 'Completada'
-        || tarea.moduloOrigen !== 'Reproduccion'
-        || tarea.especie !== 'Bovino'
-        || tarea.claveAutomatica !== 'destete'
-        || !tarea.animal
-        || !tarea.referenciaId) return;
-
-    const animalId = tarea.animal?._id || tarea.animal;
-    const ciclo = await RegistroReproductivo.findById(tarea.referenciaId).select('animal fechaPartoReal');
-    if (!ciclo?.animal || String(ciclo.animal) === String(animalId)) return;
-
-    await Animal.updateOne(
-        {
-            _id: animalId,
-            madre: ciclo.animal,
-            $or: [{ fechaDestete: null }, { fechaDestete: { $exists: false } }]
-        },
-        { $set: { fechaDestete: tarea.fechaCompletada || new Date() } }
+const aplicarEfectosTareaCompletada = async (tarea, session) => {
+    if (tarea.moduloOrigen !== 'Reproduccion' || tarea.especie !== 'Bovino'
+        || tarea.claveAutomatica !== 'destete' || !tarea.animal || !tarea.referenciaId) return false;
+    const ciclo = await RegistroReproductivo.findById(tarea.referenciaId).select('animal fechaPartoReal').session(session);
+    if (!ciclo?.fechaPartoReal || String(ciclo.animal) === String(tarea.animal)) return false;
+    if (tarea.fechaCompletada < ciclo.fechaPartoReal) throw errorTarea('El destete no puede ser anterior al parto.');
+    const resultado = await Animal.updateOne(
+        { _id: tarea.animal, madre: ciclo.animal, $or: [{ fechaDestete: null }, { fechaDestete: { $exists: false } }] },
+        { $set: { fechaDestete: tarea.fechaCompletada } }, { session }
     );
+    return resultado.modifiedCount === 1;
 };
 const POPULATE_TAREA = [
     { path: 'asignadoA', select: 'nombre apellido correo rol estado' },
@@ -85,113 +79,21 @@ const construirFiltros = (query = {}) => {
 
 const obtenerTareaPoblada = (id) => Tarea.findById(id).populate(POPULATE_TAREA);
 
-const limpiarDatosTarea = (datos) => {
-    const datosLimpios = { ...datos };
-    delete datosLimpios.asignacionModificadaManualmente;
-
-    ['potrero', 'animal', 'fechaLimite'].forEach((campo) => {
-        if (datosLimpios[campo] === '' || datosLimpios[campo] === 'null') {
-            datosLimpios[campo] = null;
-        }
-    });
-
-    return datosLimpios;
-};
-
-const aplicarFechaCompletadaPorEstado = (datos) => {
-    const datosConEstado = { ...datos };
-
-    if (datosConEstado.estado === 'Completada' && !datosConEstado.fechaCompletada) {
-        datosConEstado.fechaCompletada = new Date();
-    }
-
-    if (datosConEstado.estado && datosConEstado.estado !== 'Completada') {
-        datosConEstado.fechaCompletada = null;
-    }
-
-    return datosConEstado;
-};
-
-const TIPOS_EVENTO_POR_CLAVE = {
-    'parto-estimado': 'Parto',
-    'proximo-celo': 'Monta',
-    destete: 'Destete',
-    'revisar-celo': 'Monta',
-    'desparasitar-antes-parto': 'Sanidad',
-    'revisar-parto': 'Parto',
-    'camada-hierro': 'Tratamiento',
-    'camada-vitamina-desparasitacion': 'Sanidad',
-    'camada-destete': 'Destete',
-    'camada-desparasitar-destete': 'Sanidad',
-    'camada-vitamina-selenio-destete': 'Tratamiento',
-    'camada-circovirus': 'Sanidad',
-    'camada-primera-monta': 'Monta',
-    'camada-venta': 'Venta',
-    'camada-sacrificio': 'Sacrificio'
-};
-
-const TIPOS_EVENTO_POR_TIPO_TAREA = {
-    Sanidad: 'Sanidad',
-    Pesaje: 'Pesaje',
-    Venta: 'Venta',
-    Sacrificio: 'Muerte'
-};
-
-const obtenerTipoEventoBitacora = (tarea) => (
-    tarea.tipoEventoBitacora
-    || TIPOS_EVENTO_POR_CLAVE[tarea.claveAutomatica]
-    || TIPOS_EVENTO_POR_TIPO_TAREA[tarea.tipo]
-);
-
-const tareaDebeGenerarBitacora = (tarea) => Boolean(tarea.generaBitacora || obtenerTipoEventoBitacora(tarea));
-
-const sincronizarBitacoraTarea = async (tarea, usuarioId) => {
-    await eliminarEventosPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id });
-    await eliminarEventosCamadaPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id });
-
-    if (tarea.estado !== 'Completada' || !tareaDebeGenerarBitacora(tarea)) return;
-
-    const tipoEvento = obtenerTipoEventoBitacora(tarea);
-    const fecha = tarea.fechaCompletada || new Date();
-    const descripcion = tarea.observaciones || tarea.descripcion || 'Tarea importante completada.';
-
+const sincronizarBitacoraTarea = async (tarea, usuarioId, session, desteteRegistrado = false) => {
+    const datos = {
+        tipoEvento: desteteRegistrado ? 'Destete' : 'Observacion',
+        fecha: tarea.fechaCompletada,
+        titulo: `Tarea completada: ${tarea.titulo}`,
+        descripcion: tarea.observaciones || tarea.descripcion || 'Actividad de agenda completada; no sustituye un registro de negocio.',
+        moduloOrigen: 'Tareas', referenciaId: tarea._id, creadoPor: usuarioId,
+        metadata: { tarea: tarea._id, tipo: tarea.tipo, fechaRecepcion: tarea.fechaRecepcionCompletado }
+    };
     if (tarea.claveAutomatica?.startsWith('camada-') && tarea.referenciaId) {
-        await upsertEventoCamada({
-            camada: tarea.referenciaId,
-            tipoEvento,
-            fecha,
-            titulo: `Tarea completada: ${tarea.titulo}`,
-            descripcion,
-            moduloOrigen: 'Tareas',
-            referenciaId: tarea._id,
-            creadoPor: usuarioId,
-            metadata: {
-                tarea: tarea._id,
-                tipo: tarea.tipo,
-                claveAutomatica: tarea.claveAutomatica,
-                categoriaAutomatica: tarea.categoriaAutomatica
-            }
-        });
-        return;
-    }
-
-    if (tarea.animal) {
-        await upsertEventoAnimal({
-            animal: tarea.animal?._id || tarea.animal,
-            tipoEvento,
-            fecha,
-            titulo: `Tarea completada: ${tarea.titulo}`,
-            descripcion,
-            moduloOrigen: 'Tareas',
-            referenciaId: tarea._id,
-            creadoPor: usuarioId,
-            metadata: {
-                tarea: tarea._id,
-                tipo: tarea.tipo,
-                claveAutomatica: tarea.claveAutomatica,
-                categoriaAutomatica: tarea.categoriaAutomatica
-            }
-        });
+        const Camada = require('../models/Camada');
+        if (!await Camada.exists({ _id: tarea.referenciaId }).session(session)) throw errorTarea('La camada de origen ya no está disponible.', 409);
+        await upsertEventoCamada({ ...datos, camada: tarea.referenciaId }, { session });
+    } else if (tarea.animal) {
+        await upsertEventoAnimal({ ...datos, animal: tarea.animal }, { session });
     }
 };
 
@@ -250,274 +152,142 @@ tareaCtrl.getTareaById = async (req, res) => {
     }
 };
 
+const responderError = (res, error) => res.status(error.name === 'VersionError' ? 409 : error.status || 400).json({
+    mensaje: error.name === 'VersionError' ? 'La tarea cambió. Actualiza y revisa antes de reintentar.' : error.message,
+    codigo: error.codigo || (error.name === 'VersionError' ? 'TAREA_MODIFICADA' : undefined)
+});
+const autorizarTarea = (req, tarea) => {
+    if (!tarea) throw errorTarea('Tarea no encontrada.', 404);
+    if (esModoConsulta(req) || (!puedeGestionarTareas(req) && !esAsignado(req, tarea))) throw errorTarea('No tienes permiso para modificar esta tarea.', 403);
+};
+const validarVersion = (tarea, valor) => {
+    if (!valor) return;
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) throw errorTarea('Versión de tarea inválida.');
+    if (tarea.updatedAt.getTime() !== fecha.getTime()) throw errorTarea('La tarea cambió. Revisa la versión actual antes de reintentar.', 409, 'TAREA_MODIFICADA');
+};
+const validarFechas = (tarea) => {
+    if (tarea.fechaLimite && tarea.fechaLimite < tarea.fechaProgramada) throw errorTarea('La fecha límite no puede ser anterior a la programada.');
+};
+
 tareaCtrl.crearTarea = async (req, res) => {
     try {
-        if (!puedeGestionarTareas(req)) {
-            return res.status(403).json({ mensaje: 'No tienes permisos para crear tareas' });
-        }
-
-        await validarUsuarioAsignable(req.body.asignadoA, 'Tareas');
-
-        const nuevaTarea = new Tarea({
-            ...aplicarFechaCompletadaPorEstado(limpiarDatosTarea(req.body)),
-            creadoPor: req.usuario.id
+        if (!puedeGestionarTareas(req)) throw errorTarea('No tienes permiso para crear tareas.', 403);
+        const datos = limpiarDatosTarea(req.body);
+        if (datos.estado && datos.estado !== 'Pendiente') throw errorTarea('Las tareas se crean pendientes; registra su ejecución por separado.');
+        const tarea = await ejecutarEnTransaccion(async (session) => {
+            await validarRelacionesTarea(datos, session);
+            const nueva = new Tarea({ ...datos, organizacionId: req.organizacionId, fincaId: req.fincaId, creadoPor: req.usuario.id, asignacionVersion: randomUUID() });
+            validarFechas(nueva);
+            return nueva.save({ session });
         });
-        const tareaGuardada = await nuevaTarea.save();
-        await sincronizarBitacoraTarea(tareaGuardada, req.usuario?.id);
-        const tarea = await obtenerTareaPoblada(tareaGuardada._id);
-
         await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, req.usuario));
-
-        res.status(201).json(tarea);
-    } catch (error) {
-        res.status(400).json({ mensaje: 'Error al crear tarea', error: error.message });
-    }
+        res.status(201).json(await obtenerTareaPoblada(tarea._id));
+    } catch (error) { responderError(res, error); }
 };
 
-tareaCtrl.actualizarTarea = async (req, res) => {
+const mutarTarea = async (req, res, modo) => {
     try {
-        if (!puedeGestionarTareas(req)) {
-            return res.status(403).json({ mensaje: 'No tienes permisos para editar tareas' });
+        if (modo === 'editar' && !puedeGestionarTareas(req)) throw errorTarea('No tienes permiso para editar tareas.', 403);
+        const campos = modo === 'editar' ? [...CAMPOS, 'versionEsperada', 'reapertura']
+            : ['observaciones', 'versionEsperada', 'fechaEjecucionReal', ...(modo === 'estado' ? ['estado', 'reapertura'] : [])];
+        const datos = limpiarDatosTarea(req.body, campos);
+        const clave = String(req.get('Idempotency-Key') || '').trim();
+        if (clave.length > 160) throw errorTarea('Clave de idempotencia inválida.');
+        const resultado = await ejecutarEnTransaccion(async (session) => {
+            const tarea = await Tarea.findById(req.params.id).select('+operacionesIdempotentes').session(session);
+            autorizarTarea(req, tarea); // Nunca devolver replay ni metadatos antes de autorizar.
+            const destino = modo === 'completar' ? 'Completada' : datos.estado || tarea.estado;
+            const contenido = JSON.stringify({ observaciones: datos.observaciones || '', fechaEjecucionReal: datos.fechaEjecucionReal || '' });
+            const previa = clave && tarea.operacionesIdempotentes.find((op) => op.clave === clave);
+            if (previa) {
+                if (modo !== 'completar' || String(previa.usuario) !== req.usuario.id || previa.tipo !== 'Completar tarea'
+                    || tarea.estado !== 'Completada' || (previa.contenido && previa.contenido !== contenido)) throw errorTarea('La clave pertenece a otra operación o la tarea fue reabierta.', 409);
+                return { id: tarea._id, replay: true };
+            }
+            if (modo === 'completar' && tarea.estado === 'Completada') throw errorTarea('La tarea ya está completada.', 409, 'TAREA_YA_COMPLETADA');
+            validarVersion(tarea, datos.versionEsperada);
+            validarTransicionTarea(tarea, destino, puedeGestionarTareas(req), datos.reapertura === true);
+            if (esTareaVinculada(tarea) && ['animal', 'potrero', 'lote', 'tipo'].some((campo) => Object.hasOwn(datos, campo) && String(datos[campo] || '') !== String(tarea[campo] || ''))) throw errorTarea('No se puede cambiar el origen de una tarea vinculada.', 409);
+            if (esTareaEspecializada(tarea) && ['fechaProgramada', 'fechaLimite'].some((campo) => Object.hasOwn(datos, campo) && new Date(datos[campo]).getTime() !== new Date(tarea[campo]).getTime())) throw errorTarea('Reprograma esta actividad desde su módulo de origen.', 409);
+            const anterior = tarea.estado;
+            const asignadoAnterior = String(tarea.asignadoA);
+            const cambios = Object.fromEntries(Object.entries(datos).filter(([campo]) => CAMPOS.includes(campo)));
+            await validarRelacionesTarea(cambios, session);
+            Object.assign(tarea, cambios);
+            tarea.estado = destino;
+            if (asignadoAnterior !== String(tarea.asignadoA)) {
+                tarea.asignacionModificadaManualmente = true;
+                tarea.asignacionVersion = randomUUID();
+            }
+            validarFechas(tarea);
+            if (destino === 'Completada' && anterior !== destino) {
+                tarea.fechaRecepcionCompletado = new Date();
+                tarea.fechaCompletada = fechaEjecucionTarea(datos.fechaEjecucionReal, tarea.fechaRecepcionCompletado);
+                if (tarea.createdAt && tarea.fechaCompletada < tarea.createdAt) throw errorTarea('La ejecución no puede ser anterior a la creación de la tarea.');
+                tarea.completadaOffline = Boolean(datos.fechaEjecucionReal);
+                if (clave && modo === 'completar') tarea.operacionesIdempotentes = [...tarea.operacionesIdempotentes, { clave, tipo: 'Completar tarea', usuario: req.usuario.id, ejecutadaEn: tarea.fechaCompletada, contenido }].slice(-50);
+            } else if (destino !== 'Completada' && anterior === 'Completada') {
+                tarea.fechaCompletada = null;
+                tarea.fechaRecepcionCompletado = null;
+                tarea.completadaOffline = false;
+                await eliminarEventosPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id, session });
+                await eliminarEventosCamadaPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id, session });
+            }
+            await tarea.save({ session });
+            if (destino === 'Completada' && anterior !== destino) {
+                await validarRelacionesTarea({ animal: tarea.animal, potrero: tarea.potrero, lote: tarea.lote }, session);
+                const destete = await aplicarEfectosTareaCompletada(tarea, session);
+                await sincronizarBitacoraTarea(tarea, req.usuario.id, session, destete);
+            }
+            return { id: tarea._id, asignacion: asignadoAnterior !== String(tarea.asignadoA), completada: destino === 'Completada' && anterior !== destino };
+        });
+        const tarea = await obtenerTareaPoblada(resultado.id);
+        if (resultado.replay) res.set('X-Idempotent-Replay', 'true');
+        else {
+            if (resultado.asignacion) await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, req.usuario));
+            await ejecutarNotificacionSegura(() => resultado.completada ? notificarTareaCompletada(tarea, req.usuario) : notificarTareaModificada(tarea, req.usuario));
         }
-
-        if (Object.prototype.hasOwnProperty.call(req.body, 'asignadoA')) {
-            await validarUsuarioAsignable(req.body.asignadoA, 'Tareas');
-        }
-
-        const tareaAnterior = await Tarea.findById(req.params.id).lean();
-        if (req.body.estado === 'Completada' && tareaAnterior?.categoriaAutomatica === 'IATF') {
-            return res.status(409).json({ mensaje: 'Registra la ejecución desde el formulario IATF.' });
-        }
-        const datosActualizados = aplicarFechaCompletadaPorEstado(limpiarDatosTarea(req.body));
-        const asignacionCambioManualmente = Object.prototype.hasOwnProperty.call(req.body, 'asignadoA')
-            && String(tareaAnterior?.asignadoA || '') !== String(req.body.asignadoA || '');
-        if (asignacionCambioManualmente) {
-            datosActualizados.asignacionModificadaManualmente = true;
-        }
-        const tarea = await Tarea.findByIdAndUpdate(
-            req.params.id,
-            datosActualizados,
-            { new: true, runValidators: true }
-        ).populate(POPULATE_TAREA);
-
-        if (!tarea) {
-            return res.status(404).json({ mensaje: 'Tarea no encontrada' });
-        }
-
-        await aplicarEfectosTareaCompletada(tarea);
-        await sincronizarBitacoraTarea(tarea, req.usuario?.id);
-        const cambioAsignado = String(tareaAnterior?.asignadoA || '') !== String(tarea.asignadoA?._id || tarea.asignadoA || '');
-        if (cambioAsignado) {
-            await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, req.usuario));
-        }
-        await ejecutarNotificacionSegura(() => (
-            tarea.estado === 'Completada' && tareaAnterior?.estado !== 'Completada'
-                ? notificarTareaCompletada(tarea, req.usuario)
-                : notificarTareaModificada(tarea, req.usuario)
-        ));
         res.json(tarea);
-    } catch (error) {
-        res.status(400).json({ mensaje: 'Error al actualizar tarea', error: error.message });
-    }
+    } catch (error) { responderError(res, error); }
 };
-
-tareaCtrl.cambiarEstadoTarea = async (req, res) => {
-    try {
-        const { estado } = req.body;
-        const tarea = await Tarea.findById(req.params.id);
-
-        if (!tarea) {
-            return res.status(404).json({ mensaje: 'Tarea no encontrada' });
-        }
-
-        if (esModoConsulta(req)) {
-            return res.status(403).json({ mensaje: 'El modo Consulta es de solo lectura' });
-        }
-
-        const estadoAnterior = tarea.estado;
-
-        if (estado === 'Completada' && ['IATF', 'PROTOCOLO_ENGORDE', 'BANDA_PORCINA'].includes(tarea.categoriaAutomatica)) {
-            return res.status(409).json({ mensaje: 'Registra la ejecución desde el protocolo correspondiente para conservar la trazabilidad.' });
-        }
-
-        if (!puedeGestionarTareas(req)) {
-            if (!esAsignado(req, tarea)) {
-                return res.status(403).json({ mensaje: 'No puedes modificar tareas de otros usuarios' });
-            }
-
-            if (!['Pendiente', 'En proceso', 'Completada'].includes(estado)) {
-                return res.status(403).json({ mensaje: 'Solo puedes cambiar a Pendiente, En proceso o Completada' });
-            }
-        }
-
-        tarea.estado = estado;
-        tarea.fechaCompletada = estado === 'Completada' ? new Date() : null;
-
-        if (req.body.observaciones) {
-            tarea.observaciones = req.body.observaciones;
-        }
-
-        const tareaActualizada = await tarea.save();
-        await aplicarEfectosTareaCompletada(tareaActualizada);
-        await sincronizarBitacoraTarea(tareaActualizada, req.usuario?.id);
-        await ejecutarNotificacionSegura(() => (
-            estado === 'Completada' && estadoAnterior !== 'Completada'
-                ? notificarTareaCompletada(tareaActualizada, req.usuario)
-                : notificarTareaModificada(tareaActualizada, req.usuario)
-        ));
-        res.json(await obtenerTareaPoblada(tareaActualizada._id));
-    } catch (error) {
-        res.status(400).json({ mensaje: 'Error al cambiar estado de tarea', error: error.message });
-    }
-};
-
-tareaCtrl.completarTarea = async (req, res) => {
-    const claveIdempotencia = String(req.get('Idempotency-Key') || '').trim();
-
-    try {
-        if (claveIdempotencia.length > 160) {
-            return res.status(400).json({ mensaje: 'La clave de idempotencia no es valida' });
-        }
-
-        const tarea = await Tarea.findById(req.params.id).select('+operacionesIdempotentes');
-
-        if (!tarea) {
-            return res.status(404).json({ mensaje: 'Tarea no encontrada' });
-        }
-
-        if (['IATF', 'PROTOCOLO_ENGORDE', 'BANDA_PORCINA'].includes(tarea.categoriaAutomatica)) {
-            return res.status(409).json({
-                codigo: 'PROTOCOLO_REQUIERE_EJECUCION',
-                mensaje: 'Esta tarea debe registrarse desde su protocolo para conservar inventario y trazabilidad.'
-            });
-        }
-
-        if (claveIdempotencia && tarea.operacionesIdempotentes?.some((operacion) => operacion.clave === claveIdempotencia)) {
-            res.set('X-Idempotent-Replay', 'true');
-            return res.json(await obtenerTareaPoblada(tarea._id));
-        }
-
-        if (esModoConsulta(req)) {
-            return res.status(403).json({ mensaje: 'El modo Consulta es de solo lectura' });
-        }
-
-        if (!puedeGestionarTareas(req) && !esAsignado(req, tarea)) {
-            return res.status(403).json({ mensaje: 'No puedes completar esta tarea' });
-        }
-
-        if (['Completada', 'Cancelada'].includes(tarea.estado)) {
-            return res.status(409).json({
-                codigo: tarea.estado === 'Completada' ? 'TAREA_YA_COMPLETADA' : 'TAREA_CANCELADA',
-                mensaje: tarea.estado === 'Completada'
-                    ? 'La tarea ya fue completada desde otro dispositivo.'
-                    : 'La tarea fue cancelada y no puede completarse.',
-                tareaActual: await obtenerTareaPoblada(tarea._id)
-            });
-        }
-
-        const versionEsperada = req.body.versionEsperada ? new Date(req.body.versionEsperada) : null;
-        if (versionEsperada && !Number.isNaN(versionEsperada.getTime())
-            && tarea.updatedAt.getTime() !== versionEsperada.getTime()) {
-            return res.status(409).json({
-                codigo: 'TAREA_MODIFICADA',
-                mensaje: 'La tarea cambio mientras el dispositivo estaba sin conexion. Revisa su estado antes de reintentar.',
-                tareaActual: await obtenerTareaPoblada(tarea._id)
-            });
-        }
-
-        tarea.estado = 'Completada';
-        tarea.fechaCompletada = new Date();
-
-        if (req.body.observaciones) {
-            tarea.observaciones = req.body.observaciones;
-        }
-
-        if (claveIdempotencia) {
-            tarea.operacionesIdempotentes = [
-                ...(tarea.operacionesIdempotentes || []),
-                {
-                    clave: claveIdempotencia,
-                    tipo: 'Completar tarea',
-                    usuario: req.usuario.id,
-                    ejecutadaEn: new Date()
-                }
-            ].slice(-50);
-        }
-
-        const tareaActualizada = await tarea.save();
-        await aplicarEfectosTareaCompletada(tareaActualizada);
-        await sincronizarBitacoraTarea(tareaActualizada, req.usuario?.id);
-        await ejecutarNotificacionSegura(() => notificarTareaCompletada(tareaActualizada, req.usuario));
-        res.json(await obtenerTareaPoblada(tareaActualizada._id));
-    } catch (error) {
-        if (error?.name === 'VersionError') {
-            const tareaActual = await Tarea.findById(req.params.id).select('+operacionesIdempotentes');
-            if (claveIdempotencia && tareaActual?.operacionesIdempotentes?.some((operacion) => operacion.clave === claveIdempotencia)) {
-                res.set('X-Idempotent-Replay', 'true');
-                return res.json(await obtenerTareaPoblada(tareaActual._id));
-            }
-            return res.status(409).json({
-                codigo: 'TAREA_MODIFICADA',
-                mensaje: 'La tarea fue modificada por otro usuario. Actualiza la informacion antes de reintentar.',
-                tareaActual: tareaActual ? await obtenerTareaPoblada(tareaActual._id) : null
-            });
-        }
-        res.status(400).json({ mensaje: 'Error al completar tarea', error: error.message });
-    }
-};
+tareaCtrl.actualizarTarea = (req, res) => mutarTarea(req, res, 'editar');
+tareaCtrl.cambiarEstadoTarea = (req, res) => mutarTarea(req, res, 'estado');
+tareaCtrl.completarTarea = (req, res) => mutarTarea(req, res, 'completar');
 
 tareaCtrl.eliminarTarea = async (req, res) => {
     try {
-        if (!puedeGestionarTareas(req)) {
-            return res.status(403).json({ mensaje: 'No tienes permisos para eliminar tareas' });
-        }
-
-        const tarea = await Tarea.findByIdAndDelete(req.params.id);
-
-        if (!tarea) {
-            return res.status(404).json({ mensaje: 'Tarea no encontrada' });
-        }
-
-        await eliminarEventosPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id });
-        await eliminarEventosCamadaPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id });
+        if (!puedeGestionarTareas(req)) throw errorTarea('No tienes permiso para eliminar tareas.', 403);
+        await ejecutarEnTransaccion(async (session) => {
+            const tarea = await Tarea.findById(req.params.id).session(session);
+            autorizarTarea(req, tarea);
+            if (esTareaVinculada(tarea) || tarea.estado === 'Completada') throw errorTarea('La tarea conserva trazabilidad de origen. Cancélala o gestiónala desde su módulo; no puede borrarse.', 409);
+            // save aplica el control de versión antes del borrado dentro de la transacción.
+            tarea.observaciones = tarea.observaciones || 'Tarea eliminada';
+            await tarea.save({ session });
+            await Tarea.deleteOne({ _id: tarea._id, __v: tarea.__v }, { session });
+            await eliminarEventosPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id, session });
+            await eliminarEventosCamadaPorReferencia({ moduloOrigen: 'Tareas', referenciaId: tarea._id, session });
+            await require('../models/Notificacion').deleteMany({ entidadTipo: 'Tarea', entidadId: tarea._id }, { session });
+        });
         res.json({ mensaje: 'Tarea eliminada' });
-    } catch (error) {
-        res.status(500).json({ mensaje: 'Error al eliminar tarea', error: error.message });
-    }
+    } catch (error) { responderError(res, error); }
 };
 
 tareaCtrl.agregarComentario = async (req, res) => {
     try {
-        const { texto } = req.body;
-
-        if (esModoConsulta(req)) {
-            return res.status(403).json({ mensaje: 'El modo Consulta es de solo lectura' });
-        }
-
-        if (!texto) {
-            return res.status(400).json({ mensaje: 'El comentario es requerido' });
-        }
-
-        const tarea = await Tarea.findById(req.params.id);
-
-        if (!tarea) {
-            return res.status(404).json({ mensaje: 'Tarea no encontrada' });
-        }
-
-        if (!puedeGestionarTareas(req) && !esAsignado(req, tarea)) {
-            return res.status(403).json({ mensaje: 'No puedes comentar esta tarea' });
-        }
-
-        tarea.comentarios.push({
-            usuario: req.usuario.id,
-            texto
+        const { texto } = limpiarDatosTarea(req.body, ['texto']);
+        if (typeof texto !== 'string' || !texto.trim()) throw errorTarea('El comentario es requerido.');
+        const comentarioId = await ejecutarEnTransaccion(async (session) => {
+            const tarea = await Tarea.findById(req.params.id).session(session);
+            autorizarTarea(req, tarea);
+            tarea.comentarios.push({ usuario: req.usuario.id, texto: texto.trim() });
+            await tarea.save({ session });
+            return tarea.comentarios.at(-1)._id;
         });
-
-        const tareaActualizada = await tarea.save();
-        res.status(201).json(await obtenerTareaPoblada(tareaActualizada._id));
-    } catch (error) {
-        res.status(400).json({ mensaje: 'Error al agregar comentario', error: error.message });
-    }
+        const tarea = await obtenerTareaPoblada(req.params.id);
+        await ejecutarNotificacionSegura(() => notificarComentarioTarea(tarea, req.usuario, comentarioId));
+        res.status(201).json(tarea);
+    } catch (error) { responderError(res, error); }
 };
-
 module.exports = tareaCtrl;

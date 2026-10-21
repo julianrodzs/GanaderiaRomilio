@@ -114,6 +114,10 @@ const Potreros = ({ soloLectura = false }) => {
     return rotaciones.filter((rotacion) => fechaEnRango(rotacion.fechaEntrada, filtroRotacionesFecha));
   }, [filtroRotacionesFecha, rotaciones]);
   const potrerosPastoreo = useMemo(() => potreros.filter((item) => (item.tipoArea || 'PASTOREO') === 'PASTOREO'), [potreros]);
+  const potrerosDisponiblesRotacion = useMemo(() => potrerosPastoreo.filter((item) => (
+    !['Ocupado', 'Mantenimiento', 'Inactivo'].includes(item.estado)
+    || String(item._id) === String(rotacionSeleccionada?.potrero?._id || rotacionSeleccionada?.potrero || '')
+  )), [potrerosPastoreo, rotacionSeleccionada]);
   const bancosForrajeros = useMemo(() => potreros.filter((item) => item.tipoArea === 'BANCO_FORRAJERO'), [potreros]);
 
   const guardarPotrero = async ({ potrero, cobertura, coberturaCambiada, tieneCoberturaVigente }) => {
@@ -151,6 +155,20 @@ const Potreros = ({ soloLectura = false }) => {
       setCargando(true);
       await cargarDatos();
     } catch (err) {
+      if (err.data?.codigo === 'POTRERO_CON_DEPENDENCIAS' && err.data?.puedeInactivar) {
+        const inactivar = window.confirm(`${err.message}\n\n¿Desea marcar el área como Inactiva y conservar su historial?`);
+        if (inactivar) {
+          try {
+            await actualizarPotrero(potrero._id, { estado: 'Inactivo' });
+            setCargando(true);
+            await cargarDatos();
+            return;
+          } catch (errorInactivar) {
+            setError(errorInactivar.message);
+            return;
+          }
+        }
+      }
       setError(err.message);
     }
   };
@@ -240,7 +258,7 @@ const Potreros = ({ soloLectura = false }) => {
       return (
         <FormularioRotacion
           rotacionInicial={rotacionSeleccionada}
-          potreros={potreros}
+          potreros={potrerosDisponiblesRotacion}
           modo={rotacionSeleccionada ? 'editar' : 'crear'}
           onCancelar={cancelarFormulario}
           onGuardar={guardarRotacion}

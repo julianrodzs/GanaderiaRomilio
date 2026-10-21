@@ -43,9 +43,11 @@ const CampanaNotificaciones = ({ onAbrirCentro, onNavegar }) => {
     const intervalo = window.setInterval(cargar, 45000);
     const alEnfocar = () => cargar();
     window.addEventListener('focus', alEnfocar);
+    window.addEventListener('ganaderiaNotificacionesActualizadas', alEnfocar);
     return () => {
       window.clearInterval(intervalo);
       window.removeEventListener('focus', alEnfocar);
+      window.removeEventListener('ganaderiaNotificacionesActualizadas', alEnfocar);
     };
   }, []);
 
@@ -59,7 +61,7 @@ const CampanaNotificaciones = ({ onAbrirCentro, onNavegar }) => {
 
   const abrirNotificacion = async (notificacion) => {
     if (!notificacion.leida) {
-      await marcarNotificacionLeida(notificacion._id).catch(() => null);
+      try { await marcarNotificacionLeida(notificacion._id); } catch (err) { setError(err.message); return; }
       setCantidad((valor) => Math.max(valor - 1, 0));
       setNotificaciones((items) => items.map((item) => (
         item._id === notificacion._id ? { ...item, leida: true } : item
@@ -70,7 +72,7 @@ const CampanaNotificaciones = ({ onAbrirCentro, onNavegar }) => {
   };
 
   const marcarTodas = async () => {
-    await marcarTodasNotificacionesLeidas();
+    try { await marcarTodasNotificacionesLeidas(); } catch (err) { setError(err.message); return; }
     setCantidad(0);
     setNotificaciones((items) => items.map((item) => ({ ...item, leida: true })));
   };

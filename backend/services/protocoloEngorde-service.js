@@ -1,3 +1,4 @@
+const { ejecutarNotificacionSegura, notificarTareasOrigen } = require('./tarea-notificacion-service');
 const CicloEngorde = require('../models/CicloEngorde');
 const EventoLote = require('../models/EventoLote');
 const Lote = require('../models/Lote');
@@ -93,6 +94,7 @@ const crearTareas = async (ciclo, responsable) => {
         ejecucion.tarea = tarea._id;
     }
     await ciclo.save();
+    await ejecutarNotificacionSegura(() => notificarTareasOrigen({ referenciaId: ciclo._id, moduloOrigen: 'ProtocoloEngorde' }, ciclo.creadoPor));
 };
 
 const crearCiclo = async ({ datos, usuarioId }) => {

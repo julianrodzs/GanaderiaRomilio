@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   actualizarPlanSanitario,
+  archivarPlanSanitario,
   actualizarEstadoSanitarioAnimales,
   actualizarTratamientoSanitario,
   cancelarTratamientoSanitario,
@@ -133,6 +134,29 @@ const PlanSanitario = ({ soloLectura = false }) => {
     } catch (_) { sessionStorage.removeItem('ganaderiaAccionLote'); }
   }, []);
 
+  useEffect(() => {
+    try {
+      const accion = JSON.parse(sessionStorage.getItem('ganaderiaAccionSanidad') || 'null');
+      if (!accion?.referenciaId) return;
+      if (accion.categoriaAutomatica === 'Plan sanitario') {
+        const plan = planes.find((item) => item._id === accion.referenciaId);
+        if (!plan) return;
+        setPestana('planes');
+        setPlanAplicacion(plan);
+      } else if (accion.categoriaAutomatica === 'Tratamiento sanitario') {
+        const tratamiento = tratamientos.find((item) => item._id === accion.referenciaId);
+        if (!tratamiento) return;
+        setPestana('tratamientos');
+        setTratamientoAplicacion(tratamiento);
+      } else {
+        return;
+      }
+      sessionStorage.removeItem('ganaderiaAccionSanidad');
+    } catch (_) {
+      sessionStorage.removeItem('ganaderiaAccionSanidad');
+    }
+  }, [planes, tratamientos]);
+
   const cambiarEspecie = (valor) => {
     localStorage.setItem('ganaderiaEspecie', valor);
     setEspecie(valor);
@@ -194,6 +218,16 @@ const PlanSanitario = ({ soloLectura = false }) => {
       await eliminarPlanSanitario(plan._id);
       await cargarDatos();
     } catch (err) {
+      if (err.status === 409 && err.data?.codigo === 'PLAN_SANITARIO_CON_HISTORIAL'
+        && window.confirm('Este plan tiene historial y no se puede eliminar. ¿Deseas archivarlo para ocultarlo sin perder sus aplicaciones?')) {
+        try {
+          await archivarPlanSanitario(plan._id);
+          await cargarDatos();
+        } catch (errorArchivo) {
+          setError(errorArchivo.message);
+        }
+        return;
+      }
       setError(err.message);
     }
   };
@@ -418,9 +452,9 @@ const PlanSanitario = ({ soloLectura = false }) => {
             {(aplicacionesPagina) => (
               <div className="tabla-scroll tabla-dinamica sanidad-tabla">
                 <table>
-              <thead><tr><th>Fecha</th><th>Animal(es)</th><th>Producto</th><th>Tipo</th><th>Dosis</th><th>Naturaleza</th><th>Responsable</th><th>Origen</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Animal(es)</th><th>Producto</th><th>Tipo</th><th>Dosis</th><th>Retiro carne</th><th>Naturaleza</th><th>Responsable</th><th>Origen</th><th>Acciones</th></tr></thead>
               <tbody>{aplicacionesPagina.map((aplicacion) => (
-                <tr key={aplicacion._id}><td>{formatearFecha(aplicacion.fechaAplicacion)}</td><td title={nombresAnimales(aplicacion.animales)}>{aplicacion.lote ? `Lote ${aplicacion.lote.codigo} · ` : ''}{nombresAnimales(aplicacion.animales)}</td><td>{aplicacion.producto}</td><td>{aplicacion.tipo || '--'}</td><td>{aplicacion.dosis || '--'}</td><td><span className="naturaleza-sanitaria-badge">{etiquetaNaturaleza(aplicacion.naturaleza)}</span></td><td>{aplicacion.responsable || '--'}</td><td>{aplicacion.planSanitario ? 'Plan sanitario' : aplicacion.tratamiento ? 'Tratamiento' : 'Registro directo'}</td><td><div className="acciones-tabla acciones-iconos-sanidad"><button type="button" title="Ver detalle" aria-label="Ver detalle" onClick={() => setDetalleAplicacion(aplicacion)}>⊙</button></div></td></tr>
+                <tr key={aplicacion._id}><td>{formatearFecha(aplicacion.fechaAplicacion)}</td><td title={nombresAnimales(aplicacion.animales)}>{aplicacion.lote ? `Lote ${aplicacion.lote.codigo} · ` : ''}{nombresAnimales(aplicacion.animales)}</td><td>{aplicacion.producto}</td><td>{aplicacion.tipo || '--'}</td><td>{aplicacion.dosis || '--'}</td><td>{aplicacion.diasRetiroCarne > 0 ? `${aplicacion.diasRetiroCarne} días · hasta ${formatearFecha(aplicacion.fechaFinRetiroCarne)}` : 'No requiere'}</td><td><span className="naturaleza-sanitaria-badge">{etiquetaNaturaleza(aplicacion.naturaleza)}</span></td><td>{aplicacion.responsable || '--'}</td><td>{aplicacion.planSanitario ? 'Plan sanitario' : aplicacion.tratamiento ? 'Tratamiento' : 'Registro directo'}</td><td><div className="acciones-tabla acciones-iconos-sanidad"><button type="button" title="Ver detalle" aria-label="Ver detalle" onClick={() => setDetalleAplicacion(aplicacion)}>⊙</button></div></td></tr>
               ))}</tbody>
                 </table>
               </div>
@@ -447,7 +481,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
       {detalleAplicacion && (
         <div className="modal-backdrop"><section className="modal-panel detalle-sanidad-modal">
           <div className="panel-title"><div><p className="eyebrow">{etiquetaNaturaleza(detalleAplicacion.naturaleza)}</p><h2>{detalleAplicacion.producto}</h2></div><button className="boton-link" type="button" onClick={() => setDetalleAplicacion(null)}>Cerrar</button></div>
-          <div className="detalle-sanidad-grid"><article><span>Fecha</span><strong>{formatearFecha(detalleAplicacion.fechaAplicacion)}</strong></article>{detalleAplicacion.lote && <article><span>Lote</span><strong>{detalleAplicacion.lote.codigo} · {detalleAplicacion.lote.nombre}</strong></article>}<article><span>Animales</span><strong>{nombresAnimales(detalleAplicacion.animales)}</strong></article><article><span>Dosis</span><strong>{detalleAplicacion.dosis || '--'}</strong></article><article><span>Vía</span><strong>{detalleAplicacion.viaAplicacion || '--'}</strong></article><article><span>Responsable</span><strong>{detalleAplicacion.responsable || '--'}</strong></article><article><span>Motivo</span><strong>{detalleAplicacion.motivo || '--'}</strong></article></div>
+          <div className="detalle-sanidad-grid"><article><span>Fecha</span><strong>{formatearFecha(detalleAplicacion.fechaAplicacion)}</strong></article>{detalleAplicacion.lote && <article><span>Lote</span><strong>{detalleAplicacion.lote.codigo} · {detalleAplicacion.lote.nombre}</strong></article>}<article><span>Animales</span><strong>{nombresAnimales(detalleAplicacion.animales)}</strong></article><article><span>Dosis</span><strong>{detalleAplicacion.dosis || '--'}</strong></article><article><span>Vía</span><strong>{detalleAplicacion.viaAplicacion || '--'}</strong></article><article><span>Retiro de carne</span><strong>{detalleAplicacion.diasRetiroCarne > 0 ? `${detalleAplicacion.diasRetiroCarne} días · hasta ${formatearFecha(detalleAplicacion.fechaFinRetiroCarne)}` : 'No requiere'}</strong></article><article><span>Responsable</span><strong>{detalleAplicacion.responsable || '--'}</strong></article><article><span>Motivo</span><strong>{detalleAplicacion.motivo || '--'}</strong></article></div>
         </section></div>
       )}
     </section>

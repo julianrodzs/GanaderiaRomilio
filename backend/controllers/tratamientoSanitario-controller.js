@@ -1,8 +1,8 @@
 const { AplicacionSanitaria } = require('../models/AplicacionSanitaria');
+const Animal = require('../models/Animal');
 const { TratamientoSanitario } = require('../models/TratamientoSanitario');
 const {
     crearAplicacionSanitaria,
-    eliminarAplicacionSanitariaCreada,
     normalizarIds,
     resolverAlcanceSanitario
 } = require('../services/aplicacionSanitaria-service');
@@ -14,6 +14,12 @@ const {
 } = require('../services/sanidad-tarea-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
+const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
+const {
+    sanitizarAplicacionSanitaria,
+    sanitizarCierreTratamiento,
+    sanitizarTratamientoSanitario
+} = require('../services/sanidad-dto-service');
 
 const tratamientoSanitarioCtrl = {};
 
@@ -36,7 +42,13 @@ const poblarTratamiento = (query) => query
     .populate('registradoPor', 'nombre apellido correo')
     .populate('asignadoA', 'nombre apellido correo rol estado');
 
-const actualizarEstadoDesdeTratamiento = async (tratamiento, datos, usuarioId, campo = 'estadoSanitario') => {
+const actualizarEstadoDesdeTratamiento = async (
+    tratamiento,
+    datos,
+    usuarioId,
+    campo = 'estadoSanitario',
+    opciones = {}
+) => {
     const estadoNuevo = datos[campo];
     if (!estadoNuevo || estadoNuevo === 'No modificar') return [];
 
@@ -45,7 +57,8 @@ const actualizarEstadoDesdeTratamiento = async (tratamiento, datos, usuarioId, c
         estadoNuevo,
         datos.motivoCambioEstadoSanitario || `Actualización asociada al tratamiento con ${tratamiento.producto}.`,
         usuarioId,
-        tratamiento._id
+        tratamiento._id,
+        opciones
     );
 };
 
@@ -67,7 +80,29 @@ const crearFiltroFecha = (fechaInicio, fechaFin) => {
     return { fechaInicio: filtro };
 };
 
-const registrarAplicacion = async (tratamiento, datos, usuarioId) => {
+const resolverAnimalesActivosTratamiento = async (tratamiento, session) => {
+    const animales = await Animal.find({ _id: { $in: tratamiento.animales } })
+        .select('_id estado diio identificadorFinca nombre')
+        .session(session);
+    const activos = animales.filter((animal) => animal.estado === 'Activo');
+    const excluidos = animales.filter((animal) => animal.estado !== 'Activo');
+    if (!activos.length) {
+        const error = new Error('El tratamiento no tiene animales activos disponibles para esta aplicación');
+        error.status = 409;
+        throw error;
+    }
+    return { activos, excluidos };
+};
+
+const notaAnimalesExcluidos = (animales = []) => {
+    if (!animales.length) return '';
+    const detalle = animales.map((animal) => (
+        `${animal.diio || animal.identificadorFinca || animal.nombre || animal._id} (${animal.estado})`
+    )).join(', ');
+    return `No recibieron esta dosis por no estar activos: ${detalle}.`;
+};
+
+const registrarAplicacion = async (tratamiento, datos, usuarioId, session, claveIdempotencia = '') => {
     if (tratamiento.estado !== 'Activo') {
         const error = new Error('Solo se pueden registrar aplicaciones en tratamientos activos');
         error.status = 400;
@@ -80,6 +115,20 @@ const registrarAplicacion = async (tratamiento, datos, usuarioId) => {
         throw error;
     }
 
+    if (claveIdempotencia) {
+        const existente = await AplicacionSanitaria.findOne({ claveIdempotencia })
+            .select('+claveIdempotencia')
+            .session(session);
+        if (existente) {
+            if (String(existente.tratamiento || '') !== String(tratamiento._id)) {
+                const error = new Error('La clave de idempotencia ya fue utilizada en otra operación sanitaria');
+                error.status = 409;
+                throw error;
+            }
+            return { aplicacion: existente, replay: true };
+        }
+    }
+
     const fechaAplicacion = datos.fechaAplicacion || new Date();
     const numeroAplicacion = tratamiento.aplicacionesRealizadas + 1;
     const responsable = await validarUsuarioAsignable(
@@ -87,8 +136,10 @@ const registrarAplicacion = async (tratamiento, datos, usuarioId) => {
         'Sanidad'
     );
     const responsableNombre = [responsable.nombre, responsable.apellido].filter(Boolean).join(' ') || responsable.correo;
+    const { activos, excluidos } = await resolverAnimalesActivosTratamiento(tratamiento, session);
+    const observaciones = [datos.observaciones, notaAnimalesExcluidos(excluidos)].filter(Boolean).join(' | ');
     const aplicacion = await crearAplicacionSanitaria({
-        animales: tratamiento.animales,
+        animales: activos.map((animal) => animal._id),
         especie: tratamiento.especie,
         fechaAplicacion,
         producto: tratamiento.producto,
@@ -98,30 +149,30 @@ const registrarAplicacion = async (tratamiento, datos, usuarioId) => {
         responsable: responsableNombre,
         responsableUsuario: responsable._id,
         motivo: tratamiento.motivo,
-        observaciones: datos.observaciones,
+        observaciones,
+        diasRetiroCarne: datos.diasRetiroCarne ?? tratamiento.diasRetiroCarne,
         naturaleza: 'Tratamiento',
         tratamiento: tratamiento._id,
         lote: tratamiento.lote?._id || tratamiento.lote,
         numeroAplicacion,
-        totalAplicaciones: tratamiento.cantidadAplicaciones
-    }, usuarioId, { soloActivos: true });
+        totalAplicaciones: tratamiento.cantidadAplicaciones,
+        claveIdempotencia: claveIdempotencia || undefined
+    }, usuarioId, { soloActivos: true, session });
 
-    try {
-        tratamiento.aplicacionesRealizadas = numeroAplicacion;
-        if (numeroAplicacion >= tratamiento.cantidadAplicaciones) {
-            tratamiento.estado = 'Completado';
-            tratamiento.fechaFin = fechaAplicacion;
-            tratamiento.proximaAplicacion = null;
-        } else {
-            tratamiento.proximaAplicacion = sumarDias(fechaAplicacion, tratamiento.intervaloDias);
-        }
-        await tratamiento.save();
-    } catch (error) {
-        await eliminarAplicacionSanitariaCreada(aplicacion._id);
-        throw error;
+    tratamiento.aplicacionesRealizadas = numeroAplicacion;
+    tratamiento.fechaFinRetiroCarne = aplicacion.fechaFinRetiroCarne && (
+        !tratamiento.fechaFinRetiroCarne || aplicacion.fechaFinRetiroCarne > tratamiento.fechaFinRetiroCarne
+    ) ? aplicacion.fechaFinRetiroCarne : tratamiento.fechaFinRetiroCarne;
+    if (numeroAplicacion >= tratamiento.cantidadAplicaciones) {
+        tratamiento.estado = 'Completado';
+        tratamiento.fechaFin = fechaAplicacion;
+        tratamiento.proximaAplicacion = null;
+    } else {
+        tratamiento.proximaAplicacion = sumarDias(fechaAplicacion, tratamiento.intervaloDias);
     }
+    await tratamiento.save({ session });
 
-    return aplicacion;
+    return { aplicacion, replay: false, excluidos };
 };
 
 tratamientoSanitarioCtrl.getTratamientos = async (req, res) => {
@@ -157,47 +208,54 @@ tratamientoSanitarioCtrl.getTratamientoById = async (req, res) => {
 };
 
 tratamientoSanitarioCtrl.createTratamiento = async (req, res) => {
-    let tratamiento;
-
     try {
-        await validarUsuarioAsignable(req.body.asignadoA, 'Sanidad');
-        const validacion = await resolverAlcanceSanitario({
-            animales: req.body.animales,
-            lote: req.body.lote,
-            especie: req.body.especie
-        }, { soloActivos: true });
-        tratamiento = new TratamientoSanitario({
-            ...req.body,
-            animales: validacion.ids,
-            especie: validacion.especie,
-            lote: validacion.lote?._id || null,
-            aplicacionesRealizadas: 0,
-            proximaAplicacion: null,
-            fechaFin: null,
-            estado: 'Activo',
-            registradoPor: req.usuario?.id
+        const datos = sanitizarTratamientoSanitario(req.body);
+        await validarUsuarioAsignable(datos.asignadoA, 'Sanidad');
+        const resultado = await ejecutarEnTransaccion(async (session) => {
+            const validacion = await resolverAlcanceSanitario({
+                animales: datos.animales,
+                lote: datos.lote,
+                especie: datos.especie
+            }, { soloActivos: true, session });
+            const [tratamiento] = await TratamientoSanitario.create([{
+                ...datos,
+                animales: validacion.ids,
+                especie: validacion.especie,
+                lote: validacion.lote?._id || null,
+                aplicacionesRealizadas: 0,
+                proximaAplicacion: null,
+                fechaFin: null,
+                estado: 'Activo',
+                registradoPor: req.usuario?.id
+            }], { session });
+
+            let aplicacion = null;
+            if (datos.registrarPrimeraAplicacion === true) {
+                const registro = await registrarAplicacion(tratamiento, {
+                    fechaAplicacion: datos.fechaPrimeraAplicacion || datos.fechaInicio,
+                    dosis: datos.dosis,
+                    viaAplicacion: datos.viaAplicacion,
+                    diasRetiroCarne: datos.diasRetiroCarne,
+                    responsableUsuario: datos.asignadoA,
+                    observaciones: datos.observacionesPrimeraAplicacion
+                }, req.usuario?.id, session, `tratamiento-inicial:${tratamiento._id}`);
+                aplicacion = registro.aplicacion;
+            }
+
+            if (datos.actualizarEstadoSanitario === true) {
+                await actualizarEstadoDesdeTratamiento(tratamiento, {
+                    estadoSanitario: datos.estadoSanitario || 'Enfermo',
+                    motivoCambioEstadoSanitario: datos.motivoCambioEstadoSanitario || datos.motivo
+                }, req.usuario?.id, 'estadoSanitario', { session, omitirNotificacion: true });
+            }
+
+            await sincronizarTareaTratamiento(tratamiento, req.usuario?.id, {
+                session,
+                omitirNotificacion: true
+            });
+            return { tratamiento, aplicacion };
         });
-        await tratamiento.save();
-
-        let aplicacion = null;
-        if (req.body.registrarPrimeraAplicacion === true) {
-            aplicacion = await registrarAplicacion(tratamiento, {
-                fechaAplicacion: req.body.fechaPrimeraAplicacion || req.body.fechaInicio,
-                dosis: req.body.dosis,
-                viaAplicacion: req.body.viaAplicacion,
-                responsableUsuario: req.body.asignadoA,
-                observaciones: req.body.observacionesPrimeraAplicacion
-            }, req.usuario?.id);
-        }
-
-        if (req.body.actualizarEstadoSanitario === true) {
-            await actualizarEstadoDesdeTratamiento(tratamiento, {
-                estadoSanitario: req.body.estadoSanitario || 'Enfermo',
-                motivoCambioEstadoSanitario: req.body.motivoCambioEstadoSanitario || req.body.motivo
-            }, req.usuario?.id);
-        }
-
-        await sincronizarTareaTratamiento(tratamiento, req.usuario?.id);
+        const { tratamiento, aplicacion } = resultado;
         await notificarTratamiento(
             req,
             tratamiento,
@@ -220,17 +278,13 @@ tratamientoSanitarioCtrl.createTratamiento = async (req, res) => {
         const guardado = await poblarTratamiento(TratamientoSanitario.findById(tratamiento._id));
         res.status(201).json({ tratamiento: guardado, aplicacion });
     } catch (error) {
-        if (tratamiento?._id) {
-            const aplicaciones = await AplicacionSanitaria.find({ tratamiento: tratamiento._id }).select('_id');
-            await Promise.all(aplicaciones.map((aplicacion) => eliminarAplicacionSanitariaCreada(aplicacion._id)));
-            await TratamientoSanitario.findByIdAndDelete(tratamiento._id);
-        }
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al crear tratamiento', error: error.message });
     }
 };
 
 tratamientoSanitarioCtrl.updateTratamiento = async (req, res) => {
     try {
+        const datos = sanitizarTratamientoSanitario(req.body);
         const tratamiento = await TratamientoSanitario.findById(req.params.id);
         if (!tratamiento) return res.status(404).json({ mensaje: 'Tratamiento sanitario no encontrado' });
         if (tratamiento.estado === 'Cancelado') {
@@ -239,21 +293,21 @@ tratamientoSanitarioCtrl.updateTratamiento = async (req, res) => {
 
         const campos = [
             'animales', 'lote', 'motivo', 'diagnostico', 'producto', 'dosis', 'viaAplicacion',
-            'fechaInicio', 'cantidadAplicaciones', 'intervaloDias', 'responsable',
+            'diasRetiroCarne', 'fechaInicio', 'cantidadAplicaciones', 'intervaloDias', 'responsable',
             'veterinario', 'observaciones', 'asignadoA'
         ];
 
-        if (Object.prototype.hasOwnProperty.call(req.body, 'asignadoA')) {
-            await validarUsuarioAsignable(req.body.asignadoA, 'Sanidad');
+        if (Object.prototype.hasOwnProperty.call(datos, 'asignadoA')) {
+            await validarUsuarioAsignable(datos.asignadoA, 'Sanidad');
         }
 
-        const modificaAlcance = Object.prototype.hasOwnProperty.call(req.body, 'animales')
-            || Object.prototype.hasOwnProperty.call(req.body, 'lote');
+        const modificaAlcance = Object.prototype.hasOwnProperty.call(datos, 'animales')
+            || Object.prototype.hasOwnProperty.call(datos, 'lote');
         if (modificaAlcance && tratamiento.aplicacionesRealizadas > 0) {
             const idsActuales = normalizarIds(tratamiento.animales).sort().join(',');
-            const idsNuevos = normalizarIds(req.body.animales || tratamiento.animales).sort().join(',');
+            const idsNuevos = normalizarIds(datos.animales || tratamiento.animales).sort().join(',');
             const loteActual = String(tratamiento.lote || '');
-            const loteNuevo = String(req.body.lote || '');
+            const loteNuevo = String(datos.lote || '');
             if (idsActuales !== idsNuevos || loteActual !== loteNuevo) {
                 return res.status(400).json({
                     mensaje: 'No se puede cambiar el lote ni los animales después de registrar aplicaciones'
@@ -261,16 +315,16 @@ tratamientoSanitarioCtrl.updateTratamiento = async (req, res) => {
             }
         } else if (modificaAlcance) {
             const validacion = await resolverAlcanceSanitario({
-                animales: req.body.animales || tratamiento.animales,
-                lote: req.body.lote,
+                animales: datos.animales || tratamiento.animales,
+                lote: datos.lote,
                 especie: tratamiento.especie
             }, { soloActivos: true });
-            req.body.animales = validacion.ids;
-            req.body.lote = validacion.lote?._id || null;
+            datos.animales = validacion.ids;
+            datos.lote = validacion.lote?._id || null;
         }
 
         campos.forEach((campo) => {
-            if (Object.prototype.hasOwnProperty.call(req.body, campo)) tratamiento[campo] = req.body[campo];
+            if (Object.prototype.hasOwnProperty.call(datos, campo)) tratamiento[campo] = datos[campo];
         });
 
         const ultimaAplicacion = tratamiento.aplicacionesRealizadas
@@ -308,30 +362,63 @@ tratamientoSanitarioCtrl.updateTratamiento = async (req, res) => {
 
 tratamientoSanitarioCtrl.registrarAplicacionTratamiento = async (req, res) => {
     try {
-        const tratamiento = await TratamientoSanitario.findById(req.params.id);
-        if (!tratamiento) return res.status(404).json({ mensaje: 'Tratamiento sanitario no encontrado' });
+        const datos = sanitizarAplicacionSanitaria(req.body);
+        const claveIdempotencia = String(req.get('Idempotency-Key') || '').trim();
+        if (claveIdempotencia.length > 160) {
+            return res.status(400).json({ mensaje: 'La clave de idempotencia no es válida' });
+        }
+        const resultado = await ejecutarEnTransaccion(async (session) => {
+            const tratamiento = await TratamientoSanitario.findById(req.params.id).session(session);
+            if (!tratamiento) {
+                const error = new Error('Tratamiento sanitario no encontrado');
+                error.status = 404;
+                throw error;
+            }
 
-        const aplicacion = await registrarAplicacion(tratamiento, req.body, req.usuario?.id);
-        await completarTareasSanitariasPendientes(tratamiento._id, 'Tratamiento sanitario', aplicacion.fechaAplicacion);
-        await sincronizarTareaTratamiento(tratamiento, req.usuario?.id);
-        if (tratamiento.estado === 'Completado') {
-            await actualizarEstadoDesdeTratamiento(
+            const registro = await registrarAplicacion(
                 tratamiento,
-                req.body,
+                datos,
                 req.usuario?.id,
-                'estadoSanitarioFinal'
+                session,
+                claveIdempotencia
+            );
+            if (registro.replay) return { tratamiento, ...registro };
+
+            await completarTareasSanitariasPendientes(
+                tratamiento._id,
+                'Tratamiento sanitario',
+                registro.aplicacion.fechaAplicacion,
+                { session }
+            );
+            await sincronizarTareaTratamiento(tratamiento, req.usuario?.id, {
+                session,
+                omitirNotificacion: true
+            });
+            if (tratamiento.estado === 'Completado') {
+                await actualizarEstadoDesdeTratamiento(
+                    tratamiento,
+                    datos,
+                    req.usuario?.id,
+                    'estadoSanitarioFinal',
+                    { session, omitirNotificacion: true }
+                );
+            }
+            return { tratamiento, ...registro };
+        });
+        const { tratamiento, aplicacion, replay } = resultado;
+        if (replay) res.set('X-Idempotent-Replay', 'true');
+        if (!replay) {
+            await notificarTratamiento(
+                req,
+                tratamiento,
+                'APLICACION_SANITARIA_REGISTRADA',
+                'Aplicación de tratamiento registrada',
+                `${nombreUsuario(req.usuario)} registró la aplicación ${aplicacion.numeroAplicacion} de ${tratamiento.cantidadAplicaciones} del tratamiento con ${tratamiento.producto}.`,
+                { aplicacionId: aplicacion._id, numeroAplicacion: aplicacion.numeroAplicacion }
             );
         }
-        await notificarTratamiento(
-            req,
-            tratamiento,
-            'APLICACION_SANITARIA_REGISTRADA',
-            'Aplicación de tratamiento registrada',
-            `${nombreUsuario(req.usuario)} registró la aplicación ${aplicacion.numeroAplicacion} de ${tratamiento.cantidadAplicaciones} del tratamiento con ${tratamiento.producto}.`,
-            { aplicacionId: aplicacion._id, numeroAplicacion: aplicacion.numeroAplicacion }
-        );
         const actualizado = await poblarTratamiento(TratamientoSanitario.findById(tratamiento._id));
-        res.status(201).json({ tratamiento: actualizado, aplicacion });
+        res.status(replay ? 200 : 201).json({ tratamiento: actualizado, aplicacion });
     } catch (error) {
         const duplicada = error?.code === 11000;
         res.status(error.status || (duplicada ? 409 : 400)).json({
@@ -343,30 +430,42 @@ tratamientoSanitarioCtrl.registrarAplicacionTratamiento = async (req, res) => {
 
 tratamientoSanitarioCtrl.completarTratamiento = async (req, res) => {
     try {
-        const tratamiento = await TratamientoSanitario.findById(req.params.id);
-        if (!tratamiento) return res.status(404).json({ mensaje: 'Tratamiento sanitario no encontrado' });
-        if (tratamiento.estado === 'Cancelado') {
-            return res.status(400).json({ mensaje: 'Un tratamiento cancelado no puede completarse' });
-        }
+        const datos = sanitizarCierreTratamiento(req.body);
+        const tratamiento = await ejecutarEnTransaccion(async (session) => {
+            const encontrado = await TratamientoSanitario.findById(req.params.id).session(session);
+            if (!encontrado) {
+                const error = new Error('Tratamiento sanitario no encontrado');
+                error.status = 404;
+                throw error;
+            }
+            if (encontrado.estado === 'Cancelado') {
+                const error = new Error('Un tratamiento cancelado no puede completarse');
+                error.status = 400;
+                throw error;
+            }
 
-        tratamiento.estado = 'Completado';
-        tratamiento.fechaFin = req.body.fechaFin || new Date();
-        tratamiento.proximaAplicacion = null;
-        if (req.body.observaciones) {
-            tratamiento.observaciones = [tratamiento.observaciones, req.body.observaciones].filter(Boolean).join(' | ');
-        }
-        await tratamiento.save();
-        await cancelarTareasSanitariasPendientes(
-            tratamiento._id,
-            'Tratamiento sanitario',
-            'Cancelada porque el tratamiento fue completado.'
-        );
-        await actualizarEstadoDesdeTratamiento(
-            tratamiento,
-            req.body,
-            req.usuario?.id,
-            'estadoSanitarioFinal'
-        );
+            encontrado.estado = 'Completado';
+            encontrado.fechaFin = datos.fechaFin || new Date();
+            encontrado.proximaAplicacion = null;
+            if (datos.observaciones) {
+                encontrado.observaciones = [encontrado.observaciones, datos.observaciones].filter(Boolean).join(' | ');
+            }
+            await encontrado.save({ session });
+            await cancelarTareasSanitariasPendientes(
+                encontrado._id,
+                'Tratamiento sanitario',
+                'Cancelada porque el tratamiento fue completado.',
+                { session }
+            );
+            await actualizarEstadoDesdeTratamiento(
+                encontrado,
+                datos,
+                req.usuario?.id,
+                'estadoSanitarioFinal',
+                { session, omitirNotificacion: true }
+            );
+            return encontrado;
+        });
         await notificarTratamiento(
             req,
             tratamiento,
@@ -376,41 +475,52 @@ tratamientoSanitarioCtrl.completarTratamiento = async (req, res) => {
         );
         res.json(await poblarTratamiento(TratamientoSanitario.findById(tratamiento._id)));
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al completar tratamiento', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al completar tratamiento', error: error.message });
     }
 };
 
 tratamientoSanitarioCtrl.cancelarTratamiento = async (req, res) => {
     try {
-        const tratamiento = await TratamientoSanitario.findById(req.params.id);
-        if (!tratamiento) return res.status(404).json({ mensaje: 'Tratamiento sanitario no encontrado' });
-        if (tratamiento.estado === 'Completado') {
-            return res.status(400).json({ mensaje: 'Un tratamiento completado no puede cancelarse' });
-        }
+        const datos = sanitizarCierreTratamiento(req.body);
+        const tratamiento = await ejecutarEnTransaccion(async (session) => {
+            const encontrado = await TratamientoSanitario.findById(req.params.id).session(session);
+            if (!encontrado) {
+                const error = new Error('Tratamiento sanitario no encontrado');
+                error.status = 404;
+                throw error;
+            }
+            if (encontrado.estado === 'Completado') {
+                const error = new Error('Un tratamiento completado no puede cancelarse');
+                error.status = 400;
+                throw error;
+            }
 
-        tratamiento.estado = 'Cancelado';
-        tratamiento.fechaFin = req.body.fechaFin || new Date();
-        tratamiento.proximaAplicacion = null;
-        if (req.body.motivo) {
-            tratamiento.observaciones = [tratamiento.observaciones, `Cancelado: ${req.body.motivo}`].filter(Boolean).join(' | ');
-        }
-        await tratamiento.save();
-        await cancelarTareasSanitariasPendientes(
-            tratamiento._id,
-            'Tratamiento sanitario',
-            'Cancelada junto con el tratamiento sanitario.'
-        );
+            encontrado.estado = 'Cancelado';
+            encontrado.fechaFin = datos.fechaFin || new Date();
+            encontrado.proximaAplicacion = null;
+            if (datos.motivo) {
+                encontrado.observaciones = [encontrado.observaciones, `Cancelado: ${datos.motivo}`].filter(Boolean).join(' | ');
+            }
+            await encontrado.save({ session });
+            await cancelarTareasSanitariasPendientes(
+                encontrado._id,
+                'Tratamiento sanitario',
+                'Cancelada junto con el tratamiento sanitario.',
+                { session }
+            );
+            return encontrado;
+        });
         await notificarTratamiento(
             req,
             tratamiento,
             'TRATAMIENTO_CANCELADO',
             'Tratamiento sanitario cancelado',
             `${nombreUsuario(req.usuario)} canceló el tratamiento con ${tratamiento.producto}.`,
-            { motivo: req.body.motivo }
+            { motivo: datos.motivo }
         );
         res.json(await poblarTratamiento(TratamientoSanitario.findById(tratamiento._id)));
     } catch (error) {
-        res.status(400).json({ mensaje: 'Error al cancelar tratamiento', error: error.message });
+        res.status(error.status || 400).json({ mensaje: error.message || 'Error al cancelar tratamiento', error: error.message });
     }
 };
 

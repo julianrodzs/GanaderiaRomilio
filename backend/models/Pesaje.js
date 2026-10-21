@@ -4,8 +4,10 @@ const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugi
 const pesajeSchema = new Schema(
     {
         animal: { type: Schema.Types.ObjectId, ref: 'Animal', required: true },
+        lote: { type: Schema.Types.ObjectId, ref: 'Lote', default: null },
         fecha: { type: Date, required: true, default: Date.now },
         peso: { type: Number, required: true, min: 0.01 },
+        tipoPesaje: { type: String, enum: ['Individual', 'Lote', 'Importacion'], default: 'Individual' },
         etapaProductiva: {
             type: String,
             enum: ['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde'],
@@ -14,7 +16,9 @@ const pesajeSchema = new Schema(
         aumentoKg: { type: Number },
         diasDesdeUltimoPesaje: { type: Number, min: 0 },
         observaciones: { type: String, trim: true },
-        registradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' }
+        registradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
+        editadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
+        fechaEdicion: { type: Date }
     },
     {
         timestamps: true
@@ -23,5 +27,6 @@ const pesajeSchema = new Schema(
 
 pesajeSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 pesajeSchema.index({ animal: 1, fecha: -1 });
+pesajeSchema.index({ organizacionId: 1, animal: 1, fecha: -1, createdAt: -1 });
 
 module.exports = model('Pesaje', pesajeSchema);

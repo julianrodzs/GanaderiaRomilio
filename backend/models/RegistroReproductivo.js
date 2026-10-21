@@ -217,6 +217,15 @@ const completarFechasYEstado = (datos, opciones = {}) => {
         datos.activoParaAlertas = true;
     }
 
+    if (datos.estadoCiclo === 'No preñada' || datos.resultadoDiagnosticoGestacion === 'VACIA') {
+        datos.estadoCiclo = 'No preñada';
+        datos.activoParaAlertas = false;
+        datos.gestacionConfirmada = false;
+        datos.fechaPartoEstimada = undefined;
+        datos.estado = 'Vacía';
+        return;
+    }
+
     if (especie === 'Porcino') {
         datos.fechaInseminacion = datos.fechaInseminacion || datos.fechaMonta;
         datos.fechaMonta = datos.fechaMonta || datos.fechaInseminacion;

@@ -1,3 +1,4 @@
+const { ejecutarNotificacionSegura, notificarTareasOrigen } = require('./tarea-notificacion-service');
 const Animal = require('../models/Animal');
 const BandaReproductivaPorcina = require('../models/BandaReproductivaPorcina');
 const Camada = require('../models/Camada');
@@ -29,6 +30,12 @@ const prepararPasos = (pasos = []) => {
     normalizados.forEach((paso) => {
         if (paso.referenciaTemporal === 'DESDE_EVENTO_REAL' && !paso.eventoReferencia) throw errorProtocolo(`El paso ${paso.nombre} requiere un evento real de referencia.`);
     });
+    const primeraTarea = [...normalizados]
+        .sort((a, b) => Number(a.orden || 0) - Number(b.orden || 0))
+        .find((paso) => paso.generaTarea !== false);
+    if (primeraTarea && ((primeraTarea.referenciaTemporal || 'DESDE_INICIO') !== 'DESDE_INICIO' || Number(primeraTarea.offsetHoras || 0) !== 0)) {
+        throw errorProtocolo('La primera tarea del protocolo debe quedar programada en la fecha de inicio; los eventos reales solo pueden gobernar tareas posteriores.');
+    }
     return normalizados;
 };
 
@@ -89,6 +96,7 @@ const crearTareas = async (banda) => {
         ejecucion.tarea = tarea._id;
     }
     await banda.save();
+    await ejecutarNotificacionSegura(() => notificarTareasOrigen({ referenciaId: banda._id, moduloOrigen: 'BandaReproductivaPorcina' }, banda.creadoPor));
 };
 
 const crearBanda = async ({ datos, usuarioId }) => {

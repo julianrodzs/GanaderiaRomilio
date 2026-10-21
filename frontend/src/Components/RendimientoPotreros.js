@@ -7,6 +7,7 @@ import {
   obtenerRendimientoPotrerosPorPasto
 } from '../services/api';
 import { ContenidoPaginado } from './PaginacionTabla';
+import { usePlan } from '../context/PlanContext';
 
 const fechaInput = (fecha) => {
   const anio = fecha.getFullYear();
@@ -98,20 +99,32 @@ const GraficoMensual = ({ datos = [] }) => {
 };
 
 export const DetallePotrero = ({ potrero, rotaciones, onCerrar }) => {
-  const [tab, setTab] = useState('rendimiento');
+  const { cargando: cargandoPlan, tieneFeature } = usePlan();
+  const permiteAnalitica = tieneFeature('analiticaProductiva');
+  const [tab, setTab] = useState('informacion');
   const { preset, rango, setRango, cambiarPreset } = usarPeriodo();
   const [datos, setDatos] = useState(null);
   const [datosCobertura, setDatosCobertura] = useState(null);
-  const [error, setError] = useState('');
+  const [errorRendimiento, setErrorRendimiento] = useState('');
+  const [errorCobertura, setErrorCobertura] = useState('');
 
   useEffect(() => {
-    if (!potrero?._id || !rango.fechaInicio || !rango.fechaFin) return;
+    if (!potrero?._id) return;
+    setDatosCobertura(null);
+    setErrorCobertura('');
+    obtenerCoberturaPotrero(potrero._id)
+      .then(setDatosCobertura)
+      .catch((err) => setErrorCobertura(err.message));
+  }, [potrero?._id]);
+
+  useEffect(() => {
+    if (!potrero?._id || !rango.fechaInicio || !rango.fechaFin || cargandoPlan || !permiteAnalitica) return;
     setDatos(null);
-    setError('');
-    Promise.all([obtenerRendimientoPotrero(potrero._id, rango), obtenerCoberturaPotrero(potrero._id)])
-      .then(([rendimiento, cobertura]) => { setDatos(rendimiento); setDatosCobertura(cobertura); })
-      .catch((err) => setError(err.message));
-  }, [potrero?._id, rango.fechaInicio, rango.fechaFin]);
+    setErrorRendimiento('');
+    obtenerRendimientoPotrero(potrero._id, rango)
+      .then(setDatos)
+      .catch((err) => setErrorRendimiento(err.message));
+  }, [potrero?._id, rango.fechaInicio, rango.fechaFin, cargandoPlan, permiteAnalitica]);
 
   const rotacionesPotrero = rotaciones.filter((item) => String(item.potrero?._id || item.potrero) === String(potrero._id));
 
@@ -123,11 +136,13 @@ export const DetallePotrero = ({ potrero, rotaciones, onCerrar }) => {
           <button className="boton-link" type="button" onClick={onCerrar}>Cerrar</button>
         </div>
         <div className="potrero-tabs">
-          {['informacion', 'rendimiento', 'rotaciones'].map((item) => <button className={tab === item ? 'activo' : ''} type="button" key={item} onClick={() => setTab(item)}>{item === 'informacion' ? 'Información' : item[0].toUpperCase() + item.slice(1)}</button>)}
+          {['informacion', ...(permiteAnalitica ? ['rendimiento'] : []), 'rotaciones'].map((item) => <button className={tab === item ? 'activo' : ''} type="button" key={item} onClick={() => setTab(item)}>{item === 'informacion' ? 'Información' : item[0].toUpperCase() + item.slice(1)}</button>)}
         </div>
 
         {tab === 'informacion' && (
           <div className="potrero-informacion">
+            {errorCobertura && <div className="alerta-formulario potrero-informacion-ancha">{errorCobertura}</div>}
+            {!cargandoPlan && !permiteAnalitica && <div className="panel-alerta potrero-informacion-ancha"><p>La cobertura y las rotaciones están disponibles. El análisis avanzado de rendimiento requiere un plan superior.</p></div>}
             <article><span>Área</span><strong>{mostrarNumero(potrero.area, ' ha')}</strong></article>
             <article><span>Estado</span><strong>{potrero.estado}</strong></article>
             <article><span>Capacidad máxima</span><strong>{mostrarNumero(potrero.capacidadMaxima)}</strong></article>
@@ -149,8 +164,8 @@ export const DetallePotrero = ({ potrero, rotaciones, onCerrar }) => {
         {tab === 'rendimiento' && (
           <div className="rendimiento-detalle">
             <SelectorPeriodo preset={preset} rango={rango} onPreset={cambiarPreset} onRango={setRango} />
-            {error && <div className="alerta-formulario">{error}</div>}
-            {!datos && !error && <div className="estado-importacion">Calculando rendimiento...</div>}
+            {errorRendimiento && <div className="alerta-formulario">{errorRendimiento}</div>}
+            {!datos && !errorRendimiento && <div className="estado-importacion">Calculando rendimiento...</div>}
             {datos && (
               <>
                 <TarjetasRendimiento datos={datos.rendimiento} />

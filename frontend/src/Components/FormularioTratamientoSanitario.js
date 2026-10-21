@@ -15,6 +15,7 @@ const crearEstado = (tratamiento, especie) => ({
   producto: tratamiento?.producto || '',
   dosis: tratamiento?.dosis || '',
   viaAplicacion: tratamiento?.viaAplicacion || '',
+  diasRetiroCarne: tratamiento?.diasRetiroCarne || 0,
   fechaInicio: fechaInput(tratamiento?.fechaInicio) || fechaHoy(),
   cantidadAplicaciones: tratamiento?.cantidadAplicaciones || 1,
   intervaloDias: tratamiento?.intervaloDias || '',
@@ -67,7 +68,8 @@ const FormularioTratamientoSanitario = ({
       lote: tipoAlcance === 'lote' ? formulario.lote : null,
       animales: tipoAlcance === 'animales' ? formulario.animales : [],
       cantidadAplicaciones: Number(formulario.cantidadAplicaciones),
-      intervaloDias: formulario.intervaloDias ? Number(formulario.intervaloDias) : undefined
+      intervaloDias: formulario.intervaloDias ? Number(formulario.intervaloDias) : undefined,
+      diasRetiroCarne: Number(formulario.diasRetiroCarne || 0)
     });
   };
 
@@ -136,6 +138,11 @@ const FormularioTratamientoSanitario = ({
           <label>
             Vía de aplicación
             <input name="viaAplicacion" value={formulario.viaAplicacion} onChange={actualizar} placeholder="Intramuscular" />
+          </label>
+          <label>
+            Retiro de carne (días)
+            <input name="diasRetiroCarne" type="number" min="0" step="1" value={formulario.diasRetiroCarne} onChange={actualizar} />
+            <small>Usa 0 cuando el producto no requiere tiempo de espera.</small>
           </label>
           <label>
             Fecha de inicio

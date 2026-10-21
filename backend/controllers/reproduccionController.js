@@ -21,8 +21,12 @@ const { validarUsuarioAsignable } = require('../services/usuarioAsignable-servic
 const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota } = require('../services/plan-service');
 const { validarObjetivoProductivoFinca } = require('../services/finca-service');
 const { prepararDatosRaciales } = require('../services/raza-service');
-const { validarYPrepararCategoriaAnimal } = require('../services/categoriaAnimal-service');
+const { calcularEdadMeses, validarYPrepararCategoriaAnimal } = require('../services/categoriaAnimal-service');
 const { prepararObjetivoProductivo } = require('../config/objetivosProductivos');
+const {
+    limpiarActualizarRegistroReproductivo,
+    limpiarCrearRegistroReproductivo
+} = require('../services/reproduccion-dto-service');
 const { respuestaErrorPlan } = require('../middleware/plan');
 const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
 const { consumirSemen } = require('../services/semen-reproductivo-service');
@@ -113,7 +117,9 @@ const refrescarRegistro = async (registro) => {
     return registro;
 };
 
-const validarHembra = async (animalId) => {
+const EDAD_REPRODUCTIVA_MINIMA_MESES = Object.freeze({ Bovino: 24, Porcino: 7 });
+
+const validarHembra = async (animalId, especieEsperada, { exigirElegibilidad = true } = {}) => {
     const animal = await Animal.findById(animalId);
 
     if (!animal) {
@@ -124,7 +130,85 @@ const validarHembra = async (animalId) => {
         return { valido: false, status: 400, mensaje: 'Solo se pueden registrar ciclos reproductivos para hembras' };
     }
 
+    if (exigirElegibilidad && animal.estado !== 'Activo') {
+        return { valido: false, status: 409, mensaje: 'Solo se pueden registrar ciclos reproductivos para animales activos en inventario' };
+    }
+
+    if (especieEsperada && animal.especie !== especieEsperada) {
+        return { valido: false, status: 422, mensaje: 'La especie indicada no coincide con la especie del animal' };
+    }
+
+    const especie = animal.especie || 'Bovino';
+    const edadMinima = EDAD_REPRODUCTIVA_MINIMA_MESES[especie];
+    const edadMeses = calcularEdadMeses(animal.fechaNacimiento);
+    if (exigirElegibilidad && edadMinima != null && edadMeses == null) {
+        return { valido: false, status: 422, mensaje: 'La fecha de nacimiento es requerida para validar la edad reproductiva' };
+    }
+    if (exigirElegibilidad && edadMinima != null && edadMeses < edadMinima) {
+        return {
+            valido: false,
+            status: 422,
+            mensaje: `La hembra no alcanza la edad reproductiva mínima de ${edadMinima} meses para ${especie.toLowerCase()}`
+        };
+    }
+
     return { valido: true, animal };
+};
+
+const validarTipoInseminacionConvencional = (datos) => {
+    if (datos.tipoInseminacion && datos.tipoInseminacion !== 'IA_CONVENCIONAL') {
+        const error = new Error('Los vínculos IATF solo pueden modificarse desde el flujo de campañas IATF.');
+        error.status = 422;
+        error.code = 'REPRODUCCION_VINCULO_INTERNO_PROTEGIDO';
+        throw error;
+    }
+};
+
+const resolverPadreNacimiento = async ({ registro, datos, madre }) => {
+    const especie = madre.especie || 'Bovino';
+    let padreRegistrado = datos.padre
+        ? await Animal.findOne({ _id: datos.padre, sexo: 'Macho', especie })
+        : datos.padreDiio
+            ? await Animal.findOne({
+                sexo: 'Macho',
+                especie,
+                $or: [
+                    { diio: datos.padreDiio },
+                    { identificadorFinca: datos.padreDiio }
+                ]
+            })
+            : null;
+    if (datos.padre && !padreRegistrado) {
+        const error = new Error('El padre seleccionado debe existir, ser macho y pertenecer a la misma especie de la cría.');
+        error.status = 422;
+        throw error;
+    }
+    let padreDiio = datos.padreDiio || padreRegistrado?.diio || padreRegistrado?.identificadorFinca;
+    let padreExternoNombre = padreRegistrado
+        ? undefined
+        : datos.padreExternoNombre || datos.padreDiio;
+
+    const origenConSemen = ['IATF', 'IA_CONVENCIONAL'].includes(registro.tipoInseminacion)
+        || ['IATF', 'IA_CONVENCIONAL'].includes(registro.origenGestacion);
+    const semen = registro.semenSnapshot || {};
+    if (!padreRegistrado && !padreDiio && !padreExternoNombre && origenConSemen) {
+        const codigoToro = semen.codigoToro || null;
+        if (codigoToro) {
+            padreRegistrado = await Animal.findOne({
+                sexo: 'Macho',
+                especie,
+                $or: [{ diio: codigoToro }, { identificadorFinca: codigoToro }]
+            });
+        }
+        padreDiio = padreRegistrado
+            ? (padreRegistrado.diio || padreRegistrado.identificadorFinca)
+            : codigoToro || undefined;
+        padreExternoNombre = padreRegistrado
+            ? undefined
+            : semen.toro || semen.nombre || codigoToro || undefined;
+    }
+
+    return { padreRegistrado, padreDiio, padreExternoNombre };
 };
 
 const obtenerTipoEventoReproductivo = (registro) => {
@@ -210,26 +294,28 @@ reproduccionCtrl.getRegistros = async (req, res) => {
 
 reproduccionCtrl.createRegistro = async (req, res) => {
     try {
-        await validarUsuarioAsignable(req.body.asignadoA, 'Reproduccion');
-        const validacion = await validarHembra(req.body.animal);
+        const datos = limpiarCrearRegistroReproductivo(req.body);
+        validarTipoInseminacionConvencional(datos);
+        await validarUsuarioAsignable(datos.asignadoA, 'Reproduccion');
+        const validacion = await validarHembra(datos.animal, datos.especie);
 
         if (!validacion.valido) {
             return res.status(validacion.status).json({ mensaje: validacion.mensaje });
         }
 
         const crearRegistro = async (session = null) => {
-            const data = esInseminacionConvencional(req.body)
-                ? await prepararInseminacionConvencional({ datos: req.body, session })
-                : req.body;
+            const data = esInseminacionConvencional(datos)
+                ? await prepararInseminacionConvencional({ datos, session })
+                : datos;
             return crearNuevoCicloReproductivo({
                 data,
                 animal: validacion.animal,
                 usuarioId: req.usuario?.id,
-                cerrarCicloAnterior: req.body.cerrarCicloAnterior === true,
+                cerrarCicloAnterior: datos.cerrarCicloAnterior === true,
                 session
             });
         };
-        const registroGuardado = esInseminacionConvencional(req.body)
+        const registroGuardado = esInseminacionConvencional(datos)
             ? await ejecutarEnTransaccion(crearRegistro)
             : await crearRegistro();
         await registrarEventoReproduccion(registroGuardado, req.usuario?.id);
@@ -286,16 +372,11 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             return res.status(400).json({ mensaje: 'El DIIO o identificador de finca del ternero es requerido' });
         }
 
-        const padreRegistrado = req.body.padre
-            ? await Animal.findById(req.body.padre)
-            : req.body.padreDiio
-                ? await Animal.findOne({
-                    $or: [
-                        { diio: req.body.padreDiio },
-                        { identificadorFinca: req.body.padreDiio }
-                    ]
-                })
-                : null;
+        const { padreRegistrado, padreDiio, padreExternoNombre } = await resolverPadreNacimiento({
+            registro,
+            datos: req.body,
+            madre
+        });
 
         let datosTernero = prepararDatosRaciales(prepararDatosGenealogia({
             identificadorFinca: identificador,
@@ -314,8 +395,8 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             madreDiio: madre.diio || madre.identificadorFinca,
             madreExternaNombre: null,
             padre: padreRegistrado?._id,
-            padreDiio: req.body.padreDiio,
-            padreExternoNombre: padreRegistrado ? undefined : req.body.padreExternoNombre || req.body.padreDiio,
+            padreDiio,
+            padreExternoNombre,
             origenGenealogico: 'Interno',
             objetivoProductivo: prepararObjetivoProductivo(req.body.objetivoProductivo || 'SIN_DEFINIR'),
             fechaNacimiento: registro.fechaPartoReal,
@@ -326,7 +407,7 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
         }));
         datosTernero = validarYPrepararCategoriaAnimal(datosTernero);
 
-        await validarRelacionGenealogica(null, datosTernero.padre, datosTernero.madre);
+        await validarRelacionGenealogica(null, datosTernero.padre, datosTernero.madre, datosTernero.especie);
         const permisoCreacion = await asegurarPuedeCrearAnimal({
             organizacionId: req.organizacionId,
             especie: datosTernero.especie
@@ -447,16 +528,23 @@ reproduccionCtrl.getRegistrosPorAnimal = async (req, res) => {
 
 reproduccionCtrl.updateRegistro = async (req, res) => {
     try {
+        const datosActualizacion = limpiarActualizarRegistroReproductivo(req.body);
+        validarTipoInseminacionConvencional(datosActualizacion);
         const registroAnterior = await RegistroReproductivo.findById(req.params.id).lean();
         if (!registroAnterior) {
             return res.status(404).json({ mensaje: 'Registro reproductivo no encontrado' });
         }
         let animalValidado = null;
-        if (Object.prototype.hasOwnProperty.call(req.body, 'asignadoA')) {
-            await validarUsuarioAsignable(req.body.asignadoA, 'Reproduccion');
+        if (Object.prototype.hasOwnProperty.call(datosActualizacion, 'asignadoA')) {
+            await validarUsuarioAsignable(datosActualizacion.asignadoA, 'Reproduccion');
         }
-        if (req.body.animal) {
-            const validacion = await validarHembra(req.body.animal);
+        if (datosActualizacion.animal) {
+            const cambiaAnimal = String(datosActualizacion.animal) !== String(registroAnterior.animal);
+            const validacion = await validarHembra(
+                datosActualizacion.animal,
+                datosActualizacion.especie,
+                { exigirElegibilidad: cambiaAnimal }
+            );
 
             if (!validacion.valido) {
                 return res.status(validacion.status).json({ mensaje: validacion.mensaje });
@@ -472,19 +560,19 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
                     cicloActivo
                 });
             }
-            req.body.especie = animalValidado.especie || 'Bovino';
+            datosActualizacion.especie = animalValidado.especie || 'Bovino';
         }
 
         if (registroAnterior.semenUtilizado
-            && req.body.semenUtilizado
-            && String(registroAnterior.semenUtilizado) !== String(req.body.semenUtilizado)) {
+            && datosActualizacion.semenUtilizado
+            && String(registroAnterior.semenUtilizado) !== String(datosActualizacion.semenUtilizado)) {
             return res.status(409).json({ mensaje: 'El lote de semen consumido no puede sustituirse; registre una correccion trazable.' });
         }
-        const requiereConsumoSemen = esInseminacionConvencional(req.body) && !registroAnterior.semenUtilizado;
+        const requiereConsumoSemen = esInseminacionConvencional(datosActualizacion) && !registroAnterior.semenUtilizado;
         const actualizar = async (session = null) => {
             const datos = requiereConsumoSemen
-                ? await prepararInseminacionConvencional({ datos: req.body, session })
-                : req.body;
+                ? await prepararInseminacionConvencional({ datos: datosActualizacion, session })
+                : datosActualizacion;
             return RegistroReproductivo.findByIdAndUpdate(req.params.id, datos, {
                 new: true,
                 runValidators: true,
@@ -509,7 +597,7 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
 
         const partoNuevo = Boolean(registroActualizado.fechaPartoReal)
             && fechaKey(registroActualizado.fechaPartoReal) !== fechaKey(registroAnterior.fechaPartoReal);
-        const desteteNuevo = Boolean(req.body.fechaDestete)
+        const desteteNuevo = Boolean(datosActualizacion.fechaDestete)
             && fechaKey(registroActualizado.fechaDestete) !== fechaKey(registroAnterior.fechaDestete);
         const tipoNotificacion = partoNuevo
             ? 'PARTO_REGISTRADO'

@@ -2,6 +2,8 @@ const { AplicacionSanitaria, NATURALEZAS_APLICACION } = require('../models/Aplic
 const { crearAplicacionSanitaria, resolverAlcanceSanitario } = require('../services/aplicacionSanitaria-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
+const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
+const { sanitizarAplicacionSanitaria } = require('../services/sanidad-dto-service');
 
 const aplicacionSanitariaCtrl = {};
 
@@ -54,29 +56,50 @@ aplicacionSanitariaCtrl.getAplicacionById = async (req, res) => {
 
 aplicacionSanitariaCtrl.createAplicacionUnica = async (req, res) => {
     try {
-        const responsable = await validarUsuarioAsignable(req.body.responsableUsuario, 'Sanidad');
+        const datos = sanitizarAplicacionSanitaria(req.body);
+        const claveIdempotencia = String(req.get('Idempotency-Key') || '').trim();
+        if (claveIdempotencia.length > 160) {
+            return res.status(400).json({ mensaje: 'La clave de idempotencia no es válida' });
+        }
+        if (claveIdempotencia) {
+            const existente = await AplicacionSanitaria.findOne({ claveIdempotencia }).select('+claveIdempotencia');
+            if (existente) {
+                if (existente.naturaleza !== 'Aplicacion unica') {
+                    return res.status(409).json({ mensaje: 'La clave de idempotencia ya fue utilizada en otra operación sanitaria' });
+                }
+                res.set('X-Idempotent-Replay', 'true');
+                return res.json(await poblarAplicacion(AplicacionSanitaria.findById(existente._id)));
+            }
+        }
+        const responsable = await validarUsuarioAsignable(datos.responsableUsuario, 'Sanidad');
         const responsableNombre = [responsable.nombre, responsable.apellido].filter(Boolean).join(' ') || responsable.correo;
-        const alcance = await resolverAlcanceSanitario({
-            animales: req.body.animales,
-            lote: req.body.lote,
-            especie: req.body.especie
-        }, { soloActivos: true });
-        const aplicacion = await crearAplicacionSanitaria({
-            animales: alcance.ids,
-            especie: alcance.especie,
-            lote: alcance.lote?._id || null,
-            loteCodigo: alcance.lote?.codigo,
-            fechaAplicacion: req.body.fechaAplicacion,
-            producto: req.body.producto,
-            tipo: req.body.tipo,
-            dosis: req.body.dosis,
-            viaAplicacion: req.body.viaAplicacion,
-            responsable: responsableNombre,
-            responsableUsuario: responsable._id,
-            motivo: req.body.motivo,
-            observaciones: req.body.observaciones,
-            naturaleza: 'Aplicacion unica'
-        }, req.usuario?.id, { soloActivos: true });
+        const resultado = await ejecutarEnTransaccion(async (session) => {
+            const alcance = await resolverAlcanceSanitario({
+                animales: datos.animales,
+                lote: datos.lote,
+                especie: datos.especie
+            }, { soloActivos: true, session });
+            const aplicacion = await crearAplicacionSanitaria({
+                animales: alcance.ids,
+                especie: alcance.especie,
+                lote: alcance.lote?._id || null,
+                loteCodigo: alcance.lote?.codigo,
+                fechaAplicacion: datos.fechaAplicacion,
+                producto: datos.producto,
+                tipo: datos.tipo,
+                dosis: datos.dosis,
+                viaAplicacion: datos.viaAplicacion,
+                diasRetiroCarne: datos.diasRetiroCarne,
+                responsable: responsableNombre,
+                responsableUsuario: responsable._id,
+                motivo: datos.motivo,
+                observaciones: datos.observaciones,
+                naturaleza: 'Aplicacion unica',
+                claveIdempotencia: claveIdempotencia || undefined
+            }, req.usuario?.id, { soloActivos: true, session });
+            return { aplicacion, alcance };
+        });
+        const { aplicacion, alcance } = resultado;
 
         await notificarAccionSegura({
             actor: req.usuario,
@@ -93,6 +116,15 @@ aplicacionSanitariaCtrl.createAplicacionUnica = async (req, res) => {
 
         res.status(201).json(await poblarAplicacion(AplicacionSanitaria.findById(aplicacion._id)));
     } catch (error) {
+        if (error?.code === 11000 && req.get('Idempotency-Key')) {
+            const existente = await AplicacionSanitaria.findOne({
+                claveIdempotencia: String(req.get('Idempotency-Key')).trim()
+            }).select('_id');
+            if (existente) {
+                res.set('X-Idempotent-Replay', 'true');
+                return res.json(await poblarAplicacion(AplicacionSanitaria.findById(existente._id)));
+            }
+        }
         res.status(error.status || 400).json({ mensaje: error.message || 'Error al registrar aplicación', error: error.message });
     }
 };

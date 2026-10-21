@@ -76,6 +76,7 @@ const planSanitarioSchema = new Schema(
         asignadoA: { type: Schema.Types.ObjectId, ref: 'Usuario' },
         creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
         estado: { type: String, enum: ESTADOS, default: 'Vigente' },
+        archivado: { type: Boolean, default: false, index: true },
         observaciones: { type: String, trim: true }
     },
     {

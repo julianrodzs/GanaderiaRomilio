@@ -2,6 +2,7 @@ const PlanAlimentacion = require('../models/PlanAlimentacion');
 const AsignacionPlanAlimentacion = require('../models/AsignacionPlanAlimentacion');
 const Lote = require('../models/Lote');
 const EventoLote = require('../models/EventoLote');
+const { ejecutarEnTransaccion } = require('./mongo-transaccion-service');
 
 const crearError = (mensaje, status = 400, codigo) => Object.assign(new Error(mensaje), { status, codigo });
 
@@ -12,36 +13,47 @@ const validarCompatibilidadPlanLote = (plan, lote) => {
     if (plan.proposito !== lote.proposito) throw crearError(`El propósito del lote ${lote.codigo} no coincide con el plan.`, 409, 'PROPOSITO_INCOMPATIBLE');
 };
 
-const asignarPlanALotes = async (planId, datos = {}, usuarioId) => {
-    const plan = await PlanAlimentacion.findById(planId);
+const asignarPlanALotes = async (planId, datos = {}, usuarioId, opciones = {}) => {
+    if (!opciones.session) {
+        return ejecutarEnTransaccion((session) => asignarPlanALotes(planId, datos, usuarioId, { session }));
+    }
+    const { session } = opciones;
+    const plan = await PlanAlimentacion.findById(planId).session(session);
     if (!plan) throw crearError('Plan de alimentación no encontrado.', 404);
     const ids = [...new Set((datos.lotes || []).map(String))];
     if (!ids.length) throw crearError('Selecciona al menos un lote.');
-    const lotes = await Lote.find({ _id: { $in: ids } });
+    const lotes = await Lote.find({ _id: { $in: ids } }).session(session);
     if (lotes.length !== ids.length) throw crearError('Uno o más lotes no existen.', 404);
     lotes.forEach((lote) => validarCompatibilidadPlanLote(plan, lote));
 
-    const fechaInicio = datos.fechaInicio || new Date();
+    const fechaInicio = new Date(datos.fechaInicio || Date.now());
+    if (Number.isNaN(fechaInicio.getTime())) throw crearError('La fecha inicial de la asignación no es válida.');
     const resultados = [];
     for (const lote of lotes) {
-        const anterior = await AsignacionPlanAlimentacion.findOne({ lote: lote._id, activo: true });
+        if (lote.fechaInicio && fechaInicio < new Date(lote.fechaInicio)) {
+            throw crearError(`El plan no puede iniciar antes que el lote ${lote.codigo}.`, 400, 'FECHA_ASIGNACION_INVALIDA');
+        }
+        const anterior = await AsignacionPlanAlimentacion.findOne({ lote: lote._id, activo: true }).session(session);
         if (anterior && String(anterior.plan) === String(plan._id)) {
             resultados.push(anterior);
             continue;
         }
+        if (anterior && fechaInicio < new Date(anterior.fechaInicio)) {
+            throw crearError(`El plan no puede iniciar antes que la asignación vigente del lote ${lote.codigo}.`, 400, 'FECHA_ASIGNACION_INVALIDA');
+        }
         if (anterior) {
             anterior.activo = false;
             anterior.fechaFin = fechaInicio;
-            await anterior.save();
+            await anterior.save({ session });
         }
-        const asignacion = await AsignacionPlanAlimentacion.create({
+        const [asignacion] = await AsignacionPlanAlimentacion.create([{
             plan: plan._id,
             lote: lote._id,
             fechaInicio,
             observaciones: datos.observaciones,
             asignadoPor: usuarioId
-        });
-        await EventoLote.create({
+        }], { session });
+        await EventoLote.create([{
             lote: lote._id,
             tipo: anterior ? 'PLAN_ALIMENTACION_CAMBIADO' : 'PLAN_ALIMENTACION_ASIGNADO',
             fecha: fechaInicio,
@@ -51,7 +63,7 @@ const asignarPlanALotes = async (planId, datos = {}, usuarioId) => {
             entidadTipo: 'AsignacionPlanAlimentacion',
             registradoPor: usuarioId,
             metadata: { planId: plan._id, planAnteriorId: anterior?.plan || null }
-        });
+        }], { session });
         resultados.push(asignacion);
     }
     return resultados;

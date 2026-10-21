@@ -233,6 +233,18 @@ export const guardarTareasOffline = (tareas, opciones = {}) => guardarColeccion(
   tareas,
   { filtros: opciones.filtros || {} }
 );
+// Actualizar todas las variantes (agenda, mes y filtros) del mismo contexto.
+export const actualizarTareaEnCache = async (tarea) => {
+  const contexto = obtenerContextoOffline();
+  const registros = await obtenerRegistros(STORES.tareas);
+  if (obtenerContextoOffline().clave !== contexto.clave) return;
+  await ejecutarTransaccion(STORES.tareas, 'readwrite', (store) => {
+    registros.filter((registro) => registro.clave === contexto.clave).forEach((registro) => {
+      const items = registro.items.map((item) => item._id === tarea._id ? { ...tarea } : item);
+      store.put({ ...registro, items, actualizadoEn: new Date().toISOString() });
+    });
+  });
+};
 export const obtenerTareasOffline = (opciones = {}) => obtenerColeccion(
   STORES.tareas,
   { filtros: opciones.filtros || {} }

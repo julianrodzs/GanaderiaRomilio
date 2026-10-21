@@ -78,8 +78,23 @@ const FormularioPlanSanitario = ({ onCancelar, onGuardar, onRegistrarAplicacion,
   const enviarFormulario = (evento) => {
     evento.preventDefault();
     onGuardar({
-      ...formulario,
-      frecuenciaCantidad: Number(formulario.frecuenciaCantidad)
+      grupoGanado: formulario.grupoGanado,
+      especie: formulario.especie,
+      lote: formulario.lote || null,
+      animales: formulario.animales,
+      animalDiio: formulario.animalDiio,
+      actividad: formulario.actividad,
+      producto: formulario.producto,
+      marca: formulario.marca,
+      dosis: formulario.dosis,
+      viaAplicacion: formulario.viaAplicacion,
+      criterioPeso: formulario.criterioPeso,
+      fechaAplicacion: formulario.fechaAplicacion,
+      frecuenciaCantidad: Number(formulario.frecuenciaCantidad),
+      frecuenciaUnidad: formulario.frecuenciaUnidad,
+      asignadoA: formulario.asignadoA,
+      responsable: formulario.responsable,
+      observaciones: formulario.observaciones
     });
   };
 

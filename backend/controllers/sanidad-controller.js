@@ -1,6 +1,7 @@
 const sanidadCtrl = {};
 
 const RegistroSanitario = require('../models/RegistroSanitario');
+const { sanitizarRegistroSanitario } = require('../services/sanidad-dto-service');
 
 sanidadCtrl.getRegistrosSanitarios = async (req, res) => {
     try {
@@ -13,7 +14,7 @@ sanidadCtrl.getRegistrosSanitarios = async (req, res) => {
 
 sanidadCtrl.createRegistroSanitario = async (req, res) => {
     try {
-        const nuevoRegistro = new RegistroSanitario(req.body);
+        const nuevoRegistro = new RegistroSanitario(sanitizarRegistroSanitario(req.body));
         const registroGuardado = await nuevoRegistro.save();
         res.status(201).json(registroGuardado);
     } catch (error) {
@@ -37,7 +38,7 @@ sanidadCtrl.getRegistroSanitario = async (req, res) => {
 
 sanidadCtrl.updateRegistroSanitario = async (req, res) => {
     try {
-        const registro = await RegistroSanitario.findByIdAndUpdate(req.params.id, req.body, {
+        const registro = await RegistroSanitario.findByIdAndUpdate(req.params.id, sanitizarRegistroSanitario(req.body), {
             new: true,
             runValidators: true
         });

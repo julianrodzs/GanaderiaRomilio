@@ -21,6 +21,11 @@ const diasEntre = (inicio, fin) => Math.max(0, Math.round((fin - inicio) / MS_DI
 const maxFecha = (a, b) => (a > b ? a : b);
 const minFecha = (a, b) => (a < b ? a : b);
 const redondear = (valor, decimales = 1) => Number(valor.toFixed(decimales));
+const numeroOpcional = (valor) => {
+    if (valor === null || valor === undefined || valor === '') return null;
+    const numero = Number(valor);
+    return Number.isFinite(numero) ? numero : null;
+};
 const fechaTexto = (valor) => (valor ? valor.toISOString().slice(0, 10) : null);
 
 const resolverPeriodo = ({ fechaInicio, fechaFin } = {}) => {
@@ -158,7 +163,7 @@ const calcularRendimientoPotrero = (potrero, rotaciones, periodo, opciones = {})
         && (!item.fechaSalida || diaUTC(item.fechaSalida) >= periodo.fechaInicio));
     const { tramos, ...rendimiento } = resumen;
 
-    const objetivo = Number.isFinite(Number(potrero.diasDescansoObjetivo)) ? Number(potrero.diasDescansoObjetivo) : null;
+    const objetivo = numeroOpcional(potrero.diasDescansoObjetivo);
     const descansoReferencia = rendimiento.descansoActual ?? rendimiento.descansoPromedio;
     return {
         potrero: {
@@ -392,8 +397,8 @@ const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], h
             resumenPotrero.diasOcupados += segmento.dias;
             resumenPotrero.animalDias += animalDias;
             resumenPotrero.rotaciones.add(rotacionId);
-            const objetivo = Number(segmento.cobertura?.diasDescansoObjetivo);
-            if (Number.isFinite(objetivo)) {
+            const objetivo = numeroOpcional(segmento.cobertura?.diasDescansoObjetivo);
+            if (objetivo !== null) {
                 grupo.objetivoDiasPonderados += objetivo * segmento.dias;
                 grupo.objetivoPeso += segmento.dias;
             }
@@ -415,8 +420,8 @@ const calcularRendimientoPorPastoConDatos = ({ potreros = [], rotaciones = [], h
                 if (!grupos.has(datosClave.clave)) grupos.set(datosClave.clave, crearAcumulador(datosClave));
                 const grupo = grupos.get(datosClave.clave);
                 grupo.descansos.push(descanso.dias);
-                const objetivo = Number(cobertura?.diasDescansoObjetivo);
-                if (Number.isFinite(objetivo)) {
+                const objetivo = numeroOpcional(cobertura?.diasDescansoObjetivo);
+                if (objetivo !== null) {
                     grupo.objetivoDiasPonderados += objetivo * Math.max(descanso.dias, 1);
                     grupo.objetivoPeso += Math.max(descanso.dias, 1);
                 }

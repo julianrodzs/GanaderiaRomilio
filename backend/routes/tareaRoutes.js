@@ -1,3 +1,4 @@
+const { requirePlanVigente } = require('../middleware/plan');
 const { Router } = require('express');
 const { auth } = require('../middleware/auth');
 const {
@@ -18,11 +19,11 @@ router.use(auth);
 router.get('/', getTareas);
 router.get('/mis-tareas', getMisTareas);
 router.get('/:id', getTareaById);
-router.post('/', crearTarea);
-router.put('/:id', actualizarTarea);
-router.patch('/:id/estado', cambiarEstadoTarea);
-router.patch('/:id/completar', completarTarea);
-router.post('/:id/comentarios', agregarComentario);
-router.delete('/:id', eliminarTarea);
+router.post('/', requirePlanVigente(), crearTarea);
+router.put('/:id', requirePlanVigente(), actualizarTarea);
+router.patch('/:id/estado', requirePlanVigente(), cambiarEstadoTarea);
+router.patch('/:id/completar', requirePlanVigente(), completarTarea);
+router.post('/:id/comentarios', requirePlanVigente(), agregarComentario);
+router.delete('/:id', requirePlanVigente(), eliminarTarea);
 
 module.exports = router;

@@ -7,12 +7,12 @@ const crearFiltroEspecie = (especie) => {
     return {};
 };
 
-const obtenerAnimalesParaPlan = async (plan) => {
+const obtenerAnimalesParaPlan = async (plan, session = null) => {
     if (plan.lote) {
         const alcance = await resolverAlcanceSanitario({
             lote: plan.lote?._id || plan.lote,
             especie: plan.especie || 'Bovino'
-        }, { soloActivos: true });
+        }, { soloActivos: true, session });
         return alcance.animales;
     }
 
@@ -21,7 +21,7 @@ const obtenerAnimalesParaPlan = async (plan) => {
             _id: { $in: plan.animales.map((animal) => animal?._id || animal) },
             ...crearFiltroEspecie(plan.especie),
             estado: { $nin: ['Muerto', 'Vendido'] }
-        });
+        }).session(session);
     }
 
     if (plan.animalDiio) {
@@ -31,7 +31,7 @@ const obtenerAnimalesParaPlan = async (plan) => {
         ].filter((filtro) => Object.keys(filtro).length);
         const animal = await Animal.findOne({
             $and: [...filtros, { estado: { $nin: ['Muerto', 'Vendido'] } }]
-        });
+        }).session(session);
         return animal ? [animal] : [];
     }
 
@@ -39,7 +39,7 @@ const obtenerAnimalesParaPlan = async (plan) => {
         return Animal.find({
             ...crearFiltroEspecie(plan.especie),
             estado: { $nin: ['Muerto', 'Vendido'] }
-        });
+        }).session(session);
     }
 
     return [];

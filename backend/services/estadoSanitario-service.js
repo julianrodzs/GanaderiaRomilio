@@ -1,6 +1,7 @@
 const Animal = require('../models/Animal');
 const EventoAnimal = require('../models/EventoAnimal');
 const { notificarAccionSegura } = require('./notificacion-service');
+const { ejecutarEnTransaccion } = require('./mongo-transaccion-service');
 
 const ESTADOS_SANITARIOS = ['Sano', 'En observación', 'Enfermo', 'Recuperación'];
 
@@ -25,16 +26,17 @@ const estadoSanitarioActual = (animal) => {
     return animal.estado === 'En tratamiento' ? 'Enfermo' : 'Sano';
 };
 
-const actualizarEstadoSanitarioAnimal = async (
+const actualizarEstadoSanitarioAnimalEnSession = async (
     animalId,
     estadoNuevo,
     motivo,
     usuarioId,
-    tratamientoId = null
+    tratamientoId,
+    session
 ) => {
     validarCambio(estadoNuevo, motivo);
 
-    const animalAnterior = await Animal.findById(animalId).lean();
+    const animalAnterior = await Animal.findById(animalId).session(session).lean();
     if (!animalAnterior) throw crearError('Animal no encontrado', 404);
     if (!['Activo', 'En tratamiento'].includes(animalAnterior.estado)) {
         throw crearError('Solo se puede cambiar el estado sanitario de animales activos');
@@ -46,11 +48,11 @@ const actualizarEstadoSanitarioAnimal = async (
             const animalNormalizado = await Animal.findByIdAndUpdate(
                 animalId,
                 { $set: { estado: 'Activo', estadoSanitario: estadoNuevo } },
-                { new: true, runValidators: true }
+                { new: true, runValidators: true, session }
             );
             return { animal: animalNormalizado, evento: null, sinCambios: true };
         }
-        return { animal: await Animal.findById(animalId), evento: null, sinCambios: true };
+        return { animal: await Animal.findById(animalId).session(session), evento: null, sinCambios: true };
     }
 
     const actualizacion = {
@@ -61,11 +63,10 @@ const actualizarEstadoSanitarioAnimal = async (
     const animal = await Animal.findByIdAndUpdate(
         animalId,
         { $set: actualizacion },
-        { new: true, runValidators: true }
+        { new: true, runValidators: true, session }
     );
 
-    try {
-        const evento = await EventoAnimal.create({
+    const [evento] = await EventoAnimal.create([{
             animal: animalId,
             tipoEvento: 'Sanidad',
             fecha: new Date(),
@@ -81,41 +82,48 @@ const actualizarEstadoSanitarioAnimal = async (
                 motivo: String(motivo).trim(),
                 tratamientoId: tratamientoId || undefined
             }
-        });
+        }], { session });
 
-        await notificarAccionSegura({
-            actor: usuarioId,
-            naturaleza: 'Informativa',
-            tipo: 'ESTADO_SANITARIO_CAMBIADO',
-            titulo: 'Estado sanitario actualizado',
-            mensaje: `El estado sanitario de ${animal.diio || animal.identificadorFinca || animal.nombre || 'un animal'} cambió de ${estadoAnterior} a ${estadoNuevo}.`,
-            moduloOrigen: 'Sanidad',
-            entidadTipo: 'Animal',
-            entidadId: animal._id,
-            url: `/inventario/animal/${animal._id}`,
-            metadata: { estadoAnterior, estadoNuevo, motivo, tratamientoId: tratamientoId || undefined }
-        });
+    return { animal, evento, sinCambios: false, estadoAnterior, estadoNuevo, motivo };
+};
 
-        return {
-            animal,
-            evento,
-            sinCambios: false,
-            anteriorPersistido: {
-                estado: animalAnterior.estado,
-                estadoSanitario: animalAnterior.estadoSanitario,
-                teniaEstadoSanitario: Object.prototype.hasOwnProperty.call(animalAnterior, 'estadoSanitario')
-            }
-        };
-    } catch (error) {
-        const restauracion = { $set: { estado: animalAnterior.estado } };
-        if (Object.prototype.hasOwnProperty.call(animalAnterior, 'estadoSanitario')) {
-            restauracion.$set.estadoSanitario = animalAnterior.estadoSanitario;
-        } else {
-            restauracion.$unset = { estadoSanitario: '' };
+const notificarCambio = (resultado, usuarioId, tratamientoId) => {
+    if (!resultado || resultado.sinCambios) return Promise.resolve();
+    return notificarAccionSegura({
+        actor: usuarioId,
+        naturaleza: 'Informativa',
+        tipo: 'ESTADO_SANITARIO_CAMBIADO',
+        titulo: 'Estado sanitario actualizado',
+        mensaje: `El estado sanitario de ${resultado.animal.diio || resultado.animal.identificadorFinca || resultado.animal.nombre || 'un animal'} cambió de ${resultado.estadoAnterior} a ${resultado.estadoNuevo}.`,
+        moduloOrigen: 'Sanidad',
+        entidadTipo: 'Animal',
+        entidadId: resultado.animal._id,
+        url: `/inventario/animal/${resultado.animal._id}`,
+        metadata: {
+            estadoAnterior: resultado.estadoAnterior,
+            estadoNuevo: resultado.estadoNuevo,
+            motivo: resultado.motivo,
+            tratamientoId: tratamientoId || undefined
         }
-        await Animal.collection.updateOne({ _id: animal._id }, restauracion);
-        throw error;
-    }
+    });
+};
+
+const actualizarEstadoSanitarioAnimal = async (
+    animalId,
+    estadoNuevo,
+    motivo,
+    usuarioId,
+    tratamientoId = null,
+    opciones = {}
+) => {
+    const ejecutar = (session) => actualizarEstadoSanitarioAnimalEnSession(
+        animalId, estadoNuevo, motivo, usuarioId, tratamientoId, session
+    );
+    const resultado = opciones.session
+        ? await ejecutar(opciones.session)
+        : await ejecutarEnTransaccion(ejecutar);
+    if (!opciones.omitirNotificacion) await notificarCambio(resultado, usuarioId, tratamientoId);
+    return resultado;
 };
 
 const actualizarEstadoSanitarioAnimales = async (
@@ -123,38 +131,30 @@ const actualizarEstadoSanitarioAnimales = async (
     estadoNuevo,
     motivo,
     usuarioId,
-    tratamientoId = null
+    tratamientoId = null,
+    opciones = {}
 ) => {
     validarCambio(estadoNuevo, motivo);
     const ids = [...new Set((animales || []).map((id) => id?._id?.toString() || id?.toString()).filter(Boolean))];
     if (!ids.length) throw crearError('Debe seleccionar al menos un animal');
 
-    const resultados = [];
-    try {
+    const ejecutar = async (session) => {
+        const resultados = [];
         for (const animalId of ids) {
-            resultados.push(await actualizarEstadoSanitarioAnimal(
-                animalId,
-                estadoNuevo,
-                motivo,
-                usuarioId,
-                tratamientoId
+            resultados.push(await actualizarEstadoSanitarioAnimalEnSession(
+                animalId, estadoNuevo, motivo, usuarioId, tratamientoId, session
             ));
         }
         return resultados;
-    } catch (error) {
-        for (const resultado of resultados.reverse()) {
-            if (resultado.sinCambios || !resultado.anteriorPersistido) continue;
-            const restauracion = { $set: { estado: resultado.anteriorPersistido.estado } };
-            if (resultado.anteriorPersistido.teniaEstadoSanitario) {
-                restauracion.$set.estadoSanitario = resultado.anteriorPersistido.estadoSanitario;
-            } else {
-                restauracion.$unset = { estadoSanitario: '' };
-            }
-            await Animal.collection.updateOne({ _id: resultado.animal._id }, restauracion);
-            if (resultado.evento?._id) await EventoAnimal.findByIdAndDelete(resultado.evento._id);
-        }
-        throw error;
+    };
+
+    const resultados = opciones.session
+        ? await ejecutar(opciones.session)
+        : await ejecutarEnTransaccion(ejecutar);
+    if (!opciones.omitirNotificacion) {
+        await Promise.all(resultados.map((resultado) => notificarCambio(resultado, usuarioId, tratamientoId)));
     }
+    return resultados;
 };
 
 module.exports = {

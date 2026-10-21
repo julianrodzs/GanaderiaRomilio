@@ -2,6 +2,13 @@ const rotacionCtrl = {};
 
 const RotacionPotrero = require('../models/RotacionPotrero');
 const Potrero = require('../models/Potrero');
+const {
+    crearErrorIntegridad,
+    sanitizarRotacion,
+    validarDestinoPastoreo,
+    validarPeriodoRotacion
+} = require('../services/potrero-integridad-service');
+const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
 
 const MILISEGUNDOS_DIA = 1000 * 60 * 60 * 24;
 
@@ -13,10 +20,10 @@ const calcularDiasEntreFechas = (fechaInicio, fechaFin) => {
 
     if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) return null;
 
-    return Math.max(Math.round((fin - inicio) / MILISEGUNDOS_DIA), 0);
+    return Math.round((fin - inicio) / MILISEGUNDOS_DIA);
 };
 
-const prepararDatosRotacion = async (datos, rotacionId = null) => {
+const prepararDatosRotacion = async (datos, rotacionId = null, session = null) => {
     const datosPreparados = { ...datos };
     datosPreparados.diasOcupado = calcularDiasEntreFechas(datosPreparados.fechaEntrada, datosPreparados.fechaSalida);
     datosPreparados.diasDescansoPrevio = null;
@@ -31,7 +38,7 @@ const prepararDatosRotacion = async (datos, rotacionId = null) => {
             filtro._id = { $ne: rotacionId };
         }
 
-        const rotacionAnterior = await RotacionPotrero.findOne(filtro).sort({ fechaSalida: -1 });
+        const rotacionAnterior = await RotacionPotrero.findOne(filtro).sort({ fechaSalida: -1 }).session(session);
 
         if (rotacionAnterior?.fechaSalida) {
             datosPreparados.diasDescansoPrevio = calcularDiasEntreFechas(rotacionAnterior.fechaSalida, datosPreparados.fechaEntrada);
@@ -41,7 +48,7 @@ const prepararDatosRotacion = async (datos, rotacionId = null) => {
     return datosPreparados;
 };
 
-const validarRotacionActivaUnica = async ({ potrero, estado }, rotacionId = null) => {
+const validarRotacionActivaUnica = async ({ potrero, estado }, rotacionId = null, session = null) => {
     if (estado !== 'Activa' || !potrero) return;
 
     const filtro = {
@@ -53,7 +60,7 @@ const validarRotacionActivaUnica = async ({ potrero, estado }, rotacionId = null
         filtro._id = { $ne: rotacionId };
     }
 
-    const rotacionActiva = await RotacionPotrero.findOne(filtro).select('_id');
+    const rotacionActiva = await RotacionPotrero.findOne(filtro).select('_id').session(session);
 
     if (rotacionActiva) {
         const error = new Error('Este potrero ya tiene una rotacion activa');
@@ -62,43 +69,48 @@ const validarRotacionActivaUnica = async ({ potrero, estado }, rotacionId = null
     }
 };
 
-const actualizarEstadoPotrero = async (potreroId, estado) => {
+const validarPotreroDestino = async (potreroId, session = null) => {
+    const potrero = await Potrero.findById(potreroId).session(session);
+    return validarDestinoPastoreo(potrero);
+};
+
+const actualizarEstadoPotrero = async (potreroId, estado, session = null) => {
     if (!potreroId) return;
 
-    const potrero = await Potrero.findById(potreroId);
+    const potrero = await Potrero.findById(potreroId).session(session);
 
     if (!potrero || potrero.estado === 'Mantenimiento') return;
     if (potrero.estado === estado) return;
 
     potrero.estado = estado;
-    await potrero.save();
+    await potrero.save(session ? { session } : {});
 };
 
-const sincronizarPotreroPorRotacion = async ({ potreroId, estadoRotacion }) => {
+const sincronizarPotreroPorRotacion = async ({ potreroId, estadoRotacion, session = null }) => {
     if (estadoRotacion === 'Activa') {
-        await actualizarEstadoPotrero(potreroId, 'Ocupado');
+        await actualizarEstadoPotrero(potreroId, 'Ocupado', session);
         return;
     }
 
     if (estadoRotacion === 'Finalizada') {
-        await actualizarEstadoPotrero(potreroId, 'Descanso');
+        await actualizarEstadoPotrero(potreroId, 'Descanso', session);
     }
 };
 
-const sincronizarPotreroAnterior = async (potreroId) => {
+const sincronizarPotreroAnterior = async (potreroId, session = null) => {
     if (!potreroId) return;
 
     const activa = await RotacionPotrero.findOne({
         potrero: potreroId,
         estado: 'Activa'
-    }).select('_id');
+    }).select('_id').session(session);
 
     if (activa) {
-        await actualizarEstadoPotrero(potreroId, 'Ocupado');
+        await actualizarEstadoPotrero(potreroId, 'Ocupado', session);
         return;
     }
 
-    await actualizarEstadoPotrero(potreroId, 'Descanso');
+    await actualizarEstadoPotrero(potreroId, 'Descanso', session);
 };
 
 const obtenerPotreroId = (rotacion) => {
@@ -144,19 +156,34 @@ rotacionCtrl.getRotaciones = async (req, res) => {
 
 rotacionCtrl.createRotacion = async (req, res) => {
     try {
-        const datosRotacion = await prepararDatosRotacion(req.body);
-        await validarRotacionActivaUnica(datosRotacion);
-        const nuevaRotacion = new RotacionPotrero(datosRotacion);
-        const rotacionGuardada = await nuevaRotacion.save();
-        await sincronizarPotreroPorRotacion({
-            potreroId: rotacionGuardada.potrero,
-            estadoRotacion: rotacionGuardada.estado
+        const entrada = sanitizarRotacion(req.body, { aplicarDefaults: true });
+        if (entrada.loteRef) {
+            throw crearErrorIntegridad('Las rotaciones asociadas a lotes se crean desde el modulo de Lotes.', 409, 'ROTACION_LOTE_REQUIERE_FLUJO');
+        }
+        let rotacionId;
+        await ejecutarEnTransaccion(async (session) => {
+            validarPeriodoRotacion(entrada);
+            await validarPotreroDestino(entrada.potrero, session);
+            const datosRotacion = await prepararDatosRotacion(entrada, null, session);
+            await validarRotacionActivaUnica(datosRotacion, null, session);
+            const nuevaRotacion = new RotacionPotrero(datosRotacion);
+            const rotacionGuardada = await nuevaRotacion.save({ session });
+            await sincronizarPotreroPorRotacion({
+                potreroId: rotacionGuardada.potrero,
+                estadoRotacion: rotacionGuardada.estado,
+                session
+            });
+            rotacionId = rotacionGuardada._id;
         });
-        const rotacion = await RotacionPotrero.findById(rotacionGuardada._id).populate('potrero');
+        const rotacion = await RotacionPotrero.findById(rotacionId).populate('potrero');
 
         res.status(201).json(rotacion);
     } catch (error) {
-        res.status(error.statusCode || 400).json({ mensaje: 'Error al crear rotacion', error: error.message });
+        const conflicto = error?.code === 11000;
+        res.status(conflicto ? 409 : (error.statusCode || error.status || 400)).json({
+            mensaje: conflicto ? 'Este potrero ya tiene una rotacion activa' : error.message,
+            codigo: conflicto ? 'POTRERO_YA_OCUPADO' : error.codigo
+        });
     }
 };
 
@@ -178,28 +205,37 @@ rotacionCtrl.getRotacion = async (req, res) => {
 
 rotacionCtrl.updateRotacion = async (req, res) => {
     try {
-        const rotacionExistente = await RotacionPotrero.findById(req.params.id);
+        const cambios = sanitizarRotacion(req.body);
+        let rotacionActualizadaId;
+        await ejecutarEnTransaccion(async (session) => {
+        const rotacionExistente = await RotacionPotrero.findById(req.params.id).session(session);
 
         if (!rotacionExistente) {
-            return res.status(404).json({ mensaje: 'Rotacion no encontrada' });
+            throw crearErrorIntegridad('Rotacion no encontrada', 404, 'ROTACION_NO_ENCONTRADA');
+        }
+        if (rotacionExistente.loteRef) {
+            throw crearErrorIntegridad('Las rotaciones de lotes se administran desde el movimiento del lote.', 409, 'ROTACION_LOTE_REQUIERE_FLUJO');
         }
 
         const datosRotacion = await prepararDatosRotacion({
             ...rotacionExistente.toObject(),
-            ...req.body
-        }, req.params.id);
+            ...cambios
+        }, req.params.id, session);
 
         delete datosRotacion._id;
         delete datosRotacion.__v;
         delete datosRotacion.createdAt;
         delete datosRotacion.updatedAt;
 
-        await validarRotacionActivaUnica(datosRotacion, req.params.id);
+        validarPeriodoRotacion(datosRotacion);
+        await validarPotreroDestino(datosRotacion.potrero, session);
+        await validarRotacionActivaUnica(datosRotacion, req.params.id, session);
 
         const rotacion = await RotacionPotrero.findByIdAndUpdate(req.params.id, datosRotacion, {
             new: true,
-            runValidators: true
-        }).populate('potrero');
+            runValidators: true,
+            session
+        });
 
         const potreroAnteriorId = obtenerPotreroId(rotacionExistente);
         const potreroActualId = obtenerPotreroId(rotacion);
@@ -209,31 +245,48 @@ rotacionCtrl.updateRotacion = async (req, res) => {
         const cambioPotrero = potreroAnteriorId && potreroAnteriorId !== potreroActualId;
 
         if (cambioPotrero && estadoAnterior === 'Activa') {
-            await sincronizarPotreroAnterior(potreroAnteriorId);
+            await sincronizarPotreroAnterior(potreroAnteriorId, session);
         }
 
         if (estadoActual === 'Activa') {
             await sincronizarPotreroPorRotacion({
                 potreroId: potreroActualId,
-                estadoRotacion: 'Activa'
+                estadoRotacion: 'Activa',
+                session
             });
         } else if (estadoAnterior === 'Activa' && estadoActual === 'Finalizada') {
             await sincronizarPotreroPorRotacion({
                 potreroId: potreroActualId,
-                estadoRotacion: 'Finalizada'
+                estadoRotacion: 'Finalizada',
+                session
             });
         } else if (estadoAnterior === 'Activa' && estadoActual !== 'Activa') {
-            await sincronizarPotreroAnterior(potreroActualId);
+            await sincronizarPotreroAnterior(potreroActualId, session);
         }
 
-        res.json(rotacion);
+        rotacionActualizadaId = rotacion._id;
+        });
+        const rotacionActualizada = await RotacionPotrero.findById(rotacionActualizadaId).populate('potrero');
+        res.json(rotacionActualizada);
     } catch (error) {
-        res.status(error.statusCode || 400).json({ mensaje: 'Error al actualizar rotacion', error: error.message });
+        const conflicto = error?.code === 11000;
+        res.status(conflicto ? 409 : (error.statusCode || error.status || 400)).json({
+            mensaje: conflicto ? 'Este potrero ya tiene una rotacion activa' : error.message,
+            codigo: conflicto ? 'POTRERO_YA_OCUPADO' : error.codigo
+        });
     }
 };
 
 rotacionCtrl.deleteRotacion = async (req, res) => {
     try {
+        const existente = await RotacionPotrero.findById(req.params.id);
+        if (!existente) return res.status(404).json({ mensaje: 'Rotacion no encontrada' });
+        if (existente.loteRef) {
+            return res.status(409).json({
+                mensaje: 'La rotacion pertenece a un lote y debe conservarse como historial.',
+                codigo: 'ROTACION_LOTE_PROTEGIDA'
+            });
+        }
         const rotacion = await RotacionPotrero.findByIdAndDelete(req.params.id);
 
         if (!rotacion) {

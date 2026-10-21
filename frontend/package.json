@@ -12,7 +12,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:lunar": "node --test tests/calendarioLunarService.test.mjs"
+    "test:lunar": "node --test tests/calendarioLunarService.test.mjs",
+    "test:tareas": "node --test tests/tareasOffline.test.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

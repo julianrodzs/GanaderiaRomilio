@@ -15,9 +15,11 @@ const FormularioAplicacionUnica = ({ especie, animales, lotes = [], animalesInic
     tipo: '',
     dosis: '',
     viaAplicacion: '',
+    diasRetiroCarne: 0,
     responsableUsuario: '',
     motivo: '',
-    observaciones: ''
+    observaciones: '',
+    claveIdempotencia: globalThis.crypto?.randomUUID?.() || `unica-${Date.now()}`
   });
 
   const actualizar = (evento) => {
@@ -40,7 +42,8 @@ const FormularioAplicacionUnica = ({ especie, animales, lotes = [], animalesInic
     onGuardar({
       ...datos,
       lote: tipoAlcance === 'lote' ? formulario.lote : null,
-      animales: tipoAlcance === 'animales' ? formulario.animales : []
+      animales: tipoAlcance === 'animales' ? formulario.animales : [],
+      diasRetiroCarne: Number(formulario.diasRetiroCarne || 0)
     });
   };
 
@@ -106,6 +109,10 @@ const FormularioAplicacionUnica = ({ especie, animales, lotes = [], animalesInic
           <label>
             Vía de aplicación
             <input name="viaAplicacion" value={formulario.viaAplicacion} onChange={actualizar} placeholder="Intramuscular" />
+          </label>
+          <label>
+            Retiro de carne (días)
+            <input name="diasRetiroCarne" type="number" min="0" step="1" value={formulario.diasRetiroCarne} onChange={actualizar} />
           </label>
           <label>
             Encargado de la aplicación

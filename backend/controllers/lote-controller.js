@@ -131,7 +131,12 @@ const cambiarEtapaLote = async (req, res) => {
 };
 
 const registrarPesajes = async (req, res) => {
-    try { const pesajes = await registrarPesajesLote(req.params.id, req.body, req.usuario?.id); res.status(201).json({ registrados: pesajes.length, lote: await obtenerDetalleLote(req.params.id) }); } catch (error) { responderError(res, error); }
+    try {
+        const pesajes = await registrarPesajesLote(req.params.id, req.body, req.usuario?.id);
+        const incluirAnalitica = await tieneFeature('analiticaProductiva', req.organizacionId);
+        const detalle = proyectarDetalleLotePorPlan(await obtenerDetalleLote(req.params.id), incluirAnalitica);
+        res.status(201).json({ registrados: pesajes.length, lote: detalle });
+    } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
 
 const programarTarea = async (req, res) => {

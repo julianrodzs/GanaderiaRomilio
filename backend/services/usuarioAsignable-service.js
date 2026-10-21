@@ -7,6 +7,7 @@ const ROLES_ASIGNABLES = {
     IATF: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
     ProtocolosEngorde: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
     BandasPorcinas: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
+    Alimentacion: ['Administrador', 'Encargado', 'Trabajador'],
     Tareas: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario', 'Contador']
 };
 
@@ -42,20 +43,22 @@ const listarUsuariosAsignables = async (modulo, organizacionId = obtenerOrganiza
         .sort((a, b) => `${a.nombre} ${a.apellido || ''}`.localeCompare(`${b.nombre} ${b.apellido || ''}`, 'es'));
 };
 
-const validarUsuarioAsignable = async (usuarioId, modulo) => {
+const validarUsuarioAsignable = async (usuarioId, modulo, { session = null } = {}) => {
     if (!usuarioId) {
         const error = new Error('Debe seleccionar un responsable para las tareas');
         error.status = 400;
         throw error;
     }
 
-    const membresia = await Membresia.findOne({
+    let consulta = Membresia.findOne({
         organizacionId: obtenerOrganizacionActual(),
         usuario: usuarioId,
         estado: 'Activo',
         rol: { $in: obtenerRolesAsignables(modulo) },
         ...filtroAccesoFinca()
-    }).populate({
+    });
+    if (session) consulta = consulta.session(session);
+    const membresia = await consulta.populate({
         path: 'usuario',
         match: { estado: 'Activo' },
         select: '_id nombre apellido correo estado'

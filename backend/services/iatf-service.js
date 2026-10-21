@@ -1,3 +1,4 @@
+const { ejecutarNotificacionSegura, notificarTareasOrigen } = require('./tarea-notificacion-service');
 const mongoose = require('mongoose');
 const Animal = require('../models/Animal');
 const CampanaIATF = require('../models/CampanaIATF');
@@ -16,6 +17,7 @@ const { Membresia } = require('../models/Membresia');
 const { calcularFechaProbablePartoBovino, obtenerDuracionGestacionBovina } = require('./duracionGestacion-service');
 const { upsertEventoAnimal } = require('./eventoAnimal-service');
 const { validarUsuarioAsignable } = require('./usuarioAsignable-service');
+const { conciliarCicloVacioActivo } = require('./reproduccion-service');
 const { obtenerFincaActual } = require('../context/organizacion-context');
 
 const ESTADOS_PARTICIPACION_ACTIVOS = ['INSCRITA', 'EN_PROTOCOLO', 'PROTOCOLO_COMPLETADO', 'INSEMINADA'];
@@ -93,6 +95,10 @@ const validarPlantilla = (datos) => {
             throw errorIatf('Los diagnósticos de gestación deben asignarse a Administrador o Veterinario.');
         }
     });
+    const primeraTarea = pasos.find((paso) => paso.generaTarea !== false);
+    if (primeraTarea && ((primeraTarea.referenciaTemporal || 'DESDE_INICIO') !== 'DESDE_INICIO' || Number(primeraTarea.offsetHoras || 0) !== 0)) {
+        throw errorIatf('La primera tarea del protocolo debe quedar programada en la fecha y hora de inicio de la campaña.');
+    }
     return true;
 };
 
@@ -321,6 +327,7 @@ const crearCampana = async ({ datos, usuarioId }) => {
     } finally {
         await session.endSession();
     }
+    await ejecutarNotificacionSegura(() => notificarTareasOrigen({ referenciaId: creada._id, moduloOrigen: 'Reproduccion', categoriaAutomatica: 'IATF' }, usuarioId));
     return obtenerCampana(creada._id);
 };
 
@@ -536,7 +543,18 @@ const registrarIATF = async ({ campanaId, datos, usuarioId, rolUsuario }) => {
                 const semen = consumoSemen.insumo;
                 const diasGestacion = await obtenerDuracionGestacionBovina({ fincaId: campana.fincaId, session });
                 let ciclo = await RegistroReproductivo.findOne({ animal: participante.animal, estadoCiclo: 'Activo', activoParaAlertas: true }).session(session);
-                if (ciclo && idTexto(ciclo.campanaIATF) !== idTexto(campana._id)) throw errorIatf('El animal ya tiene un ciclo reproductivo activo. Ciérralo antes de registrar la IATF.', 409);
+                if (ciclo && idTexto(ciclo.campanaIATF) !== idTexto(campana._id)) {
+                    if (await conciliarCicloVacioActivo({
+                        ciclo,
+                        usuarioId,
+                        session,
+                        motivo: 'Ciclo vacío legado conciliado al registrar una resincronización IATF.'
+                    })) {
+                        ciclo = null;
+                    } else {
+                        throw errorIatf('El animal ya tiene un ciclo reproductivo activo. Ciérralo antes de registrar la IATF.', 409);
+                    }
+                }
                 if (!ciclo) ciclo = new RegistroReproductivo({ animal: participante.animal, especie: 'Bovino' });
                 Object.assign(ciclo, {
                     asignadoA: campana.responsable,
@@ -563,7 +581,8 @@ const registrarIATF = async ({ campanaId, datos, usuarioId, rolUsuario }) => {
                 participante.semenSnapshot = {
                     nombre: semen.nombre, toro: item.toro || semen.toro, codigoToro: item.codigoToro || semen.codigoToro,
                     raza: item.raza || semen.razaToro, lote: item.loteSemen || semen.lote, tipoSemen: item.tipoSemen || semen.tipoSemen,
-                    costoUnitario: semen.costoUnitario, moneda: semen.moneda, diasGestacionConfigurados: diasGestacion
+                    costoUnitario: semen.costoUnitario, moneda: semen.moneda, cantidad: consumoSemen.cantidad,
+                    diasGestacionConfigurados: diasGestacion
                 };
                 participante.tecnicoInseminador = item.tecnico || datos.tecnico || usuarioId;
                 participante.registroReproductivo = ciclo._id;
@@ -633,6 +652,11 @@ const registrarDiagnosticos = async ({ campanaId, datos, usuarioId }) => {
                         } else if (item.resultado === 'VACIA') {
                             ciclo.gestacionConfirmada = false;
                             ciclo.fechaPartoEstimada = undefined;
+                            ciclo.estado = 'Vacía';
+                            ciclo.estadoCiclo = 'No preñada';
+                            ciclo.activoParaAlertas = false;
+                            ciclo.fechaCierre = diagnostico.fecha;
+                            ciclo.motivoCierre = 'Diagnóstico VACIA registrado en campaña IATF.';
                         }
                         await ciclo.save({ session });
                     }
@@ -673,8 +697,9 @@ const calcularMetricasCampana = (campana, diagnosticos = [], pasos = []) => {
         return suma + Number(p.costoTotalSnapshot || 0);
     }, 0), 0);
     const costoSemen = participantes.reduce((total, p) => {
-        agregarCosto(p.semenSnapshot?.moneda, p.semenSnapshot?.costoUnitario);
-        return total + Number(p.semenSnapshot?.costoUnitario || 0);
+        const costo = Number(p.semenSnapshot?.costoUnitario || 0) * Number(p.semenSnapshot?.cantidad || 1);
+        agregarCosto(p.semenSnapshot?.moneda, costo);
+        return total + costo;
     }, 0);
     const adicionales = campana.costosAdicionales || {};
     agregarCosto(
@@ -687,12 +712,22 @@ const calcularMetricasCampana = (campana, diagnosticos = [], pasos = []) => {
     const porFecha = {};
     diagnosticos.forEach((item) => {
         const clave = new Date(item.fecha).toISOString().slice(0, 10);
-        porFecha[clave] ||= { fecha: clave, diagnosticadas: 0, prenadas: 0 };
-        porFecha[clave].diagnosticadas += 1;
-        if (item.resultado === 'PREÑADA') porFecha[clave].prenadas += 1;
+        porFecha[clave] ||= { fecha: clave, porAnimal: new Map() };
+        const animal = idTexto(item.animal);
+        const anterior = porFecha[clave].porAnimal.get(animal);
+        const fechaAnterior = new Date(anterior?.createdAt || anterior?.updatedAt || 0).getTime();
+        const fechaActual = new Date(item.createdAt || item.updatedAt || 0).getTime();
+        if (!anterior || fechaActual >= fechaAnterior) porFecha[clave].porAnimal.set(animal, item);
     });
-    Object.values(porFecha).forEach((grupo) => {
-        grupo.pAI = inseminadas ? Number(((grupo.prenadas / inseminadas) * 100).toFixed(2)) : 0;
+    const diagnosticosPorFecha = Object.values(porFecha).map((grupo) => {
+        const unicos = [...grupo.porAnimal.values()];
+        const prenadasFecha = unicos.filter((item) => item.resultado === 'PREÑADA').length;
+        return {
+            fecha: grupo.fecha,
+            diagnosticadas: unicos.length,
+            prenadas: prenadasFecha,
+            pAI: inseminadas ? Number(((prenadasFecha / inseminadas) * 100).toFixed(2)) : 0
+        };
     });
     const resultadosPorToro = {};
     participantes.filter((p) => p.fechaInseminacion).forEach((p) => {
@@ -718,7 +753,7 @@ const calcularMetricasCampana = (campana, diagnosticos = [], pasos = []) => {
         monedaCosto,
         costosPorMoneda,
         costoPorPrenez: prenadas && costoTotal != null ? Number((costoTotal / prenadas).toFixed(2)) : null,
-        diagnosticosPorFecha: Object.values(porFecha),
+        diagnosticosPorFecha,
         resultadosObservadosPorToro: Object.values(resultadosPorToro)
     };
 };

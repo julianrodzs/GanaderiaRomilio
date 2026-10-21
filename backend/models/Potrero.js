@@ -14,7 +14,7 @@ const potreroSchema = new Schema(
         ultimaFertilizacion: { type: Date },
         estado: {
             type: String,
-            enum: ['Disponible', 'Ocupado', 'Descanso', 'Mantenimiento'],
+            enum: ['Disponible', 'Ocupado', 'Descanso', 'Mantenimiento', 'Inactivo'],
             default: 'Disponible'
         },
         observaciones: { type: String, trim: true },

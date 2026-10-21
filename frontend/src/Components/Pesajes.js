@@ -13,15 +13,27 @@ import { obtenerCategoriaVisible } from '../utils/categoriasAnimales';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
-const fechaHoy = () => new Date().toISOString().slice(0, 10);
+const fechaHoy = () => {
+  const ahora = new Date();
+  const desplazamiento = ahora.getTimezoneOffset() * 60_000;
+  return new Date(ahora.getTime() - desplazamiento).toISOString().slice(0, 10);
+};
+
+const claveFechaCivil = (fecha) => {
+  if (!fecha) return '';
+  const coincidencia = String(fecha).match(/^(\d{4}-\d{2}-\d{2})/);
+  if (coincidencia) return coincidencia[1];
+  const valor = new Date(fecha);
+  if (Number.isNaN(valor.getTime())) return '';
+  const desplazamiento = valor.getTimezoneOffset() * 60_000;
+  return new Date(valor.getTime() - desplazamiento).toISOString().slice(0, 10);
+};
 
 const formatearFecha = (fecha) => {
-  if (!fecha) return '--';
-  return new Date(fecha).toLocaleDateString('es-CR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
+  const clave = claveFechaCivil(fecha);
+  if (!clave) return '--';
+  const [anio, mes, dia] = clave.split('-');
+  return `${dia}/${mes}/${anio}`;
 };
 
 const obtenerId = (valor) => {
@@ -39,15 +51,15 @@ const formatearAnimal = (animal) => {
   return `${animal.diio || animal.identificadorFinca || 'Sin ID'}${animal.nombre ? ` - ${animal.nombre}` : ''}`;
 };
 
-const valorInicial = {
+const crearValorInicial = () => ({
   animal: '',
   fecha: fechaHoy(),
   peso: '',
   etapaProductiva: '',
   observaciones: ''
-};
+});
 
-const Pesajes = ({ soloLectura = false }) => {
+const Pesajes = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const [pesajes, setPesajes] = useState([]);
   const [animales, setAnimales] = useState([]);
   const [potreros, setPotreros] = useState([]);
@@ -57,7 +69,7 @@ const Pesajes = ({ soloLectura = false }) => {
   const [errorFormulario, setErrorFormulario] = useState('');
   const [modoFormulario, setModoFormulario] = useState(false);
   const [pesajeSeleccionado, setPesajeSeleccionado] = useState(null);
-  const [formulario, setFormulario] = useState(valorInicial);
+  const [formulario, setFormulario] = useState(crearValorInicial);
   const [orden, setOrden] = useState({ campo: 'fecha', direccion: 'desc' });
   const [filtros, setFiltros] = useState({
     busqueda: '',
@@ -82,7 +94,7 @@ const Pesajes = ({ soloLectura = false }) => {
       const [pesajesData, animalesData, potrerosData] = await Promise.all([
         obtenerPesajes({ especie }),
         obtenerAnimales({ especie }),
-        obtenerPotreros()
+        obtenerPotreros().catch(() => [])
       ]);
       setPesajes(pesajesData);
       setAnimales(animalesData);
@@ -103,7 +115,7 @@ const Pesajes = ({ soloLectura = false }) => {
 
     const filtrados = pesajes.filter((pesaje) => {
       const animal = pesaje.animal;
-      const fecha = pesaje.fecha ? new Date(pesaje.fecha) : null;
+      const fecha = claveFechaCivil(pesaje.fecha);
       const potreroAnimal = obtenerId(animal?.potreroActual);
       const categoria = obtenerCategoriaAnimal(animal);
 
@@ -117,8 +129,8 @@ const Pesajes = ({ soloLectura = false }) => {
         if (!valores.includes(texto)) return false;
       }
 
-      if (filtros.fechaInicio && fecha && fecha < new Date(`${filtros.fechaInicio}T00:00:00`)) return false;
-      if (filtros.fechaFin && fecha && fecha > new Date(`${filtros.fechaFin}T23:59:59`)) return false;
+      if (filtros.fechaInicio && fecha && fecha < filtros.fechaInicio) return false;
+      if (filtros.fechaFin && fecha && fecha > filtros.fechaFin) return false;
       if (filtros.potrero !== 'Todos' && potreroAnimal !== filtros.potrero) return false;
       if (filtros.sexo !== 'Todos' && animal?.sexo !== filtros.sexo) return false;
       if (filtros.categoria !== 'Todos' && categoria !== filtros.categoria) return false;
@@ -152,7 +164,7 @@ const Pesajes = ({ soloLectura = false }) => {
 
   const abrirNuevo = () => {
     setPesajeSeleccionado(null);
-    setFormulario(valorInicial);
+    setFormulario(crearValorInicial());
     setErrorFormulario('');
     setModoFormulario(true);
   };
@@ -161,7 +173,7 @@ const Pesajes = ({ soloLectura = false }) => {
     setPesajeSeleccionado(pesaje);
     setFormulario({
       animal: obtenerId(pesaje.animal),
-      fecha: pesaje.fecha ? new Date(pesaje.fecha).toISOString().slice(0, 10) : fechaHoy(),
+      fecha: claveFechaCivil(pesaje.fecha) || fechaHoy(),
       peso: pesaje.peso || '',
       etapaProductiva: pesaje.etapaProductiva || pesaje.animal?.etapaProductiva || '',
       observaciones: pesaje.observaciones || ''
@@ -173,7 +185,7 @@ const Pesajes = ({ soloLectura = false }) => {
   const cancelarFormulario = () => {
     setModoFormulario(false);
     setPesajeSeleccionado(null);
-    setFormulario(valorInicial);
+    setFormulario(crearValorInicial());
   };
 
   const guardarPesaje = async (evento) => {
@@ -261,6 +273,7 @@ const Pesajes = ({ soloLectura = false }) => {
             Fecha
             <input
               type="date"
+              max={fechaHoy()}
               value={formulario.fecha}
               onChange={(evento) => setFormulario((actual) => ({ ...actual, fecha: evento.target.value }))}
               required
@@ -400,7 +413,7 @@ const Pesajes = ({ soloLectura = false }) => {
                 <td>
                   <div className="acciones-tabla">
                     {!soloLectura && <button type="button" aria-label="Editar" title="Editar" onClick={() => abrirEditar(pesaje)}>✎</button>}
-                    {!soloLectura && <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => borrarPesaje(pesaje)}>⌫</button>}
+                    {!soloLectura && rolUsuario === 'Administrador' && <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => borrarPesaje(pesaje)}>⌫</button>}
                   </div>
                 </td>
               </tr>

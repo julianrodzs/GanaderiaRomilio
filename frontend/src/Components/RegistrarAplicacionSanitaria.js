@@ -11,7 +11,9 @@ const RegistrarAplicacionSanitaria = ({ plan, usuariosAsignables = [], onCancela
     responsableUsuario: responsableInicial,
     dosis: plan?.dosis || '',
     viaAplicacion: plan?.viaAplicacion || '',
-    observaciones: ''
+    diasRetiroCarne: 0,
+    observaciones: '',
+    claveIdempotencia: globalThis.crypto?.randomUUID?.() || `plan-${Date.now()}`
   });
 
   const actualizarCampo = (evento) => {
@@ -83,6 +85,10 @@ const RegistrarAplicacionSanitaria = ({ plan, usuariosAsignables = [], onCancela
                 onChange={actualizarCampo}
                 placeholder="Intramuscular"
               />
+            </label>
+            <label>
+              Retiro de carne (días)
+              <input name="diasRetiroCarne" type="number" min="0" step="1" value={formulario.diasRetiroCarne} onChange={actualizarCampo} />
             </label>
           </div>
 

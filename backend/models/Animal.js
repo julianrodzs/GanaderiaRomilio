@@ -69,6 +69,7 @@ const animalSchema = new Schema(
         pesoNacimiento: { type: Number, min: 0 },
         pesoDestete: { type: Number, min: 0 },
         pesoActual: { type: Number, min: 0 },
+        fechaUltimoPesaje: { type: Date },
         pesoCompra: { type: Number, min: 0 },
         pesoVenta: { type: Number, min: 0 },
         precioCompraPorKg: { type: Number, min: 0 },
@@ -93,6 +94,8 @@ const animalSchema = new Schema(
             enum: ['Sano', 'En observación', 'Enfermo', 'Recuperación'],
             default: 'Sano'
         },
+        fechaFinRetiroCarne: { type: Date, default: null },
+        medicamentoEnRetiro: { type: String, trim: true, default: '' },
         potreroActual: { type: Schema.Types.ObjectId, ref: 'Potrero' },
         loteActual: { type: Schema.Types.ObjectId, ref: 'Lote' },
         fotoPrincipal: { type: Schema.Types.ObjectId, ref: 'ArchivoMultimedia', default: null },
@@ -111,6 +114,7 @@ animalSchema.index(
 );
 animalSchema.index({ estado: 1 });
 animalSchema.index({ estadoSanitario: 1 });
+animalSchema.index({ fechaFinRetiroCarne: 1 });
 animalSchema.index({ sexo: 1 });
 animalSchema.index({ potreroActual: 1 });
 animalSchema.index({ especie: 1, estado: 1 });

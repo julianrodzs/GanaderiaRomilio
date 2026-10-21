@@ -1,6 +1,8 @@
 import { completarTarea, crearEventoAnimal } from './api';
 import {
   actualizarCambioPendiente,
+  actualizarTareaEnCache,
+  obtenerContextoOffline,
   eliminarCambioPendiente,
   obtenerCambiosPendientes,
   registrarResultadoSincronizacion
@@ -21,21 +23,25 @@ const estaListoParaReintento = (cambio, forzar) => {
 
 const sincronizarCambio = async (cambio) => {
   const intentos = Number(cambio.intentos || 0) + 1;
-  await actualizarCambioPendiente(cambio.id, {
+  const actualizado = await actualizarCambioPendiente(cambio.id, {
     estadoSincronizacion: 'Sincronizando',
     intentos,
     ultimoIntentoEn: new Date().toISOString(),
     errorSincronizacion: ''
   });
 
+  if (!actualizado || obtenerContextoOffline().clave !== cambio.clave) return { id: cambio.id, estado: 'Pendiente' };
   try {
     if (cambio.tipo === 'completar-tarea') {
-      await completarTarea({
+      const tarea = await completarTarea({
         id: cambio.referenciaId,
         observaciones: cambio.payload?.observaciones || '',
         idempotencyKey: cambio.idempotencyKey,
-        versionEsperada: cambio.payload?.versionEsperada || ''
+        versionEsperada: cambio.payload?.versionEsperada || '',
+        fechaEjecucionReal: cambio.creadoEn,
+        contextoEsperado: cambio
       });
+      if (obtenerContextoOffline().clave === cambio.clave) await actualizarTareaEnCache(tarea);
     } else if (cambio.tipo === 'crear-nota-bitacora') {
       await crearEventoAnimal(cambio.payload, { idempotencyKey: cambio.idempotencyKey });
     } else {
@@ -91,8 +97,14 @@ export const sincronizarCambiosOffline = (opciones = {}) => {
   return sincronizacionActiva;
 };
 
-export const reintentarCambioOffline = async (id) => {
+export const reintentarCambioOffline = async (id, { versionEsperada } = {}) => {
+  const cambio = (await obtenerCambiosPendientes()).find((item) => item.id === id);
+  if (!cambio) return;
+  if (cambio.tipo === 'completar-tarea' && cambio.estadoSincronizacion === 'Conflicto' && !versionEsperada) {
+    throw new Error('Revisa la tarea actual antes de volver a completarla.');
+  }
   await actualizarCambioPendiente(id, {
+    ...(versionEsperada ? { payload: { ...cambio.payload, versionEsperada } } : {}),
     estadoSincronizacion: 'Pendiente',
     intentos: 0,
     proximoIntentoEn: null,

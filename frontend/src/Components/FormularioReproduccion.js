@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { etiquetaUsuarioConRol } from '../utils/usuarios';
+import { obtenerAptitudReproductivaPorEdad } from '../utils/categoriasAnimales';
 import SelectorAnimalBuscable from './SelectorAnimalBuscable';
 
 const DIAS_REVISION_CELO_POSTPARTO = 60;
@@ -100,7 +101,8 @@ const normalizarEnvio = (registro) => {
     'fechaDestete'
   ];
   const datos = Object.fromEntries(
-    Object.entries(registro)
+    Object.keys(estadoInicial)
+      .map((campo) => [campo, registro[campo]])
       .map(([campo, valor]) => [campo, camposFecha.includes(campo) && valor === '' ? null : valor])
       .filter(([campo, valor]) => campo === 'observaciones' || valor !== '')
   );
@@ -127,7 +129,12 @@ const FormularioReproduccion = ({
   usuariosAsignables = [],
   semenDisponible = []
 }) => {
-  const hembras = animales.filter((animal) => animal.sexo === 'Hembra');
+  const animalInicialId = obtenerAnimalId(registroInicial?.animal);
+  const hembras = animales.filter((animal) => {
+    if (animal.sexo !== 'Hembra') return false;
+    if (modo === 'editar' && animal._id === animalInicialId) return true;
+    return animal.estado === 'Activo' && obtenerAptitudReproductivaPorEdad(animal).listo;
+  });
   const [formulario, setFormulario] = useState(() => {
     const inicial = normalizarRegistro(registroInicial);
     return {
@@ -188,8 +195,13 @@ const FormularioReproduccion = ({
     evento.preventDefault();
     const datos = normalizarEnvio(formulario);
     if (esInseminacion) {
-      datos.tipoInseminacion = 'IA_CONVENCIONAL';
-      datos.cantidadPajuelas = Number(formulario.cantidadPajuelas || 1);
+      if (registroInicial?.tipoInseminacion === 'IATF') {
+        delete datos.semenUtilizado;
+        delete datos.cantidadPajuelas;
+      } else {
+        datos.tipoInseminacion = 'IA_CONVENCIONAL';
+        datos.cantidadPajuelas = Number(formulario.cantidadPajuelas || 1);
+      }
     } else {
       delete datos.semenUtilizado;
       delete datos.cantidadPajuelas;

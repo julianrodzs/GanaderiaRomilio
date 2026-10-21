@@ -21,6 +21,8 @@ const aplicacionSanitariaSchema = new Schema(
         tipo: { type: String, trim: true },
         dosis: { type: String, trim: true },
         viaAplicacion: { type: String, trim: true },
+        diasRetiroCarne: { type: Number, default: 0, min: 0 },
+        fechaFinRetiroCarne: { type: Date, default: null },
         responsable: { type: String, trim: true },
         responsableUsuario: { type: Schema.Types.ObjectId, ref: 'Usuario', default: null },
         motivo: { type: String, trim: true },
@@ -30,6 +32,7 @@ const aplicacionSanitariaSchema = new Schema(
         tratamiento: { type: Schema.Types.ObjectId, ref: 'TratamientoSanitario', default: null },
         numeroAplicacion: { type: Number, min: 1 },
         totalAplicaciones: { type: Number, min: 1 },
+        claveIdempotencia: { type: String, trim: true, maxlength: 160, select: false },
         registradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' }
     },
     { timestamps: true }
@@ -70,6 +73,11 @@ aplicacionSanitariaSchema.index({ organizacionId: 1, tratamiento: 1, numeroAplic
 aplicacionSanitariaSchema.index({ planSanitario: 1, fechaAplicacion: -1 });
 aplicacionSanitariaSchema.index({ responsableUsuario: 1, fechaAplicacion: -1 });
 aplicacionSanitariaSchema.index({ lote: 1, fechaAplicacion: -1 });
+aplicacionSanitariaSchema.index(
+    { organizacionId: 1, fincaId: 1, claveIdempotencia: 1 },
+    { unique: true, partialFilterExpression: { claveIdempotencia: { $type: 'string' } } }
+);
+aplicacionSanitariaSchema.index({ fechaFinRetiroCarne: 1 });
 
 const AplicacionSanitaria = model('AplicacionSanitaria', aplicacionSanitariaSchema);
 

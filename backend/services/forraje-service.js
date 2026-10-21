@@ -1,6 +1,9 @@
+const { ejecutarNotificacionSegura, notificarTareaAsignada } = require('./tarea-notificacion-service');
 const CorteForraje = require('../models/CorteForraje');
 const Potrero = require('../models/Potrero');
 const HistorialCoberturaPotrero = require('../models/HistorialCoberturaPotrero');
+const Lote = require('../models/Lote');
+const Animal = require('../models/Animal');
 const { Tarea } = require('../models/Tarea');
 const { diaUTC, obtenerCoberturaEnFecha } = require('./potreroCobertura-service');
 const { validarUsuarioAsignable } = require('./usuarioAsignable-service');
@@ -14,7 +17,34 @@ const sumarDias = (fecha, dias) => new Date(diaUTC(fecha).getTime() + Number(dia
 const convertirAKg = (cantidad, unidad = 'KG') => {
     const valor = Number(cantidad);
     if (!Number.isFinite(valor) || valor < 0) throw new Error('La cantidad de forraje debe ser un número mayor o igual a cero.');
-    return String(unidad).toUpperCase() === 'TON' || String(unidad).toUpperCase() === 'TONELADAS' ? valor * 1000 : valor;
+    const unidadNormalizada = String(unidad || 'KG').trim().toUpperCase();
+    if (!['KG', 'TON', 'TONELADA', 'TONELADAS'].includes(unidadNormalizada)) {
+        throw new Error('La unidad de forraje debe ser KG o TON.');
+    }
+    return unidadNormalizada === 'KG' ? valor : valor * 1000;
+};
+
+const validarDestinoCorte = async (destino = {}) => {
+    const normalizado = {
+        tipo: destino.tipo || 'FINCA_GENERAL',
+        referenciaId: destino.referenciaId || null,
+        descripcion: String(destino.descripcion || '').trim() || null
+    };
+    if (normalizado.tipo === 'LOTE') {
+        if (!normalizado.referenciaId) throw new Error('Seleccione el lote que recibira el forraje.');
+        const lote = await Lote.findOne({ _id: normalizado.referenciaId, estado: 'ACTIVO' }).select('_id');
+        if (!lote) throw new Error('El lote de destino no existe o no esta activo en esta finca.');
+    } else if (normalizado.tipo === 'ANIMAL') {
+        if (!normalizado.referenciaId) throw new Error('Seleccione el animal que recibira el forraje.');
+        const animal = await Animal.findOne({ _id: normalizado.referenciaId, estado: 'Activo' }).select('_id');
+        if (!animal) throw new Error('El animal de destino no existe o no esta activo en esta finca.');
+    } else if (normalizado.referenciaId) {
+        throw new Error('Este tipo de destino no admite una referencia de lote o animal.');
+    }
+    if (normalizado.tipo === 'OTRO' && !normalizado.descripcion) {
+        throw new Error('Describa el destino del forraje cuando selecciona Otro.');
+    }
+    return normalizado;
 };
 
 const cancelarDuplicadas = async (potreroId, categoria, conservarId) => Tarea.updateMany({
@@ -57,6 +87,7 @@ const programarTarea = async ({ potrero, fecha, responsable, usuarioId, categori
     if (tarea.asignacionModificadaManualmente && responsableAnterior) tarea.asignadoA = responsableAnterior;
     await tarea.save();
     await cancelarDuplicadas(potrero._id, categoria, tarea._id);
+    await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, usuarioId));
     return tarea;
 };
 
@@ -93,6 +124,7 @@ const registrarCorte = async (potreroId, datos, usuarioId) => {
     if (porcentajeMateriaSeca !== null && (!Number.isFinite(porcentajeMateriaSeca) || porcentajeMateriaSeca < 0 || porcentajeMateriaSeca > 100)) {
         throw new Error('El porcentaje de materia seca debe estar entre 0 y 100.');
     }
+    const destino = await validarDestinoCorte(datos.destino);
     const corte = await CorteForraje.create({
         potrero: potrero._id,
         fechaCorte,
@@ -104,7 +136,7 @@ const registrarCorte = async (potreroId, datos, usuarioId) => {
         cantidadForrajeVerdeKg,
         porcentajeMateriaSeca,
         cantidadMateriaSecaKg: porcentajeMateriaSeca === null ? null : cantidadForrajeVerdeKg * porcentajeMateriaSeca / 100,
-        destino: datos.destino,
+        destino,
         responsable,
         observaciones: datos.observaciones,
         registradoPor: usuarioId
@@ -134,13 +166,18 @@ const registrarCorte = async (potreroId, datos, usuarioId) => {
     return CorteForraje.findById(corte._id).populate('forraje').populate('responsable', 'nombre apellido correo').lean();
 };
 
-const listarCortes = (potreroId, filtros = {}) => {
+const construirFiltroCortes = (potreroId, filtros = {}) => {
     const consulta = { ...(potreroId ? { potrero: potreroId } : {}) };
     if (filtros.fechaInicio || filtros.fechaFin) {
         consulta.fechaCorte = {};
         if (filtros.fechaInicio) consulta.fechaCorte.$gte = diaUTC(filtros.fechaInicio);
-        if (filtros.fechaFin) consulta.fechaCorte.$lte = sumarDias(filtros.fechaFin, 1);
+        if (filtros.fechaFin) consulta.fechaCorte.$lt = sumarDias(filtros.fechaFin, 1);
     }
+    return consulta;
+};
+
+const listarCortes = (potreroId, filtros = {}) => {
+    const consulta = construirFiltroCortes(potreroId, filtros);
     return CorteForraje.find(consulta)
         .populate('potrero', 'codigo nombre area intervaloCorteObjetivoDias')
         .populate('forraje')
@@ -186,11 +223,13 @@ const enriquecerBancosForrajeros = async (potreros = []) => {
 
 module.exports = {
     CATEGORIA_CORTE,
+    construirFiltroCortes,
     convertirAKg,
     enriquecerBancosForrajeros,
     listarCortes,
     programarPrimerCorte,
     programarTarea,
     registrarCorte,
-    sumarDias
+    sumarDias,
+    validarDestinoCorte
 };

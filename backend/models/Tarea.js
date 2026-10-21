@@ -33,6 +33,9 @@ const tareaSchema = new Schema(
         fechaProgramada: { type: Date, required: true },
         fechaLimite: { type: Date },
         fechaCompletada: { type: Date },
+        fechaRecepcionCompletado: { type: Date },
+        completadaOffline: { type: Boolean, default: false },
+        asignacionVersion: { type: String },
         asignadoA: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true },
         asignacionModificadaManualmente: { type: Boolean, default: false },
         creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
@@ -63,7 +66,8 @@ const tareaSchema = new Schema(
                 clave: { type: String, required: true, trim: true },
                 tipo: { type: String, required: true, trim: true },
                 usuario: { type: Schema.Types.ObjectId, ref: 'Usuario' },
-                ejecutadaEn: { type: Date, default: Date.now }
+                ejecutadaEn: { type: Date, default: Date.now },
+                contenido: { type: String }
             }],
             default: [],
             select: false
@@ -76,6 +80,10 @@ const tareaSchema = new Schema(
 );
 
 tareaSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+tareaSchema.pre('validate', function versionarAsignacion(next) {
+    if (this.isModified('asignadoA')) this.asignacionVersion = require('crypto').randomUUID();
+    next();
+});
 tareaSchema.index({ asignadoA: 1, estado: 1, fechaProgramada: 1 });
 tareaSchema.index({ fechaProgramada: 1 });
 tareaSchema.index({ prioridad: 1 });

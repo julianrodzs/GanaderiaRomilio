@@ -1,10 +1,17 @@
+const { notificarTareaAsignada, ejecutarNotificacionSegura } = require('./tarea-notificacion-service');
 const AlertaCorreo = require('../models/AlertaCorreo');
 const { ejecutarConOrganizacion } = require('../context/organizacion-context');
 const { sincronizarCategoriasAnimales } = require('./categoriaAnimal-service');
 const Organizacion = require('../models/Organizacion');
 const { Tarea } = require('../models/Tarea');
 const { crearNotificacion } = require('./notificacion-service');
-const { enviarCorreoAdministradores } = require('./correoElectronico-service');
+const { enviarCorreoResend } = require('./correoElectronico-service');
+const { Membresia } = require('../models/Membresia');
+const { listarFincasAccesibles } = require('./accesoFinca-service');
+const { obtenerOrganizacionActual } = require('../context/organizacion-context');
+const { escaparHtml } = require('./htmlSeguro-service');
+const { claveFechaTarea, diasHastaTarea } = require('./tarea-integridad-service');
+const { claveDiaEnZona } = require('./fechaZonaHoraria-service');
 const { incrementarEmailsOperativos, tieneFeature } = require('./plan-service');
 
 const MS_DIA = 1000 * 60 * 60 * 24;
@@ -13,24 +20,15 @@ const FRECUENCIA_PROXIMA_DIAS = 6;
 const FRECUENCIA_VENCIDA_DIAS = 2;
 const FRECUENCIA_CRITICA_DIAS = 1;
 
-const normalizarDia = (fecha = new Date()) => {
-    const dia = new Date(fecha);
-    dia.setHours(0, 0, 0, 0);
-    return dia;
+const formatearFechaKey = claveFechaTarea;
+const formatearFecha = (fecha, zona = 'America/Costa_Rica') => {
+    const [anio, mes, dia] = claveFechaTarea(fecha, zona).split('-');
+    return `${dia}/${mes}/${anio}`;
 };
-
-const formatearFechaKey = (fecha) => normalizarDia(fecha).toISOString().slice(0, 10);
-
-const formatearFecha = (fecha) => new Date(fecha).toLocaleDateString('es-CR', {
-    year: 'numeric', month: '2-digit', day: '2-digit'
-});
-
-const diasHasta = (fecha) => Math.ceil((normalizarDia(fecha).getTime() - normalizarDia().getTime()) / MS_DIA);
-
-const diasDesde = (fecha) => {
-    if (!fecha) return Infinity;
-    return Math.floor((normalizarDia().getTime() - normalizarDia(fecha).getTime()) / MS_DIA);
-};
+const diasHasta = diasHastaTarea;
+const diasDesde = (fecha, zona) => fecha
+    ? (Date.parse(claveDiaEnZona(new Date(), zona)) - Date.parse(claveDiaEnZona(fecha, zona))) / MS_DIA
+    : Infinity;
 
 const fechaObjetivoTarea = (tarea) => tarea.fechaLimite || tarea.fechaProgramada;
 
@@ -55,30 +53,34 @@ const obtenerTareasParaRecordatorio = () => Tarea.find({
     ]
 }).populate('asignadoA', 'nombre apellido correo rol estado').lean();
 
-const crearNotificacionesOperativas = async (tareas) => {
+const crearNotificacionesOperativas = async (tareas, zonaHoraria = 'America/Costa_Rica') => {
     let creadas = 0;
     for (const tarea of tareas) {
-        if (!tarea.asignadoA?._id || tarea.asignadoA.estado === 'Inactivo') continue;
+        if (!tarea.fincaId || !tarea.asignadoA?._id || tarea.asignadoA.estado === 'Inactivo') continue;
+        // Reconciliar asignaciones pendientes sin crear duplicados, incluso fuera de la ventana de 7 días.
+        const asignacion = await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, tarea.creadoPor));
+        if (asignacion?.creada) creadas += 1;
         const fechaObjetivo = fechaObjetivoTarea(tarea);
         if (!fechaObjetivo) continue;
-        const dias = diasHasta(fechaObjetivo);
+        const dias = diasHasta(fechaObjetivo, zonaHoraria);
         if (dias > DIAS_ANTICIPACION) continue;
 
         const vencida = dias < 0;
         const estadoKey = vencida ? 'VENCIDA' : 'PROXIMA';
         const resultado = await crearNotificacion({
             destinatario: tarea.asignadoA._id,
+            fincaId: tarea.fincaId,
             naturaleza: 'Operativa',
             tipo: `TAREA_${estadoKey}`,
             titulo: tituloAlerta(tarea, vencida),
             mensaje: vencida
-                ? `La tarea '${tarea.titulo}' está vencida desde el ${formatearFecha(fechaObjetivo)}.`
-                : `La tarea '${tarea.titulo}' está programada para ${dias === 0 ? 'hoy' : dias === 1 ? 'mañana' : `dentro de ${dias} días`}.`,
+                ? `La tarea '${tarea.titulo}' está vencida desde el ${formatearFecha(fechaObjetivo, zonaHoraria)}.`
+                : `La tarea '${tarea.titulo}' tiene fecha objetivo ${formatearFecha(fechaObjetivo, zonaHoraria)}.`,
             moduloOrigen: 'Tareas',
             entidadTipo: 'Tarea',
             entidadId: tarea._id,
             url: `/tareas/${tarea._id}`,
-            dedupKey: `TAREA_${tarea._id}_${estadoKey}_${formatearFechaKey(fechaObjetivo)}`,
+            dedupKey: `TAREA_${tarea._id}_${estadoKey}_${formatearFechaKey(fechaObjetivo, zonaHoraria)}`,
             metadata: {
                 fechaObjetivo,
                 dias,
@@ -92,29 +94,29 @@ const crearNotificacionesOperativas = async (tareas) => {
     return creadas;
 };
 
-const debeEnviarCorreo = async (tarea, fechaObjetivo, dias) => {
+const debeEnviarCorreo = async (tarea, fechaObjetivo, dias, destinatario, zonaHoraria = 'America/Costa_Rica') => {
     const vencida = dias < 0;
     const critica = vencida && tarea.prioridad === 'Urgente';
-    const clave = `tarea-${critica ? 'critica' : vencida ? 'vencida' : 'proxima'}:${tarea._id}`;
-    const fechaObjetivoKey = formatearFechaKey(fechaObjetivo);
-    const estado = await AlertaCorreo.findOne({ clave });
+    const clave = `tarea-${critica ? 'critica' : vencida ? 'vencida' : 'proxima'}:${tarea._id}:${destinatario || 'sin-destinatario'}`;
+    const fechaObjetivoKey = formatearFechaKey(fechaObjetivo, zonaHoraria);
+    const estado = destinatario ? await AlertaCorreo.findOne({ clave }) : null;
     const frecuenciaDias = critica ? FRECUENCIA_CRITICA_DIAS : vencida ? FRECUENCIA_VENCIDA_DIAS : FRECUENCIA_PROXIMA_DIAS;
 
-    if (!estado || estado.fechaObjetivoKey !== fechaObjetivoKey || diasDesde(estado.ultimoEnvio) >= frecuenciaDias) {
+    if (!estado || estado.fechaObjetivoKey !== fechaObjetivoKey || diasDesde(estado.ultimoEnvio, zonaHoraria) >= frecuenciaDias) {
         return { enviar: true, clave, fechaObjetivoKey, critica, vencida };
     }
     return { enviar: false };
 };
 
-const obtenerAlertasTareas = async (tareasPrecargadas = null) => {
+const obtenerAlertasTareas = async (tareasPrecargadas = null, zonaHoraria = 'America/Costa_Rica') => {
     const tareas = tareasPrecargadas || await obtenerTareasParaRecordatorio();
     const alertas = [];
     for (const tarea of tareas) {
         const fecha = fechaObjetivoTarea(tarea);
         if (!fecha) continue;
-        const dias = diasHasta(fecha);
+        const dias = diasHasta(fecha, zonaHoraria);
         if (dias > DIAS_ANTICIPACION) continue;
-        const revision = await debeEnviarCorreo(tarea, fecha, dias);
+        const revision = await debeEnviarCorreo(tarea, fecha, dias, null, zonaHoraria);
         if (!revision.enviar) continue;
 
         const categoria = categoriaTarea(tarea);
@@ -154,51 +156,65 @@ const agruparPorAsunto = (alertas) => alertas.reduce((grupos, alerta) => {
     return grupos;
 }, {});
 
-const crearTexto = (titulo, alertas) => `${titulo}\n\n${alertas.map((alerta) => (
-    `- ${alerta.tarea.titulo}. Fecha: ${formatearFecha(alerta.fecha)}. ${alerta.dias < 0 ? `Días vencida: ${Math.abs(alerta.dias)}` : `Días restantes: ${alerta.dias}`}.`
+const crearTexto = (titulo, alertas, zonaHoraria) => `${titulo}\n\n${alertas.map((alerta) => (
+    `- ${alerta.tarea.titulo}. Fecha: ${formatearFecha(alerta.fecha, zonaHoraria)}. ${alerta.dias < 0 ? `Días vencida: ${Math.abs(alerta.dias)}` : `Días restantes: ${alerta.dias}`}.`
 )).join('\n')}`;
 
-const crearHtml = (titulo, alertas, nombreOrganizacion) => `
-    <h2>${titulo}</h2>
-    <p>Estas tareas requieren seguimiento en ${nombreOrganizacion}.</p>
+const crearHtml = (titulo, alertas, nombreOrganizacion, zonaHoraria) => `
+    <h2>${escaparHtml(titulo)}</h2>
+    <p>Estas tareas requieren seguimiento en ${escaparHtml(nombreOrganizacion)}.</p>
     <ul>${alertas.map((alerta) => `
-        <li><strong>${alerta.tarea.titulo}</strong><br>
-        Fecha objetivo: ${formatearFecha(alerta.fecha)}<br>
+        <li><strong>${escaparHtml(alerta.tarea.titulo)}</strong><br>
+        Fecha objetivo: ${formatearFecha(alerta.fecha, zonaHoraria)}<br>
         ${alerta.dias < 0 ? `Días vencida: ${Math.abs(alerta.dias)}` : `Días restantes: ${alerta.dias}`}</li>
     `).join('')}</ul>
 `;
 
-const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca') => {
+const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zonaHoraria = 'America/Costa_Rica') => {
     if (process.env.EMAIL_ALERTS_ENABLED === 'false') return { enviadas: 0, grupos: 0, desactivado: true };
-
-    const grupos = agruparPorAsunto(alertas);
+    const membresias = await Membresia.find({ organizacionId: obtenerOrganizacionActual(), estado: 'Activo', rol: 'Administrador' })
+        .populate({ path: 'usuario', match: { estado: 'Activo' }, select: '_id correo' });
     let enviadas = 0;
-    for (const [asunto, grupo] of Object.entries(grupos)) {
-        const resultado = await enviarCorreoAdministradores({
-            subject: `${asunto} - ${nombreOrganizacion}`,
-            html: crearHtml(asunto, grupo, nombreOrganizacion),
-            text: crearTexto(asunto, grupo)
-        });
-        if (!resultado.enviado) continue;
-        for (const alerta of grupo) {
-            await registrarEnvio(alerta);
-            enviadas += 1;
-        }
+    let alertasEnviadas = 0;
+    const errores = [];
+    for (const membresia of membresias) {
+        if (!membresia.usuario?.correo) continue;
+        try {
+            const fincas = new Set((await listarFincasAccesibles(membresia)).map((finca) => String(finca._id)));
+            const pendientes = [];
+            for (const alerta of alertas) {
+                if (!fincas.has(String(alerta.tarea.fincaId))) continue;
+                const decision = await debeEnviarCorreo(alerta.tarea, alerta.fecha, alerta.dias, membresia.usuario._id, zonaHoraria);
+                if (decision.enviar) pendientes.push({ ...alerta, ...decision });
+            }
+            for (const [asunto, grupo] of Object.entries(agruparPorAsunto(pendientes))) {
+                const resultado = await enviarCorreoResend({
+                    to: process.env.EMAIL_TEST_TO || membresia.usuario.correo,
+                    subject: `${asunto} - ${nombreOrganizacion}`,
+                    html: crearHtml(asunto, grupo, nombreOrganizacion, zonaHoraria),
+                    text: crearTexto(asunto, grupo, zonaHoraria)
+                });
+                if (!resultado.enviado) continue;
+                enviadas += 1;
+                for (const alerta of grupo) { await registrarEnvio(alerta); alertasEnviadas += 1; }
+            }
+        } catch (error) { errores.push({ usuarioId: membresia.usuario._id, mensaje: error.message }); }
     }
-    return { enviadas, grupos: Object.keys(grupos).length };
+    return { enviadas, alertasEnviadas, errores };
 };
 
-const procesarAlertasTareas = async ({ nombreOrganizacion } = {}) => {
+const procesarAlertasTareas = async ({ nombreOrganizacion, zonaHoraria = 'America/Costa_Rica' } = {}) => {
+    if (!await tieneFeature('centroAlertas')) return { notificacionesCreadas: 0, correos: { enviadas: 0, desactivadoPorPlan: true } };
     const tareas = await obtenerTareasParaRecordatorio();
-    const notificacionesCreadas = await crearNotificacionesOperativas(tareas);
+    const notificacionesCreadas = await crearNotificacionesOperativas(tareas, zonaHoraria);
     if (!await tieneFeature('emailsOperativos')) {
         return {
             notificacionesCreadas,
             correos: { enviadas: 0, grupos: 0, desactivadoPorPlan: true }
         };
     }
-    const alertasCorreo = await obtenerAlertasTareas(tareas);
-    const correos = await enviarCorreosTareas(alertasCorreo, nombreOrganizacion);
+    const alertasCorreo = await obtenerAlertasTareas(tareas, zonaHoraria);
+    const correos = await enviarCorreosTareas(alertasCorreo, nombreOrganizacion, zonaHoraria);
     if (correos.enviadas > 0) {
         await incrementarEmailsOperativos({ cantidad: correos.enviadas });
     }
@@ -206,25 +222,27 @@ const procesarAlertasTareas = async ({ nombreOrganizacion } = {}) => {
 };
 
 const procesarAlertasTodasOrganizaciones = async () => {
-    const organizaciones = await Organizacion.find({ estado: 'Activa' }).select('_id nombre');
+    const organizaciones = await Organizacion.find({ estado: 'Activa', 'plan.estado': { $in: ['Activo', 'Prueba'] } }).select('_id nombre zonaHoraria');
     const resultados = [];
 
     for (const organizacion of organizaciones) {
-        const resultado = await ejecutarConOrganizacion(
-            organizacion._id,
-            async () => {
-                const [alertas, categoriasAnimales] = await Promise.all([
-                    procesarAlertasTareas({ nombreOrganizacion: organizacion.nombre }),
-                    sincronizarCategoriasAnimales()
-                ]);
-                return { ...alertas, categoriasAnimales };
-            }
-        );
-        resultados.push({
-            organizacionId: organizacion._id,
-            organizacion: organizacion.nombre,
-            ...resultado
-        });
+        try {
+            const resultado = await ejecutarConOrganizacion(
+                organizacion._id,
+                async () => {
+                    const [alertas, categoriasAnimales] = await Promise.all([
+                        procesarAlertasTareas({ nombreOrganizacion: organizacion.nombre, zonaHoraria: organizacion.zonaHoraria }),
+                        sincronizarCategoriasAnimales()
+                    ]);
+                    return { ...alertas, categoriasAnimales };
+                }
+            );
+            resultados.push({
+                organizacionId: organizacion._id,
+                organizacion: organizacion.nombre,
+                ...resultado
+            });
+        } catch (error) { resultados.push({ organizacionId: organizacion._id, error: error.message }); }
     }
 
     return resultados;
@@ -233,6 +251,8 @@ const procesarAlertasTodasOrganizaciones = async () => {
 const enviarAlertasCorreo = procesarAlertasTodasOrganizaciones;
 
 module.exports = {
+    crearHtml,
+    enviarCorreosTareas,
     crearNotificacionesOperativas,
     enviarAlertasCorreo,
     obtenerAlertasTareas,

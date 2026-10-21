@@ -1,6 +1,8 @@
 const { Router } = require('express');
 const router = Router();
 const { autorizarPermiso } = require('../middleware/auth');
+const { requirePlanVigente } = require('../middleware/plan');
+const planVigente = requirePlanVigente();
 const puedeVer = autorizarPermiso('sanidad.ver');
 const puedeGestionar = autorizarPermiso('sanidad.gestionar');
 const puedeEliminar = autorizarPermiso('sanidad.eliminar');
@@ -15,11 +17,11 @@ const {
 
 router.route('/')
     .get(puedeVer, getRegistrosSanitarios)
-    .post(puedeGestionar, createRegistroSanitario);
+    .post(puedeGestionar, planVigente, createRegistroSanitario);
 
 router.route('/:id')
     .get(puedeVer, getRegistroSanitario)
-    .put(puedeGestionar, updateRegistroSanitario)
-    .delete(puedeEliminar, deleteRegistroSanitario);
+    .put(puedeGestionar, planVigente, updateRegistroSanitario)
+    .delete(puedeEliminar, planVigente, deleteRegistroSanitario);
 
 module.exports = router;

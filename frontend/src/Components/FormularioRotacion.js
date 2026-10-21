@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 
+const hoyInput = () => {
+  const fecha = new Date();
+  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+};
+
 const estadoInicial = {
   potrero: '',
   lote: '',
-  fechaEntrada: new Date().toISOString().slice(0, 10),
+  fechaEntrada: hoyInput(),
   fechaSalida: '',
   numeroAnimales: '',
   estado: 'Activa',
@@ -99,19 +104,19 @@ const FormularioRotacion = ({
         <div className="form-grid">
           <label>
             Fecha entrada
-            <input name="fechaEntrada" type="date" value={formulario.fechaEntrada} onChange={actualizarCampo} required />
+            <input name="fechaEntrada" type="date" value={formulario.fechaEntrada} max={formulario.fechaSalida || undefined} onChange={actualizarCampo} required />
           </label>
 
           <label>
             Fecha salida
-            <input name="fechaSalida" type="date" value={formulario.fechaSalida} onChange={actualizarCampo} />
+            <input name="fechaSalida" type="date" value={formulario.fechaSalida} min={formulario.fechaEntrada || undefined} onChange={actualizarCampo} />
           </label>
         </div>
 
         <div className="form-grid">
           <label>
             Numero animales
-            <input name="numeroAnimales" type="number" min="0" value={formulario.numeroAnimales} onChange={actualizarCampo} />
+            <input name="numeroAnimales" type="number" min="1" step="1" value={formulario.numeroAnimales} onChange={actualizarCampo} required />
           </label>
 
           <label>

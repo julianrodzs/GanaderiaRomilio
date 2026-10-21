@@ -21,6 +21,7 @@ const {
     liberarCriasCamada,
     reservarCriasCamada
 } = require('../services/camada-service');
+const { obtenerAlertasRetiroVenta } = require('../services/retiro-carne-service');
 
 const ventaAnimalCtrl = {};
 
@@ -425,6 +426,25 @@ const errorValidacion = (validacion) => Object.assign(new Error(validacion.mensa
     status: validacion.status || 400
 });
 
+const advertirRetiroCarne = async (req, res, animales) => {
+    if (req.body.confirmarRetiroCarne === true || req.body.confirmarRetiroCarne === 'true') return false;
+    const alertas = await obtenerAlertasRetiroVenta({
+        animales: idsAnimalesVenta(animales),
+        fechaVenta: req.body.fechaVenta || new Date()
+    });
+    if (!alertas.length) return false;
+    const principal = alertas[0];
+    res.status(409).json({
+        alertaRetiro: true,
+        mensaje: `${alertas.length} animal${alertas.length === 1 ? '' : 'es'} mantiene${alertas.length === 1 ? '' : 'n'} un periodo de retiro de carne activo. Confirma conscientemente para continuar.`,
+        diasFaltantes: principal.diasFaltantes,
+        medicamento: principal.medicamento,
+        fechaFinRetiroCarne: principal.fechaFinRetiroCarne,
+        retiros: alertas
+    });
+    return true;
+};
+
 ventaAnimalCtrl.getVentas = async (req, res) => {
     try {
         const { fechaInicio, fechaFin, comprador, estado, especie } = req.query;
@@ -469,6 +489,7 @@ ventaAnimalCtrl.crearVenta = async (req, res) => {
         if (Array.isArray(camadas) && camadas.length > 0 && req.body.especie !== 'Porcino') {
             return res.status(400).json({ mensaje: 'Las ventas por camada solo aplican para porcinos' });
         }
+        if (await advertirRetiroCarne(req, res, animales)) return;
         const ventaId = await ejecutarEnTransaccion(async (session) => {
             const validacion = await validarAnimalesVenta(animales, null, req.body.especie, session);
             if (!validacion.valido) throw errorValidacion(validacion);
@@ -533,6 +554,7 @@ ventaAnimalCtrl.actualizarVenta = async (req, res) => {
         if (Array.isArray(camadas) && camadas.length > 0 && (req.body.especie || ventaAnterior.especie) !== 'Porcino') {
             return res.status(400).json({ mensaje: 'Las ventas por camada solo aplican para porcinos' });
         }
+        if (await advertirRetiroCarne(req, res, animales)) return;
 
         const ventaId = await ejecutarEnTransaccion(async (session) => {
             const ventaVigente = await VentaAnimal.findById(req.params.id).session(session);

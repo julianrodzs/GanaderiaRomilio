@@ -22,6 +22,7 @@ import Ventas from './Ventas';
 import { puedeAccederModulo, puedeGestionarModulo, puedeRealizarAccion } from '../constants/permisosRoles';
 import {
   obtenerAnimales,
+  obtenerTarea,
   obtenerEficienciaEngorde,
   obtenerLotes,
   obtenerPlanesSanitarios,
@@ -309,8 +310,22 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
 
   const reintentarCambio = async (id) => {
     setEstadoConexion((actual) => ({ ...actual, sincronizando: true }));
-    await reintentarCambioOffline(id).catch(() => {});
-    await sincronizarAhora();
+    try {
+      const cambio = (await obtenerCambiosPendientes()).find((item) => item.id === id);
+      let versionEsperada;
+      if (cambio?.tipo === 'completar-tarea' && cambio.estadoSincronizacion === 'Conflicto') {
+        const actual = await obtenerTarea(cambio.referenciaId);
+        if (['Completada', 'Cancelada'].includes(actual.estado)) {
+          window.alert(`La tarea está ${actual.estado.toLowerCase()}. Revisa el registro y descarta el cambio local si corresponde.`);
+          return;
+        }
+        if (!window.confirm(`La tarea cambió: ${actual.titulo}. Estado actual: ${actual.estado}.\nObservaciones actuales: ${actual.observaciones || 'Sin observaciones'}.\nTu registro: ${cambio.payload?.observaciones || 'Sin observaciones'}.\n¿Confirmas completarla con tu registro de campo sobre esta versión?`)) return;
+        versionEsperada = actual.updatedAt;
+      }
+      await reintentarCambioOffline(id, { versionEsperada });
+      await sincronizarAhora();
+    } catch (error) { window.alert(error.message); }
+    finally { setEstadoConexion((actual) => ({ ...actual, sincronizando: false })); }
   };
 
   const descartarCambio = async (id) => {
@@ -446,7 +461,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Pesajes soloLectura={!puedeGestionarModulo(rol, 'Pesajes') || !estadoConexion.online} />
+        <Pesajes rolUsuario={rol} soloLectura={!puedeGestionarModulo(rol, 'Pesajes') || !estadoConexion.online} />
       </main>
     );
   }
@@ -540,7 +555,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Tareas usuario={usuario} tareaInicialId={tareaInicialId} />
+        <Tareas usuario={usuario} tareaInicialId={tareaInicialId} onNavegarSanidad={() => setVistaActiva('Sanidad')} />
       </main>
     );
   }

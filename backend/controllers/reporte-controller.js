@@ -972,14 +972,18 @@ const calcularCategoriaAnimal = (animal) => {
 };
 
 const crearAnalisisPesajesAnimal = (animal, pesajes) => {
-    const ordenados = [...pesajes].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+    const ordenados = [...pesajes].sort((a, b) => (
+        new Date(a.fecha) - new Date(b.fecha)
+        || new Date(a.createdAt || 0) - new Date(b.createdAt || 0)
+        || String(a._id || '').localeCompare(String(b._id || ''))
+    ));
     const inicial = ordenados[0];
     const actual = ordenados[ordenados.length - 1];
     const crecimiento = calcularGmd(ordenados);
-    const dias = crecimiento?.dias || 0;
-    const gananciaTotal = crecimiento?.gananciaKg || 0;
-    const gananciaDiariaPromedio = crecimiento?.gmdReal || 0;
-    const gananciaMensualPromedio = gananciaDiariaPromedio * 30.44;
+    const dias = crecimiento?.dias ?? null;
+    const gananciaTotal = crecimiento?.gananciaKg ?? null;
+    const gananciaDiariaPromedio = crecimiento?.gmdReal ?? null;
+    const gananciaMensualPromedio = gananciaDiariaPromedio === null ? null : gananciaDiariaPromedio * 30.44;
 
     return {
         animalId: animal._id,
@@ -987,15 +991,15 @@ const crearAnalisisPesajesAnimal = (animal, pesajes) => {
         nombre: animal.nombre || '',
         sexo: animal.sexo,
         categoria: calcularCategoriaAnimal(animal),
-        pesoInicial: inicial?.peso || 0,
-        pesoActual: actual?.peso || 0,
+        pesoInicial: inicial?.peso ?? null,
+        pesoActual: actual?.peso ?? null,
         fechaInicial: inicial?.fecha || null,
         fechaUltimoPesaje: actual?.fecha || null,
         cantidadPesajes: ordenados.length,
         diasTranscurridos: dias,
-        gananciaTotal: redondear(gananciaTotal),
-        gananciaDiariaPromedio: redondear(gananciaDiariaPromedio, 3),
-        gananciaMensualPromedio: redondear(gananciaMensualPromedio, 2),
+        gananciaTotal: gananciaTotal === null ? null : redondear(gananciaTotal),
+        gananciaDiariaPromedio: gananciaDiariaPromedio === null ? null : redondear(gananciaDiariaPromedio, 3),
+        gananciaMensualPromedio: gananciaMensualPromedio === null ? null : redondear(gananciaMensualPromedio, 2),
         evolucion: ordenados.map((pesaje) => ({
             fecha: pesaje.fecha,
             peso: pesaje.peso
@@ -1016,8 +1020,19 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
         const idsAnimales = animales.map((animal) => animal._id);
         filtroPesajes.animal = { $in: idsAnimales };
         const pesajes = idsAnimales.length
-            ? await Pesaje.find(filtroPesajes).sort({ fecha: 1 }).lean()
+            ? await Pesaje.find(filtroPesajes).sort({ fecha: 1, createdAt: 1, _id: 1 }).lean()
             : [];
+        const ultimosPesajesGlobales = idsAnimales.length
+            ? await Pesaje.find({ animal: { $in: idsAnimales } })
+                .setOptions({ omitirAislamientoFinca: true })
+                .sort({ fecha: -1, createdAt: -1, _id: -1 })
+                .lean()
+            : [];
+        const ultimoGlobalPorAnimal = ultimosPesajesGlobales.reduce((mapa, pesaje) => {
+            const id = String(pesaje.animal || '');
+            if (id && !mapa.has(id)) mapa.set(id, pesaje);
+            return mapa;
+        }, new Map());
         const pesajesPorAnimal = pesajes.reduce((mapa, pesaje) => {
             const id = pesaje.animal?.toString();
             if (!id) return mapa;
@@ -1033,7 +1048,7 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
         const fechaLimiteReciente = new Date();
         fechaLimiteReciente.setDate(fechaLimiteReciente.getDate() - Number(diasSinPesaje || 60));
         const animalesSinPesajesRecientes = animales.filter((animal) => {
-            const ultimo = [...(pesajesPorAnimal.get(animal._id.toString()) || [])].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0];
+            const ultimo = ultimoGlobalPorAnimal.get(animal._id.toString());
             return !ultimo || new Date(ultimo.fecha) < fechaLimiteReciente;
         }).map((animal) => ({
             animalId: animal._id,
@@ -1041,7 +1056,7 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
             nombre: animal.nombre || '',
             sexo: animal.sexo,
             categoria: calcularCategoriaAnimal(animal),
-            fechaUltimoPesaje: (pesajesPorAnimal.get(animal._id.toString()) || []).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0]?.fecha || null
+            fechaUltimoPesaje: ultimoGlobalPorAnimal.get(animal._id.toString())?.fecha || null
         }));
         const categoriasCrias = especie === 'Porcino'
             ? new Set(['Lechón', 'Lechona'])
@@ -1050,13 +1065,14 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
                 : new Set(['Ternero', 'Ternera', 'Lechón', 'Lechona']);
         const crecimientoCrias = analisis.filter((item) => categoriasCrias.has(item.categoria)).map((item) => {
             const animal = animales.find((animalItem) => animalItem._id.toString() === item.animalId.toString());
-            const pesoNacimiento = animal?.pesoNacimiento || 0;
+            const pesoNacimiento = animal?.pesoNacimiento;
+            if (pesoNacimiento === null || pesoNacimiento === undefined || item.pesoActual === null) return null;
             return {
                 ...item,
                 pesoNacimiento,
                 gananciaDesdeNacimiento: redondear(item.pesoActual - pesoNacimiento)
             };
-        });
+        }).filter(Boolean);
 
         res.json({
             filtros: {
@@ -1071,22 +1087,22 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
                 totalPesajes: pesajes.length,
                 animalesConCrecimiento: conCrecimiento.length,
                 animalesSinPesajesRecientes: animalesSinPesajesRecientes.length,
-                gananciaPromedioDiaria: redondear(
-                    conCrecimiento.reduce((total, item) => total + item.gananciaDiariaPromedio, 0) / (conCrecimiento.length || 1),
+                gananciaPromedioDiaria: conCrecimiento.length ? redondear(
+                    conCrecimiento.reduce((total, item) => total + item.gananciaDiariaPromedio, 0) / conCrecimiento.length,
                     3
-                ),
-                gananciaDiariaPromedio: redondear(
-                    conCrecimiento.reduce((total, item) => total + item.gananciaDiariaPromedio, 0) / (conCrecimiento.length || 1),
+                ) : null,
+                gananciaDiariaPromedio: conCrecimiento.length ? redondear(
+                    conCrecimiento.reduce((total, item) => total + item.gananciaDiariaPromedio, 0) / conCrecimiento.length,
                     3
-                ),
-                gananciaPromedioMensual: redondear(
-                    conCrecimiento.reduce((total, item) => total + item.gananciaMensualPromedio, 0) / (conCrecimiento.length || 1),
+                ) : null,
+                gananciaPromedioMensual: conCrecimiento.length ? redondear(
+                    conCrecimiento.reduce((total, item) => total + item.gananciaMensualPromedio, 0) / conCrecimiento.length,
                     2
-                ),
-                gananciaMensualPromedio: redondear(
-                    conCrecimiento.reduce((total, item) => total + item.gananciaMensualPromedio, 0) / (conCrecimiento.length || 1),
+                ) : null,
+                gananciaMensualPromedio: conCrecimiento.length ? redondear(
+                    conCrecimiento.reduce((total, item) => total + item.gananciaMensualPromedio, 0) / conCrecimiento.length,
                     2
-                ),
+                ) : null,
                 sinPesajesRecientes: animalesSinPesajesRecientes.length
             },
             mejoresCrecimientos: [...conCrecimiento].sort((a, b) => b.gananciaDiariaPromedio - a.gananciaDiariaPromedio).slice(0, 10),

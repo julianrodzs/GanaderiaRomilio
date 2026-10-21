@@ -271,7 +271,22 @@ const IATF = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const cargar = async () => {
     try {
       setError('');
-      const [campanas, protocolos, insumos, lotes, animales, usuarios, consolidado] = await Promise.all([obtenerCampanasIATF(), obtenerProtocolosIATF(), obtenerInsumosIATF(), obtenerLotes({ especie: 'Bovino', estado: 'ACTIVO' }), obtenerAnimales({ especie: 'Bovino' }), obtenerUsuariosAsignables('IATF'), tieneFeature('reportesMultiFinca') ? obtenerConsolidadoIATF() : Promise.resolve(null)]);
+      const usuariosPromise = permisos.crear
+        ? obtenerUsuariosAsignables('IATF').catch(() => [])
+        : Promise.resolve([]);
+      const puedeVerConsolidado = ['Administrador', 'Consulta'].includes(rolUsuario);
+      const consolidadoPromise = tieneFeature('reportesMultiFinca') && puedeVerConsolidado
+        ? obtenerConsolidadoIATF().catch(() => null)
+        : Promise.resolve(null);
+      const [campanas, protocolos, insumos, lotes, animales, usuarios, consolidado] = await Promise.all([
+        obtenerCampanasIATF(),
+        obtenerProtocolosIATF(),
+        obtenerInsumosIATF(),
+        obtenerLotes({ especie: 'Bovino', estado: 'ACTIVO' }),
+        obtenerAnimales({ especie: 'Bovino' }),
+        usuariosPromise,
+        consolidadoPromise
+      ]);
       setDatos({ campanas, protocolos, insumos, lotes, animales, usuarios, consolidado });
       if (detalle?._id) setDetalle(await obtenerCampanaIATF(detalle._id));
     } catch (e) { setError(e.message); } finally { setCargando(false); }

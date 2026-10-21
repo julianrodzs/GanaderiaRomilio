@@ -1,3 +1,4 @@
+import { claveFechaTarea, formatearFechaTarea, diasHastaFechaTarea, esTareaEspecializada } from '../utils/fechasTareas.mjs';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   actualizarTarea,
@@ -16,6 +17,7 @@ import {
   obtenerTareas,
   obtenerUsuariosAsignables,
   obtenerRaciones,
+  obtenerSemenReproductivoDisponible,
   ejecutarPasoEngorde,
   ejecutarPasoBandaPorcina,
   ejecutarPasoIATF,
@@ -24,6 +26,7 @@ import {
 import {
   guardarCambiosPendientes,
   guardarTareasOffline,
+  actualizarTareaEnCache,
   obtenerCambiosPendientes,
   obtenerTareasOffline
 } from '../services/offlineStorage';
@@ -79,19 +82,8 @@ const estadoInicial = {
   observaciones: ''
 };
 
-const fechaInput = (fecha) => {
-  if (!fecha) return '';
-  return new Date(fecha).toISOString().slice(0, 10);
-};
-
-const formatearFecha = (fecha) => {
-  if (!fecha) return '--';
-  return new Date(fecha).toLocaleDateString('es-CR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-};
+const fechaInput = claveFechaTarea;
+const formatearFecha = formatearFechaTarea;
 
 const nombrePotreroAnimal = (tarea) => {
   const potrero = tarea.potrero ? `${tarea.potrero.codigo || ''} ${tarea.potrero.nombre || ''}`.trim() : '';
@@ -100,32 +92,10 @@ const nombrePotreroAnimal = (tarea) => {
   return [potrero, animal].filter(Boolean).join(' / ') || '--';
 };
 
-const estaVencida = (tarea) => {
-  if (!tarea.fechaLimite || ['Completada', 'Cancelada'].includes(tarea.estado)) return false;
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  const limite = new Date(tarea.fechaLimite);
-  limite.setHours(0, 0, 0, 0);
-  return limite < hoy;
-};
-
-const esTareaDeHoy = (tarea) => {
-  if (!tarea.fechaProgramada || ['Completada', 'Cancelada'].includes(tarea.estado)) return false;
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  const fecha = new Date(tarea.fechaProgramada);
-  fecha.setHours(0, 0, 0, 0);
-  return fecha.getTime() === hoy.getTime();
-};
-
-const diasParaTarea = (tarea) => {
-  if (!tarea.fechaProgramada) return null;
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  const fecha = new Date(tarea.fechaProgramada);
-  fecha.setHours(0, 0, 0, 0);
-  return Math.round((fecha - hoy) / (1000 * 60 * 60 * 24));
-};
+const estaVencida = (tarea) => !['Completada', 'Cancelada'].includes(tarea.estado)
+  && diasHastaFechaTarea(tarea.fechaLimite || tarea.fechaProgramada) < 0;
+const esTareaDeHoy = (tarea) => !['Completada', 'Cancelada'].includes(tarea.estado) && diasHastaFechaTarea(tarea.fechaProgramada) === 0;
+const diasParaTarea = (tarea) => diasHastaFechaTarea(tarea.fechaLimite || tarea.fechaProgramada);
 
 const textoTiempoTarea = (tarea) => {
   const dias = diasParaTarea(tarea);
@@ -148,8 +118,11 @@ const normalizarTarea = (tarea) => ({
 
 const slug = (valor = '') => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').toLowerCase();
 
-const Tareas = ({ usuario, tareaInicialId = '' }) => {
+const Tareas = ({ usuario, tareaInicialId = '', onNavegarSanidad }) => {
   const puedeGestionar = puedeGestionarModulo(usuario?.rol, 'Tareas');
+  const puedeReabrir = (tarea) => tarea.estado === 'En proceso' || (puedeGestionar && ['Completada', 'Cancelada'].includes(tarea.estado) && !tarea.creadoAutomaticamente && !tarea.referenciaId);
+  const puedeReprogramar = (tarea) => puedeGestionar && !esTareaEspecializada(tarea) && !['Completada', 'Cancelada'].includes(tarea.estado);
+  const puedeBorrar = (tarea) => puedeGestionar && !tarea.creadoAutomaticamente && !tarea.referenciaId && tarea.estado !== 'Completada';
   const soloLectura = usuario?.rol === 'Consulta';
   const [tareas, setTareas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -220,7 +193,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       }
     } catch (err) {
       const filtrosActivos = Object.fromEntries(Object.entries(filtros).filter(([, valor]) => Boolean(valor)));
-      const tareasOffline = await obtenerTareasOffline({ filtros: filtrosActivos }).catch(() => []);
+      const tareasOffline = [401, 403].includes(err.status) ? [] : await obtenerTareasOffline({ filtros: filtrosActivos }).catch(() => []);
       const errorDeConexion = !navigator.onLine || err instanceof TypeError;
       setTareas(tareasOffline);
       setError(tareasOffline.length
@@ -330,8 +303,8 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
 
   const guardar = async (evento) => {
     evento.preventDefault();
-    const datos = {
-      ...formulario,
+    let datos = {
+      ...Object.fromEntries(Object.keys(estadoInicial).map((campo) => [campo, formulario[campo]])),
       fechaLimite: formulario.fechaLimite || null,
       potrero: formulario.potrero || null,
       animal: formulario.animal || null
@@ -341,6 +314,9 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
       setGuardando(true);
       setErrorFormulario('');
       if (tareaSeleccionada?._id) {
+        const anterior = normalizarTarea(tareaSeleccionada);
+        datos = Object.fromEntries(Object.entries(datos).filter(([campo, valor]) => String(valor || '') !== String(anterior[campo] || '')));
+        datos.versionEsperada = tareaSeleccionada.updatedAt;
         await actualizarTarea(tareaSeleccionada._id, datos);
       } else {
         await crearTarea(datos);
@@ -358,9 +334,9 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
   const cambiarEstado = async (tarea, estado, observaciones = '') => {
     try {
       setGuardando(true);
-      await cambiarEstadoTarea(tarea._id, estado, observaciones);
+      const tareaActualizada = await cambiarEstadoTarea(tarea._id, estado, observaciones, { versionEsperada: tarea.updatedAt, reapertura: estado === 'Pendiente' && ['Completada', 'Cancelada'].includes(tarea.estado) });
       await cargarDatos();
-      setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, estado, observaciones: observaciones || actual.observaciones } : actual));
+      setDetalle((actual) => (actual?._id === tarea._id ? tareaActualizada : actual));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -386,7 +362,13 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
 
     try {
       setGuardando(true);
-      await actualizarTarea(reprogramacion.tarea._id, { fechaProgramada: reprogramacion.fecha });
+      const anterior = reprogramacion.tarea;
+      const desplazamiento = Date.parse(reprogramacion.fecha) - Date.parse(fechaInput(anterior.fechaProgramada));
+      await actualizarTarea(anterior._id, {
+        fechaProgramada: reprogramacion.fecha,
+        ...(anterior.fechaLimite ? { fechaLimite: new Date(Date.parse(fechaInput(anterior.fechaLimite)) + desplazamiento).toISOString().slice(0, 10) } : {}),
+        versionEsperada: anterior.updatedAt
+      });
       await cargarDatos();
       setDetalle((actual) => (actual?._id === reprogramacion.tarea._id
         ? { ...actual, fechaProgramada: reprogramacion.fecha }
@@ -402,6 +384,16 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
   const completar = async (tarea) => {
     try {
       setGuardando(true);
+      if (tarea.moduloOrigen === 'Sanidad' && ['Plan sanitario', 'Tratamiento sanitario'].includes(tarea.categoriaAutomatica)) {
+        if (!navigator.onLine) throw new Error('La aplicación sanitaria debe confirmarse con conexión para mantener la trazabilidad clínica.');
+        sessionStorage.setItem('ganaderiaAccionSanidad', JSON.stringify({
+          categoriaAutomatica: tarea.categoriaAutomatica,
+          referenciaId: tarea.referenciaId?._id || tarea.referenciaId
+        }));
+        setDetalle(null);
+        onNavegarSanidad?.();
+        return;
+      }
       if (tarea.categoriaAutomatica === 'IATF') {
         if (!navigator.onLine) throw new Error('La ejecución IATF necesita conexión para validar existencias y evitar consumos duplicados.');
         const actividad = await obtenerActividadIATFPorTarea(tarea._id);
@@ -422,7 +414,8 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
           retornosCelo: [],
           fechaHoraReal: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
           productos: (actividad.ejecucion.pasoSnapshot.productos || []).map((producto) => ({ producto: String(producto.producto?._id || producto.producto), cantidad: '', dosis: producto.dosis || '', unidad: producto.unidad || '' })),
-          semen: ''
+          semen: '',
+          cantidadPajuelas: 1
         });
         setDetalle(null);
         return;
@@ -434,10 +427,13 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
           setActividadProtocolo({ tipo: 'ENGORDE', ...actividad, raciones, fechaReal: fechaInput(new Date()), observaciones: '', racion: raciones[0]?._id || '', producto: '', tipoSanidad: '', dosis: '', viaAplicacion: '', pesajes: (actividad.ciclo.detalleLote.animales || []).map((animal) => ({ animal: animal._id, etiqueta: animal.diio || animal.identificadorFinca || animal.nombre, peso: '' })) });
         } else {
           const actividad = await obtenerActividadPorcinaPorTarea(tarea._id);
+          const semenDisponible = actividad.ejecucion.tipoAccion === 'INSEMINACION'
+            ? await obtenerSemenReproductivoDisponible(fechaInput(new Date()))
+            : [];
           const procesados = new Set((actividad.ejecucion.participantes || []).map(String));
           const disponibles = actividad.banda.participantes.filter((item) => item.estadoParticipacion !== 'RETIRADA' && !procesados.has(String(item._id))).map((item) => String(item._id));
           const participantes = ['PARTO', 'DESTETE_CAMADA'].includes(actividad.ejecucion.tipoAccion) ? disponibles.slice(0, 1) : disponibles;
-          setActividadProtocolo({ tipo: 'PORCINO', ...actividad, fechaReal: fechaInput(new Date()), observaciones: '', resultado: 'PREÑADA', retornoCelo: false, participantes, producto: '', tipoSanidad: '', dosis: '', viaAplicacion: '', nacidosTotales: '', nacidosVivos: '', nacidosMuertos: '', momias: '', destetados: '', pesoPromedioDestete: '' });
+          setActividadProtocolo({ tipo: 'PORCINO', ...actividad, semenDisponible, semenUtilizado: '', cantidadPajuelas: 1, fechaReal: fechaInput(new Date()), observaciones: '', resultado: 'PREÑADA', retornoCelo: false, participantes, producto: '', tipoSanidad: '', dosis: '', viaAplicacion: '', nacidosTotales: '', nacidosVivos: '', nacidosMuertos: '', momias: '', destetados: '', pesoPromedioDestete: '' });
         }
         setDetalle(null);
         return;
@@ -456,12 +452,14 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
           item._id === tarea._id ? { ...item, estado: 'Completada', pendienteSincronizar: true } : item
         ));
         setTareas(tareasActualizadas);
+        await actualizarTareaEnCache({ ...tarea, estado: 'Completada', pendienteSincronizar: true });
         const filtrosActivos = Object.fromEntries(Object.entries(filtros).filter(([, valor]) => Boolean(valor)));
         await guardarTareasOffline(tareasActualizadas, { filtros: filtrosActivos });
         setDetalle((actual) => (actual?._id === tarea._id ? { ...actual, estado: 'Completada', pendienteSincronizar: true } : actual));
         setError('Sin conexion. La tarea queda pendiente de sincronizar.');
       } else {
-        await completarTarea({ id: tarea._id, observaciones: observacionesCompletar });
+        const tareaActualizada = await completarTarea({ id: tarea._id, observaciones: observacionesCompletar, versionEsperada: tarea.updatedAt });
+        setDetalle((actual) => actual?._id === tarea._id ? tareaActualizada : actual);
         await cargarDatos();
       }
       setObservacionesCompletar('');
@@ -492,7 +490,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
         const seleccionados = actividadIatf.participantes.filter((item) => actividadIatf.animales.includes(String(item.animal?._id || item.animal)));
         await registrarInseminacionesIATF(actividadIatf.campana._id, {
           fechaHoraReal: actividadIatf.fechaHoraReal,
-          inseminaciones: seleccionados.map((item) => ({ participanteId: item._id, semen: actividadIatf.semen, fechaHoraReal: actividadIatf.fechaHoraReal }))
+          inseminaciones: seleccionados.map((item) => ({ participanteId: item._id, semen: actividadIatf.semen, cantidadPajuelas: Number(actividadIatf.cantidadPajuelas || 1), fechaHoraReal: actividadIatf.fechaHoraReal }))
         });
       }
       setActividadIatf(null);
@@ -518,6 +516,11 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
         const tipoAccion = actividadProtocolo.ejecucion.tipoAccion;
         const datos = { fechaReal: actividadProtocolo.fechaReal, observaciones: actividadProtocolo.observaciones, participantes: actividadProtocolo.participantes };
         if (tipoAccion === 'DIAGNOSTICO_GESTACION') datos.resultado = actividadProtocolo.resultado;
+        if (tipoAccion === 'INSEMINACION') {
+          if (!actividadProtocolo.semenUtilizado) throw new Error('Selecciona el semen utilizado.');
+          datos.semenUtilizado = actividadProtocolo.semenUtilizado;
+          datos.cantidadPajuelas = Number(actividadProtocolo.cantidadPajuelas || 1);
+        }
         if (tipoAccion === 'CONTROL_REPETICION') datos.retornoCelo = actividadProtocolo.retornoCelo;
         if (tipoAccion === 'TRATAMIENTO_REPRODUCTIVO') datos.aplicacion = { producto: actividadProtocolo.producto, tipo: actividadProtocolo.tipoSanidad, dosis: actividadProtocolo.dosis, viaAplicacion: actividadProtocolo.viaAplicacion, motivo: actividadProtocolo.observaciones };
         if (tipoAccion === 'PARTO') datos.camada = { nacidosTotales: Number(actividadProtocolo.nacidosTotales || 0), nacidosVivos: Number(actividadProtocolo.nacidosVivos || 0), nacidosMuertos: Number(actividadProtocolo.nacidosMuertos || 0), momias: Number(actividadProtocolo.momias || 0), destino: 'No definido' };
@@ -687,12 +690,12 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
                   <div className="acciones-tabla acciones-tabla-amplia">
                     <button type="button" title="Ver detalle" onClick={() => setDetalle(tarea)}>⊙</button>
                     {puedeGestionar && <button type="button" title="Editar" onClick={() => abrirEdicion(tarea)}>✎</button>}
-                    {puedeGestionar && <button type="button" title="Reprogramar" onClick={() => reprogramarTarea(tarea)} disabled={guardando}>↷</button>}
+                    {puedeReprogramar(tarea) && <button type="button" title="Reprogramar" onClick={() => reprogramarTarea(tarea)} disabled={guardando}>↷</button>}
                     {!soloLectura && tarea.estado === 'Pendiente' && <button type="button" title="En proceso" onClick={() => cambiarEstado(tarea, 'En proceso')} disabled={guardando}>▶</button>}
-                    {!soloLectura && tarea.estado !== 'Completada' && <button type="button" title="Completar" onClick={() => completar(tarea)} disabled={guardando}>✓</button>}
-                    {!soloLectura && ['En proceso', 'Completada'].includes(tarea.estado) && <button type="button" title="Reabrir como pendiente" onClick={() => cambiarEstado(tarea, 'Pendiente')} disabled={guardando}>↶</button>}
+                    {!soloLectura && !['Completada', 'Cancelada'].includes(tarea.estado) && <button type="button" title="Completar" onClick={() => completar(tarea)} disabled={guardando}>✓</button>}
+                    {!soloLectura && puedeReabrir(tarea) && <button type="button" title="Reabrir como pendiente" onClick={() => cambiarEstado(tarea, 'Pendiente')} disabled={guardando}>↶</button>}
                     {puedeGestionar && !['Completada', 'Cancelada'].includes(tarea.estado) && <button type="button" title="Cancelar tarea" onClick={() => cancelarTarea(tarea)} disabled={guardando}>×</button>}
-                    {puedeGestionar && <button type="button" title="Eliminar" onClick={() => borrar(tarea)}>⌫</button>}
+                    {puedeBorrar(tarea) && <button type="button" title="Eliminar" onClick={() => borrar(tarea)}>⌫</button>}
                   </div>
                 </td>
               </tr>
@@ -716,20 +719,20 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
             {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
             <div className="tarea-form-grid">
               <label className="campo-completo">Titulo<input name="titulo" value={formulario.titulo} onChange={actualizarCampo} required /></label>
-              <label>Estado<select name="estado" value={formulario.estado} onChange={actualizarCampo}>{estados.map((estado) => <option key={estado} value={estado}>{estado}</option>)}</select></label>
-              <label>Tipo<select name="tipo" value={formulario.tipo} onChange={actualizarCampo}>{tipos.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
+              <label>Estado<select name="estado" disabled={!tareaSeleccionada || esTareaEspecializada(tareaSeleccionada) || ['Completada', 'Cancelada'].includes(tareaSeleccionada.estado)} value={formulario.estado} onChange={actualizarCampo}>{estados.map((estado) => <option key={estado} value={estado}>{estado}</option>)}</select></label>
+              <label>Tipo<select name="tipo" disabled={Boolean(tareaSeleccionada?.referenciaId)} value={formulario.tipo} onChange={actualizarCampo}>{tipos.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></label>
               <label>Prioridad<select name="prioridad" value={formulario.prioridad} onChange={actualizarCampo}>{prioridades.map((prioridad) => <option key={prioridad} value={prioridad}>{prioridad}</option>)}</select></label>
-              <SelectorFechaConLuna
+              <fieldset disabled={esTareaEspecializada(tareaSeleccionada || {})}><SelectorFechaConLuna
                 etiqueta="Fecha programada"
                 value={formulario.fechaProgramada}
                 onChange={(fechaProgramada) => setFormulario((actual) => ({ ...actual, fechaProgramada }))}
                 mostrarLuna={esTareaConInfoLunar(formulario)}
                 required
               />
-              <label>Fecha limite<input name="fechaLimite" type="date" value={formulario.fechaLimite} onChange={actualizarCampo} /></label>
+              <label>Fecha limite<input name="fechaLimite" type="date" value={formulario.fechaLimite} onChange={actualizarCampo} /></label></fieldset>
               <label>Asignado a<select name="asignadoA" value={formulario.asignadoA} onChange={actualizarCampo} required>{usuarios.map((usuarioItem) => <option key={usuarioItem._id} value={usuarioItem._id}>{etiquetaUsuarioConRol(usuarioItem)}</option>)}</select></label>
-              <label>Potrero<select name="potrero" value={formulario.potrero} onChange={actualizarCampo}><option value="">Sin potrero</option>{potreros.map((potrero) => <option key={potrero._id} value={potrero._id}>{potrero.codigo} - {potrero.nombre}</option>)}</select></label>
-              <label>Animal<select name="animal" value={formulario.animal} onChange={actualizarCampo}><option value="">Sin animal</option>{animales.map((animal) => <option key={animal._id} value={animal._id}>{animal.diio || animal.identificadorFinca}</option>)}</select></label>
+              <label>Potrero<select name="potrero" disabled={Boolean(tareaSeleccionada?.referenciaId)} value={formulario.potrero} onChange={actualizarCampo}><option value="">Sin potrero</option>{potreros.map((potrero) => <option key={potrero._id} value={potrero._id}>{potrero.codigo} - {potrero.nombre}</option>)}</select></label>
+              <label>Animal<select name="animal" disabled={Boolean(tareaSeleccionada?.referenciaId)} value={formulario.animal} onChange={actualizarCampo}><option value="">Sin animal</option>{animales.map((animal) => <option key={animal._id} value={animal._id}>{animal.diio || animal.identificadorFinca}</option>)}</select></label>
               <label className="campo-completo">Descripcion<textarea name="descripcion" rows="3" value={formulario.descripcion} onChange={actualizarCampo} /></label>
               <label className="campo-completo">Observaciones<textarea name="observaciones" rows="3" value={formulario.observaciones} onChange={actualizarCampo} /></label>
             </div>
@@ -789,7 +792,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
             </div>
             {detalle.descripcion && <div className="detalle-observaciones"><span>Descripcion</span><p>{detalle.descripcion}</p></div>}
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
-            {!soloLectura && detalle.estado !== 'Completada' && (
+            {!soloLectura && !['Completada', 'Cancelada'].includes(detalle.estado) && (
               <div className="form-card tarea-completar-card">
                 <label>Observaciones al completar<textarea rows="3" value={observacionesCompletar} onChange={(evento) => setObservacionesCompletar(evento.target.value)} /></label>
                 <button className="boton-primario compacto" type="button" onClick={() => completar(detalle)} disabled={guardando}>{guardando ? 'Completando...' : 'Completar tarea'}</button>
@@ -801,12 +804,12 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
                   Pasar a en proceso
                 </button>
               )}
-              {['En proceso', 'Completada'].includes(detalle.estado) && (
+              {puedeReabrir(detalle) && (
                 <button className="boton-link" type="button" onClick={() => cambiarEstado(detalle, 'Pendiente')} disabled={guardando}>
                   Reabrir como pendiente
                 </button>
               )}
-              {puedeGestionar && (
+              {puedeReprogramar(detalle) && (
                 <button className="boton-link" type="button" onClick={() => reprogramarTarea(detalle)} disabled={guardando}>
                   Reprogramar
                 </button>
@@ -848,7 +851,7 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
                 const insumo = actividadIatf.insumos.find((item) => item._id === producto.producto);
                 return <label key={producto.producto}>Cantidad real de {insumo?.nombre || 'insumo'}<input type="number" min="0" step="0.001" value={producto.cantidad} onChange={(e) => setActividadIatf((actual) => ({ ...actual, productos: actual.productos.map((item, i) => i === indice ? { ...item, cantidad: e.target.value } : item) }))} /><small>Disponible: {insumo?.cantidadDisponible ?? '--'} {insumo?.unidad || producto.unidad}</small></label>;
               })}
-              {actividadIatf.ejecucion.pasoSnapshot.tipoAccion === 'IATF' && <label>Pajuela utilizada<select value={actividadIatf.semen} onChange={(e) => setActividadIatf((actual) => ({ ...actual, semen: e.target.value }))}><option value="">Seleccionar</option>{actividadIatf.insumos.filter((item) => item.categoria === 'SEMEN').map((item) => <option key={item._id} value={item._id}>{item.toro || item.nombre} · {item.cantidadDisponible} disponibles</option>)}</select></label>}
+              {actividadIatf.ejecucion.pasoSnapshot.tipoAccion === 'IATF' && <><label>Pajuela utilizada<select value={actividadIatf.semen} onChange={(e) => setActividadIatf((actual) => ({ ...actual, semen: e.target.value }))}><option value="">Seleccionar</option>{actividadIatf.insumos.filter((item) => item.categoria === 'SEMEN').map((item) => <option key={item._id} value={item._id}>{item.toro || item.nombre} · {item.cantidadDisponible} disponibles</option>)}</select></label><label>Pajuelas por animal<input type="number" min="1" step="1" value={actividadIatf.cantidadPajuelas} onChange={(e) => setActividadIatf((actual) => ({ ...actual, cantidadPajuelas: e.target.value }))} /></label></>}
               <div className="campo-completo iatf-aplicacion-selector"><strong>Animales atendidos ({actividadIatf.animales.length})</strong>{actividadIatf.participantes.map((participante) => { const id = String(participante.animal?._id || participante.animal); return <label key={participante._id}><input type="checkbox" checked={actividadIatf.animales.includes(id)} onChange={() => setActividadIatf((actual) => ({ ...actual, animales: actual.animales.includes(id) ? actual.animales.filter((item) => item !== id) : [...actual.animales, id] }))} /> {participante.animal?.diio || participante.animal?.identificadorFinca} {participante.animal?.nombre || ''}</label>; })}</div>
               {actividadIatf.ejecucion.pasoSnapshot.tipoAccion === 'OBSERVAR_CELO' && <div className="campo-completo iatf-aplicacion-selector"><strong>Celo observado ({actividadIatf.retornosCelo.length})</strong>{actividadIatf.participantes.filter((participante) => actividadIatf.animales.includes(String(participante.animal?._id || participante.animal))).map((participante) => { const id = String(participante.animal?._id || participante.animal); return <label key={participante._id}><input type="checkbox" checked={actividadIatf.retornosCelo.includes(id)} onChange={() => setActividadIatf((actual) => ({ ...actual, retornosCelo: actual.retornosCelo.includes(id) ? actual.retornosCelo.filter((item) => item !== id) : [...actual.retornosCelo, id] }))} /> {participante.animal?.diio || participante.animal?.identificadorFinca}</label>; })}</div>}
             </div>
@@ -871,13 +874,14 @@ const Tareas = ({ usuario, tareaInicialId = '' }) => {
               {actividadProtocolo.tipo === 'ENGORDE' && actividadProtocolo.ejecucion.tipoAccion === 'SANIDAD' && <><label>Producto<input value={actividadProtocolo.producto} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, producto: e.target.value }))} /></label><label>Tipo<input value={actividadProtocolo.tipoSanidad} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, tipoSanidad: e.target.value }))} /></label><label>Dosis<input value={actividadProtocolo.dosis} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, dosis: e.target.value }))} /></label><label>Vía de aplicación<input value={actividadProtocolo.viaAplicacion} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, viaAplicacion: e.target.value }))} /></label></>}
               {actividadProtocolo.tipo === 'PORCINO' && <div className="campo-completo iatf-aplicacion-selector"><strong>Participantes atendidas ({actividadProtocolo.participantes.length})</strong>{actividadProtocolo.banda.participantes.filter((item) => item.estadoParticipacion !== 'RETIRADA').map((item) => { const id = String(item._id); return <label key={id}><input type="checkbox" checked={actividadProtocolo.participantes.includes(id)} onChange={() => setActividadProtocolo((actual) => ({ ...actual, participantes: actual.participantes.includes(id) ? actual.participantes.filter((actualId) => actualId !== id) : [...actual.participantes, id] }))} /> {item.animal?.diio || item.diio} · {item.animal?.nombre || item.nombre || 'Sin nombre'}</label>; })}</div>}
               {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'DIAGNOSTICO_GESTACION' && <label>Resultado<select value={actividadProtocolo.resultado} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, resultado: e.target.value }))}><option value="PREÑADA">Preñada</option><option value="VACIA">Vacía</option><option value="DUDOSA">Dudosa</option></select></label>}
+              {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'INSEMINACION' && <><label>Semen utilizado<select required value={actividadProtocolo.semenUtilizado} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, semenUtilizado: e.target.value }))}><option value="">Seleccionar</option>{actividadProtocolo.semenDisponible.map((item) => <option key={item._id} value={item._id}>{item.toro || item.nombre} · {item.cantidadDisponible} pajuelas</option>)}</select></label><label>Pajuelas por animal<input required type="number" min="1" step="1" value={actividadProtocolo.cantidadPajuelas} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, cantidadPajuelas: e.target.value }))} /></label></>}
               {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'CONTROL_REPETICION' && <label className="opcion-check"><input type="checkbox" checked={actividadProtocolo.retornoCelo} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, retornoCelo: e.target.checked }))} /> Se observó retorno a celo</label>}
               {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'TRATAMIENTO_REPRODUCTIVO' && <><label>Producto<input required value={actividadProtocolo.producto} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, producto: e.target.value }))} /></label><label>Tipo<input value={actividadProtocolo.tipoSanidad} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, tipoSanidad: e.target.value }))} /></label><label>Dosis<input value={actividadProtocolo.dosis} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, dosis: e.target.value }))} /></label><label>Vía de aplicación<input value={actividadProtocolo.viaAplicacion} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, viaAplicacion: e.target.value }))} /></label></>}
               {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'PARTO' && <><label>Nacidos totales<input type="number" min="0" value={actividadProtocolo.nacidosTotales} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, nacidosTotales: e.target.value }))} /></label><label>Nacidos vivos<input type="number" min="0" value={actividadProtocolo.nacidosVivos} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, nacidosVivos: e.target.value }))} /></label><label>Nacidos muertos<input type="number" min="0" value={actividadProtocolo.nacidosMuertos} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, nacidosMuertos: e.target.value }))} /></label><label>Momias<input type="number" min="0" value={actividadProtocolo.momias} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, momias: e.target.value }))} /></label></>}
               {actividadProtocolo.tipo === 'PORCINO' && actividadProtocolo.ejecucion.tipoAccion === 'DESTETE_CAMADA' && <><label>Destetados<input type="number" min="0" value={actividadProtocolo.destetados} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, destetados: e.target.value }))} /></label><label>Peso promedio al destete<input type="number" min="0" step="0.01" value={actividadProtocolo.pesoPromedioDestete} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, pesoPromedioDestete: e.target.value }))} /></label></>}
               <label className="campo-completo">Observaciones<textarea rows="3" value={actividadProtocolo.observaciones} onChange={(e) => setActividadProtocolo((actual) => ({ ...actual, observaciones: e.target.value }))} /></label>
             </div>
-            <div className="modal-actions"><button className="boton-link" type="button" onClick={() => setActividadProtocolo(null)}>Cancelar</button><button className="boton-primario" type="button" onClick={guardarEjecucionProtocolo} disabled={guardando || (actividadProtocolo.tipo === 'PORCINO' && !actividadProtocolo.participantes.length)}>{guardando ? 'Registrando...' : 'Registrar ejecución real'}</button></div>
+            <div className="modal-actions"><button className="boton-link" type="button" onClick={() => setActividadProtocolo(null)}>Cancelar</button><button className="boton-primario" type="button" onClick={guardarEjecucionProtocolo} disabled={guardando || (actividadProtocolo.tipo === 'PORCINO' && (!actividadProtocolo.participantes.length || (actividadProtocolo.ejecucion.tipoAccion === 'INSEMINACION' && !actividadProtocolo.semenUtilizado)))}>{guardando ? 'Registrando...' : 'Registrar ejecución real'}</button></div>
           </section>
         </div>
       )}

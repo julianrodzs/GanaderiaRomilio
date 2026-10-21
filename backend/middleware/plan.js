@@ -58,8 +58,20 @@ const requireFeature = (feature, dependencias = {}) => async (req, res, next) =>
     }
 };
 
+const requirePlanVigente = (dependencias = {}) => async (req, res, next) => {
+    try {
+        const obtenerPlan = dependencias.obtenerPlanActual || obtenerPlanActual;
+        req.planActual = asegurarPlanVigente(await obtenerPlan(req.organizacionId));
+        return next();
+    } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
+        return res.status(500).json({ mensaje: 'No se pudo validar la suscripción', error: error.message });
+    }
+};
+
 module.exports = {
     requireFeature,
+    requirePlanVigente,
     resolverAccesoFeature,
     respuestaErrorPlan
 };

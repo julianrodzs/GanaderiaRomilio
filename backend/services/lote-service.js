@@ -13,8 +13,19 @@ const AsignacionRacionLote = require('../models/AsignacionRacionLote');
 const SuministroAlimentacion = require('../models/SuministroAlimentacion');
 const { calcularGmd } = require('./indicesProductivos-service');
 const { validarUsuarioAsignable } = require('./usuarioAsignable-service');
+const { limpiarDatosTarea, validarRelacionesTarea } = require('./tarea-integridad-service');
 const { upsertEventoAnimal } = require('./eventoAnimal-service');
 const { OBJETIVO_POR_PROPOSITO, PROPOSITOS_LOTE, normalizarPropositoLote, propositoCompatibleConObjetivo } = require('../config/lotes');
+const { ejecutarEnTransaccion } = require('./mongo-transaccion-service');
+const { validarDestinoPastoreo } = require('./potrero-integridad-service');
+const {
+    actualizarPesoActualAnimal,
+    registrarEventoPesaje,
+    sanitizarPesaje,
+    sanitizarPesajeMasivo,
+    validarAnimalesUnicos,
+    validarDatosPesaje
+} = require('./pesaje-integridad-service');
 
 const crearError = (mensaje, status = 400, codigo) => Object.assign(new Error(mensaje), { status, codigo });
 const MS_DIA = 24 * 60 * 60 * 1000;
@@ -148,8 +159,8 @@ const cambiarEtapa = async (loteId, etapa, usuarioId, fechaCambio = new Date()) 
     return lote;
 };
 
-const obtenerLote = async (loteId) => {
-    const lote = await Lote.findById(loteId);
+const obtenerLote = async (loteId, opciones = {}) => {
+    const lote = await Lote.findById(loteId).session(opciones.session || null);
     if (!lote) throw crearError('Lote no encontrado.', 404);
     return lote;
 };
@@ -162,6 +173,7 @@ const cerrarPertenencia = async (pertenencia, { fechaSalida = new Date(), motivo
     const animal = await Animal.findById(pertenencia.animal).session(session || null);
     if (animal && String(animal.loteActual || '') === String(pertenencia.lote)) {
         animal.loteActual = null;
+        animal.potreroActual = null;
         await animal.save(session ? { session } : {});
     }
     if (animal) {
@@ -180,6 +192,14 @@ const cerrarPertenencia = async (pertenencia, { fechaSalida = new Date(), motivo
 };
 
 const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
+    if (!opciones.session) {
+        return ejecutarEnTransaccion((session) => agregarAnimalesAlLote(
+            loteId,
+            datos,
+            usuarioId,
+            { ...opciones, session }
+        ));
+    }
     const { session } = opciones;
     const lote = await Lote.findById(loteId).session(session || null);
     if (!lote) throw crearError('Lote no encontrado.', 404);
@@ -199,6 +219,10 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {
     for (const animal of animales) {
         const anterior = activas.find((item) => String(item.animal) === String(animal._id));
         if (anterior && String(anterior.lote?._id || anterior.lote) === String(lote._id)) {
+            if (String(animal.potreroActual || '') !== String(lote.ubicacionActual || '')) {
+                animal.potreroActual = lote.ubicacionActual || null;
+                await animal.save({ session });
+            }
             resultados.push(anterior);
             continue;
         }
@@ -220,6 +244,7 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {
         }], session ? { session } : {});
         const [pertenencia] = pertenencias;
         animal.loteActual = lote._id;
+        animal.potreroActual = lote.ubicacionActual || null;
         await animal.save(session ? { session } : {});
         await registrarEventoLote({
             animal,
@@ -243,15 +268,20 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {
             titulo: `${agregados.length} animal(es) incorporados`,
             descripcion: datos.motivoEntrada || 'Ingreso al lote',
             usuarioId,
-            metadata: { animales: agregados.map((item) => item.animal) }
+            metadata: { animales: agregados.map((item) => item.animal) },
+            session
         });
     }
     return resultados;
 };
 
-const cerrarLote = async (loteId, datos = {}, usuarioId) => {
-    const lote = await obtenerLote(loteId);
-    const pertenencias = await PertenenciaLote.find({ lote: lote._id, activo: true });
+const cerrarLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
+    if (!opciones.session) {
+        return ejecutarEnTransaccion((session) => cerrarLote(loteId, datos, usuarioId, { ...opciones, session }));
+    }
+    const { session } = opciones;
+    const lote = await obtenerLote(loteId, { session });
+    const pertenencias = await PertenenciaLote.find({ lote: lote._id, activo: true }).session(session);
     if (pertenencias.length && !['SIN_LOTE', 'MOVER'].includes(datos.accionAnimales)) {
         throw crearError('El lote tiene animales activos. Indica si quedarán sin lote o serán movidos.', 409, 'LOTE_CON_ANIMALES');
     }
@@ -264,33 +294,61 @@ const cerrarLote = async (loteId, datos = {}, usuarioId) => {
             fechaEntrada: datos.fechaCierre || new Date(),
             motivoSalida: datos.motivo || `Cierre del lote ${lote.codigo}`,
             motivoEntrada: `Traslado por cierre del lote ${lote.codigo}`
-        }, usuarioId);
+        }, usuarioId, { session });
     } else if (datos.accionAnimales === 'SIN_LOTE') {
         for (const pertenencia of pertenencias) {
             await cerrarPertenencia(pertenencia, {
                 fechaSalida: datos.fechaCierre || new Date(),
                 motivoSalida: datos.motivo || `Cierre del lote ${lote.codigo}`,
                 usuarioId,
-                lote
+                lote,
+                session
             });
         }
     }
     lote.estado = datos.estado === 'CANCELADO' ? 'CANCELADO' : 'CERRADO';
     lote.fechaCierre = datos.fechaCierre || new Date();
+    const rotacionActiva = await RotacionPotrero.findOne({ loteRef: lote._id, estado: 'Activa' }).session(session);
+    if (rotacionActiva) {
+        if (new Date(lote.fechaCierre) < new Date(rotacionActiva.fechaEntrada)) {
+            throw crearError('La fecha de cierre no puede ser anterior al ingreso al potrero.', 400, 'FECHA_CIERRE_INVALIDA');
+        }
+        rotacionActiva.estado = 'Finalizada';
+        rotacionActiva.fechaSalida = lote.fechaCierre;
+        rotacionActiva.diasOcupado = Math.round((new Date(lote.fechaCierre) - new Date(rotacionActiva.fechaEntrada)) / MS_DIA);
+        await rotacionActiva.save({ session });
+        await Potrero.findOneAndUpdate(
+            { _id: rotacionActiva.potrero, estado: { $nin: ['Mantenimiento', 'Inactivo'] } },
+            { $set: { estado: 'Descanso' } },
+            { session }
+        );
+    }
+    lote.ubicacionActual = null;
     if (datos.motivo) lote.descripcion = [lote.descripcion, datos.motivo].filter(Boolean).join('\n');
     await AsignacionPlanAlimentacion.updateMany(
         { lote: lote._id, activo: true },
-        { $set: { activo: false, fechaFin: lote.fechaCierre } }
+        { $set: { activo: false, fechaFin: lote.fechaCierre } },
+        { session }
     );
-    await lote.save();
-    await HistorialEtapaLote.updateMany({ lote: lote._id, fechaFin: null }, { $set: { fechaFin: lote.fechaCierre } });
+    await AsignacionRacionLote.updateMany(
+        { lote: lote._id, activo: true },
+        { $set: { activo: false, fechaFin: lote.fechaCierre } },
+        { session }
+    );
+    await lote.save({ session });
+    await HistorialEtapaLote.updateMany(
+        { lote: lote._id, fechaFin: null },
+        { $set: { fechaFin: lote.fechaCierre } },
+        { session }
+    );
     await registrarEventoOperativoLote({
         lote: lote._id,
         tipo: 'LOTE_CERRADO',
         titulo: lote.estado === 'CANCELADO' ? 'Lote cancelado' : 'Lote cerrado',
         descripcion: datos.motivo || 'Cierre manual del lote',
         fecha: lote.fechaCierre,
-        usuarioId
+        usuarioId,
+        session
     });
     return lote;
 };
@@ -320,54 +378,77 @@ const retirarAnimalesDelLote = async (loteId, datos = {}, usuarioId) => {
     return pertenencias;
 };
 
-const registrarPesajesLote = async (loteId, datos = {}, usuarioId) => {
-    const lote = await obtenerLote(loteId);
+const registrarPesajesLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
+    if (!opciones.session) {
+        return ejecutarEnTransaccion((session) => registrarPesajesLote(
+            loteId,
+            datos,
+            usuarioId,
+            { ...opciones, session }
+        ));
+    }
+    const { session } = opciones;
+    const capturaMasiva = sanitizarPesajeMasivo(datos);
+    const lote = await obtenerLote(loteId, { session });
     if (lote.estado !== 'ACTIVO') throw crearError('Solo se pueden registrar pesajes en un lote activo.', 409);
-    const entradas = (datos.pesajes || []).filter((item) => item.peso !== '' && item.peso !== null && item.peso !== undefined);
+    const entradas = capturaMasiva.pesajes.filter((item) => item.peso !== '' && item.peso !== null && item.peso !== undefined);
     if (!entradas.length) throw crearError('Ingresa al menos un peso.');
     if (entradas.some((item) => !Number.isFinite(Number(item.peso)) || Number(item.peso) <= 0)) throw crearError('Todos los pesos deben ser mayores que cero.');
-    const ids = [...new Set(entradas.map((item) => String(item.animal)))];
-    const pertenencias = await PertenenciaLote.find({ lote: loteId, animal: { $in: ids }, activo: true });
+    const ids = validarAnimalesUnicos(entradas);
+    const pertenencias = await PertenenciaLote.find({ lote: loteId, animal: { $in: ids }, activo: true }).session(session);
     if (pertenencias.length !== ids.length) throw crearError('Todos los animales deben pertenecer actualmente al lote.', 409);
-    const fecha = datos.fecha || new Date();
-    const creados = await Pesaje.insertMany(entradas.map((item) => ({
-        animal: item.animal,
-        fecha,
-        peso: Number(item.peso),
-        etapaProductiva: lote.especie === 'Porcino' ? item.etapaProductiva || undefined : undefined,
-        observaciones: item.observaciones || datos.observaciones,
-        registradoPor: usuarioId
-    })));
-    await Promise.all(creados.map(async (pesaje) => {
-        const ultimo = await Pesaje.findOne({ animal: pesaje.animal }).sort({ fecha: -1, createdAt: -1 });
-        await Animal.findByIdAndUpdate(pesaje.animal, { pesoActual: ultimo?.peso || null });
-        await upsertEventoAnimal({
-            animal: pesaje.animal,
-            tipoEvento: 'Pesaje',
-            fecha: pesaje.fecha,
-            titulo: 'Pesaje registrado desde lote',
-            descripcion: `Peso registrado: ${pesaje.peso} kg en el lote ${lote.codigo}.`,
-            moduloOrigen: 'Pesajes',
-            referenciaId: pesaje._id,
-            creadoPor: usuarioId,
-            metadata: { pesoKg: pesaje.peso, loteId: lote._id }
+    const fecha = capturaMasiva.fecha || new Date();
+    const preparados = [];
+    for (const item of entradas) {
+        const captura = sanitizarPesaje({
+            animal: item.animal,
+            fecha,
+            peso: item.peso,
+            etapaProductiva: item.etapaProductiva,
+            observaciones: item.observaciones || capturaMasiva.observaciones
         });
-    }));
+        const validacion = await validarDatosPesaje(captura, { session });
+        preparados.push({
+            ...captura,
+            fecha: validacion.fecha,
+            peso: validacion.peso,
+            etapaProductiva: lote.especie === 'Porcino'
+                ? captura.etapaProductiva || validacion.animal.etapaProductiva || undefined
+                : undefined,
+            lote: lote._id,
+            tipoPesaje: 'Lote',
+            registradoPor: usuarioId
+        });
+    }
+    const creados = await Pesaje.insertMany(preparados, { session });
+    for (const pesaje of creados) {
+        await actualizarPesoActualAnimal(pesaje.animal, { session });
+        await registrarEventoPesaje(pesaje, usuarioId, {
+            session,
+            loteId: lote._id,
+            crearEventoLote: false,
+            titulo: 'Pesaje registrado desde lote',
+            descripcion: `Peso registrado: ${pesaje.peso} kg en el lote ${lote.codigo}.`
+        });
+    }
     await registrarEventoOperativoLote({
         lote: lote._id,
         tipo: 'PESAJES_REGISTRADOS',
         titulo: `${creados.length} pesaje(s) registrados`,
-        descripcion: datos.observaciones || 'Pesaje grupal del lote',
+        descripcion: capturaMasiva.observaciones || 'Pesaje grupal del lote',
         fecha,
         usuarioId,
-        metadata: { pesajes: creados.map((item) => item._id) }
+        metadata: { pesajes: creados.map((item) => item._id), animales: creados.map((item) => item.animal) },
+        session
     });
     return creados;
 };
 
 const crearTareaLote = async (loteId, datos = {}, usuarioId) => {
     const lote = await obtenerLote(loteId);
-    await validarUsuarioAsignable(datos.asignadoA, 'Tareas');
+    datos = limpiarDatosTarea(datos);
+    if (datos.estado && datos.estado !== 'Pendiente') throw crearError('Las tareas se crean pendientes.');
+    await validarRelacionesTarea(datos);
     const tarea = await Tarea.create({
         ...datos,
         lote: lote._id,
@@ -390,24 +471,48 @@ const crearTareaLote = async (loteId, datos = {}, usuarioId) => {
     return tarea;
 };
 
-const moverLoteAPotrero = async (loteId, datos = {}, usuarioId) => {
-    const lote = await obtenerLote(loteId);
+const moverLoteAPotrero = async (loteId, datos = {}, usuarioId, opciones = {}) => {
+    if (!opciones.session) {
+        try {
+            return await ejecutarEnTransaccion((session) => moverLoteAPotrero(
+                loteId,
+                datos,
+                usuarioId,
+                { ...opciones, session }
+            ));
+        } catch (error) {
+            if (error?.code === 11000) throw crearError('El potrero de destino ya tiene una rotacion activa.', 409, 'POTRERO_YA_OCUPADO');
+            throw error;
+        }
+    }
+    const { session } = opciones;
+    const lote = await obtenerLote(loteId, { session });
     if (lote.estado !== 'ACTIVO') throw crearError('Solo se puede mover un lote activo.', 409);
     if (!datos.potrero) throw crearError('Selecciona el potrero de destino.');
     const fecha = datos.fechaEntrada || new Date();
-    const cantidad = await PertenenciaLote.countDocuments({ lote: lote._id, activo: true });
-    const activa = await RotacionPotrero.findOne({ loteRef: lote._id, estado: 'Activa' });
+    const destino = validarDestinoPastoreo(await Potrero.findById(datos.potrero).session(session));
+    const cantidad = await PertenenciaLote.countDocuments({ lote: lote._id, activo: true }).session(session);
+    if (cantidad < 1) throw crearError('El lote debe tener al menos un animal activo para iniciar una rotacion.', 409, 'LOTE_SIN_ANIMALES');
+    if (Number(destino.capacidadMaxima) > 0 && cantidad > Number(destino.capacidadMaxima)) {
+        throw crearError(`El lote supera la capacidad maxima de ${destino.capacidadMaxima} animales del potrero.`, 409, 'CAPACIDAD_POTRERO_SUPERADA');
+    }
+    const activa = await RotacionPotrero.findOne({ loteRef: lote._id, estado: 'Activa' }).session(session);
     if (activa && String(activa.potrero) === String(datos.potrero)) throw crearError('El lote ya se encuentra en ese potrero.', 409);
-    const otraActiva = await RotacionPotrero.findOne({ potrero: datos.potrero, estado: 'Activa', _id: { $ne: activa?._id } });
+    const otraActiva = await RotacionPotrero.findOne({ potrero: datos.potrero, estado: 'Activa', _id: { $ne: activa?._id } }).session(session);
     if (otraActiva) throw crearError('El potrero de destino ya tiene una rotación activa.', 409);
     if (activa) {
+        if (new Date(fecha) < new Date(activa.fechaEntrada)) throw crearError('La nueva entrada no puede ser anterior a la rotacion activa.', 400, 'FECHA_ROTACION_INVALIDA');
         activa.estado = 'Finalizada';
         activa.fechaSalida = fecha;
-        activa.diasOcupado = Math.max(Math.round((new Date(fecha) - new Date(activa.fechaEntrada)) / MS_DIA), 0);
-        await activa.save();
-        await Potrero.findOneAndUpdate({ _id: activa.potrero, estado: { $ne: 'Mantenimiento' } }, { $set: { estado: 'Descanso' } });
+        activa.diasOcupado = Math.round((new Date(fecha) - new Date(activa.fechaEntrada)) / MS_DIA);
+        await activa.save({ session });
+        await Potrero.findOneAndUpdate(
+            { _id: activa.potrero, estado: { $nin: ['Mantenimiento', 'Inactivo'] } },
+            { $set: { estado: 'Descanso' } },
+            { session }
+        );
     }
-    const rotacion = await RotacionPotrero.create({
+    const [rotacion] = await RotacionPotrero.create([{
         potrero: datos.potrero,
         lote: lote.codigo,
         loteRef: lote._id,
@@ -415,12 +520,16 @@ const moverLoteAPotrero = async (loteId, datos = {}, usuarioId) => {
         numeroAnimales: cantidad,
         estado: 'Activa',
         observaciones: datos.observaciones
-    });
+    }], { session });
     const anterior = lote.ubicacionActual;
     lote.ubicacionActual = datos.potrero;
-    await lote.save();
-    await Potrero.findOneAndUpdate({ _id: datos.potrero, estado: { $ne: 'Mantenimiento' } }, { $set: { estado: 'Ocupado' } });
-    await Animal.updateMany({ loteActual: lote._id, estado: 'Activo' }, { $set: { potreroActual: datos.potrero } });
+    await lote.save({ session });
+    await Potrero.findByIdAndUpdate(datos.potrero, { $set: { estado: 'Ocupado' } }, { session, runValidators: true });
+    await Animal.updateMany(
+        { loteActual: lote._id, estado: 'Activo' },
+        { $set: { potreroActual: datos.potrero } },
+        { session }
+    );
     await registrarEventoOperativoLote({
         lote: lote._id,
         tipo: 'CAMBIO_POTRERO',
@@ -430,7 +539,8 @@ const moverLoteAPotrero = async (loteId, datos = {}, usuarioId) => {
         referenciaId: rotacion._id,
         entidadTipo: 'RotacionPotrero',
         usuarioId,
-        metadata: { potreroAnterior: anterior || null, potreroNuevo: datos.potrero, numeroAnimales: cantidad }
+        metadata: { potreroAnterior: anterior || null, potreroNuevo: datos.potrero, numeroAnimales: cantidad },
+        session
     });
     return rotacion;
 };

@@ -102,6 +102,7 @@ const Ventas = ({ soloLectura = false }) => {
   const [busquedaAnimal, setBusquedaAnimal] = useState('');
   const [modoVentaDetalle, setModoVentaDetalle] = useState('individual');
   const [preseleccionLote, setPreseleccionLote] = useState(null);
+  const [alertaRetiro, setAlertaRetiro] = useState(null);
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const etiquetaId = textoEspecie(especie, 'etiquetaId');
 
@@ -349,22 +350,44 @@ const Ventas = ({ soloLectura = false }) => {
     }));
   };
 
+  const persistirVenta = async (payload) => {
+    if (ventaSeleccionada?._id) {
+      await actualizarVentaAnimal(ventaSeleccionada._id, payload);
+    } else {
+      await crearVentaAnimal(payload);
+    }
+    setAlertaRetiro(null);
+    setModoFormulario(false);
+    setVentaSeleccionada(null);
+    await cargarDatos();
+  };
+
   const guardarVenta = async (evento) => {
     evento.preventDefault();
     try {
       setGuardando(true);
       setErrorFormulario('');
       const payload = { ...formulario, especie: formulario.especie || especie };
-      if (ventaSeleccionada?._id) {
-        await actualizarVentaAnimal(ventaSeleccionada._id, payload);
+      await persistirVenta(payload);
+    } catch (err) {
+      if (err.data?.alertaRetiro) {
+        setAlertaRetiro({ ...err.data, payload: { ...formulario, especie: formulario.especie || especie } });
       } else {
-        await crearVentaAnimal(payload);
+        setErrorFormulario(err.message);
       }
-      setModoFormulario(false);
-      setVentaSeleccionada(null);
-      await cargarDatos();
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const confirmarVentaEnRetiro = async () => {
+    try {
+      setGuardando(true);
+      setErrorFormulario('');
+      await persistirVenta({ ...alertaRetiro.payload, confirmarRetiroCarne: true });
     } catch (err) {
       setErrorFormulario(err.message);
+      setAlertaRetiro(null);
     } finally {
       setGuardando(false);
     }
@@ -590,6 +613,30 @@ const Ventas = ({ soloLectura = false }) => {
             </button>
           </div>
         </form>
+        {alertaRetiro && (
+          <div className="modal-backdrop">
+            <section className="modal-panel retiro-carne-modal" role="alertdialog" aria-modal="true">
+              <div className="panel-title">
+                <div><p className="eyebrow">Inocuidad</p><h2>Periodo de retiro de carne activo</h2></div>
+              </div>
+              <p>{alertaRetiro.mensaje}</p>
+              <div className="lista-compacta">
+                {(alertaRetiro.retiros || []).map((retiro) => (
+                  <span key={retiro.animalId}>
+                    <strong>{retiro.animal}</strong> · {retiro.medicamento} · hasta {formatearFecha(retiro.fechaFinRetiroCarne)} ({retiro.diasFaltantes} días)
+                  </span>
+                ))}
+              </div>
+              <p className="texto-ayuda-formulario">La venta quedará permitida únicamente después de esta confirmación consciente.</p>
+              <div className="form-actions">
+                <button className="boton-link" type="button" onClick={() => setAlertaRetiro(null)}>Volver y revisar</button>
+                <button className="boton-peligro" type="button" disabled={guardando} onClick={confirmarVentaEnRetiro}>
+                  {guardando ? 'Confirmando...' : 'Confirmar venta de todas formas'}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
       </section>
     );
   }

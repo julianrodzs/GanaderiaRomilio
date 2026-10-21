@@ -24,6 +24,7 @@ test('el crecimiento histórico filtra animales y pesajes por especie', async ()
     const findPesajeOriginal = Pesaje.find;
     let filtroAnimales;
     let filtroPesajes;
+    let consultaHistoricaMultiFinca = false;
 
     Animal.find = (filtro) => {
         filtroAnimales = filtro;
@@ -41,7 +42,11 @@ test('el crecimiento histórico filtra animales y pesajes por especie', async ()
     };
     Pesaje.find = (filtro) => {
         filtroPesajes = filtro;
-        return {
+        const consulta = {
+            setOptions: (opciones) => {
+                consultaHistoricaMultiFinca = opciones.omitirAislamientoFinca === true;
+                return consulta;
+            },
             sort: () => ({
                 lean: async () => [
                     { animal: 'porcino-1', fecha: '2026-09-10', peso: 3 },
@@ -49,6 +54,7 @@ test('el crecimiento histórico filtra animales y pesajes por especie', async ()
                 ]
             })
         };
+        return consulta;
     };
 
     try {
@@ -58,6 +64,7 @@ test('el crecimiento histórico filtra animales y pesajes por especie', async ()
         assert.equal(res.statusCode, 200);
         assert.equal(filtroAnimales.especie, 'Porcino');
         assert.deepEqual(filtroPesajes.animal.$in, ['porcino-1']);
+        assert.equal(consultaHistoricaMultiFinca, true);
         assert.equal(res.body.resumen.totalPesajes, 2);
         assert.equal(res.body.crecimientoCrias[0].categoria, 'Lechón');
         assert.equal(res.body.crecimientoTerneros.length, 0);

@@ -54,10 +54,14 @@ const esDescendienteDirecto = async (animalId, posibleAncestroId) => {
     return ancestros.has(String(posibleAncestroId));
 };
 
-const validarRelacionGenealogica = async (animalId, padreId, madreId) => {
+const validarRelacionGenealogica = async (animalId, padreId, madreId, especieEsperada = null) => {
     const idAnimal = normalizarId(animalId);
     const idPadre = normalizarId(padreId);
     const idMadre = normalizarId(madreId);
+    const animal = idAnimal ? await obtenerAnimalBasico(idAnimal) : null;
+    const especieAnimal = especieEsperada || animal?.especie || null;
+    let padre = null;
+    let madre = null;
 
     if (idAnimal && idPadre && idPadre === idAnimal) {
         throw crearError('Un animal no puede ser su propio padre.');
@@ -72,21 +76,31 @@ const validarRelacionGenealogica = async (animalId, padreId, madreId) => {
     }
 
     if (idPadre) {
-        const padre = await obtenerAnimalBasico(idPadre);
+        padre = await obtenerAnimalBasico(idPadre);
         if (!padre) throw crearError('El padre seleccionado no existe.');
         if (padre.sexo !== 'Macho') throw crearError('El padre registrado debe ser Macho.');
+        if (especieAnimal && padre.especie !== especieAnimal) {
+            throw crearError('El padre debe pertenecer a la misma especie de la cría.');
+        }
         if (idAnimal && await esDescendienteDirecto(idPadre, idAnimal)) {
             throw crearError('La relación de padre genera un ciclo genealógico.');
         }
     }
 
     if (idMadre) {
-        const madre = await obtenerAnimalBasico(idMadre);
+        madre = await obtenerAnimalBasico(idMadre);
         if (!madre) throw crearError('La madre seleccionada no existe.');
         if (madre.sexo !== 'Hembra') throw crearError('La madre registrada debe ser Hembra.');
+        if (especieAnimal && madre.especie !== especieAnimal) {
+            throw crearError('La madre debe pertenecer a la misma especie de la cría.');
+        }
         if (idAnimal && await esDescendienteDirecto(idMadre, idAnimal)) {
             throw crearError('La relación de madre genera un ciclo genealógico.');
         }
+    }
+
+    if (padre && madre && padre.especie !== madre.especie) {
+        throw crearError('Padre y madre deben pertenecer a la misma especie.');
     }
 };
 

@@ -68,6 +68,7 @@ const enviarCorreoResend = async ({ to, subject, html, text, from }) => {
 
     const respuesta = await fetch('https://api.resend.com/emails', {
         method: 'POST',
+        signal: AbortSignal.timeout(30000),
         headers: {
             Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
             'Content-Type': 'application/json'

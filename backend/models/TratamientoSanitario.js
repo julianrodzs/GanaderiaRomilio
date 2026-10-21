@@ -20,6 +20,8 @@ const tratamientoSanitarioSchema = new Schema(
         producto: { type: String, required: true, trim: true },
         dosis: { type: String, trim: true },
         viaAplicacion: { type: String, trim: true },
+        diasRetiroCarne: { type: Number, default: 0, min: 0 },
+        fechaFinRetiroCarne: { type: Date, default: null },
         fechaInicio: { type: Date, required: true },
         cantidadAplicaciones: { type: Number, default: 1, min: 1 },
         intervaloDias: { type: Number, min: 1 },
@@ -59,6 +61,7 @@ tratamientoSanitarioSchema.index({ especie: 1, estado: 1, proximaAplicacion: 1 }
 tratamientoSanitarioSchema.index({ animales: 1, fechaInicio: -1 });
 tratamientoSanitarioSchema.index({ producto: 1, fechaInicio: -1 });
 tratamientoSanitarioSchema.index({ lote: 1, fechaInicio: -1 });
+tratamientoSanitarioSchema.index({ fechaFinRetiroCarne: 1 });
 
 const TratamientoSanitario = model('TratamientoSanitario', tratamientoSanitarioSchema);
 

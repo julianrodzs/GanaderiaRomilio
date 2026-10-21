@@ -1,6 +1,7 @@
 const animalCtrl = {};
 
 const Animal = require('../models/Animal');
+const Pesaje = require('../models/Pesaje');
 const Camada = require('../models/Camada');
 const EventoAnimal = require('../models/EventoAnimal');
 const { TratamientoSanitario } = require('../models/TratamientoSanitario');
@@ -356,6 +357,22 @@ animalCtrl.updateAnimal = async (req, res) => {
 
         if (!animalAnterior) {
             return res.status(404).json({ mensaje: 'Animal no encontrado' });
+        }
+
+        if (Object.prototype.hasOwnProperty.call(datos, 'pesoActual')) {
+            const pesoSolicitado = datos.pesoActual === null || datos.pesoActual === '' ? null : Number(datos.pesoActual);
+            const pesoAnterior = animalAnterior.pesoActual === null || animalAnterior.pesoActual === undefined
+                ? null
+                : Number(animalAnterior.pesoActual);
+            const tienePesajes = await Pesaje.exists({ animal: animalAnterior._id })
+                .setOptions({ omitirAislamientoFinca: true });
+            if (tienePesajes && pesoSolicitado !== pesoAnterior) {
+                return res.status(409).json({
+                    mensaje: 'El peso actual se deriva del historial. Registre o corrija el dato desde Pesajes.',
+                    codigo: 'PESO_ACTUAL_DERIVADO'
+                });
+            }
+            if (tienePesajes) delete datos.pesoActual;
         }
 
         datos = prepararDatosRaciales(datos, animalAnterior);
