@@ -9,11 +9,13 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "test:lunar": "node --test tests/calendarioLunarService.test.mjs",
-    "test:tareas": "node --test tests/tareasOffline.test.mjs"
+    "test:tareas": "node --test tests/tareasOffline.test.mjs",
+    "test:api": "node --test tests/apiAutenticacion.test.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

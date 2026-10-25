@@ -15,8 +15,7 @@ const obtenerSesion = () => {
 };
 
 const obtenerTokenSesion = () => obtenerSesion()?.token || '';
-const obtenerFincaSesion = () => {
-  const sesion = obtenerSesion();
+const obtenerFincaSesion = (sesion = obtenerSesion()) => {
   return sesion?.fincaActiva?._id
     || sesion?.finca?._id
     || sesion?.fincaId
@@ -25,6 +24,13 @@ const obtenerFincaSesion = () => {
     || '';
 };
 
+const claveContextoSesion = (sesion) => JSON.stringify([
+  sesion?.token || '',
+  sesion?.usuario?._id || sesion?.usuario?.id || '',
+  sesion?.organizacion?._id || sesion?.usuario?.organizacionId || '',
+  obtenerFincaSesion(sesion)
+]);
+
 const request = async (ruta, opciones = {}) => {
   if (!API_URL) {
     throw new Error('VITE_API_URL no configurado');
@@ -32,9 +38,10 @@ const request = async (ruta, opciones = {}) => {
 
   const esFormData = opciones.body instanceof FormData;
   const metodo = String(opciones.method || 'GET').toUpperCase();
-  const contextoInicio = obtenerContextoOffline();
-  const token = obtenerTokenSesion();
-  const { headers, contextoEsperado, ...fetchOpciones } = opciones;
+  const { headers, contextoEsperado, autenticada = true, ...fetchOpciones } = opciones;
+  const sesionInicio = autenticada ? obtenerSesion() : null;
+  const contextoInicio = claveContextoSesion(sesionInicio);
+  const token = sesionInicio?.token || '';
   if (contextoEsperado && obtenerContextoOffline().clave !== contextoEsperado.clave) {
     throw new Error('La sesión o finca cambió; sincroniza desde el contexto de origen.');
   }
@@ -47,7 +54,7 @@ const request = async (ruta, opciones = {}) => {
 
   if (token) {
     headersBase.Authorization = `Bearer ${token}`;
-    const fincaId = obtenerFincaSesion();
+    const fincaId = obtenerFincaSesion(sesionInicio);
     if (fincaId) headersBase['X-Finca-Id'] = fincaId;
   }
 
@@ -57,25 +64,18 @@ const request = async (ruta, opciones = {}) => {
     headers: headersBase,
   });
 
-  if (metodo === 'GET' && obtenerContextoOffline().clave !== contextoInicio.clave) {
+  const data = await respuesta.json().catch(() => ({}));
+
+  if (autenticada && metodo === 'GET' && claveContextoSesion(obtenerSesion()) !== contextoInicio) {
     const error = new Error('La finca o sesión cambió mientras se cargaban los datos.');
     error.code = 'REQUEST_CONTEXT_CHANGED';
     throw error;
   }
 
-  const data = await respuesta.json().catch(() => ({}));
-
   if (!respuesta.ok) {
-    if (respuesta.status === 401) {
-      const sesionGuardada = localStorage.getItem('ganaderiaSesion');
-      let sesion = null;
-      try {
-        sesion = JSON.parse(sesionGuardada || 'null');
-      } catch (error) {
-        sesion = null;
-      }
-      window.dispatchEvent(new CustomEvent('ganaderiaSesionExpirada', { detail: { sesion } }));
+    if (respuesta.status === 401 && autenticada && token && claveContextoSesion(obtenerSesion()) === contextoInicio) {
       localStorage.removeItem('ganaderiaSesion');
+      window.dispatchEvent(new CustomEvent('ganaderiaSesionExpirada', { detail: { sesion: sesionInicio } }));
     }
 
     const error = new Error(data.mensaje || data.message || 'Error en la solicitud');
@@ -85,11 +85,11 @@ const request = async (ruta, opciones = {}) => {
   }
 
   const metodoEfectivo = String(fetchOpciones.method || 'GET').toUpperCase();
-  if (metodoEfectivo !== 'GET' && /^(\/animales|\/compras|\/ventas|\/usuarios|\/fincas|\/plan\/especie|\/conteo-drone)/.test(ruta)) {
+  if (autenticada && metodoEfectivo !== 'GET' && /^(\/animales|\/compras|\/ventas|\/usuarios|\/fincas|\/plan\/especie|\/conteo-drone)/.test(ruta)) {
     window.dispatchEvent(new CustomEvent('ganaderiaPlanActualizado', { detail: { ruta, metodo: metodoEfectivo } }));
   }
 
-  if (metodoEfectivo !== 'GET') window.dispatchEvent(new Event('ganaderiaNotificacionesActualizadas'));
+  if (autenticada && metodoEfectivo !== 'GET') window.dispatchEvent(new Event('ganaderiaNotificacionesActualizadas'));
   return data;
 };
 
@@ -320,6 +320,7 @@ export const descargarReporteMultiFinca = async (filtros = {}) => {
 
 export const loginUsuario = ({ correo, contrasena }) => {
   return request('/usuarios/login', {
+    autenticada: false,
     method: 'POST',
     body: JSON.stringify({ correo, contrasena })
   });
@@ -327,6 +328,7 @@ export const loginUsuario = ({ correo, contrasena }) => {
 
 export const solicitarRecuperacionPassword = (correo) => {
   return request('/auth/forgot-password', {
+    autenticada: false,
     method: 'POST',
     body: JSON.stringify({ correo })
   });
@@ -334,6 +336,7 @@ export const solicitarRecuperacionPassword = (correo) => {
 
 export const restablecerPassword = ({ token, password }) => {
   return request('/auth/reset-password', {
+    autenticada: false,
     method: 'POST',
     body: JSON.stringify({ token, password })
   });
@@ -351,7 +354,7 @@ export const actualizarPerfilUsuario = (datos) => request('/usuarios/perfil', {
   method: 'PUT', body: JSON.stringify(datos)
 });
 export const aceptarInvitacionNueva = (token, contrasena) => request('/invitaciones/aceptar', {
-  method: 'POST', body: JSON.stringify({ token, contrasena })
+  autenticada: false, method: 'POST', body: JSON.stringify({ token, contrasena })
 });
 export const aceptarInvitacionExistente = (token) => request('/usuarios/invitaciones/aceptar', {
   method: 'POST', body: JSON.stringify({ token })
