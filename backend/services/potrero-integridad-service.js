@@ -1,3 +1,5 @@
+const { claveDiaEnZona } = require('./fechaZonaHoraria-service');
+
 const CAMPOS_POTRERO = new Set([
     'codigo',
     'nombre',
@@ -75,14 +77,26 @@ const sanitizarPotrero = (payload = {}) => {
 
 const sanitizarRotacion = (payload = {}, opciones = {}) => {
     const { datos } = sanitizarSegunCampos(payload, CAMPOS_ROTACION);
-    if (opciones.aplicarDefaults && datos.estado === undefined) datos.estado = 'Activa';
+    if (opciones.aplicarDefaults && datos.estado === undefined) {
+        const entrada = new Date(datos.fechaEntrada);
+        const salida = datos.fechaSalida && new Date(datos.fechaSalida);
+        const hoy = claveDiaEnZona(opciones.ahora || new Date(), opciones.zonaHoraria);
+        datos.estado = !Number.isNaN(entrada.getTime()) && entrada.toISOString().slice(0, 10) > hoy
+            ? 'Planificada'
+            : salida && !Number.isNaN(salida.getTime()) && salida.toISOString().slice(0, 10) <= hoy
+                ? 'Finalizada'
+                : 'Activa';
+    }
     return datos;
 };
 
-const validarPeriodoRotacion = ({ fechaEntrada, fechaSalida, numeroAnimales }) => {
+const validarPeriodoRotacion = ({ fechaEntrada, fechaSalida, numeroAnimales, estado }, opciones = {}) => {
     const entrada = new Date(fechaEntrada);
     if (!fechaEntrada || Number.isNaN(entrada.getTime())) {
         throw crearErrorIntegridad('La fecha de entrada es obligatoria y debe ser valida.', 400, 'FECHA_ENTRADA_INVALIDA');
+    }
+    if (estado === 'Activa' && entrada.toISOString().slice(0, 10) > claveDiaEnZona(opciones.ahora || new Date(), opciones.zonaHoraria)) {
+        throw crearErrorIntegridad('Una rotacion con entrada futura debe permanecer Planificada hasta registrar el ingreso real.', 400, 'ROTACION_FUTURA_NO_ACTIVA');
     }
     if (fechaSalida) {
         const salida = new Date(fechaSalida);
@@ -91,6 +105,9 @@ const validarPeriodoRotacion = ({ fechaEntrada, fechaSalida, numeroAnimales }) =
         }
         if (salida < entrada) {
             throw crearErrorIntegridad('La fecha de salida no puede ser anterior a la fecha de entrada.', 400, 'PERIODO_ROTACION_INVALIDO');
+        }
+        if (estado === 'Activa' && salida.toISOString().slice(0, 10) <= claveDiaEnZona(opciones.ahora || new Date(), opciones.zonaHoraria)) {
+            throw crearErrorIntegridad('Una rotacion con salida ya registrada debe marcarse Finalizada.', 400, 'ROTACION_CON_SALIDA_NO_ACTIVA');
         }
     }
     const cantidad = Number(numeroAnimales);

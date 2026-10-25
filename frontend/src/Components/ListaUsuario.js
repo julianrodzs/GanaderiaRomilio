@@ -473,7 +473,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Potreros soloLectura={!puedeGestionarModulo(rol, 'Potreros') || !estadoConexion.online} />
+        <Potreros soloLectura={!puedeGestionarModulo(rol, 'Potreros') || !estadoConexion.online} zonaHoraria={sesion?.organizacion?.zonaHoraria} />
       </main>
     );
   }

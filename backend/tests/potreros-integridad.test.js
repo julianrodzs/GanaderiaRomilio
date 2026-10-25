@@ -31,6 +31,27 @@ test('las rotaciones aplican Activa por defecto y exigen enteros y fechas ordena
     assert.doesNotThrow(() => validarPeriodoRotacion({ fechaEntrada: '2026-10-10', fechaSalida: '2026-10-10', numeroAnimales: 2 }));
 });
 
+test('una rotacion futura sin estado queda Planificada y no puede activarse antes del ingreso', () => {
+    const opciones = { aplicarDefaults: true, ahora: new Date('2026-10-25T04:00:00Z'), zonaHoraria: 'America/Costa_Rica' };
+    const datos = { potrero: 'p1', fechaEntrada: '2026-10-25', numeroAnimales: 20 };
+    assert.equal(sanitizarRotacion(datos, opciones).estado, 'Planificada');
+    assert.equal(sanitizarRotacion({ ...datos, fechaEntrada: '2026-10-24' }, opciones).estado, 'Activa');
+    assert.throws(() => validarPeriodoRotacion({ ...datos, estado: 'Activa' }, opciones),
+        error => error.status === 400 && error.codigo === 'ROTACION_FUTURA_NO_ACTIVA');
+    assert.doesNotThrow(() => validarPeriodoRotacion({ ...datos, estado: 'Planificada' }, opciones));
+    assert.doesNotThrow(() => validarPeriodoRotacion({ ...datos, estado: 'Activa' }, { ahora: new Date('2026-10-25T06:00:00Z'), zonaHoraria: 'America/Costa_Rica' }));
+});
+
+test('una salida historica sin estado se finaliza y no se admite como ocupacion activa', () => {
+    const opciones = { aplicarDefaults: true, ahora: new Date('2026-10-25T16:00:00Z'), zonaHoraria: 'America/Costa_Rica' };
+    const datos = { potrero: 'p1', fechaEntrada: '2026-10-01', fechaSalida: '2026-10-10', numeroAnimales: 20 };
+    assert.equal(sanitizarRotacion(datos, opciones).estado, 'Finalizada');
+    assert.throws(() => validarPeriodoRotacion({ ...datos, estado: 'Activa' }, opciones),
+        error => error.codigo === 'ROTACION_CON_SALIDA_NO_ACTIVA');
+    assert.doesNotThrow(() => validarPeriodoRotacion({ ...datos, estado: 'Finalizada' }, opciones));
+    assert.doesNotThrow(() => validarPeriodoRotacion({ ...datos, estado: 'Planificada' }, opciones));
+});
+
 test('el esquema garantiza una sola rotacion activa por potrero', () => {
     const indice = RotacionPotrero.schema.indexes().find(([, opciones]) => opciones.name === 'una_rotacion_activa_por_potrero');
     assert.deepEqual(indice[0], { organizacionId: 1, fincaId: 1, potrero: 1, estado: 1 });

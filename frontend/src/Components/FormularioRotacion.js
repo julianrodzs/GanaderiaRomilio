@@ -1,42 +1,5 @@
 import React, { useState } from 'react';
-
-const hoyInput = () => {
-  const fecha = new Date();
-  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
-};
-
-const estadoInicial = {
-  potrero: '',
-  lote: '',
-  fechaEntrada: hoyInput(),
-  fechaSalida: '',
-  numeroAnimales: '',
-  estado: 'Activa',
-  observaciones: ''
-};
-
-const formatearFechaInput = (fecha) => {
-  if (!fecha) return '';
-  return new Date(fecha).toISOString().slice(0, 10);
-};
-
-const obtenerPotreroId = (potrero) => {
-  if (!potrero) return '';
-  if (typeof potrero === 'string') return potrero;
-  return potrero._id || '';
-};
-
-const normalizarRotacion = (rotacion) => ({
-  ...estadoInicial,
-  ...rotacion,
-  potrero: obtenerPotreroId(rotacion?.potrero),
-  fechaEntrada: formatearFechaInput(rotacion?.fechaEntrada) || estadoInicial.fechaEntrada,
-  fechaSalida: formatearFechaInput(rotacion?.fechaSalida),
-  numeroAnimales: rotacion?.numeroAnimales ?? ''
-});
-
-const numeroOpcional = (valor) => (valor === '' || valor === null || valor === undefined ? null : Number(valor));
-const fechaOpcional = (valor) => (valor ? valor : null);
+import { hoyRotacion, normalizarFormularioRotacion, prepararEnvioRotacion } from '../utils/formularioRotacion.mjs';
 
 const FormularioRotacion = ({
   rotacionInicial,
@@ -45,10 +8,12 @@ const FormularioRotacion = ({
   onCancelar,
   onGuardar,
   guardando,
-  error
+  error,
+  zonaHoraria = 'America/Costa_Rica'
 }) => {
+  const hoy = hoyRotacion(zonaHoraria);
   const [formulario, setFormulario] = useState(() => {
-    const inicial = normalizarRotacion(rotacionInicial);
+    const inicial = normalizarFormularioRotacion(rotacionInicial, hoy);
     return {
       ...inicial,
       potrero: inicial.potrero || potreros[0]?._id || ''
@@ -57,17 +22,18 @@ const FormularioRotacion = ({
 
   const actualizarCampo = (evento) => {
     const { name, value } = evento.target;
-    setFormulario((actual) => ({ ...actual, [name]: value }));
+    setFormulario((actual) => ({
+      ...actual,
+      [name]: value,
+      ...(name === 'fechaEntrada' && value > hoy && actual.estado === 'Activa' ? { estado: 'Planificada' } : {}),
+      ...(name === 'fechaSalida' && value && value <= hoy && actual.estado === 'Activa' ? { estado: 'Finalizada' } : {})
+    }));
   };
 
   const enviarFormulario = (evento) => {
     evento.preventDefault();
 
-    onGuardar({
-      ...formulario,
-      fechaSalida: fechaOpcional(formulario.fechaSalida),
-      numeroAnimales: numeroOpcional(formulario.numeroAnimales)
-    });
+    onGuardar(prepararEnvioRotacion(formulario));
   };
 
   return (
@@ -122,7 +88,7 @@ const FormularioRotacion = ({
           <label>
             Estado
             <select name="estado" value={formulario.estado} onChange={actualizarCampo}>
-              <option value="Activa">Activa</option>
+              <option value="Activa" disabled={formulario.fechaEntrada > hoy || Boolean(formulario.fechaSalida && formulario.fechaSalida <= hoy)}>Activa</option>
               <option value="Finalizada">Finalizada</option>
               <option value="Planificada">Planificada</option>
             </select>

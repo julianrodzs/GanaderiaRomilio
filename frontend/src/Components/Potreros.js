@@ -66,7 +66,7 @@ const filtrosRotaciones = [
   { id: 'estado', accessor: (rotacion) => rotacion.estado }
 ];
 
-const Potreros = ({ soloLectura = false }) => {
+const Potreros = ({ soloLectura = false, zonaHoraria = 'America/Costa_Rica' }) => {
   const { potreros: imagenPotreros } = useApariencia();
   const [potreros, setPotreros] = useState([]);
   const [rotaciones, setRotaciones] = useState([]);
@@ -264,6 +264,7 @@ const Potreros = ({ soloLectura = false }) => {
           onGuardar={guardarRotacion}
           guardando={guardando}
           error={errorFormulario}
+          zonaHoraria={zonaHoraria}
         />
       );
     }
@@ -348,6 +349,10 @@ const Potreros = ({ soloLectura = false }) => {
           onAgregar={soloLectura ? undefined : abrirNuevaRotacion}
           onEditar={soloLectura ? undefined : abrirEdicionRotacion}
           onEliminar={soloLectura ? undefined : borrarRotacion}
+          puedeEditar={(rotacion) => !rotacion.loteRef}
+          puedeEliminar={(rotacion) => !rotacion.loteRef}
+          tituloEditarNoDisponible="Esta rotacion se gestiona desde el modulo de Lotes"
+          tituloEliminarNoDisponible="Esta rotacion conserva el historial del lote"
           mostrarAcciones={!soloLectura}
         />
       </section>

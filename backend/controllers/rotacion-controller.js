@@ -156,13 +156,14 @@ rotacionCtrl.getRotaciones = async (req, res) => {
 
 rotacionCtrl.createRotacion = async (req, res) => {
     try {
-        const entrada = sanitizarRotacion(req.body, { aplicarDefaults: true });
+        const opcionesFecha = { zonaHoraria: req.organizacion?.zonaHoraria };
+        const entrada = sanitizarRotacion(req.body, { aplicarDefaults: true, ...opcionesFecha });
         if (entrada.loteRef) {
             throw crearErrorIntegridad('Las rotaciones asociadas a lotes se crean desde el modulo de Lotes.', 409, 'ROTACION_LOTE_REQUIERE_FLUJO');
         }
         let rotacionId;
         await ejecutarEnTransaccion(async (session) => {
-            validarPeriodoRotacion(entrada);
+            validarPeriodoRotacion(entrada, opcionesFecha);
             await validarPotreroDestino(entrada.potrero, session);
             const datosRotacion = await prepararDatosRotacion(entrada, null, session);
             await validarRotacionActivaUnica(datosRotacion, null, session);
@@ -227,7 +228,7 @@ rotacionCtrl.updateRotacion = async (req, res) => {
         delete datosRotacion.createdAt;
         delete datosRotacion.updatedAt;
 
-        validarPeriodoRotacion(datosRotacion);
+        validarPeriodoRotacion(datosRotacion, { zonaHoraria: req.organizacion?.zonaHoraria });
         await validarPotreroDestino(datosRotacion.potrero, session);
         await validarRotacionActivaUnica(datosRotacion, req.params.id, session);
 
