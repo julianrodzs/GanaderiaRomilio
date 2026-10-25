@@ -1,5 +1,7 @@
 # Consolidación multi-finca
 
+Revisión de implementación: **2026-10-21**. Ver [AUDIT_MODULO_REPORTES.md](../../AUDIT_MODULO_REPORTES.md) para pruebas, catálogo y pendientes. Las limitaciones descritas todavía no están remediadas en código.
+
 ## Alcance comercial
 
 La operación multi-finca está disponible desde Gestión. Permite trasladar animales, consultar su pertenencia histórica, registrar transferencias financieras internas y repartir gastos. Premium agrega comparación simultánea, metas, cierres inmutables, detalle por finca y exportación consolidada.
@@ -46,21 +48,31 @@ Los movimientos históricos sin `alcanceFinanciero` se consideran externos por c
 
 ## Monedas
 
-CRC y USD nunca se suman entre sí ni se convierten automáticamente. El consolidado, la evolución y el Excel mantienen totales separados por moneda. Una conversión futura requerirá tipo de cambio, fecha y fuente explícitos.
+El cálculo consolidado agrupa CRC y USD por separado y no convierte automáticamente. Los bloques `monedas` conservan los importes; los campos escalares ingresos/egresos/balance son alias de **CRC**. Una conversión futura requerirá tipo de cambio, fecha y fuente explícitos.
+
+El XLSX vivo incluye desglose por moneda. En cambio, el modal, el PDF y las hojas Resumen/Fincas del XLSX **histórico** leen solo alias CRC y omiten USD en esos totales, sin etiquetado suficiente (RP-14). El snapshot JSON y su evolución pueden contener USD: la omisión está en su presentación, no en la suma del servicio. Las metas y participaciones financieras escalares también usan CRC, sin metas diferenciadas por moneda.
 
 ## Reporte Premium
 
 `GET /api/reportes/multi-finca` incluye inventario y participación por finca, peso ponderado, resultado externo por moneda, operaciones internas, reproducción, sanidad, traslados, evolución mensual y metas.
 
-Los destetes se atribuyen usando `HistorialFincaAnimal` para encontrar la finca vigente en la fecha real del destete. Los demás hechos conservan el `fincaId` con el que se registraron.
+Los destetes **individuales** se atribuyen usando `HistorialFincaAnimal` para encontrar la finca vigente en la fecha real del destete, con respaldo en finca actual si falta historia. El consolidado consulta `Animal.fechaDestete`; no incorpora destetes colectivos de `Camada` (RP-13). Los demás hechos conservan el `fincaId` con el que se registraron.
+
+Inventario, pesoActual y tratamientos activos son del momento de consulta. Finanzas, partos y aplicaciones usan el período. `especie` afecta los conjuntos animales/sanitarios, pero no segrega movimientos financieros. Las fechas se normalizan UTC; para timestamps reales difieren del día de Costa Rica (RP-15).
 
 `GET /api/reportes/multi-finca/detalle` permite navegar a animales, finanzas, partos, destetes, aplicaciones o tratamientos de una finca autorizada.
+
+El detalle limita a 200 documentos sin total/cursor. Finanzas incluye operaciones internas marcadas para exclusión aunque el KPI externo las descarta: no concilia por simple suma del detalle (RP-18).
 
 ## Metas y cierres
 
 Las metas pueden pertenecer a toda la organización o a una finca, con período y valores para inventario, peso, finanzas, partos, destetes y sanidad.
 
-Un cierre guarda una fotografía completa del reporte y no se recalcula. La clave combina fechas, especie y fincas ordenadas; esto impide cerrar dos veces exactamente el mismo alcance. Cambios posteriores no alteran el documento histórico.
+Un cierre guarda el reporte calculado y no se recalcula. La clave combina fechas, especie y fincas ordenadas; esto impide cerrar dos veces exactamente el mismo alcance. No hay ruta de edición del snapshot. Cambios posteriores no recalculan el documento histórico.
+
+**RP-12:** eso no equivale a reconstruir existencias al cierre: un cierre de 2020 creado hoy contiene el inventario actual y flujos de 2020. Las consultas que construyen el reporte tampoco comparten una lectura snapshot transaccional. Distinguir fecha de captura y fecha de corte antes de certificar el cierre como histórico.
+
+El detalle histórico está implementado: muestra resumen y tabla de fincas, además de ofrecer PDF/XLSX. La API devuelve el snapshot. Listado, detalle y exportación exigen acceso a todas las fincas del cierre mediante la selección de fincas activas; inactivar una finca puede impedir consultar su cierre con esa política.
 
 Endpoints Premium:
 
@@ -68,9 +80,14 @@ Endpoints Premium:
 - `DELETE /api/reportes/multi-finca/metas/:id`
 - `GET/POST /api/reportes/multi-finca/cierres`
 - `GET /api/reportes/multi-finca/cierres/:id`
+- `GET /api/reportes/multi-finca/cierres/:id/exportar?formato=pdf|xlsx`
 - `GET /api/reportes/multi-finca/exportar`
 
-La exportación XLSX contiene resumen, desglose por finca, finanzas por finca y moneda, evolución mensual y metas. Incluye período, especie y fincas usadas como criterios del reporte.
+La exportación XLSX **viva** contiene cinco hojas: resumen, desglose por finca, finanzas por finca y moneda, evolución mensual y metas. Incluye período, especie y fincas usadas como criterios del reporte.
+
+El XLSX histórico contiene cuatro hojas, sin Finanzas por moneda. PDFKit genera el PDF de cierre en A4 horizontal. Se confirmaron encabezados desalineados, altura fija de filas y falta de encabezados al cambiar de página (RP-17). Fechas de cierre se exportan como cadenas localizadas; las metas del XLSX vivo pasan como Date. Falta un contrato uniforme de fechas/tipos y zona horaria; `es-CR` no fija la zona.
+
+Todas estas rutas requieren autenticación, `reportes.ver` y `reportesMultiFinca` de un plan Premium vigente. Escrituras de metas/cierres añaden `reportes.configurar`. IDs de fincas no accesibles se rechazan; agregaciones multi-finca mantienen el aislamiento de organización aunque omitan el de finca individual. No existe una ruta pública alternativa de exportación.
 
 ## Infraestructura
 

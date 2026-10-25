@@ -9,7 +9,7 @@ import { ContenidoPaginado } from './PaginacionTabla';
 const MODELOS = [
   { id: 'Potrero', nombre: 'Potreros', campos: ['codigo', 'nombre', 'estado'] },
   { id: 'Animal', nombre: 'Inventario', campos: ['diio', 'especie', 'sexo', 'categoria', 'nombre'] },
-  { id: 'MovimientoFinanciero', nombre: 'Finanzas', campos: ['fecha', 'naturaleza', 'tipoMovimiento', 'categoria', 'descripcion', 'monto'] },
+  { id: 'MovimientoFinanciero', nombre: 'Finanzas', campos: ['fecha', 'naturaleza', 'tipoMovimiento', 'categoria', 'descripcion', 'monto', 'moneda'] },
   { id: 'Pesaje', nombre: 'Pesajes', campos: ['diio', 'fecha', 'peso'] }
 ];
 
@@ -26,6 +26,7 @@ const ETIQUETAS = {
   tipoMovimiento: 'Tipo',
   descripcion: 'Descripción',
   monto: 'Monto',
+  moneda: 'Moneda',
   peso: 'Peso kg'
 };
 
@@ -40,6 +41,7 @@ const formatearValor = (valor, campo) => {
 
 const ImportarExcel = () => {
   const inputRef = useRef(null);
+  const confirmandoRef = useRef(false);
   const [archivo, setArchivo] = useState(null);
   const [preview, setPreview] = useState(null);
   const [resultado, setResultado] = useState(null);
@@ -47,6 +49,7 @@ const ImportarExcel = () => {
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState('');
   const [arrastrando, setArrastrando] = useState(false);
+  const [duplicadosConfirmados, setDuplicadosConfirmados] = useState([]);
 
   const validarArchivo = async (archivoSeleccionado) => {
     if (!archivoSeleccionado) return;
@@ -54,10 +57,15 @@ const ImportarExcel = () => {
       setError('Selecciona un archivo con extensión .xlsx.');
       return;
     }
+    if (archivoSeleccionado.size > 5 * 1024 * 1024) {
+      setError('El archivo supera el máximo permitido de 5 MB.');
+      return;
+    }
 
     setArchivo(archivoSeleccionado);
     setPreview(null);
     setResultado(null);
+    setDuplicadosConfirmados([]);
     setError('');
     setCargando('validando');
     try {
@@ -90,14 +98,16 @@ const ImportarExcel = () => {
   };
 
   const confirmar = async () => {
-    if (!preview?.importacionId || !preview?.puedeConfirmar) return;
+    if (!preview?.importacionId || !preview?.puedeConfirmar || confirmandoRef.current) return;
+    confirmandoRef.current = true;
     setError('');
     setCargando('importando');
     try {
-      setResultado(await confirmarImportacionExcel(preview.importacionId, modo));
+      setResultado(await confirmarImportacionExcel(preview.importacionId, modo, duplicadosConfirmados));
     } catch (err) {
       setError(err.message);
     } finally {
+      confirmandoRef.current = false;
       setCargando('');
     }
   };
@@ -160,7 +170,7 @@ const ImportarExcel = () => {
         />
         <span className="drop-icon">XLSX</span>
         <strong>{archivo ? archivo.name : 'Suelta aquí la plantilla completada'}</strong>
-        <small>Primero se valida todo el libro. Ningún dato se guarda hasta que confirmes la vista previa.</small>
+        <small>Primero se valida todo el libro. Ningún dato operativo se guarda hasta que confirmes la vista previa.</small>
       </div>
 
       {error && <div className="alerta-formulario">{error}</div>}
@@ -225,6 +235,25 @@ const ImportarExcel = () => {
             </section>
           )}
 
+          {preview.duplicados?.length > 0 && (
+            <section className="advertencias-importacion">
+              <p className="eyebrow">Posibles duplicados</p>
+              <p>Se omitirán por defecto. Marca únicamente los registros legítimos que deban repetirse.</p>
+              {preview.duplicados.map((item) => (
+                <label key={`${item.modelo}-${item.fila}-${item.clave}`}>
+                  <input
+                    type="checkbox"
+                    checked={duplicadosConfirmados.includes(item.clave)}
+                    onChange={(evento) => setDuplicadosConfirmados((actual) => evento.target.checked
+                      ? [...new Set([...actual, item.clave])]
+                      : actual.filter((clave) => clave !== item.clave))}
+                  />
+                  {item.modelo} · fila {item.fila} · {item.descripcion}
+                </label>
+              ))}
+            </section>
+          )}
+
           {MODELOS.map((modelo) => {
             const filas = preview.muestras?.[modelo.id] || [];
             if (!filas.length) return null;
@@ -236,9 +265,16 @@ const ImportarExcel = () => {
                     <thead><tr>{modelo.campos.map((campo) => <th key={campo}>{ETIQUETAS[campo] || campo}</th>)}</tr></thead>
                     <tbody>
                       {filas.map((fila, indice) => (
-                        <tr key={`${modelo.id}-${indice}`}>
-                          {modelo.campos.map((campo) => <td key={campo}>{formatearValor(fila[campo], campo)}</td>)}
-                        </tr>
+                        <React.Fragment key={`${modelo.id}-${indice}`}>
+                          <tr>
+                            {modelo.campos.map((campo) => <td key={campo}>{formatearValor(fila[campo], campo)}</td>)}
+                          </tr>
+                          {fila.cambios?.length > 0 && (
+                            <tr><td colSpan={modelo.campos.length}>
+                              <strong>Cambios:</strong> {fila.cambios.map((cambio) => `${cambio.campo}: ${cambio.anterior ?? '--'} → ${cambio.nuevo ?? '--'}`).join(' · ')}
+                            </td></tr>
+                          )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>

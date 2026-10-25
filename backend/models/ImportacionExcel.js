@@ -8,7 +8,7 @@ const importacionExcelSchema = new Schema(
         hashArchivo: { type: String, trim: true, index: true },
         estado: {
             type: String,
-            enum: ['Pendiente', 'Con errores', 'Confirmada', 'Confirmada con errores'],
+            enum: ['Pendiente', 'Con errores', 'Procesando', 'Aplicada', 'Fallida', 'Expirada', 'Confirmada', 'Confirmada con errores'],
             default: 'Pendiente',
             index: true
         },
@@ -38,7 +38,11 @@ const importacionExcelSchema = new Schema(
             }
         ],
         usuario: { type: Schema.Types.ObjectId, ref: 'Usuario', index: true },
-        confirmadaAt: Date
+        confirmadaAt: Date,
+        iniciadoEn: Date,
+        finalizadoEn: Date,
+        expiraEn: { type: Date, index: true },
+        errorFinal: Schema.Types.Mixed
     },
     {
         timestamps: true

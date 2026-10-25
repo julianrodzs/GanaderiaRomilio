@@ -11,7 +11,12 @@ const CAMPOS_SENSIBLES = new Set([
     'resetPasswordToken'
 ]);
 
-const normalizarClave = (valor = '') => String(valor).trim().toLowerCase();
+const normalizarClave = (valor = '') => String(valor).normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase();
+const CAMPOS_SENSIBLES_NORMALIZADOS = new Set([...CAMPOS_SENSIBLES].map(normalizarClave));
+const PATRONES_SENSIBLES = ['contrasena', 'password', 'token', 'secret', 'hash', 'authorization'];
 
 const truncarTexto = (valor, maximo = 800) => {
     const texto = String(valor || '');
@@ -26,7 +31,9 @@ const sanitizar = (valor, profundidad = 0) => {
 
     if (typeof valor === 'object') {
         return Object.entries(valor).reduce((resultado, [clave, contenido]) => {
-            if (CAMPOS_SENSIBLES.has(normalizarClave(clave))) {
+            const claveNormalizada = normalizarClave(clave);
+            if (CAMPOS_SENSIBLES_NORMALIZADOS.has(claveNormalizada)
+                || PATRONES_SENSIBLES.some((patron) => claveNormalizada.includes(patron))) {
                 resultado[clave] = '[protegido]';
                 return resultado;
             }
@@ -38,6 +45,38 @@ const sanitizar = (valor, profundidad = 0) => {
 
     if (typeof valor === 'string') return truncarTexto(valor);
     return valor;
+};
+
+const sanitizarRuta = (ruta = '') => {
+    const [camino, consulta = ''] = String(ruta).split('?');
+    if (!consulta) return camino;
+    const parametros = new URLSearchParams(consulta);
+    for (const clave of parametros.keys()) {
+        const claveNormalizada = normalizarClave(clave);
+        if (CAMPOS_SENSIBLES_NORMALIZADOS.has(claveNormalizada)
+            || PATRONES_SENSIBLES.some((patron) => claveNormalizada.includes(patron))) {
+            parametros.set(clave, '[protegido]');
+        }
+    }
+    const consultaSanitizada = parametros.toString();
+    return consultaSanitizada ? `${camino}?${consultaSanitizada}` : camino;
+};
+
+const obtenerEvento = (req, modulo) => {
+    if (req.auditoriaEvento) return req.auditoriaEvento;
+    const ruta = String(req.originalUrl || '').split('?')[0];
+    if (/\/usuarios\/login$/.test(ruta)) return 'Inicio de sesión';
+    if (/recuperar-contrasena$/.test(ruta)) return 'Solicitud de recuperación';
+    if (/restablecer-contrasena$/.test(ruta)) return 'Contraseña restablecida';
+    if (/invitaciones\/aceptar$/.test(ruta)) return 'Invitación aceptada';
+    if (/\/usuarios\/perfil$/.test(ruta) && req.method === 'PUT') return 'Perfil actualizado';
+    if (/\/usuarios\/perfil$/.test(ruta) && req.method === 'DELETE') return 'Cuenta anonimizada';
+    if (/\/usuarios\/[^/]+\/estado$/.test(ruta)) return 'Estado de membresía actualizado';
+    if (/\/usuarios\/[^/]+$/.test(ruta) && req.method === 'PUT') return 'Membresía actualizada';
+    if (/\/usuarios\/[^/]+$/.test(ruta) && req.method === 'DELETE') return 'Membresía eliminada';
+    if (ruta === '/api/usuarios' && req.method === 'POST') return 'Invitación de usuario enviada';
+    if (req.method === 'GET') return `Exportación de ${modulo}`;
+    return `${req.method} en ${modulo}`;
 };
 
 const obtenerModulo = (ruta = '') => {
@@ -83,7 +122,9 @@ const obtenerEstado = (codigo) => {
 };
 
 const auditoriaPeticiones = (req, res, next) => {
-    if (!METODOS_AUDITABLES.has(req.method)) {
+    const ruta = req.originalUrl || '';
+    const esExportacion = req.method === 'GET' && /(?:exportar|exportacion|descargar|download)/i.test(ruta);
+    if (!METODOS_AUDITABLES.has(req.method) && !esExportacion) {
         return next();
     }
 
@@ -93,6 +134,8 @@ const auditoriaPeticiones = (req, res, next) => {
         const usuario = req.usuario || {};
         const nombre = [usuario.nombre, usuario.apellido].filter(Boolean).join(' ');
         const estado = obtenerEstado(res.statusCode);
+        const rutaSanitizada = sanitizarRuta(req.originalUrl);
+        const modulo = obtenerModulo(rutaSanitizada);
 
         Auditoria.create({
             organizacionId: req.organizacionId || req.auditoriaOrganizacionId || undefined,
@@ -101,15 +144,18 @@ const auditoriaPeticiones = (req, res, next) => {
             usuarioCorreo: usuario.correo,
             usuarioRol: usuario.rol,
             accion: req.method,
-            modulo: obtenerModulo(req.originalUrl),
+            evento: obtenerEvento(req, modulo),
+            modulo,
             metodo: req.method,
-            ruta: req.originalUrl,
-            recursoTipo: obtenerModulo(req.originalUrl),
+            ruta: rutaSanitizada,
+            recursoTipo: modulo,
             recursoId: obtenerRecursoId(req),
-            descripcion: `${req.method} ${req.originalUrl}`,
+            descripcion: `${obtenerEvento(req, modulo)}: ${rutaSanitizada}`,
             datos: sanitizar({
                 body: req.body,
                 query: req.query,
+                antes: req.auditoriaAntes,
+                despues: req.auditoriaDespues,
                 duracionMs: Date.now() - inicio
             }),
             ip: req.ip,
@@ -127,5 +173,6 @@ const auditoriaPeticiones = (req, res, next) => {
 
 module.exports = {
     auditoriaPeticiones,
-    sanitizar
+    sanitizar,
+    sanitizarRuta
 };

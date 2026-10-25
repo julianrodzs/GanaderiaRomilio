@@ -4,6 +4,8 @@ import {
   finalizarBandaPorcina, obtenerAnimales, obtenerBandaPorcina, obtenerBandasPorcinas,
   obtenerPlantillasPorcinas, obtenerSemenReproductivoDisponible, obtenerUsuariosAsignables, retirarParticipanteBandaPorcina
 } from '../services/api';
+import { cargarOpcional } from '../utils/cargarOpcional';
+import { puedeRealizarAccion } from '../constants/permisosRoles';
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 const fecha = (valor) => valor ? new Date(valor).toLocaleDateString('es-CR') : '--';
@@ -11,7 +13,8 @@ const ACCIONES = ['DESTETE', 'OBSERVAR_CELO', 'SERVICIO', 'INSEMINACION', 'TRATA
 const EVENTOS = ['DESTETE', 'SERVICIO', 'IA', 'PARTO_ESTIMADO', 'PARTO_REAL', 'DESTETE_REAL', 'OTRO_PASO'];
 const pasoBase = (orden = 1) => ({ claveTemporal: `paso-${Date.now()}-${orden}`, nombre: orden === 1 ? 'Observar celo' : 'Nueva actividad', tipoAccion: orden === 1 ? 'OBSERVAR_CELO' : 'CONTROL', orden, referenciaTemporal: 'DESDE_INICIO', pasoReferenciaId: '', eventoReferencia: '', offsetHoras: 0, generaTarea: true, tareaGrupal: true, rolResponsable: 'Encargado', obligatorio: true, instrucciones: '' });
 
-const BandasPorcinas = ({ modo = 'bandas', soloLectura = false }) => {
+const BandasPorcinas = ({ modo = 'bandas', soloLectura = false, rolUsuario = 'Consulta' }) => {
+  const puedeCrearBanda = !soloLectura && puedeRealizarAccion(rolUsuario, 'reproduccion.protocoloPorcinoCrear');
   const [plantillas, setPlantillas] = useState([]);
   const [bandas, setBandas] = useState([]);
   const [animales, setAnimales] = useState([]);
@@ -32,7 +35,7 @@ const BandasPorcinas = ({ modo = 'bandas', soloLectura = false }) => {
   const cargar = async () => {
     try {
       setError('');
-      const [p, b, a, u, semen] = await Promise.all([obtenerPlantillasPorcinas(), obtenerBandasPorcinas(), obtenerAnimales({ especie: 'Porcino' }), soloLectura ? [] : obtenerUsuariosAsignables('BandasPorcinas'), soloLectura ? [] : obtenerSemenReproductivoDisponible()]);
+      const [p, b, a, u, semen] = await Promise.all([obtenerPlantillasPorcinas(), obtenerBandasPorcinas(), obtenerAnimales({ especie: 'Porcino' }), puedeCrearBanda ? cargarOpcional(() => obtenerUsuariosAsignables('BandasPorcinas'), []) : [], puedeCrearBanda ? cargarOpcional(() => obtenerSemenReproductivoDisponible(), []) : []]);
       setPlantillas(p); setBandas(b); setAnimales(a.filter((item) => item.sexo === 'Hembra' && item.estado === 'Activo')); setUsuarios(u || []); setSemenDisponible(semen || []);
       setBanda((actual) => ({ ...actual, protocolo: actual.protocolo || p[0]?._id || '', responsable: actual.responsable || u?.[0]?._id || '' }));
     } catch (err) { setError(err.message); }
@@ -81,7 +84,7 @@ const BandasPorcinas = ({ modo = 'bandas', soloLectura = false }) => {
   </section>;
 
   return <><section className="protocolo-panel">
-    <div className="panel-title"><div><p className="eyebrow">Reproducción porcina PRO</p><h2>Bandas reproductivas</h2></div>{!soloLectura && <button className="boton-primario compacto" type="button" onClick={() => setMostrarNueva(true)}>Nueva banda</button>}</div>
+    <div className="panel-title"><div><p className="eyebrow">Reproducción porcina PRO</p><h2>Bandas reproductivas</h2></div>{puedeCrearBanda && <button className="boton-primario compacto" type="button" onClick={() => setMostrarNueva(true)}>Nueva banda</button>}</div>
     <div className="tabla-scroll"><table><thead><tr><th>Banda</th><th>Inicio</th><th>Participantes</th><th>Responsable</th><th>Estado</th><th>Acción</th></tr></thead><tbody>{bandas.map((item) => <tr key={item._id}><td>{item.nombre}</td><td>{fecha(item.fechaInicio)}</td><td>{item.participantes?.filter((p) => p.estadoParticipacion !== 'RETIRADA').length || 0}</td><td>{item.responsable ? `${item.responsable.nombre} ${item.responsable.apellido || ''}` : '--'}</td><td>{item.estado}</td><td><button className="boton-icono" title="Ver detalle" type="button" onClick={() => abrir(item._id)}>◉</button></td></tr>)}</tbody></table></div>
     {error && <p className="mensaje-error">{error}</p>}
     {mostrarNueva && <div className="modal-backdrop"><form className="modal-panel" onSubmit={guardarBanda}><div className="panel-title"><div><p className="eyebrow">Nueva banda</p><h2>Participantes y protocolo</h2></div><button className="boton-link" type="button" onClick={() => setMostrarNueva(false)}>Cerrar</button></div><div className="formulario-grid"><label>Nombre<input required value={banda.nombre} onChange={(e) => setBanda({ ...banda, nombre: e.target.value })} /></label><label>Protocolo<select required value={banda.protocolo} onChange={(e) => setBanda({ ...banda, protocolo: e.target.value })}><option value="">Seleccionar</option>{plantillas.map((item) => <option key={item._id} value={item._id}>{item.nombre} · v{item.version}</option>)}</select></label><label>Inicio<input type="date" value={banda.fechaInicio} onChange={(e) => setBanda({ ...banda, fechaInicio: e.target.value })} /></label><label>Responsable<select required value={banda.responsable} onChange={(e) => setBanda({ ...banda, responsable: e.target.value })}><option value="">Seleccionar</option>{usuarios.map((item) => <option key={item._id} value={item._id}>{item.nombre} {item.apellido || ''} · {item.rol}</option>)}</select></label><label>Veterinario<select value={banda.veterinario} onChange={(e) => setBanda({ ...banda, veterinario: e.target.value })}><option value="">Sin asignar</option>{usuarios.filter((item) => ['Veterinario', 'Administrador'].includes(item.rol)).map((item) => <option key={item._id} value={item._id}>{item.nombre} {item.apellido || ''} · {item.rol}</option>)}</select></label></div><fieldset className="selector-multiple-lote"><legend>Cerdas de la banda</legend>{animales.map((animal) => <label key={animal._id}><input type="checkbox" checked={seleccionados.includes(animal._id)} onChange={(e) => setSeleccionados(e.target.checked ? [...seleccionados, animal._id] : seleccionados.filter((id) => id !== animal._id))} /> {animal.diio || animal.identificadorFinca} · {animal.nombre || 'Sin nombre'}</label>)}</fieldset><div className="acciones-formulario"><button className="boton-primario" disabled={guardando || !seleccionados.length}>Crear banda</button></div></form></div>}

@@ -108,7 +108,7 @@ const normalizarCompraFormulario = (compra) => ({
   objetivoLoteRapido: 'ENGORDE'
 });
 
-const Compras = ({ soloLectura = false }) => {
+const Compras = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const { capacidadDisponible } = usePlan();
   const [compras, setCompras] = useState([]);
   const [resumen, setResumen] = useState(null);
@@ -520,7 +520,7 @@ const Compras = ({ soloLectura = false }) => {
                     <button type="button" title="Ver detalle" onClick={() => abrirDetalle(compra)}>⊙</button>
                     {!soloLectura && compra.estado !== 'Anulada' && <button type="button" title="Editar" onClick={() => abrirEdicion(compra)}>✎</button>}
                     {!soloLectura && compra.estado !== 'Anulada' && <button type="button" title="Anular" onClick={() => anularCompra(compra)}>↺</button>}
-                    {!soloLectura && <button type="button" title="Eliminar" onClick={() => borrarCompra(compra)}>⌫</button>}
+                    {!soloLectura && rolUsuario === 'Administrador' && <button type="button" title="Eliminar" onClick={() => borrarCompra(compra)}>⌫</button>}
                   </div>
                 </td>
               </tr>

@@ -135,8 +135,8 @@ const asignarRacionLote = async (loteId, datos, usuarioId, opciones = {}) => {
     if (anterior && String(anterior.racion) === String(racion._id)) return anterior;
     if (anterior && fechaInicio < new Date(anterior.fechaInicio)) throw crearError('La nueva ración no puede iniciar antes que la asignación vigente.', 400, 'FECHA_ASIGNACION_INVALIDA');
     if (anterior) { anterior.activo = false; anterior.fechaFin = fechaInicio; await anterior.save({ session }); }
-    const [asignacion] = await AsignacionRacionLote.create([{ lote: loteId, racion: racion._id, fechaInicio, asignadoPor: usuarioId, observaciones: datos.observaciones }], { session });
-    await EventoLote.create([{ lote: loteId, tipo: anterior ? 'RACION_CAMBIADA' : 'RACION_ASIGNADA', fecha: fechaInicio, titulo: anterior ? 'Ración cambiada' : 'Ración asignada', descripcion: racion.nombre, referenciaId: asignacion._id, entidadTipo: 'AsignacionRacionLote', registradoPor: usuarioId }], { session });
+    const [asignacion] = await AsignacionRacionLote.create([{ lote: loteId, racion: racion._id, fechaInicio, asignadoPor: usuarioId, observaciones: datos.observaciones }], { session, ordered: true });
+    await EventoLote.create([{ lote: loteId, tipo: anterior ? 'RACION_CAMBIADA' : 'RACION_ASIGNADA', fecha: fechaInicio, titulo: anterior ? 'Ración cambiada' : 'Ración asignada', descripcion: racion.nombre, referenciaId: asignacion._id, entidadTipo: 'AsignacionRacionLote', registradoPor: usuarioId }], { session, ordered: true });
     return asignacion;
 };
 
@@ -285,8 +285,8 @@ const crearSuministro = async (datos, usuarioId, opciones = {}) => {
         racionSnapshot: racionAsignada?.racion ? { id: racionAsignada.racion._id, nombre: racionAsignada.racion.nombre, etapa: racionAsignada.racion.etapa, detalles: racionAsignada.racion.detalles.map((item) => ({ alimento: item.alimento?._id, nombre: item.alimento?.nombre, cantidad: item.cantidad, unidad: item.unidad, baseCalculo: item.baseCalculo })) } : null,
         etapaOperativaSnapshot: lote.etapaOperativa, cantidadAnimalesSnapshot: cantidadAnimales,
         detalles, ...totales, responsable: responsableId, observaciones: datos.observaciones, registradoPor: usuarioId
-    }], { session });
-    await EventoLote.create([{ lote: lote._id, tipo: 'SUMINISTRO_ALIMENTACION', fecha: suministro.fechaHora, titulo: 'Alimentación registrada', descripcion: `${suministro.totalKgSuministrados} kg suministrados`, referenciaId: suministro._id, entidadTipo: 'SuministroAlimentacion', registradoPor: usuarioId, metadata: { cantidadAnimalesSnapshot: cantidadAnimales, totalKg: suministro.totalKgSuministrados } }], { session });
+    }], { session, ordered: true });
+    await EventoLote.create([{ lote: lote._id, tipo: 'SUMINISTRO_ALIMENTACION', fecha: suministro.fechaHora, titulo: 'Alimentación registrada', descripcion: `${suministro.totalKgSuministrados} kg suministrados`, referenciaId: suministro._id, entidadTipo: 'SuministroAlimentacion', registradoPor: usuarioId, metadata: { cantidadAnimalesSnapshot: cantidadAnimales, totalKg: suministro.totalKgSuministrados } }], { session, ordered: true });
     return suministro;
 };
 
@@ -342,7 +342,7 @@ const actualizarSuministro = async (id, datos, usuarioId, opciones = {}) => {
         Object.assign(evento, datosEvento);
         await evento.save({ session });
     } else {
-        await EventoLote.create([datosEvento], { session });
+        await EventoLote.create([datosEvento], { session, ordered: true });
     }
     return suministro;
 };

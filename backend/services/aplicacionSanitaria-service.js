@@ -170,7 +170,7 @@ const crearEventosLoteAplicacion = async (aplicacion, animales, usuarioId, sessi
         entidadTipo: 'AplicacionSanitaria',
         registradoPor: usuarioId,
         metadata: { producto: aplicacion.producto, animales: aplicacion.animales, loteCodigo: aplicacion.loteCodigo }
-        }], session ? { session } : {});
+        }], session ? { session, ordered: true } : {});
         return evento;
     }));
 };
@@ -202,7 +202,7 @@ const crearAplicacionSanitaria = async (datos, usuarioId, opciones = {}) => {
             diasRetiroCarne: Number(datos.diasRetiroCarne || 0),
             fechaFinRetiroCarne,
             registradoPor: usuarioId
-        }], { session });
+        }], { session, ordered: true });
 
         await crearEventosAplicacion(aplicacion, usuarioId, session);
         await crearEventosLoteAplicacion(aplicacion, validacion.animales, usuarioId, session);

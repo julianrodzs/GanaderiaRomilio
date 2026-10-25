@@ -20,4 +20,11 @@ pertenenciaLoteSchema.index(
     { unique: true, partialFilterExpression: { activo: true } }
 );
 
+pertenenciaLoteSchema.pre('validate', function validarCronologia(next) {
+    if (this.fechaEntrada && this.fechaSalida && this.fechaSalida < this.fechaEntrada) {
+        this.invalidate('fechaSalida', 'La fecha de salida no puede ser anterior a la fecha de entrada.');
+    }
+    next();
+});
+
 module.exports = model('PertenenciaLote', pertenenciaLoteSchema);

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   obtenerFinanzasCria,
   obtenerProductividadCria,
@@ -243,6 +243,10 @@ const Reportes = ({ usuario }) => {
   } = usePaginacionControlada('reporte-productos-detalle');
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [erroresPanel, setErroresPanel] = useState({});
+  const [actualizadoEn, setActualizadoEn] = useState(null);
+  const [complementariosVisibles, setComplementariosVisibles] = useState(false);
+  const sentinelComplementarios = useRef(null);
   const etiquetaId = 'DIIO';
   const incluirReportesBovinos = especie !== 'Porcino' && puedeUsarEspecie('Bovino');
 
@@ -250,6 +254,12 @@ const Reportes = ({ usuario }) => {
     try {
       setCargando(true);
       setError('');
+      setErroresPanel({});
+      setReporte(null); setProductividad(null); setFinanzasCria(null); setSustentabilidadCria(null);
+      setVacasImproductivas(null); setCrecimientoPesajes(null); setVentasReporte(null);
+      setProductosReporte(null); setDestinosFinancieros([]); setPorcinosReporte(null);
+      setSanidadReporte(null); setRazasBovinas(null); setDescendenciaBovina(null);
+      setPesoDesteteReporte(null); setPesoDesteteAvanzado(null); setLotesReporte(null);
       const incluirReportesPorcinos = especie !== 'Bovino' && puedeUsarEspecie('Porcino');
       const filtrosGenerales = {
         fechaInicio: filtros.fechaInicio,
@@ -279,104 +289,80 @@ const Reportes = ({ usuario }) => {
         pagina: paginaProductos,
         limite: limiteProductos
       };
-      const [
-        data,
-        productividadData,
-        finanzasCriaData,
-        sustentabilidadData,
-        vacasImproductivasData,
-        crecimientoData,
-        ventasData,
-        productosResumenData,
-        productosPorProductoData,
-        productosPorCategoriaData,
-        productosCombustiblesData,
-        productosProveedoresData,
-        destinosFinancierosData,
-        camadasData,
-        reproduccionPorcinaData,
-        tareasCamadasData,
-        economiaCamadasData,
-        sanidadData,
-        razasBovinasData,
-        descendenciaBovinaData,
-        pesoDesteteData,
-        pesoDesteteAvanzadoData
-      ] = await Promise.all([
-        obtenerResumenReportes({
-          ...filtrosGenerales,
-          ...filtrosPartosResumen
-        }),
-        tieneFeature('analiticaProductiva') ? obtenerProductividadCria(filtrosGenerales) : Promise.resolve(null),
-        tieneFeature('analiticaEconomica') ? obtenerFinanzasCria(filtrosGenerales) : Promise.resolve(null),
-        tieneFeature('analiticaEconomica') ? obtenerSustentabilidadCria(filtrosGenerales) : Promise.resolve(null),
-        tieneFeature('analiticaProductiva') && incluirReportesBovinos ? obtenerVacasImproductivas(filtrosImproductivas) : Promise.resolve(null),
-        tieneFeature('analiticaProductiva') ? obtenerReporteCrecimientoPesajes({
-          ...filtrosGenerales,
-          diasSinPesaje: filtros.diasSinPesaje
-        }) : Promise.resolve(null),
-        obtenerResumenVentas(filtrosGenerales),
-        obtenerReporteProductosResumen(filtrosProductos),
-        obtenerReporteProductosPorProducto(filtrosProductos),
-        obtenerReporteProductosPorCategoria(filtrosProductos),
-        obtenerReporteProductosCombustibles(filtrosProductos),
-        obtenerReporteProductosProveedores(filtrosProductos),
-        obtenerResumenDestinosFinancieros({
-          fechaInicio: filtros.fechaInicio,
-          fechaFin: filtros.fechaFin
-        }),
-        incluirReportesPorcinos ? obtenerReporteCamadas(filtrosGenerales) : Promise.resolve(null),
-        incluirReportesPorcinos && tieneFeature('analiticaProductiva') ? obtenerReporteReproductivoPorcino(filtrosGenerales) : Promise.resolve(null),
-        incluirReportesPorcinos ? obtenerReporteTareasCamadas(filtrosGenerales) : Promise.resolve(null),
-        incluirReportesPorcinos && tieneFeature('analiticaEconomica') ? obtenerReporteEconomicoCamadas(filtrosGenerales) : Promise.resolve(null),
-        obtenerReporteSanidad(filtrosGenerales),
-        tieneFeature('analiticaProductiva') ? obtenerReporteRazas({ especie }) : Promise.resolve(null),
-        tieneFeature('analiticaProductiva') && especie !== 'Porcino' ? obtenerReporteDescendenciaBovina(filtrosGenerales) : Promise.resolve(null),
-        obtenerReportePesoDestete(filtrosGenerales),
-        tieneFeature('analiticaProductiva') ? obtenerReportePesoDesteteAvanzado(filtrosGenerales) : Promise.resolve(null)
-      ]);
-      setReporte(data);
-      setProductividad(productividadData);
-      setFinanzasCria(finanzasCriaData);
-      setSustentabilidadCria(sustentabilidadData);
-      setVacasImproductivas(vacasImproductivasData);
-      setCrecimientoPesajes(crecimientoData);
-      setVentasReporte(ventasData);
-      if (!tieneFeature('analiticaEconomica') && ventasData) {
-        ventasData.ventasPorOrigen = [];
-        ventasData.rotacionInventarioVendido = { detalle: [] };
+      const finanzasFiltros = { fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin };
+      const resultados = {};
+      const tareasBase = [
+        ['resumen', () => obtenerResumenReportes({ ...filtrosGenerales, ...filtrosPartosResumen })],
+        ['productividad', () => tieneFeature('analiticaProductiva') ? obtenerProductividadCria(filtrosGenerales) : null],
+        ['finanzasCria', () => tieneFeature('analiticaEconomica') ? obtenerFinanzasCria(finanzasFiltros) : null],
+        ['sustentabilidad', () => tieneFeature('analiticaEconomica') ? obtenerSustentabilidadCria(finanzasFiltros) : null],
+        ['vacasImproductivas', () => tieneFeature('analiticaProductiva') && incluirReportesBovinos ? obtenerVacasImproductivas(filtrosImproductivas) : null],
+        ['crecimiento', () => tieneFeature('analiticaProductiva') ? obtenerReporteCrecimientoPesajes({ ...filtrosGenerales, diasSinPesaje: filtros.diasSinPesaje }) : null],
+        ['ventas', () => obtenerResumenVentas(filtrosGenerales)],
+        ['lotes', () => obtenerReporteLotes(filtrosGenerales, tieneFeature('analiticaProductiva'))]
+      ];
+      const tareasComplementarias = [
+        ['productosResumen', () => obtenerReporteProductosResumen(filtrosProductos)],
+        ['productosDetalle', () => obtenerReporteProductosPorProducto(filtrosProductos)],
+        ['productosCategoria', () => obtenerReporteProductosPorCategoria(filtrosProductos)],
+        ['combustibles', () => obtenerReporteProductosCombustibles(filtrosProductos)],
+        ['proveedores', () => obtenerReporteProductosProveedores(filtrosProductos)],
+        ['destinos', () => obtenerResumenDestinosFinancieros(finanzasFiltros)],
+        ['camadas', () => incluirReportesPorcinos ? obtenerReporteCamadas(filtrosGenerales) : null],
+        ['reproduccionPorcina', () => incluirReportesPorcinos && tieneFeature('analiticaProductiva') ? obtenerReporteReproductivoPorcino(filtrosGenerales) : null],
+        ['tareasCamadas', () => incluirReportesPorcinos ? obtenerReporteTareasCamadas(filtrosGenerales) : null],
+        ['economiaCamadas', () => incluirReportesPorcinos && tieneFeature('analiticaEconomica') ? obtenerReporteEconomicoCamadas(finanzasFiltros) : null],
+        ['sanidad', () => obtenerReporteSanidad(filtrosGenerales)],
+        ['razas', () => tieneFeature('analiticaProductiva') ? obtenerReporteRazas({ especie }) : null],
+        ['descendencia', () => tieneFeature('analiticaProductiva') && especie !== 'Porcino' ? obtenerReporteDescendenciaBovina(filtrosGenerales) : null],
+        ['pesoDestete', () => obtenerReportePesoDestete(filtrosGenerales)],
+        ['pesoDesteteAvanzado', () => tieneFeature('analiticaProductiva') ? obtenerReportePesoDesteteAvanzado(filtrosGenerales) : null]
+      ];
+      const tareas = complementariosVisibles ? [...tareasBase, ...tareasComplementarias] : tareasBase;
+      const errores = {};
+      for (let indice = 0; indice < tareas.length; indice += 4) {
+        const lote = tareas.slice(indice, indice + 4);
+        const resueltos = await Promise.allSettled(lote.map(([, ejecutar]) => ejecutar()));
+        resueltos.forEach((resultado, posicion) => {
+          const clave = lote[posicion][0];
+          if (resultado.status === 'fulfilled') resultados[clave] = resultado.value;
+          else errores[clave] = resultado.reason?.status === 403 ? 'UPGRADE' : (resultado.reason?.message || 'No se pudo cargar este panel.');
+        });
       }
-      setProductosReporte({
-        resumen: productosResumenData,
-        porProducto: productosPorProductoData?.datos || productosPorProductoData || [],
-        paginacionProductos: productosPorProductoData?.paginacion || null,
-        porCategoria: productosPorCategoriaData,
-        combustibles: productosCombustiblesData,
-        proveedores: productosProveedoresData
-      });
-      setDestinosFinancieros(destinosFinancierosData || []);
-      setPorcinosReporte(incluirReportesPorcinos ? {
-        camadas: camadasData,
-        reproduccion: reproduccionPorcinaData,
-        tareasCamadas: tareasCamadasData,
-        economia: economiaCamadasData
-      } : null);
-      setSanidadReporte(sanidadData);
-      setRazasBovinas(razasBovinasData);
-      setDescendenciaBovina(descendenciaBovinaData);
-      setPesoDesteteReporte(pesoDesteteData);
-      setPesoDesteteAvanzado(pesoDesteteAvanzadoData);
-      setLotesReporte(await obtenerReporteLotes(filtrosGenerales, tieneFeature('analiticaProductiva')));
+      setReporte(resultados.resumen); setProductividad(resultados.productividad);
+      setFinanzasCria(resultados.finanzasCria); setSustentabilidadCria(resultados.sustentabilidad);
+      setVacasImproductivas(resultados.vacasImproductivas); setCrecimientoPesajes(resultados.crecimiento);
+      const ventasData = resultados.ventas;
+      if (!tieneFeature('analiticaEconomica') && ventasData) { ventasData.ventasPorOrigen = []; ventasData.rotacionInventarioVendido = { detalle: [] }; }
+      setVentasReporte(ventasData);
+      setProductosReporte({ resumen: resultados.productosResumen, porProducto: resultados.productosDetalle?.datos || resultados.productosDetalle || [], paginacionProductos: resultados.productosDetalle?.paginacion || null, porCategoria: resultados.productosCategoria, combustibles: resultados.combustibles, proveedores: resultados.proveedores });
+      setDestinosFinancieros(resultados.destinos || []);
+      setPorcinosReporte(incluirReportesPorcinos ? { camadas: resultados.camadas, reproduccion: resultados.reproduccionPorcina, tareasCamadas: resultados.tareasCamadas, economia: resultados.economiaCamadas } : null);
+      setSanidadReporte(resultados.sanidad); setRazasBovinas(resultados.razas); setDescendenciaBovina(resultados.descendencia);
+      setPesoDesteteReporte(resultados.pesoDestete); setPesoDesteteAvanzado(resultados.pesoDesteteAvanzado); setLotesReporte(resultados.lotes);
+      setErroresPanel(errores);
+      setActualizadoEn(new Date());
+      if (Object.keys(errores).length === tareas.length) setError('No se pudo cargar ningún panel del reporte.');
     } catch (err) {
       setError(err.message);
     } finally {
       setCargando(false);
     }
-  }, [filtros, especie, tieneFeature, puedeUsarEspecie, incluirReportesBovinos, paginaProductos, limiteProductos]);
+  }, [filtros, especie, tieneFeature, puedeUsarEspecie, incluirReportesBovinos, paginaProductos, limiteProductos, complementariosVisibles]);
 
   useEffect(() => {
     cargarReportes();
   }, [cargarReportes]);
+
+  useEffect(() => {
+    const nodo = sentinelComplementarios.current;
+    if (!nodo || complementariosVisibles) return undefined;
+    const observador = new IntersectionObserver(([entrada]) => {
+      if (entrada.isIntersecting) setComplementariosVisibles(true);
+    }, { rootMargin: '500px 0px' });
+    observador.observe(nodo);
+    return () => observador.disconnect();
+  }, [complementariosVisibles]);
 
   useEffect(() => {
     setPaginaProductos(1);
@@ -474,6 +460,10 @@ const Reportes = ({ usuario }) => {
       </div>
 
       {error && <div className="alerta-formulario">{error}</div>}
+      {Object.entries(erroresPanel).map(([panel, mensaje]) => mensaje === 'UPGRADE'
+        ? <UpgradeMessage key={panel} feature={panel} titulo={`Panel ${panel}`} pregunta="Esta analítica requiere una capacidad superior del plan." etiqueta="Reporte bloqueado" />
+        : <div className="alerta-formulario" key={panel}><strong>{panel}:</strong> {mensaje} Los demás paneles siguen disponibles. <button type="button" className="boton-link" onClick={cargarReportes}>Reintentar</button></div>)}
+      {actualizadoEn && <p className="reporte-actualizado">Actualizado: {actualizadoEn.toLocaleTimeString('es-CR')}</p>}
       {cargando && <div className="estado-importacion">Cargando reportes...</div>}
 
       <FeatureGate
@@ -655,6 +645,7 @@ const Reportes = ({ usuario }) => {
             <section className="reporte-panel reporte-panel-amplio">
               <p className="eyebrow">Finanzas de cria</p>
               <h2>Inversion, operacion y patrimonio</h2>
+              <p className="nota-monedas-reporte">Alcance: toda la finca. No se aplica especie cuando el movimiento financiero no está vinculado de forma confiable a un animal o lote.</p>
               <div className="reportes-metricas finanzas-cria-metricas">
                 <article>
                   <span>Inversión operativa histórica</span>
@@ -684,7 +675,7 @@ const Reportes = ({ usuario }) => {
                 <article>
                   <span>Crecimiento del hato</span>
                   <strong>{formatearNumero(finanzasCria.crecimientoHato)}</strong>
-                  <small>{formatearNumero(finanzasCria.animalesInicioPeriodo)} inicio · {formatearNumero(finanzasCria.animalesActuales)} actuales</small>
+                  <small>{formatearNumero(finanzasCria.animalesInicioPeriodo)} al inicio · {formatearNumero(finanzasCria.animalesFinalPeriodo)} al cierre</small>
                 </article>
                 <article>
                   <span>Valor del hato activo</span>
@@ -692,13 +683,15 @@ const Reportes = ({ usuario }) => {
                   <small>Sin volver a sumar su costo histórico de compra</small>
                 </article>
               </div>
+              {(finanzasCria.advertencias || []).map((advertencia) => <div className="alerta-formulario" key={advertencia.codigo}>{advertencia.mensaje}</div>)}
             </section>
           )}
 
           {sustentabilidadCria && (
             <section className="reporte-panel reporte-panel-amplio">
               <p className="eyebrow">Sustentabilidad de cria</p>
-              <h2>Ventas por kilo menos compras y costo operativo</h2>
+              <h2>Resultado económico observado en el período</h2>
+              <p className="nota-monedas-reporte">Alcance: toda la finca; CRC y USD permanecen separados y no se convierten entre sí.</p>
               <div className="reportes-metricas finanzas-cria-metricas">
                 <article>
                   <span>Ventas de animales</span>
@@ -713,22 +706,22 @@ const Reportes = ({ usuario }) => {
                 <article>
                   <span>Gastos operativos</span>
                   <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="gastosOperativosPeriodo" /></strong>
-                  <small>{formatearNumero(sustentabilidadCria.animalesActivosCosto)} animales · {sustentabilidadCria.mesesPeriodo} meses</small>
+                  <small>{formatearNumero(sustentabilidadCria.animalesPromedioPeriodo)} animales promedio · {sustentabilidadCria.diasPeriodo} días</small>
                 </article>
                 <article>
-                  <span>Costo mensual/animal</span>
-                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="costoProduccionMensualPorAnimal" /></strong>
-                  <small>Costo operativo prorrateado</small>
+                  <span>Costo por animal en el período</span>
+                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="costoPorAnimalPeriodo" /></strong>
+                  <small>Gastos reales / promedio de animales-día</small>
                 </article>
                 <article>
-                  <span>Costo asignado</span>
-                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="costoProduccionAsignado" /></strong>
-                  <small>Segun meses en finca de vendidos</small>
+                  <span>Animales-día</span>
+                  <strong>{formatearNumero(sustentabilidadCria.animalesDia)}</strong>
+                  <small>Exposición ganadera observada en el período</small>
                 </article>
-                <article className={(sustentabilidadCria.monedas?.CRC?.margenSustentabilidad || 0) >= 0 ? 'sustentabilidad-positiva' : 'sustentabilidad-negativa'}>
-                  <span>Utilidad / pérdida</span>
-                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="margenSustentabilidad" /></strong>
-                  <small>Ventas - compras - costo asignado</small>
+                <article className={Object.values(sustentabilidadCria.monedas || {}).some((item) => Number(item.balancePeriodo || 0) < 0) ? 'sustentabilidad-negativa' : 'sustentabilidad-positiva'}>
+                  <span>Balance observado</span>
+                  <strong><TotalesMoneda monedas={sustentabilidadCria.monedas} campo="balancePeriodo" /></strong>
+                  <small>Ventas - compras - gastos operativos reales</small>
                 </article>
                 <article>
                   <span>Precio venta prom/kg</span>
@@ -763,8 +756,7 @@ const Reportes = ({ usuario }) => {
                         <th>Total venta</th>
                         <th>Total compra</th>
                         <th>Meses</th>
-                        <th>Costo asignado</th>
-                        <th>Utilidad/pérdida</th>
+                        <th>Resultado comercial directo</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -779,8 +771,7 @@ const Reportes = ({ usuario }) => {
                           <td>{formatearMoneda(animal.totalVenta)}</td>
                           <td>{formatearMoneda(animal.totalCompra)}</td>
                           <td>{animal.duracionMeses}</td>
-                          <td><TotalesMoneda monedas={animal.costosProduccionAsignados} /></td>
-                          <td><TotalesMoneda monedas={animal.utilidadPerdidaPorMoneda} /></td>
+                          <td>{formatearMoneda(animal.resultadoComercialDirecto)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -956,6 +947,8 @@ const Reportes = ({ usuario }) => {
             </section>
           )}
 
+          <div ref={sentinelComplementarios} className="reportes-sentinel" aria-hidden="true" />
+          {!complementariosVisibles && <div className="estado-importacion">Los análisis complementarios se cargarán al llegar a esta sección.</div>}
           <FeatureGate feature="analiticaEconomica" titulo="Análisis de compras de animales" pregunta="¿Qué se está comprando, a qué precio y cómo cambia por especie, sexo y origen?" etiqueta="Reporte económico">
             <ReporteComprasAnimales
               fechaInicio={filtros.fechaInicio}
@@ -1201,6 +1194,7 @@ const Reportes = ({ usuario }) => {
                   <small><TotalesMoneda monedas={porcinosReporte.economia?.resumen?.monedas} campo="costoPromedioPorCamada" /> costo prom/camada</small>
                 </article>
               </div>
+              {porcinosReporte.economia?.resumen?.cobertura && <p className="nota-monedas-reporte">{porcinosReporte.economia.resumen.cobertura.movimientosIndirectosDistribuidos} movimiento(s) indirectos distribuidos; {porcinosReporte.economia.resumen.cobertura.movimientosDirectosFueraCohorte} directo(s) de otras camadas excluidos. {porcinosReporte.economia.resumen.cobertura.costoPorDestetadoDisponible ? `${porcinosReporte.economia.resumen.cobertura.criasDestetadasConDenominador} crías forman el denominador de destete.` : 'Sin destetes reales para calcular costo por cría destetada.'}</p>}
 
               <div className="crecimiento-grid porcinos-reportes-grid">
                 <article>

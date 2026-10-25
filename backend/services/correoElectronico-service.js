@@ -3,6 +3,12 @@ const { obtenerOrganizacionActual } = require('../context/organizacion-context')
 const { Membresia } = require('../models/Membresia');
 
 const crearTokenRecuperacion = () => crypto.randomBytes(32).toString('hex');
+const escaparHtml = (valor = '') => String(valor)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 
 const obtenerRemitente = () => process.env.EMAIL_FROM || 'Ganaderia Romilio <onboarding@resend.dev>';
 const obtenerRemitenteRecuperacion = () => (
@@ -12,7 +18,7 @@ const obtenerRemitenteRecuperacion = () => (
 );
 
 const obtenerDestinatariosAdministradores = async (organizacionId = obtenerOrganizacionActual()) => {
-    if (process.env.EMAIL_TEST_TO) {
+    if (process.env.NODE_ENV !== 'production' && process.env.EMAIL_TEST_TO) {
         return [process.env.EMAIL_TEST_TO];
     }
 
@@ -58,11 +64,14 @@ const enviarCorreoResend = async ({ to, subject, html, text, from }) => {
     };
 
     if (!process.env.RESEND_API_KEY) {
-        console.log('Correo preparado sin RESEND_API_KEY:', mensaje);
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error('El proveedor de correo no está configurado.');
+        }
+        console.warn('Correo no enviado: RESEND_API_KEY no está configurada.');
         return {
             enviado: false,
             modo: 'pendiente_resend_api_key',
-            mensaje
+            mensaje: 'Proveedor de correo no configurado'
         };
     }
 
@@ -111,7 +120,7 @@ const enviarCorreoRecuperacion = async ({ correo, nombre, token }) => {
         subject: 'Recuperacion de cuenta - Ganaderia Romilio',
         text: `Hola ${nombre || ''}. Usa este enlace para crear una nueva contrasena. El enlace vence en 30 minutos: ${enlaceRecuperacion}`,
         html: `
-            <p>Hola ${nombre || ''},</p>
+            <p>Hola ${escaparHtml(nombre || '')},</p>
             <p>Recibimos una solicitud para recuperar el acceso a tu cuenta de Ganaderia Romilio.</p>
             <p>Usa el siguiente enlace para crear una nueva contrasena. El enlace vence en 30 minutos:</p>
             <p><a href="${enlaceRecuperacion}">${enlaceRecuperacion}</a></p>
@@ -127,20 +136,20 @@ const enviarCorreoRecuperacion = async ({ correo, nombre, token }) => {
     };
 };
 
-const enviarCorreoInvitacion = async ({ correo, nombre, organizacion, token }) => {
+const enviarCorreoInvitacion = async ({ correo, nombre, organizacion, token, cuentaExistente = false }) => {
     const enlaceBase = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const enlaceInvitacion = `${enlaceBase}/restablecer-contrasena/${token}`;
+    const enlaceInvitacion = `${enlaceBase}/aceptar-invitacion/${token}`;
     const resultado = await enviarCorreoResend({
         from: obtenerRemitenteRecuperacion(),
         to: correo,
         subject: `Invitacion a ${organizacion} - Ganaderia Romilio`,
-        text: `Hola ${nombre || ''}. Tu cuenta para ${organizacion} esta lista. Crea tu contrasena desde este enlace: ${enlaceInvitacion}`,
+        text: `Hola ${nombre || ''}. Recibiste una invitación para ${organizacion}. ${cuentaExistente ? 'Inicia sesión y acepta' : 'Define tu contraseña'} desde este enlace: ${enlaceInvitacion}`,
         html: `
-            <p>Hola ${nombre || ''},</p>
-            <p>Tu cuenta para <strong>${organizacion}</strong> ya esta disponible en Ganaderia Romilio.</p>
-            <p>Crea tu contrasena desde el siguiente enlace:</p>
+            <p>Hola ${escaparHtml(nombre || '')},</p>
+            <p>Recibiste una invitación para <strong>${escaparHtml(organizacion)}</strong> en Ganaderia Romilio.</p>
+            <p>${cuentaExistente ? 'Inicia sesión con el correo invitado y acepta' : 'Define tu contraseña'} desde el siguiente enlace:</p>
             <p><a href="${enlaceInvitacion}">${enlaceInvitacion}</a></p>
-            <p>El enlace vence en 24 horas.</p>
+            <p>El enlace vence en 72 horas.</p>
         `
     });
 

@@ -12,9 +12,11 @@ const normalizarId = (valor) => {
 
 const esObjectIdValido = (id) => mongoose.Types.ObjectId.isValid(id);
 
-const obtenerAnimalBasico = async (animalId) => {
+const obtenerAnimalBasico = async (animalId, opciones = {}) => {
     if (!esObjectIdValido(animalId)) return null;
-    return Animal.findById(animalId).select(CAMPOS_ANIMAL).lean();
+    let consulta = Animal.findById(animalId).select(CAMPOS_ANIMAL);
+    if (opciones.session && typeof consulta.session === 'function') consulta = consulta.session(opciones.session);
+    return consulta.lean();
 };
 
 const crearError = (mensaje, status = 400) => {
@@ -23,42 +25,42 @@ const crearError = (mensaje, status = 400) => {
     return error;
 };
 
-const obtenerAncestros = async (animalId, generaciones = 3, visitados = new Set(), nivel = 1) => {
+const obtenerAncestros = async (animalId, generaciones = 3, visitados = new Set(), nivel = 1, opciones = {}) => {
     if (!animalId || nivel > generaciones || visitados.has(String(animalId))) return [];
     visitados.add(String(animalId));
 
-    const animal = await obtenerAnimalBasico(animalId);
+    const animal = await obtenerAnimalBasico(animalId, opciones);
     if (!animal) return [];
 
     const padres = [animal.padre, animal.madre].filter(Boolean);
     const ancestros = [];
 
     for (const padreId of padres) {
-        const padre = await obtenerAnimalBasico(padreId);
+        const padre = await obtenerAnimalBasico(padreId, opciones);
         if (!padre) continue;
         ancestros.push({ ...padre, nivel });
-        const superiores = await obtenerAncestros(padre._id, generaciones, visitados, nivel + 1);
+        const superiores = await obtenerAncestros(padre._id, generaciones, visitados, nivel + 1, opciones);
         ancestros.push(...superiores);
     }
 
     return ancestros;
 };
 
-const obtenerIdsAncestros = async (animalId, generaciones = 3) => {
-    const ancestros = await obtenerAncestros(animalId, generaciones);
+const obtenerIdsAncestros = async (animalId, generaciones = 3, opciones = {}) => {
+    const ancestros = await obtenerAncestros(animalId, generaciones, new Set(), 1, opciones);
     return new Set(ancestros.map((animal) => String(animal._id)));
 };
 
-const esDescendienteDirecto = async (animalId, posibleAncestroId) => {
-    const ancestros = await obtenerIdsAncestros(animalId, MAX_GENERACIONES_VALIDACION);
+const esDescendienteDirecto = async (animalId, posibleAncestroId, opciones = {}) => {
+    const ancestros = await obtenerIdsAncestros(animalId, MAX_GENERACIONES_VALIDACION, opciones);
     return ancestros.has(String(posibleAncestroId));
 };
 
-const validarRelacionGenealogica = async (animalId, padreId, madreId, especieEsperada = null) => {
+const validarRelacionGenealogica = async (animalId, padreId, madreId, especieEsperada = null, opciones = {}) => {
     const idAnimal = normalizarId(animalId);
     const idPadre = normalizarId(padreId);
     const idMadre = normalizarId(madreId);
-    const animal = idAnimal ? await obtenerAnimalBasico(idAnimal) : null;
+    const animal = idAnimal ? await obtenerAnimalBasico(idAnimal, opciones) : null;
     const especieAnimal = especieEsperada || animal?.especie || null;
     let padre = null;
     let madre = null;
@@ -76,31 +78,39 @@ const validarRelacionGenealogica = async (animalId, padreId, madreId, especieEsp
     }
 
     if (idPadre) {
-        padre = await obtenerAnimalBasico(idPadre);
+        padre = await obtenerAnimalBasico(idPadre, opciones);
         if (!padre) throw crearError('El padre seleccionado no existe.');
         if (padre.sexo !== 'Macho') throw crearError('El padre registrado debe ser Macho.');
         if (especieAnimal && padre.especie !== especieAnimal) {
             throw crearError('El padre debe pertenecer a la misma especie de la cría.');
         }
-        if (idAnimal && await esDescendienteDirecto(idPadre, idAnimal)) {
+        if (idAnimal && await esDescendienteDirecto(idPadre, idAnimal, opciones)) {
             throw crearError('La relación de padre genera un ciclo genealógico.');
         }
     }
 
     if (idMadre) {
-        madre = await obtenerAnimalBasico(idMadre);
+        madre = await obtenerAnimalBasico(idMadre, opciones);
         if (!madre) throw crearError('La madre seleccionada no existe.');
         if (madre.sexo !== 'Hembra') throw crearError('La madre registrada debe ser Hembra.');
         if (especieAnimal && madre.especie !== especieAnimal) {
             throw crearError('La madre debe pertenecer a la misma especie de la cría.');
         }
-        if (idAnimal && await esDescendienteDirecto(idMadre, idAnimal)) {
+        if (idAnimal && await esDescendienteDirecto(idMadre, idAnimal, opciones)) {
             throw crearError('La relación de madre genera un ciclo genealógico.');
         }
     }
 
     if (padre && madre && padre.especie !== madre.especie) {
         throw crearError('Padre y madre deben pertenecer a la misma especie.');
+    }
+
+    const nacimientoCria = opciones.fechaNacimiento || animal?.fechaNacimiento;
+    if (nacimientoCria && padre?.fechaNacimiento && new Date(padre.fechaNacimiento) >= new Date(nacimientoCria)) {
+        throw crearError('El padre debe ser mayor que la cría.');
+    }
+    if (nacimientoCria && madre?.fechaNacimiento && new Date(madre.fechaNacimiento) >= new Date(nacimientoCria)) {
+        throw crearError('La madre debe ser mayor que la cría.');
     }
 };
 

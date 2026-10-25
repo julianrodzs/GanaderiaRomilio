@@ -17,6 +17,24 @@ const membresiaPuedeAccederFinca = (membresia, fincaId) => (
     || idsPermitidosMembresia(membresia).includes(String(fincaId || ''))
 );
 
+const exigirAccesoFincaObjetivo = (membresia, fincaId) => {
+    if (!membresiaPuedeAccederFinca(membresia, fincaId)) {
+        throw crearErrorFinca('No tienes acceso a la finca solicitada.');
+    }
+    return true;
+};
+
+const exigirAlcanceOrganizacionalCompleto = (membresia) => {
+    if (membresia?.accesoTodasFincas !== true) {
+        throw crearErrorFinca(
+            'Esta operación requiere acceso a todas las fincas de la organización.',
+            403,
+            'ORGANIZACION_FULL_SCOPE_REQUIRED'
+        );
+    }
+    return true;
+};
+
 const consultaFincasSinContexto = (filtro) => Finca.find(filtro)
     .setOptions({ omitirAislamientoOrganizacion: true });
 
@@ -57,8 +75,8 @@ const resolverFincaActiva = async ({ membresia, organizacion, fincaSolicitada })
     return finca;
 };
 
-const resolverFincasParaReporte = async ({ membresia, organizacionId, fincaIds }) => {
-    const accesibles = await listarFincasAccesibles(membresia);
+const resolverFincasParaReporte = async ({ membresia, organizacionId, fincaIds, incluirInactivas = false }) => {
+    const accesibles = await listarFincasAccesibles(membresia, { incluirInactivas });
     const porId = new Map(accesibles.map((finca) => [String(finca._id), finca]));
     const solicitadas = Array.isArray(fincaIds)
         ? fincaIds
@@ -74,6 +92,8 @@ const resolverFincasParaReporte = async ({ membresia, organizacionId, fincaIds }
 
 module.exports = {
     crearErrorFinca,
+    exigirAccesoFincaObjetivo,
+    exigirAlcanceOrganizacionalCompleto,
     listarFincasAccesibles,
     membresiaPuedeAccederFinca,
     resolverFincaActiva,

@@ -99,6 +99,8 @@ const animalSchema = new Schema(
         potreroActual: { type: Schema.Types.ObjectId, ref: 'Potrero' },
         loteActual: { type: Schema.Types.ObjectId, ref: 'Lote' },
         fotoPrincipal: { type: Schema.Types.ObjectId, ref: 'ArchivoMultimedia', default: null },
+        claveImportacion: { type: String, trim: true },
+        importacionOrigen: { type: Schema.Types.ObjectId, ref: 'ImportacionExcel' },
         observaciones: { type: String, trim: true }
     },
     {
@@ -128,5 +130,9 @@ animalSchema.index({ organizacionId: 1, fincaId: 1, padre: 1, fechaNacimiento: -
 animalSchema.index({ organizacionId: 1, fincaId: 1, madreDiio: 1, fechaNacimiento: -1 });
 animalSchema.index({ organizacionId: 1, fincaId: 1, padreDiio: 1, fechaNacimiento: -1 });
 animalSchema.index({ organizacionId: 1, fincaId: 1, especie: 1, grupoRacial: 1 });
+animalSchema.index(
+    { organizacionId: 1, fincaId: 1, claveImportacion: 1 },
+    { unique: true, partialFilterExpression: { claveImportacion: { $type: 'string' } } }
+);
 
 module.exports = model('Animal', animalSchema);

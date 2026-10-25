@@ -17,7 +17,8 @@ const {
     getCierres,
     getDetalleMetrica,
     getMetas,
-    guardarMeta
+    guardarMeta,
+    regenerarCierre
 } = require('../controllers/consolidacionMultiFinca-controller');
 const {
     getRendimientoPotreros,
@@ -65,10 +66,11 @@ router.get('/multi-finca/detalle', reportesMultiFinca, getDetalleMetrica);
 router.get('/multi-finca/metas', reportesMultiFinca, getMetas);
 router.post('/multi-finca/metas', reportesMultiFinca, autorizarPermiso('reportes.configurar'), guardarMeta);
 router.delete('/multi-finca/metas/:id', reportesMultiFinca, autorizarPermiso('reportes.configurar'), eliminarMeta);
-router.get('/multi-finca/cierres', reportesMultiFinca, getCierres);
+router.get('/multi-finca/cierres', getCierres);
 router.post('/multi-finca/cierres', reportesMultiFinca, autorizarPermiso('reportes.configurar'), crearCierre);
-router.get('/multi-finca/cierres/:id/exportar', reportesMultiFinca, exportarCierre);
-router.get('/multi-finca/cierres/:id', reportesMultiFinca, getCierre);
+router.post('/multi-finca/cierres/:id/regenerar', reportesMultiFinca, autorizarPermiso('reportes.configurar'), regenerarCierre);
+router.get('/multi-finca/cierres/:id/exportar', exportarCierre);
+router.get('/multi-finca/cierres/:id', getCierre);
 router.get('/lotes', obtenerReporteLotes);
 router.get('/lotes/analitica', analiticaProductiva, obtenerReporteLotesAnalitica);
 router.get('/productividad', analiticaProductiva, getProductividadCria);

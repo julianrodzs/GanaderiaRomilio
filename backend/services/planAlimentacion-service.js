@@ -52,7 +52,7 @@ const asignarPlanALotes = async (planId, datos = {}, usuarioId, opciones = {}) =
             fechaInicio,
             observaciones: datos.observaciones,
             asignadoPor: usuarioId
-        }], { session });
+        }], { session, ordered: true });
         await EventoLote.create([{
             lote: lote._id,
             tipo: anterior ? 'PLAN_ALIMENTACION_CAMBIADO' : 'PLAN_ALIMENTACION_ASIGNADO',
@@ -63,7 +63,7 @@ const asignarPlanALotes = async (planId, datos = {}, usuarioId, opciones = {}) =
             entidadTipo: 'AsignacionPlanAlimentacion',
             registradoPor: usuarioId,
             metadata: { planId: plan._id, planAnteriorId: anterior?.plan || null }
-        }], { session });
+        }], { session, ordered: true });
         resultados.push(asignacion);
     }
     return resultados;

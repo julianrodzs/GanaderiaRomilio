@@ -24,6 +24,7 @@ import TablaDinamica from './TablaDinamica';
 import FeatureGate from './FeatureGate';
 import IATF from './IATF';
 import BandasPorcinas from './BandasPorcinas';
+import { cargarOpcional } from '../utils/cargarOpcional';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -177,8 +178,8 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
       const [registrosData, animalesData, usuariosData, semenData] = await Promise.all([
         obtenerRegistrosReproductivos({ especie }),
         obtenerAnimales({ especie }),
-        soloLectura ? Promise.resolve([]) : obtenerUsuariosAsignables('Reproduccion'),
-        soloLectura ? Promise.resolve([]) : obtenerSemenReproductivoDisponible()
+        soloLectura ? Promise.resolve([]) : cargarOpcional(() => obtenerUsuariosAsignables('Reproduccion'), []),
+        soloLectura ? Promise.resolve([]) : cargarOpcional(() => obtenerSemenReproductivoDisponible(), [])
       ]);
       setRegistros(registrosData);
       setAnimales(animalesData);
@@ -508,7 +509,7 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
           pregunta="Coordina servicios, diagnósticos, partos y destetes con fechas reales."
           etiqueta="Reproducción avanzada"
         >
-          <BandasPorcinas modo={vistaReproduccion} soloLectura={soloLectura} />
+          <BandasPorcinas modo={vistaReproduccion} soloLectura={soloLectura} rolUsuario={rolUsuario} />
         </FeatureGate>
       </>
     );
@@ -632,7 +633,7 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
           textoAgregar="Nuevo registro"
           onAgregar={soloLectura ? undefined : abrirNuevoRegistro}
           onEditar={soloLectura ? undefined : abrirEdicionRegistro}
-          onEliminar={soloLectura ? undefined : borrarRegistro}
+          onEliminar={soloLectura || rolUsuario !== 'Administrador' ? undefined : borrarRegistro}
           mostrarAcciones={!soloLectura}
         />
       </section>

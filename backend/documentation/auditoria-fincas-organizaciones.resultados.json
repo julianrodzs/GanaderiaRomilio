@@ -1,0 +1,6032 @@
+{
+  "fecha": "2026-10-23",
+  "modo": "Local, persistencia simulada; no producción",
+  "escenario": {
+    "a": "000000000000000000000001",
+    "b": "000000000000000000000002",
+    "a1": "00000000000000000000000b",
+    "a2": "00000000000000000000000c",
+    "a3": "00000000000000000000000d",
+    "b1": "000000000000000000000015",
+    "adminA": "00000000000000000000001f",
+    "encargado": "000000000000000000000020",
+    "adminB": "000000000000000000000021"
+  },
+  "checks": 36,
+  "results": [
+    {
+      "name": "C01 find inyecta organización y finca"
+    },
+    {
+      "name": "C01 findOne inyecta organización y finca"
+    },
+    {
+      "name": "C01 findById inyecta organización y finca"
+    },
+    {
+      "name": "C01 countDocuments inyecta organización y finca"
+    },
+    {
+      "name": "C01 distinct inyecta organización y finca"
+    },
+    {
+      "name": "C01 updateOne inyecta organización y finca"
+    },
+    {
+      "name": "C01 updateMany inyecta organización y finca"
+    },
+    {
+      "name": "C01 findOneAndUpdate inyecta organización y finca"
+    },
+    {
+      "name": "C01 deleteOne inyecta organización y finca"
+    },
+    {
+      "name": "C01 deleteMany inyecta organización y finca"
+    },
+    {
+      "name": "C02 aggregate limita raíz y el lookup sanitario valida organización"
+    },
+    {
+      "name": "C03 populate modelo aislado rechaza referencia B; Usuario global sí retorna identidad B"
+    },
+    {
+      "name": "C04 sin contexto lectura obligatoria vacía; contexto solo org abarca 3 fincas"
+    },
+    {
+      "name": "F01 bulkWrite inyecta organización y finca"
+    },
+    {
+      "name": "F01 save/insertMany imponen el tenant del contexto"
+    },
+    {
+      "name": "F01 updateOne elimina cambios de tenant"
+    },
+    {
+      "name": "C05 100 contextos asíncronos entrelazados sin mezcla",
+      "details": {
+        "contexts": 100
+      }
+    },
+    {
+      "name": "C06 finca A2/B1 e inactiva rechazadas para Encargado A1"
+    },
+    {
+      "name": "C07 reporte resuelve solo fincas autorizadas"
+    },
+    {
+      "name": "C08 matriz HTTP: 3 usuarios x 4 fincas x GET/POST x 27 módulos",
+      "details": {
+        "requests": 648,
+        "denied": 378
+      }
+    },
+    {
+      "name": "C09 60 peticiones HTTP simultáneas no mezclan contexto",
+      "details": {
+        "requests": 60
+      }
+    },
+    {
+      "name": "F02 reparto exige centavos exactos y partidas positivas"
+    },
+    {
+      "name": "C10 sumas y ponderaciones por finca/moneda: 3 fincas desiguales",
+      "details": {
+        "animales": 6,
+        "pesoPromedio": 233.33333333333334,
+        "CRC": {
+          "ingresos": 600,
+          "egresos": 3,
+          "balance": 597,
+          "transferenciasInternas": 3,
+          "gastosCompartidos": 3
+        },
+        "USD": {
+          "ingresos": 6,
+          "egresos": 3,
+          "balance": 3,
+          "transferenciasInternas": 3,
+          "gastosCompartidos": 3
+        }
+      }
+    },
+    {
+      "name": "F03 corte histórico usa Pesaje y ventana temporal de tratamientos"
+    },
+    {
+      "name": "F04 agrupación mensual usa zona horaria de la organización"
+    },
+    {
+      "name": "F05 consultas históricas incluyen fincas inactivas autorizadas"
+    },
+    {
+      "name": "F06 traslado futuro se rechaza antes de modificar inventario",
+      "details": {
+        "futureAccepted": false
+      }
+    },
+    {
+      "name": "C11 meta/cierre no acepta fincas ajenas en resolver; clave cierre estable"
+    },
+    {
+      "name": "F07 downgrade conserva excedentes en solo lectura y permite elegir operativas"
+    },
+    {
+      "name": "F08 respuesta tardía A1 se descarta al cambiar a A2"
+    },
+    {
+      "name": "F09 carga 10000 animales una sola vez para 10 fincas",
+      "details": {
+        "fincas": 10,
+        "animales": 10000,
+        "ms": [
+          78.27,
+          71.87,
+          96.59,
+          76.26,
+          49.66
+        ],
+        "httpMs": [
+          137.87,
+          68.57,
+          51.26,
+          58.57,
+          74.88
+        ],
+        "animalRowsReadPerRun": 10000,
+        "environment": "Node v24.16.0 local win32 x64, DB adaptada en memoria; HTTP loopback sin middleware de auth"
+      }
+    },
+    {
+      "name": "F10 administrador limitado a A1 no puede editar A2 por ID",
+      "details": {
+        "listedFarms": 1,
+        "unauthorizedSameOrgUpdate": 403,
+        "foreignOrgUpdate": 403
+      }
+    },
+    {
+      "name": "C12 último cupo de finca: dos creaciones concurrentes y reactivación concurrente",
+      "details": {
+        "createStatuses": [
+          "fulfilled",
+          "rejected"
+        ],
+        "mixedStatuses": [
+          "fulfilled",
+          "rejected"
+        ],
+        "scope": "Servicios reales, CAS Mongo simulado; no replica set"
+      }
+    },
+    {
+      "name": "C13 índices de negocio contienen organización/finca y Esencial rechaza segunda especie"
+    },
+    {
+      "name": "F11 fotos operativas R2 son privadas y sin URL permanente",
+      "details": {
+        "public": false,
+        "cache": "private, no-store",
+        "scope": "Contrato local; bucket real no consultado"
+      }
+    },
+    {
+      "name": "F12 operaciones financieras protegidas tienen anulación transaccional del grupo"
+    }
+  ],
+  "matrix": [
+    {
+      "modulo": "animales",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "animales",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "animales",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "animales",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "lotes",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "alimentacion",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "camadas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "pesajes",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "potreros",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "rotaciones",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "sanidad",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "plan-sanitario",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tratamientos-sanitarios",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "aplicaciones-sanitarias",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reproduccion",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "iatf",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-engorde",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "protocolos-porcinos",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "finanzas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "ventas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "compras",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "reportes",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "fincas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "tareas",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-animal",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "eventos-camada",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "usuarios",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "PATCH",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "PATCH",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "PATCH",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "PATCH",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "PATCH",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "PATCH",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "PATCH",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "PATCH",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "PATCH",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "PATCH",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "PATCH",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "notificaciones",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "PATCH",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 403,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "importar",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminA",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminA",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "EncargadoA1",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "EncargadoA1",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_ACCESS_DENIED"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000b",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000c",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "GET",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminB",
+      "finca": "00000000000000000000000d",
+      "method": "POST",
+      "esperado": "403 finca",
+      "status": 403,
+      "code": "FINCA_NOT_AVAILABLE"
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "GET",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    },
+    {
+      "modulo": "conteo-drone",
+      "usuario": "AdminB",
+      "finca": "000000000000000000000015",
+      "method": "POST",
+      "esperado": "Superar guarda finca; depende rol/ruta",
+      "status": 200,
+      "code": null
+    }
+  ]
+}

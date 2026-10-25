@@ -7,19 +7,25 @@ const { TratamientoSanitario } = require('../models/TratamientoSanitario');
 const MetaConsolidacion = require('../models/MetaConsolidacion');
 const TrasladoFinca = require('../models/TrasladoFinca');
 const HistorialFincaAnimal = require('../models/HistorialFincaAnimal');
+const Camada = require('../models/Camada');
+const { claveDiaEnZona, rangoInstantesEnZona } = require('./fechaZonaHoraria-service');
+const { obtenerPoblacionHistoricaPorFincas } = require('./poblacionHistorica-service');
 
-const periodoReporte = ({ fechaInicio, fechaFin } = {}) => {
+const periodoReporte = ({ fechaInicio, fechaFin, zonaHoraria = 'America/Costa_Rica' } = {}) => {
     const hoy = new Date();
-    const inicio = fechaInicio ? new Date(fechaInicio) : new Date(Date.UTC(hoy.getUTCFullYear(), 0, 1));
-    const fin = fechaFin ? new Date(fechaFin) : hoy;
-    inicio.setUTCHours(0, 0, 0, 0);
-    fin.setUTCHours(23, 59, 59, 999);
-    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime()) || inicio > fin) {
+    const hoyCivil = claveDiaEnZona(hoy, zonaHoraria);
+    try {
+        return rangoInstantesEnZona({
+            fechaInicio: fechaInicio || `${hoyCivil.slice(0, 4)}-01-01`,
+            fechaFin: fechaFin || hoyCivil,
+            zonaHoraria
+        });
+    } catch (causa) {
         const error = new Error('El período del reporte multi-finca no es válido.');
         error.status = 400;
+        error.cause = causa;
         throw error;
     }
-    return { inicio, fin };
 };
 
 const filtroEspecie = (especie) => {
@@ -41,7 +47,7 @@ const obtenerDestetesConFincaHistorica = async ({ inicio, fin, especie }) => {
         fechaDestete: { $gte: inicio, $lte: fin }
     })
         .setOptions({ omitirAislamientoFinca: true })
-        .select('_id fincaId fechaDestete pesoDestete')
+        .select('_id fincaId fechaDestete pesoDestete camadaOrigen')
         .lean();
     const historias = animales.length
         ? await HistorialFincaAnimal.find({ animal: { $in: animales.map((animal) => animal._id) } }).sort({ fecha: 1 }).lean()
@@ -66,7 +72,15 @@ const obtenerDestetesConFincaHistorica = async ({ inicio, fin, especie }) => {
 };
 
 const obtenerDestetesPorFinca = async ({ inicio, fin, especie, ids }) => {
-    const animales = await obtenerDestetesConFincaHistorica({ inicio, fin, especie });
+    const incluirPorcinos = especie !== 'Bovino';
+    const camadas = incluirPorcinos ? await Camada.find({
+        fincaId: { $in: ids },
+        fechaDesteteReal: { $gte: inicio, $lte: fin },
+        estado: { $ne: 'Cancelada' }
+    }).setOptions({ omitirAislamientoFinca: true }).select('_id fincaId destetados pesoPromedioDestete').lean() : [];
+    const camadasColectivas = new Set(camadas.map((camada) => String(camada._id)));
+    const animales = (await obtenerDestetesConFincaHistorica({ inicio, fin, especie }))
+        .filter((animal) => !animal.camadaOrigen || !camadasColectivas.has(String(animal.camadaOrigen)));
     const permitidas = new Set(ids.map(String));
     const grupos = new Map();
     animales.forEach((animal) => {
@@ -80,14 +94,44 @@ const obtenerDestetesPorFinca = async ({ inicio, fin, especie, ids }) => {
             grupo.pesoTotal += numero(animal.pesoDestete);
         }
     });
+    camadas.forEach((camada) => {
+        const fincaId = String(camada.fincaId);
+        if (!permitidas.has(fincaId)) return;
+        if (!grupos.has(fincaId)) grupos.set(fincaId, { _id: fincaId, cantidad: 0, conPeso: 0, pesoTotal: 0 });
+        const grupo = grupos.get(fincaId);
+        const cantidad = numero(camada.destetados);
+        grupo.cantidad += cantidad;
+        if (cantidad > 0 && numero(camada.pesoPromedioDestete) > 0) {
+            grupo.conPeso += cantidad;
+            grupo.pesoTotal += cantidad * numero(camada.pesoPromedioDestete);
+        }
+    });
     return [...grupos.values()];
 };
 
 const obtenerDetalleDestetesPorFinca = async ({ inicio, fin, especie, fincaId }) => {
+    const camadas = especie !== 'Bovino' ? await Camada.find({
+        fincaId,
+        fechaDesteteReal: { $gte: inicio, $lte: fin },
+        estado: { $ne: 'Cancelada' }
+    }).setOptions({ omitirAislamientoFinca: true }).select('_id codigoCamada fechaDesteteReal destetados pesoPromedioDestete').lean() : [];
+    const idsCamadas = new Set(camadas.map((camada) => String(camada._id)));
     const animales = await obtenerDestetesConFincaHistorica({ inicio, fin, especie });
-    return animales
+    const individuales = animales
         .filter((animal) => animal.fincaHistoricaId === String(fincaId))
-        .map(({ fincaHistoricaId, ...animal }) => animal);
+        .filter((animal) => !animal.camadaOrigen || !idsCamadas.has(String(animal.camadaOrigen)))
+        .map(({ fincaHistoricaId, ...animal }) => ({ ...animal, tipoDetalle: 'Animal', cantidad: 1 }));
+    return [
+        ...individuales,
+        ...camadas.map((camada) => ({
+            _id: camada._id,
+            tipoDetalle: 'Camada',
+            codigoCamada: camada.codigoCamada,
+            fechaDestete: camada.fechaDesteteReal,
+            cantidad: numero(camada.destetados),
+            pesoDestete: camada.pesoPromedioDestete
+        }))
+    ];
 };
 const normalizarFinanzasPorFinca = (items = []) => {
     const mapa = new Map();
@@ -99,6 +143,7 @@ const normalizarFinanzasPorFinca = (items = []) => {
         mapa.get(fincaId).monedas[moneda] = {
             ingresos: numero(item.ingresos),
             egresos: numero(item.egresos),
+            balance: numero(item.ingresos) - numero(item.egresos),
             transferenciasEntrantes: numero(item.transferenciasEntrantes),
             transferenciasSalientes: numero(item.transferenciasSalientes),
             gastosCompartidos: numero(item.gastosCompartidos)
@@ -233,25 +278,34 @@ const construirComparativoMultiFinca = ({
     return { consolidado, fincas: detalleConParticipacion, evolucionMensual, metas };
 };
 
-const obtenerReporteMultiFinca = async ({ fincas, fechaInicio, fechaFin, especie = 'Todos' }) => {
-    const { inicio, fin } = periodoReporte({ fechaInicio, fechaFin });
+const obtenerReporteMultiFinca = async ({ fincas, fechaInicio, fechaFin, especie = 'Todos', organizacionId, zonaHoraria = 'America/Costa_Rica' }) => {
+    const { inicio, fin } = periodoReporte({ fechaInicio, fechaFin, zonaHoraria });
     const ids = fincas.map((finca) => new Types.ObjectId(finca._id));
     const matchFinca = { fincaId: { $in: ids } };
     const matchEspecie = filtroEspecie(especie);
     const opciones = { omitirAislamientoFinca: true };
 
-    const [inventario, finanzas, partos, destetes, aplicaciones, tratamientos, traslados, evolucionMensual, metas] = await Promise.all([
-        Animal.aggregate([
-            { $match: { ...matchFinca, ...matchEspecie, estado: 'Activo' } },
-            { $group: {
-                _id: '$fincaId',
-                activos: { $sum: 1 },
-                bovinos: { $sum: { $cond: [{ $eq: [{ $ifNull: ['$especie', 'Bovino'] }, 'Bovino'] }, 1, 0] } },
-                porcinos: { $sum: { $cond: [{ $eq: ['$especie', 'Porcino'] }, 1, 0] } },
-                animalesConPeso: { $sum: { $cond: [{ $gt: ['$pesoActual', 0] }, 1, 0] } },
-                pesoTotal: { $sum: { $cond: [{ $gt: ['$pesoActual', 0] }, '$pesoActual', 0] } }
-            } }
-        ]).option(opciones),
+    const poblacionPorFinca = await obtenerPoblacionHistoricaPorFincas({
+        organizacionId,
+        fincaIds: fincas.map((finca) => finca._id),
+        especie,
+        fecha: fin
+    });
+    const inventario = fincas.map((finca) => {
+        const animales = poblacionPorFinca.get(String(finca._id)) || [];
+        return animales.reduce((resumen, animal) => {
+            resumen.activos += 1;
+            if ((animal.especie || 'Bovino') === 'Porcino') resumen.porcinos += 1;
+            else resumen.bovinos += 1;
+            if (numero(animal.pesoAlCorte) > 0) {
+                resumen.animalesConPeso += 1;
+                resumen.pesoTotal += numero(animal.pesoAlCorte);
+            }
+            return resumen;
+        }, { _id: finca._id, activos: 0, bovinos: 0, porcinos: 0, animalesConPeso: 0, pesoTotal: 0 });
+    });
+
+    const [finanzas, partos, destetes, aplicaciones, tratamientos, traslados, evolucionMensual, metas] = await Promise.all([
         MovimientoFinanciero.aggregate([
             { $match: { ...matchFinca, fecha: { $gte: inicio, $lte: fin } } },
             { $group: {
@@ -273,7 +327,13 @@ const obtenerReporteMultiFinca = async ({ fincas, fechaInicio, fechaFin, especie
             { $group: { _id: '$fincaId', cantidad: { $sum: 1 } } }
         ]).option(opciones),
         TratamientoSanitario.aggregate([
-            { $match: { ...matchFinca, ...matchEspecie, estado: 'Activo' } },
+            { $match: {
+                ...matchFinca,
+                ...matchEspecie,
+                estado: { $ne: 'Cancelado' },
+                fechaInicio: { $lte: fin },
+                $or: [{ fechaFin: null }, { fechaFin: { $gte: inicio } }]
+            } },
             { $group: { _id: '$fincaId', cantidad: { $sum: 1 } } }
         ]).option(opciones),
         TrasladoFinca.find({
@@ -283,7 +343,12 @@ const obtenerReporteMultiFinca = async ({ fincas, fechaInicio, fechaFin, especie
         MovimientoFinanciero.aggregate([
             { $match: { ...matchFinca, fecha: { $gte: inicio, $lte: fin }, excluirConsolidacion: { $ne: true } } },
             { $group: {
-                _id: { fincaId: '$fincaId', moneda: { $ifNull: ['$moneda', 'CRC'] }, anio: { $year: '$fecha' }, mes: { $month: '$fecha' } },
+                _id: {
+                    fincaId: '$fincaId',
+                    moneda: { $ifNull: ['$moneda', 'CRC'] },
+                    anio: { $year: { date: '$fecha', timezone: zonaHoraria } },
+                    mes: { $month: { date: '$fecha', timezone: zonaHoraria } }
+                },
                 ingresos: { $sum: { $cond: [{ $eq: ['$naturaleza', 'Ingreso'] }, '$monto', 0] } },
                 egresos: { $sum: { $cond: [{ $eq: ['$naturaleza', 'Egreso'] }, '$monto', 0] } }
             } },

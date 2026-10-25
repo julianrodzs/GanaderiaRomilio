@@ -26,7 +26,8 @@ const estadoInicial = {
   accesoTodasFincas: true,
   fincas: [],
   contrasena: '',
-  confirmarContrasena: ''
+  confirmarContrasena: '',
+  sinAccesoCorreo: false
 };
 
 const formatearFecha = (fecha) => {
@@ -199,18 +200,24 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
       }
     }
 
-    const datos = {
+    const datos = usuarioSeleccionado ? {
+      rol: formulario.rol,
+      estadoMembresia: formulario.estado,
+      accesoTodasFincas: formulario.accesoTodasFincas,
+      fincas: formulario.accesoTodasFincas ? [] : formulario.fincas
+    } : {
       nombre: formulario.nombre,
       apellido: formulario.apellido,
       correo: formulario.correo,
       telefono: formulario.telefono,
       rol: formulario.rol,
-      estado: formulario.estado,
+      estadoMembresia: formulario.estado,
       accesoTodasFincas: formulario.accesoTodasFincas,
-      fincas: formulario.accesoTodasFincas ? [] : formulario.fincas
+      fincas: formulario.accesoTodasFincas ? [] : formulario.fincas,
+      sinAccesoCorreo: formulario.sinAccesoCorreo
     };
 
-    if (formulario.contrasena) {
+    if (!usuarioSeleccionado && formulario.sinAccesoCorreo && formulario.contrasena) {
       datos.contrasena = formulario.contrasena;
     }
 
@@ -411,7 +418,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
                     <td>{formatearFecha(item.createdAt)}</td>
                     <td>{item.usuarioNombre || item.usuarioCorreo || '--'}</td>
                     <td>{item.usuarioRol || '--'}</td>
-                    <td>{item.accion}</td>
+                    <td>{item.evento || item.accion}</td>
                     <td>{item.modulo}</td>
                     <td>{item.ruta}</td>
                     <td><span className={`estado-badge estado-${item.estado}`}>{item.estado}</span></td>
@@ -444,25 +451,25 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
             {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
 
             <div className="usuario-form-grid">
-              <label>
+              {!usuarioSeleccionado && <label>
                 Nombre
                 <input name="nombre" value={formulario.nombre} onChange={actualizarCampo} required />
-              </label>
+              </label>}
 
-              <label>
+              {!usuarioSeleccionado && <label>
                 Apellido
                 <input name="apellido" value={formulario.apellido} onChange={actualizarCampo} />
-              </label>
+              </label>}
 
-              <label>
+              {!usuarioSeleccionado && <label>
                 Correo
                 <input name="correo" type="email" value={formulario.correo} onChange={actualizarCampo} required />
-              </label>
+              </label>}
 
-              <label>
+              {!usuarioSeleccionado && <label>
                 Telefono
                 <input name="telefono" value={formulario.telefono} onChange={actualizarCampo} />
-              </label>
+              </label>}
 
               <label>
                 Rol
@@ -480,26 +487,35 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
                 </select>
               </label>
 
-              <label>
-                Contrasena {usuarioSeleccionado ? '(opcional)' : '(solo para una cuenta nueva)'}
+              {!usuarioSeleccionado && <label className="campo-ancho opcion-check">
+                <input type="checkbox" checked={formulario.sinAccesoCorreo} onChange={(e) => setFormulario((actual) => ({ ...actual, sinAccesoCorreo: e.target.checked }))} />
+                La persona no tiene acceso al correo; crear con contraseña temporal
+              </label>}
+
+              {!usuarioSeleccionado && formulario.sinAccesoCorreo && <label>
+                Contraseña temporal
                 <input
                   name="contrasena"
                   type="password"
                   value={formulario.contrasena}
                   onChange={actualizarCampo}
-                  placeholder={usuarioSeleccionado ? 'Opcional al editar' : 'No se usa si el correo ya tiene una cuenta'}
+                  placeholder="Mínimo 10 caracteres"
+                  minLength="10"
+                  required
                 />
-              </label>
+              </label>}
 
-              <label>
+              {!usuarioSeleccionado && formulario.sinAccesoCorreo && <label>
                 Confirmar contrasena
                 <input
                   name="confirmarContrasena"
                   type="password"
                   value={formulario.confirmarContrasena}
                   onChange={actualizarCampo}
+                  minLength="10"
+                  required
                 />
-              </label>
+              </label>}
             </div>
 
             <fieldset className="usuario-acceso-fincas">
@@ -558,7 +574,7 @@ const Usuarios = ({ usuarioActual, onAbrirPlan, onAbrirAdministracionSaas }) => 
               <article><span>Fecha</span><strong>{formatearFecha(detalleAuditoria.createdAt)}</strong></article>
               <article><span>Usuario</span><strong>{detalleAuditoria.usuarioNombre || detalleAuditoria.usuarioCorreo || '--'}</strong></article>
               <article><span>Rol</span><strong>{detalleAuditoria.usuarioRol || '--'}</strong></article>
-              <article><span>Acción</span><strong>{detalleAuditoria.accion}</strong></article>
+              <article><span>Acción</span><strong>{detalleAuditoria.evento || detalleAuditoria.accion}</strong></article>
               <article><span>Estado</span><strong>{detalleAuditoria.estado}</strong></article>
               <article><span>Código</span><strong>{detalleAuditoria.codigoRespuesta || '--'}</strong></article>
               <article><span>IP</span><strong>{detalleAuditoria.ip || '--'}</strong></article>

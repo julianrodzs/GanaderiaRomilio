@@ -30,6 +30,7 @@ const prepararFormulario = (configuracion) => ({
   porcinosCria: { ...(configuracion?.porcinosCria || {}) },
   porcinos: { ...(configuracion?.porcinos || {}) },
   bovinosEngorde: { ...(configuracion?.bovinosEngorde || {}) },
+  diasEsperaPosparto: configuracion?.diasEsperaPosparto || 45,
   diasPesajeReciente: configuracion?.diasPesajeReciente || 60
 });
 
@@ -141,6 +142,9 @@ const ReporteIndicesProductivos = ({ fechaInicio, fechaFin, especie = 'Todos', p
             ))}
             <label>Días para considerar pesaje reciente
               <input type="number" min="1" step="1" value={formulario.diasPesajeReciente} onChange={(evento) => setFormulario((actual) => ({ ...actual, diasPesajeReciente: evento.target.value }))} required />
+            </label>
+            <label>Días de espera voluntaria posparto
+              <input type="number" min="1" step="1" value={formulario.diasEsperaPosparto} onChange={(evento) => setFormulario((actual) => ({ ...actual, diasEsperaPosparto: evento.target.value }))} required />
             </label>
           </div>
           <div className="form-actions"><button className="boton-primario compacto" type="submit" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar metas'}</button></div>

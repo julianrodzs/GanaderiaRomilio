@@ -12,8 +12,9 @@ const archivoMultimediaSchema = new Schema(
             index: true
         },
         proveedor: { type: String, enum: ['R2'], default: 'R2', required: true },
+        visibilidad: { type: String, enum: ['PUBLICO', 'PRIVADO'], default: 'PRIVADO', required: true },
         clave: { type: String, required: true, trim: true, unique: true },
-        url: { type: String, required: true, trim: true },
+        url: { type: String, trim: true, default: '' },
         nombreOriginal: { type: String, required: true, trim: true },
         mimeType: { type: String, required: true, trim: true },
         tamanoBytes: { type: Number, required: true, min: 1 },

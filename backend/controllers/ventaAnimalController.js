@@ -25,6 +25,16 @@ const { obtenerAlertasRetiroVenta } = require('../services/retiro-carne-service'
 
 const ventaAnimalCtrl = {};
 
+const normalizarMoneda = (valor = 'CRC') => {
+    const moneda = String(valor || 'CRC').trim().toUpperCase();
+    if (moneda !== 'CRC') {
+        const error = new Error('Las ventas de animales operan en CRC. Esta moneda no está soportada.');
+        error.status = 400;
+        throw error;
+    }
+    return moneda;
+};
+
 const poblarVenta = (query) => query
     .populate('animales.animal')
     .populate({
@@ -324,7 +334,7 @@ const aplicarVentaConfirmada = async (venta, usuarioId, session) => {
             unidad: 'KG',
             precioUnitario: venta.pesoTotalKg ? venta.montoTotal / venta.pesoTotalKg : undefined,
             monto: venta.montoTotal,
-            moneda: 'CRC',
+            moneda: venta.moneda || 'CRC',
             proveedor: venta.comprador,
             destinoUso: DESTINO_USO_MOVIMIENTOS_ANIMALES,
             observaciones: venta.observaciones,
@@ -350,12 +360,38 @@ const restaurarPertenenciasCerradasPorVenta = async (venta, session, usuarioId) 
         fechaSalida: venta.fechaVenta
     })
         .sort({ fechaSalida: -1, updatedAt: -1 })
-        .populate('lote', 'codigo nombre')
+        .populate('lote', 'codigo nombre estado ubicacionActual')
         .session(session);
 
     for (const pertenencia of cerradas) {
         const animalId = String(pertenencia.animal);
         if (animalesConPertenencia.has(animalId)) continue;
+
+        if (!pertenencia.lote || pertenencia.lote.estado !== 'ACTIVO') {
+            await Animal.updateOne(
+                { _id: pertenencia.animal, estado: 'Activo' },
+                { $set: { loteActual: null, potreroActual: null } },
+                { session }
+            );
+            await upsertEventoAnimal({
+                animal: pertenencia.animal,
+                tipoEvento: 'Cambio de lote',
+                fecha: new Date(),
+                titulo: 'Venta anulada sin restaurar lote',
+                descripcion: 'El lote original ya estaba cerrado; el animal quedó activo y sin lote.',
+                moduloOrigen: 'Lotes',
+                referenciaId: pertenencia._id,
+                claveIdempotencia: `REVERSION_VENTA:${venta._id}:${pertenencia.animal}:SIN_LOTE`,
+                creadoPor: usuarioId || venta.registradoPor,
+                metadata: {
+                    accion: 'REVERSION_VENTA_SIN_LOTE',
+                    loteId: pertenencia.lote?._id,
+                    codigoLote: pertenencia.lote?.codigo,
+                    ventaId: venta._id
+                }
+            }, { session });
+            continue;
+        }
 
         pertenencia.activo = true;
         pertenencia.fechaSalida = undefined;
@@ -363,7 +399,7 @@ const restaurarPertenenciasCerradasPorVenta = async (venta, session, usuarioId) 
         await pertenencia.save({ session });
         await Animal.updateOne(
             { _id: pertenencia.animal, estado: 'Activo' },
-            { $set: { loteActual: pertenencia.lote?._id || pertenencia.lote } },
+            { $set: { loteActual: pertenencia.lote._id, potreroActual: pertenencia.lote.ubicacionActual || null } },
             { session }
         );
         await upsertEventoAnimal({
@@ -374,6 +410,7 @@ const restaurarPertenenciasCerradasPorVenta = async (venta, session, usuarioId) 
             descripcion: `Se restauró la pertenencia al lote ${pertenencia.lote?.codigo || pertenencia.lote} al revertir la venta.`,
             moduloOrigen: 'Lotes',
             referenciaId: pertenencia._id,
+            claveIdempotencia: `REVERSION_VENTA:${venta._id}:${pertenencia.animal}:LOTE`,
             creadoPor: usuarioId || venta.registradoPor,
             metadata: {
                 accion: 'REVERSION_VENTA',
@@ -419,7 +456,8 @@ const extraerDatosVenta = (body = {}) => ({
     identificacionComprador: body.identificacionComprador,
     telefonoComprador: body.telefonoComprador,
     observaciones: body.observaciones,
-    montoFinal: body.montoFinal
+    montoFinal: body.montoFinal,
+    moneda: normalizarMoneda(body.moneda)
 });
 
 const errorValidacion = (validacion) => Object.assign(new Error(validacion.mensaje), {
@@ -506,7 +544,7 @@ ventaAnimalCtrl.crearVenta = async (req, res) => {
                 registradoPor: req.usuario?.id,
                 organizacionId: req.organizacionId,
                 fincaId: req.fincaId
-            }], { session });
+            }], { session, ordered: true });
             await aplicarVentaConfirmada(ventaGuardada, req.usuario?.id, session);
             return ventaGuardada._id;
         });

@@ -1,8 +1,7 @@
 const XLSX = require('xlsx');
-const Animal = require('../models/Animal');
-const Potrero = require('../models/Potrero');
-const Pesaje = require('../models/Pesaje');
-const MovimientoFinanciero = require('../models/MovimientoFinanciero');
+const crypto = require('node:crypto');
+const path = require('node:path');
+const { Worker } = require('node:worker_threads');
 const {
     CATEGORIAS_FINANCIERAS,
     DESTINOS_USO_FINANCIERO,
@@ -11,28 +10,55 @@ const {
     NATURALEZAS_FINANCIERAS,
     TIPOS_MOVIMIENTO_FINANCIERO
 } = require('../config/catalogosFinancieros');
-const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota, puedeUsarEspecie } = require('./plan-service');
-const { obtenerFincaActual } = require('../context/organizacion-context');
-const { validarObjetivoProductivoFinca } = require('./finca-service');
-const { normalizarFraccionRacial, obtenerCatalogoRacial, prepararDatosRaciales } = require('./raza-service');
-const HistorialCoberturaPotrero = require('../models/HistorialCoberturaPotrero');
+const { normalizarFraccionRacial, obtenerCatalogoRacial } = require('./raza-service');
 const { CATALOGO_PASTOS_BASE } = require('../config/catalogoPastos');
-const { guardarCobertura, resolverPastoPorTexto } = require('./potreroCobertura-service');
-const Lote = require('../models/Lote');
-const { agregarAnimalesAlLote, cerrarPertenencia, validarAnimalParaLote } = require('./lote-service');
-const PertenenciaLote = require('../models/PertenenciaLote');
+const { resolverPastoPorTexto } = require('./potreroCobertura-service');
 const { PROPOSITOS_LOTE, normalizarPropositoLote, propositoCompatibleConObjetivo } = require('../config/lotes');
 const { CATEGORIAS_POR_ESPECIE, obtenerCategoriaAnimal } = require('./categoriaAnimal-service');
 const { OBJETIVOS_PRODUCTIVOS, normalizarObjetivoProductivo } = require('../config/objetivosProductivos');
-const {
-    actualizarPesoActualAnimal,
-    registrarEventoPesaje,
-    validarDatosPesaje
-} = require('./pesaje-integridad-service');
+const { claveDiaEnZona } = require('./fechaZonaHoraria-service');
+const { confirmarImportacionExcelAtomica } = require('./importarExcel-confirmacion-service');
 
 const VERSION_PLANTILLA = '1';
+const TIPOS_IMPORTACION_FINANCIERA = TIPOS_MOVIMIENTO_FINANCIERO.filter((item) => !['Planilla', 'Inversion'].includes(item));
 const HOJAS_DATOS = ['POTREROS', 'INVENTARIO', 'FINANZAS', 'PESAJES'];
 const HOJAS_AUXILIARES = ['INSTRUCCIONES', 'CATALOGOS'];
+const LIMITES_IMPORTACION = Object.freeze({
+    filas: Number(process.env.IMPORT_MAX_ROWS_PER_SHEET || 5000),
+    columnas: Number(process.env.IMPORT_MAX_COLUMNS_PER_SHEET || 60),
+    longitudCelda: Number(process.env.IMPORT_MAX_CELL_LENGTH || 1000),
+    hojas: Number(process.env.IMPORT_MAX_SHEETS || 8),
+    timeoutMs: Number(process.env.IMPORT_PARSE_TIMEOUT_MS || 15000)
+});
+
+const parsearExcelAislado = (buffer, limites = LIMITES_IMPORTACION) => new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, '..', 'workers', 'importarExcel-parser-worker.js'), {
+        workerData: { buffer, limites },
+        resourceLimits: { maxOldGenerationSizeMb: Number(process.env.IMPORT_WORKER_MEMORY_MB || 128) }
+    });
+    let terminado = false;
+    const finalizar = (callback) => {
+        if (terminado) return;
+        terminado = true;
+        clearTimeout(timeout);
+        callback();
+    };
+    const timeout = setTimeout(() => {
+        finalizar(() => {
+            worker.terminate();
+            reject(Object.assign(new Error('El archivo tardó demasiado en procesarse y fue rechazado.'), { codigo: 'IMPORT_TIMEOUT' }));
+        });
+    }, limites.timeoutMs);
+    worker.once('message', (mensaje) => finalizar(() => {
+        worker.terminate();
+        if (mensaje.ok) resolve(mensaje.workbook);
+        else reject(Object.assign(new Error(mensaje.error.mensaje), { codigo: mensaje.error.codigo }));
+    }));
+    worker.once('error', (error) => finalizar(() => reject(error)));
+    worker.once('exit', (codigo) => {
+        if (!terminado && codigo !== 0) finalizar(() => reject(new Error('El lector XLSX terminó inesperadamente.')));
+    });
+});
 
 const COLUMNAS = {
     POTREROS: {
@@ -51,7 +77,7 @@ const COLUMNAS = {
             'GRADO_RACIAL', 'VARIEDAD_RACIAL', 'COMPOSICION_RACIAL',
             'FRACCION_RAZA_PRINCIPAL', 'FRACCION_RAZA_SECUNDARIA',
             'FECHA_NACIMIENTO', 'MADRE_DIIO', 'PADRE_DIIO',
-            'PESO_ACTUAL_KG', 'OBJETIVO_PRODUCTIVO', 'ETAPA_PRODUCTIVA', 'ESTADO',
+            'PESO_ACTUAL_KG', 'FECHA_PESAJE', 'OBJETIVO_PRODUCTIVO', 'ETAPA_PRODUCTIVA', 'ESTADO',
             'ESTADO_SANITARIO', 'POTRERO_CODIGO', 'CODIGO_LOTE', 'NOMBRE_LOTE', 'PROPOSITO_LOTE', 'OBSERVACIONES'
         ]
     },
@@ -59,12 +85,136 @@ const COLUMNAS = {
         requeridas: ['FECHA', 'NATURALEZA', 'TIPO_MOVIMIENTO', 'CATEGORIA', 'DESCRIPCION', 'MONTO', 'MONEDA'],
         opcionales: [
             'PRODUCTO', 'CANTIDAD', 'UNIDAD', 'PRECIO_UNITARIO', 'PROVEEDOR', 'DESTINO_USO',
-            'METODO_PAGO', 'EMPLEADO', 'FINCA', 'OBSERVACIONES'
+            'METODO_PAGO', 'FINCA', 'OBSERVACIONES'
         ]
     },
     PESAJES: {
         requeridas: ['DIIO', 'FECHA', 'PESO_KG'],
         opcionales: ['ETAPA_PRODUCTIVA', 'OBSERVACIONES']
+    }
+};
+
+const PROPIEDAD_POR_COLUMNA = Object.freeze({
+    NOMBRE: 'nombre', RAZA: 'raza', RAZA_PRINCIPAL: 'razaPrincipal', RAZA_SECUNDARIA: 'razaSecundaria',
+    DESCRIPCION_RACIAL: 'descripcionRacial', GRADO_RACIAL: 'gradoRacial', VARIEDAD_RACIAL: 'variedadRacial',
+    COMPOSICION_RACIAL: 'composicionRacial', FRACCION_RAZA_PRINCIPAL: 'fraccionRazaPrincipal',
+    FRACCION_RAZA_SECUNDARIA: 'fraccionRazaSecundaria', FECHA_NACIMIENTO: 'fechaNacimiento',
+    OBJETIVO_PRODUCTIVO: 'objetivoProductivo', ETAPA_PRODUCTIVA: 'etapaProductiva', ESTADO: 'estado',
+    ESTADO_SANITARIO: 'estadoSanitario', OBSERVACIONES: 'observaciones', AREA_HECTAREAS: 'area',
+    CAPACIDAD_MAXIMA: 'capacidadMaxima', UBICACION: 'ubicacion', TIPO_AREA: 'tipoArea'
+});
+
+const valorComparable = (valor) => {
+    if (valor instanceof Date) return valor.toISOString().slice(0, 10);
+    if (valor?._id) return String(valor._id);
+    return valor ?? null;
+};
+
+const serializarEstable = (valor) => {
+    if (valor instanceof Date) return valor.toISOString();
+    if (Array.isArray(valor)) return valor.map(serializarEstable);
+    if (valor && typeof valor === 'object') {
+        return Object.fromEntries(Object.keys(valor).sort().map((clave) => [clave, serializarEstable(valor[clave])]));
+    }
+    return valor;
+};
+
+const crearClaveImportacion = ({ organizacionId, fincaId, hoja, registro }) => {
+    const datos = Object.fromEntries(Object.entries(registro).filter(([clave]) => ![
+        'filaOrigen', 'camposProporcionados', 'cambios', 'operacion', 'existenteId', 'posibleDuplicado',
+        'omitirPorDuplicado', 'claveImportacion'
+    ].includes(clave)));
+    return crypto.createHash('sha256').update(JSON.stringify(serializarEstable({
+        organizacionId: String(organizacionId || ''), fincaId: String(fincaId || ''), hoja, datos
+    }))).digest('hex');
+};
+
+const validarYEnriquecerAnimales = ({ registros, animalesExistentes = [], errores, advertencias }) => {
+    const porClave = new Map();
+    const registrar = (animal, origen) => {
+        [animal.diio, animal.identificadorFinca].filter(Boolean).forEach((valor) => {
+            const clave = normalizarTexto(valor);
+            const actuales = porClave.get(clave) || [];
+            if (!actuales.some((item) => String(item.animal._id || item.animal.diio) === String(animal._id || animal.diio))) {
+                actuales.push({ animal, origen });
+            }
+            porClave.set(clave, actuales);
+        });
+    };
+    animalesExistentes.forEach((animal) => registrar(animal, 'base'));
+    registros.forEach((animal) => registrar(animal, 'archivo'));
+
+    const grafo = new Map();
+    registros.forEach((registro) => {
+        const coincidencias = porClave.get(normalizarTexto(registro.diio)) || [];
+        const existentes = coincidencias.filter((item) => item.origen === 'base');
+        if (new Set(existentes.map((item) => String(item.animal._id))).size > 1) {
+            agregarError(errores, 'INVENTARIO', registro.filaOrigen, 'DIIO', registro.diio, 'El DIIO coincide con animales diferentes por DIIO e identificador interno.', 'IDENTIDAD_AMBIGUA');
+            return;
+        }
+        const existente = existentes[0]?.animal;
+        registro.operacion = existente ? 'actualizar' : 'crear';
+        registro.existenteId = existente?._id;
+        registro.cambios = existente ? (registro.camposProporcionados || []).map((columna) => {
+            if (columna === 'DIIO') return null;
+            const propiedad = PROPIEDAD_POR_COLUMNA[columna];
+            if (!propiedad || valorComparable(registro[propiedad]) === valorComparable(existente[propiedad])) return null;
+            return { campo: propiedad, anterior: valorComparable(existente[propiedad]), nuevo: valorComparable(registro[propiedad]) };
+        }).filter(Boolean) : [];
+        if (registro.codigoLote) {
+            const objetivoFinal = registro.objetivoProductivo || existente?.objetivoProductivo;
+            if (!objetivoFinal) {
+                agregarError(errores, 'INVENTARIO', registro.filaOrigen, 'OBJETIVO_PRODUCTIVO', '', 'El objetivo productivo es obligatorio al asignar un animal nuevo a un lote.', 'OBJETIVO_REQUERIDO');
+            } else if (registro.loteProposito && !propositoCompatibleConObjetivo(registro.loteProposito, objetivoFinal)) {
+                agregarError(errores, 'INVENTARIO', registro.filaOrigen, 'OBJETIVO_PRODUCTIVO', objetivoFinal, 'El objetivo productivo no es compatible con el propósito del lote.', 'OBJETIVO_LOTE_INCOMPATIBLE');
+            }
+        }
+
+        const padres = [];
+        for (const [campo, sexoEsperado] of [['madreDiio', 'Hembra'], ['padreDiio', 'Macho']]) {
+            const referencia = registro[campo];
+            if (!referencia) continue;
+            if (normalizarTexto(referencia) === normalizarTexto(registro.diio)) {
+                agregarError(errores, 'INVENTARIO', registro.filaOrigen, campo === 'madreDiio' ? 'MADRE_DIIO' : 'PADRE_DIIO', referencia, 'Un animal no puede ser su propio progenitor.', 'AUTOPARENTESCO');
+                continue;
+            }
+            const candidatos = porClave.get(normalizarTexto(referencia)) || [];
+            const unicos = [...new Map(candidatos.map((item) => [String(item.animal._id || item.animal.diio), item.animal])).values()];
+            if (unicos.length !== 1) {
+                if (unicos.length > 1) agregarError(errores, 'INVENTARIO', registro.filaOrigen, campo === 'madreDiio' ? 'MADRE_DIIO' : 'PADRE_DIIO', referencia, 'La referencia genealógica es ambigua.', 'IDENTIDAD_AMBIGUA');
+                else {
+                    advertencias.push({ hoja: 'INVENTARIO', mensaje: `Fila ${registro.filaOrigen}: no se encontró ${referencia}; la relación genealógica quedará vacía.` });
+                    registro[campo] = undefined;
+                }
+                continue;
+            }
+            const progenitor = unicos[0];
+            if (progenitor.sexo !== sexoEsperado) agregarError(errores, 'INVENTARIO', registro.filaOrigen, campo === 'madreDiio' ? 'MADRE_DIIO' : 'PADRE_DIIO', referencia, `El progenitor debe ser ${sexoEsperado}.`, 'SEXO_PROGENITOR_INVALIDO');
+            if (progenitor.especie !== registro.especie) agregarError(errores, 'INVENTARIO', registro.filaOrigen, campo === 'madreDiio' ? 'MADRE_DIIO' : 'PADRE_DIIO', referencia, 'El progenitor debe pertenecer a la misma especie.', 'ESPECIE_PROGENITOR_INVALIDA');
+            if (progenitor.fechaNacimiento && registro.fechaNacimiento && new Date(progenitor.fechaNacimiento) >= new Date(registro.fechaNacimiento)) {
+                agregarError(errores, 'INVENTARIO', registro.filaOrigen, campo === 'madreDiio' ? 'MADRE_DIIO' : 'PADRE_DIIO', referencia, 'El progenitor debe ser mayor que la cría.', 'EDAD_PROGENITOR_INVALIDA');
+            }
+            padres.push(normalizarTexto(referencia));
+        }
+        grafo.set(normalizarTexto(registro.diio), padres);
+    });
+
+    const visitando = new Set();
+    const visitados = new Set();
+    const recorrer = (clave) => {
+        if (visitando.has(clave)) return true;
+        if (visitados.has(clave)) return false;
+        visitando.add(clave);
+        const ciclo = (grafo.get(clave) || []).some((padre) => grafo.has(padre) && recorrer(padre));
+        visitando.delete(clave);
+        visitados.add(clave);
+        return ciclo;
+    };
+    for (const registro of registros) {
+        if (recorrer(normalizarTexto(registro.diio))) {
+            agregarError(errores, 'INVENTARIO', registro.filaOrigen, 'MADRE_DIIO/PADRE_DIIO', '', 'La relación genealógica genera un ciclo.', 'CICLO_GENEALOGICO');
+            break;
+        }
     }
 };
 
@@ -87,10 +237,17 @@ const valorCanonico = (valor, opciones) => {
     return opciones.find((opcion) => normalizarTexto(opcion) === buscado);
 };
 
+const esNumeroTextoAmbiguo = (valor) => {
+    if (typeof valor !== 'string') return false;
+    const texto = limpiarTexto(valor).replace(/[₡$\s]/g, '');
+    return /^[+-]?\d+[.,]\d{3}$/.test(texto);
+};
+
 const numero = (valor) => {
     if (valor === undefined || valor === null || valor === '') return undefined;
     if (typeof valor === 'number') return Number.isFinite(valor) ? valor : undefined;
 
+    if (esNumeroTextoAmbiguo(valor)) return undefined;
     let texto = limpiarTexto(valor).replace(/[₡$\s]/g, '');
     const ultimaComa = texto.lastIndexOf(',');
     const ultimoPunto = texto.lastIndexOf('.');
@@ -107,44 +264,73 @@ const numero = (valor) => {
     return Number.isFinite(resultado) ? resultado : undefined;
 };
 
+const mensajeNumero = (valor, mensajeBase) => (esNumeroTextoAmbiguo(valor)
+    ? 'Valor ambiguo: use una celda numérica o escriba 1234 / 1.23.'
+    : mensajeBase);
+
+const campoConValor = (leer, columna) => limpiarTexto(leer(columna)) !== '';
+
+const categoriasCompatiblesSexo = ({ especie, sexo }) => {
+    if (especie === 'Bovino' && sexo === 'Macho') return ['Ternero', 'Novillo', 'Toro', 'Otro'];
+    if (especie === 'Bovino' && sexo === 'Hembra') return ['Ternera', 'Novilla', 'Vaca', 'Otro'];
+    if (especie === 'Porcino' && sexo === 'Macho') return ['Lechón', 'Cerdo joven', 'Cerdo adulto', 'Otro'];
+    if (especie === 'Porcino' && sexo === 'Hembra') return ['Lechona', 'Cerda joven', 'Chancha', 'Otro'];
+    return [];
+};
+
 const fecha = (valor) => {
     if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
-        return new Date(valor.getFullYear(), valor.getMonth(), valor.getDate(), 12);
+        return new Date(Date.UTC(valor.getUTCFullYear(), valor.getUTCMonth(), valor.getUTCDate()));
     }
 
     if (typeof valor === 'number') {
         const partes = XLSX.SSF.parse_date_code(valor);
-        if (partes) return new Date(partes.y, partes.m - 1, partes.d, 12);
+        if (partes) return new Date(Date.UTC(partes.y, partes.m - 1, partes.d));
     }
 
     const texto = limpiarTexto(valor);
     let coincidencia = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (coincidencia) {
         const [, dia, mes, anio] = coincidencia;
-        const resultado = new Date(Number(anio), Number(mes) - 1, Number(dia), 12);
-        if (resultado.getFullYear() === Number(anio)
-            && resultado.getMonth() === Number(mes) - 1
-            && resultado.getDate() === Number(dia)) return resultado;
+        const resultado = new Date(Date.UTC(Number(anio), Number(mes) - 1, Number(dia)));
+        if (resultado.getUTCFullYear() === Number(anio)
+            && resultado.getUTCMonth() === Number(mes) - 1
+            && resultado.getUTCDate() === Number(dia)) return resultado;
         return undefined;
     }
 
     coincidencia = texto.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
     if (coincidencia) {
         const [, anio, mes, dia] = coincidencia;
-        const resultado = new Date(Number(anio), Number(mes) - 1, Number(dia), 12);
-        if (resultado.getFullYear() === Number(anio)
-            && resultado.getMonth() === Number(mes) - 1
-            && resultado.getDate() === Number(dia)) return resultado;
+        const resultado = new Date(Date.UTC(Number(anio), Number(mes) - 1, Number(dia)));
+        if (resultado.getUTCFullYear() === Number(anio)
+            && resultado.getUTCMonth() === Number(mes) - 1
+            && resultado.getUTCDate() === Number(dia)) return resultado;
     }
 
     return undefined;
 };
 
 const claveFecha = (valor) => {
-    const anio = valor.getFullYear();
-    const mes = String(valor.getMonth() + 1).padStart(2, '0');
-    const dia = String(valor.getDate()).padStart(2, '0');
+    const anio = valor.getUTCFullYear();
+    const mes = String(valor.getUTCMonth() + 1).padStart(2, '0');
+    const dia = String(valor.getUTCDate()).padStart(2, '0');
     return `${anio}-${mes}-${dia}`;
+};
+
+const fechaCivilHoy = () => new Date(`${claveDiaEnZona(new Date(), 'America/Costa_Rica')}T00:00:00.000Z`);
+
+const validarIdentificadorTexto = (errores, hoja, fila, campo, valor) => {
+    if (typeof valor !== 'number') return;
+    agregarError(
+        errores,
+        hoja,
+        fila,
+        campo,
+        valor,
+        'El identificador debe estar en una celda de tipo Texto para conservar ceros iniciales y todos sus dígitos.',
+        'IDENTIFICADOR_NUMERICO'
+    );
 };
 
 const filaVacia = (fila = []) => fila.every((valor) => limpiarTexto(valor) === '');
@@ -162,11 +348,7 @@ const prepararHoja = (workbook, nombreHoja, errores, advertencias) => {
     const nombreReal = workbook.SheetNames.find((nombre) => normalizarTexto(nombre) === nombreHoja);
     if (!nombreReal) return null;
 
-    const matriz = XLSX.utils.sheet_to_json(workbook.Sheets[nombreReal], {
-        header: 1,
-        defval: null,
-        raw: true
-    });
+    const matriz = workbook.Sheets[nombreReal] || [];
     const encabezados = (matriz[0] || []).map(normalizarEncabezado);
     const duplicados = encabezados.filter((encabezado, indice) => encabezado && encabezados.indexOf(encabezado) !== indice);
     const configuracion = COLUMNAS[nombreHoja];
@@ -211,8 +393,8 @@ const mapearPotreros = (hoja, errores) => {
         const nombre = limpiarTexto(leer('NOMBRE'));
         const area = numero(leer('AREA_HECTAREAS'));
         const capacidadMaxima = numero(leer('CAPACIDAD_MAXIMA'));
-        const tipoAreaTexto = limpiarTexto(leer('TIPO_AREA')) || 'PASTOREO';
-        const tipoArea = valorCanonico(tipoAreaTexto, ['PASTOREO', 'BANCO_FORRAJERO']);
+        const tipoAreaTexto = limpiarTexto(leer('TIPO_AREA'));
+        const tipoArea = tipoAreaTexto ? valorCanonico(tipoAreaTexto, ['PASTOREO', 'BANCO_FORRAJERO']) : undefined;
         const pastoTexto = limpiarTexto(leer('PASTO_PRINCIPAL') || leer('PASTO') || leer('TIPO_PASTO'));
         const fechaEstablecimientoPastoTexto = limpiarTexto(leer('FECHA_ESTABLECIMIENTO_PASTO'));
         const fechaEstablecimientoPasto = fechaEstablecimientoPastoTexto ? fecha(leer('FECHA_ESTABLECIMIENTO_PASTO')) : undefined;
@@ -220,18 +402,18 @@ const mapearPotreros = (hoja, errores) => {
         const diasDescansoObjetivo = numero(leer('DIAS_DESCANSO_OBJETIVO'));
         const intervaloCorteTexto = limpiarTexto(leer('INTERVALO_CORTE_OBJETIVO_DIAS'));
         const intervaloCorteObjetivoDias = numero(leer('INTERVALO_CORTE_OBJETIVO_DIAS'));
-        const estadoTexto = limpiarTexto(leer('ESTADO')) || 'Disponible';
-        const estado = valorCanonico(estadoTexto, ['Disponible', 'Ocupado', 'Descanso', 'Mantenimiento']);
+        const estadoTexto = limpiarTexto(leer('ESTADO'));
+        const estado = estadoTexto ? valorCanonico(estadoTexto, ['Disponible', 'Ocupado', 'Descanso', 'Mantenimiento']) : undefined;
 
         if (!codigo) agregarError(errores, 'POTREROS', numeroFila, 'CODIGO', '', 'El código es obligatorio.', 'CAMPO_REQUERIDO');
         if (!nombre) agregarError(errores, 'POTREROS', numeroFila, 'NOMBRE', '', 'El nombre es obligatorio.', 'CAMPO_REQUERIDO');
         if (codigo && codigos.has(normalizarTexto(codigo))) agregarError(errores, 'POTREROS', numeroFila, 'CODIGO', codigo, 'El código está repetido dentro del archivo.', 'DUPLICADO_ARCHIVO');
-        if (limpiarTexto(leer('AREA_HECTAREAS')) && (area === undefined || area < 0)) agregarError(errores, 'POTREROS', numeroFila, 'AREA_HECTAREAS', leer('AREA_HECTAREAS'), 'Debe ser un número mayor o igual a cero.');
-        if (limpiarTexto(leer('CAPACIDAD_MAXIMA')) && (capacidadMaxima === undefined || capacidadMaxima < 0)) agregarError(errores, 'POTREROS', numeroFila, 'CAPACIDAD_MAXIMA', leer('CAPACIDAD_MAXIMA'), 'Debe ser un número mayor o igual a cero.');
+        if (limpiarTexto(leer('AREA_HECTAREAS')) && (area === undefined || area < 0)) agregarError(errores, 'POTREROS', numeroFila, 'AREA_HECTAREAS', leer('AREA_HECTAREAS'), mensajeNumero(leer('AREA_HECTAREAS'), 'Debe ser un número mayor o igual a cero.'));
+        if (limpiarTexto(leer('CAPACIDAD_MAXIMA')) && (capacidadMaxima === undefined || capacidadMaxima < 0)) agregarError(errores, 'POTREROS', numeroFila, 'CAPACIDAD_MAXIMA', leer('CAPACIDAD_MAXIMA'), mensajeNumero(leer('CAPACIDAD_MAXIMA'), 'Debe ser un número mayor o igual a cero.'));
         if (fechaEstablecimientoPastoTexto && !fechaEstablecimientoPasto) agregarError(errores, 'POTREROS', numeroFila, 'FECHA_ESTABLECIMIENTO_PASTO', leer('FECHA_ESTABLECIMIENTO_PASTO'), 'Fecha inválida. Use DD/MM/AAAA.');
         if (diasDescansoObjetivoTexto && (diasDescansoObjetivo === undefined || diasDescansoObjetivo < 0)) agregarError(errores, 'POTREROS', numeroFila, 'DIAS_DESCANSO_OBJETIVO', leer('DIAS_DESCANSO_OBJETIVO'), 'Debe ser un número mayor o igual a cero.');
-        if (!estado) agregarError(errores, 'POTREROS', numeroFila, 'ESTADO', estadoTexto, 'Estado de potrero no permitido.');
-        if (!tipoArea) agregarError(errores, 'POTREROS', numeroFila, 'TIPO_AREA', tipoAreaTexto, 'Use PASTOREO o BANCO_FORRAJERO.');
+        if (estadoTexto && !estado) agregarError(errores, 'POTREROS', numeroFila, 'ESTADO', estadoTexto, 'Estado de potrero no permitido.');
+        if (tipoAreaTexto && !tipoArea) agregarError(errores, 'POTREROS', numeroFila, 'TIPO_AREA', tipoAreaTexto, 'Use PASTOREO o BANCO_FORRAJERO.');
         if (intervaloCorteTexto && (intervaloCorteObjetivoDias === undefined || intervaloCorteObjetivoDias < 1)) agregarError(errores, 'POTREROS', numeroFila, 'INTERVALO_CORTE_OBJETIVO_DIAS', leer('INTERVALO_CORTE_OBJETIVO_DIAS'), 'Debe ser un número mayor o igual a uno.');
 
         if (codigo) codigos.add(normalizarTexto(codigo));
@@ -251,7 +433,8 @@ const mapearPotreros = (hoja, errores) => {
             diasDescansoObjetivo,
             intervaloCorteObjetivoDias,
             observacionCobertura: limpiarTexto(leer('OBSERVACION_COBERTURA')) || undefined,
-            observaciones: limpiarTexto(leer('OBSERVACIONES')) || undefined
+            observaciones: limpiarTexto(leer('OBSERVACIONES')) || undefined,
+            camposProporcionados: hoja.encabezados.filter((columna) => columna && campoConValor(leer, columna))
         });
     });
 
@@ -277,14 +460,16 @@ const mapearInventario = (hoja, errores, lotesExistentes = []) => {
             ? obtenerCategoriaAnimal({ especie, sexo, fechaNacimiento: nacimiento })
             : null;
         const pesoActual = numero(leer('PESO_ACTUAL_KG'));
-        const estadoTexto = limpiarTexto(leer('ESTADO')) || 'Activo';
-        const estado = valorCanonico(estadoTexto, ['Activo', 'Vendido', 'Muerto']);
-        const sanitarioTexto = limpiarTexto(leer('ESTADO_SANITARIO')) || 'Sano';
-        const estadoSanitario = valorCanonico(sanitarioTexto, ['Sano', 'En observación', 'Enfermo', 'Recuperación']);
+        const estadoTexto = limpiarTexto(leer('ESTADO'));
+        const estado = estadoTexto ? valorCanonico(estadoTexto, ['Activo', 'Vendido', 'Muerto']) : undefined;
+        const sanitarioTexto = limpiarTexto(leer('ESTADO_SANITARIO'));
+        const estadoSanitario = sanitarioTexto ? valorCanonico(sanitarioTexto, ['Sano', 'En observación', 'Enfermo', 'Recuperación']) : undefined;
         const objetivoTexto = limpiarTexto(leer('OBJETIVO_PRODUCTIVO'));
-        const objetivoProductivo = objetivoTexto ? normalizarObjetivoProductivo(objetivoTexto) : 'SIN_DEFINIR';
+        const objetivoProductivo = objetivoTexto ? normalizarObjetivoProductivo(objetivoTexto) : undefined;
         const etapaTexto = limpiarTexto(leer('ETAPA_PRODUCTIVA'));
         const etapaProductiva = etapaTexto ? valorCanonico(etapaTexto, ['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde']) : undefined;
+        const fechaPesajeTexto = limpiarTexto(leer('FECHA_PESAJE'));
+        const fechaPesaje = fechaPesajeTexto ? fecha(leer('FECHA_PESAJE')) : undefined;
         const fraccionPrincipalTexto = limpiarTexto(leer('FRACCION_RAZA_PRINCIPAL'));
         const fraccionSecundariaTexto = limpiarTexto(leer('FRACCION_RAZA_SECUNDARIA'));
         let fraccionRazaPrincipal;
@@ -307,16 +492,25 @@ const mapearInventario = (hoja, errores, lotesExistentes = []) => {
             ? lotesExistentes.find((item) => normalizarTexto(item.codigo) === normalizarTexto(codigoLote))
             : null;
 
+        validarIdentificadorTexto(errores, 'INVENTARIO', numeroFila, 'DIIO', leer('DIIO'));
+        validarIdentificadorTexto(errores, 'INVENTARIO', numeroFila, 'MADRE_DIIO', leer('MADRE_DIIO'));
+        validarIdentificadorTexto(errores, 'INVENTARIO', numeroFila, 'PADRE_DIIO', leer('PADRE_DIIO'));
         if (!diio) agregarError(errores, 'INVENTARIO', numeroFila, 'DIIO', '', 'El DIIO es obligatorio.', 'CAMPO_REQUERIDO');
         if (!especie) agregarError(errores, 'INVENTARIO', numeroFila, 'ESPECIE', leer('ESPECIE'), 'Usa Bovino o Porcino.');
         if (!sexo) agregarError(errores, 'INVENTARIO', numeroFila, 'SEXO', leer('SEXO'), 'Usa Macho o Hembra.');
         if (!categoria) agregarError(errores, 'INVENTARIO', numeroFila, 'CATEGORIA', categoriaTexto, especie ? `La categoría no corresponde a ${especie}. Opciones: ${CATEGORIAS_POR_ESPECIE[especie].join(', ')}.` : 'La categoría no se puede validar sin una especie válida.');
+        if (categoria && especie && sexo && !categoriasCompatiblesSexo({ especie, sexo }).includes(categoria)) agregarError(errores, 'INVENTARIO', numeroFila, 'CATEGORIA', categoriaTexto, `La categoría ${categoria} no corresponde al sexo ${sexo}.`, 'CATEGORIA_SEXO_INCOMPATIBLE');
         if (categoria && categoriaCalculada && categoria !== categoriaCalculada) agregarError(errores, 'INVENTARIO', numeroFila, 'CATEGORIA', categoriaTexto, `Por edad y sexo corresponde ${categoriaCalculada}.`, 'CATEGORIA_EDAD_SEXO_INCOMPATIBLE');
         if (diio && diios.has(normalizarTexto(diio))) agregarError(errores, 'INVENTARIO', numeroFila, 'DIIO', diio, 'El DIIO está repetido dentro del archivo.', 'DUPLICADO_ARCHIVO');
         if (limpiarTexto(leer('FECHA_NACIMIENTO')) && !nacimiento) agregarError(errores, 'INVENTARIO', numeroFila, 'FECHA_NACIMIENTO', leer('FECHA_NACIMIENTO'), 'Usa una fecha válida en formato DD/MM/AAAA.');
-        if (limpiarTexto(leer('PESO_ACTUAL_KG')) && (pesoActual === undefined || pesoActual < 0)) agregarError(errores, 'INVENTARIO', numeroFila, 'PESO_ACTUAL_KG', leer('PESO_ACTUAL_KG'), 'Debe ser un número mayor o igual a cero.');
-        if (!estado) agregarError(errores, 'INVENTARIO', numeroFila, 'ESTADO', estadoTexto, 'Estado general no permitido.');
-        if (!estadoSanitario) agregarError(errores, 'INVENTARIO', numeroFila, 'ESTADO_SANITARIO', sanitarioTexto, 'Estado sanitario no permitido.');
+        if (nacimiento && nacimiento > fechaCivilHoy()) agregarError(errores, 'INVENTARIO', numeroFila, 'FECHA_NACIMIENTO', leer('FECHA_NACIMIENTO'), 'La fecha de nacimiento no puede estar en el futuro.', 'FECHA_FUTURA');
+        if (fechaPesajeTexto && !fechaPesaje) agregarError(errores, 'INVENTARIO', numeroFila, 'FECHA_PESAJE', leer('FECHA_PESAJE'), 'Usa una fecha válida en formato DD/MM/AAAA.');
+        if (fechaPesaje && fechaPesaje > fechaCivilHoy()) agregarError(errores, 'INVENTARIO', numeroFila, 'FECHA_PESAJE', leer('FECHA_PESAJE'), 'La fecha del pesaje no puede estar en el futuro.', 'FECHA_FUTURA');
+        if (fechaPesaje && nacimiento && fechaPesaje < nacimiento) agregarError(errores, 'INVENTARIO', numeroFila, 'FECHA_PESAJE', leer('FECHA_PESAJE'), 'La fecha del pesaje no puede ser anterior al nacimiento.');
+        if (limpiarTexto(leer('PESO_ACTUAL_KG')) && (pesoActual === undefined || pesoActual <= 0)) agregarError(errores, 'INVENTARIO', numeroFila, 'PESO_ACTUAL_KG', leer('PESO_ACTUAL_KG'), mensajeNumero(leer('PESO_ACTUAL_KG'), 'Debe ser un número mayor que cero.'));
+        if (estadoTexto && !estado) agregarError(errores, 'INVENTARIO', numeroFila, 'ESTADO', estadoTexto, 'Estado general no permitido.');
+        if (estado && estado !== 'Activo') agregarError(errores, 'INVENTARIO', numeroFila, 'ESTADO', estadoTexto, 'Vendido y Muerto deben registrarse mediante sus flujos operativos, no por importación.', 'ESTADO_FINAL_NO_PERMITIDO');
+        if (sanitarioTexto && !estadoSanitario) agregarError(errores, 'INVENTARIO', numeroFila, 'ESTADO_SANITARIO', sanitarioTexto, 'Estado sanitario no permitido.');
         if (objetivoTexto && !objetivoProductivo) agregarError(errores, 'INVENTARIO', numeroFila, 'OBJETIVO_PRODUCTIVO', objetivoTexto, 'Objetivo productivo no permitido.');
         if (etapaTexto && !etapaProductiva) agregarError(errores, 'INVENTARIO', numeroFila, 'ETAPA_PRODUCTIVA', etapaTexto, 'Etapa productiva no permitida.');
         if (etapaProductiva && especie !== 'Porcino') agregarError(errores, 'INVENTARIO', numeroFila, 'ETAPA_PRODUCTIVA', etapaTexto, 'La etapa productiva por fases aplica únicamente a porcinos.');
@@ -325,7 +519,7 @@ const mapearInventario = (hoja, errores, lotesExistentes = []) => {
         if (loteExistente && loteExistente.estado !== 'ACTIVO') agregarError(errores, 'INVENTARIO', numeroFila, 'CODIGO_LOTE', codigoLote, 'El lote indicado no está activo.');
         if (loteExistente && especie && loteExistente.especie !== especie) agregarError(errores, 'INVENTARIO', numeroFila, 'CODIGO_LOTE', codigoLote, 'La especie del lote no coincide con la del animal.');
         if (loteExistente && propositoLote && loteExistente.proposito !== propositoLote) agregarError(errores, 'INVENTARIO', numeroFila, 'PROPOSITO_LOTE', propositoLote, 'El propósito indicado no coincide con el lote existente.');
-        if (loteExistente && !propositoCompatibleConObjetivo(loteExistente.proposito, objetivoProductivo)) agregarError(errores, 'INVENTARIO', numeroFila, 'OBJETIVO_PRODUCTIVO', objetivoTexto, 'El objetivo productivo no es compatible con el propósito del lote.');
+        if (loteExistente && objetivoProductivo && !propositoCompatibleConObjetivo(loteExistente.proposito, objetivoProductivo)) agregarError(errores, 'INVENTARIO', numeroFila, 'OBJETIVO_PRODUCTIVO', objetivoTexto, 'El objetivo productivo no es compatible con el propósito del lote.');
 
         if (diio) diios.add(normalizarTexto(diio));
         if (errores.length !== inicioErrores) return;
@@ -353,13 +547,16 @@ const mapearInventario = (hoja, errores, lotesExistentes = []) => {
             madreDiio: limpiarTexto(leer('MADRE_DIIO')) || undefined,
             padreDiio: limpiarTexto(leer('PADRE_DIIO')) || undefined,
             pesoActual,
+            fechaPesaje,
             estado,
             estadoSanitario,
             potreroCodigo: limpiarTexto(leer('POTRERO_CODIGO')) || undefined,
             codigoLote: codigoLote || undefined,
             nombreLote: nombreLote || undefined,
             propositoLote,
-            observaciones: limpiarTexto(leer('OBSERVACIONES')) || undefined
+            loteProposito: loteExistente?.proposito,
+            observaciones: limpiarTexto(leer('OBSERVACIONES')) || undefined,
+            camposProporcionados: hoja.encabezados.filter((columna) => columna && campoConValor(leer, columna))
         });
     });
 
@@ -378,7 +575,7 @@ const mapearFinanzas = (hoja, errores, catalogos) => {
         const inicioErrores = errores.length;
         const fechaMovimiento = fecha(leer('FECHA'));
         const naturaleza = valorCanonico(leer('NATURALEZA'), NATURALEZAS_FINANCIERAS);
-        const tipoMovimiento = valorCanonico(leer('TIPO_MOVIMIENTO'), TIPOS_MOVIMIENTO_FINANCIERO);
+        const tipoMovimiento = valorCanonico(leer('TIPO_MOVIMIENTO'), TIPOS_IMPORTACION_FINANCIERA);
         const categoria = valorCanonico(leer('CATEGORIA'), categorias);
         const descripcion = limpiarTexto(leer('DESCRIPCION'));
         const monto = numero(leer('MONTO'));
@@ -392,15 +589,16 @@ const mapearFinanzas = (hoja, errores, catalogos) => {
 
         if (!fechaMovimiento) agregarError(errores, 'FINANZAS', numeroFila, 'FECHA', leer('FECHA'), 'Usa una fecha válida en formato DD/MM/AAAA.');
         if (!naturaleza) agregarError(errores, 'FINANZAS', numeroFila, 'NATURALEZA', leer('NATURALEZA'), 'Usa Ingreso o Egreso.');
-        if (!tipoMovimiento) agregarError(errores, 'FINANZAS', numeroFila, 'TIPO_MOVIMIENTO', leer('TIPO_MOVIMIENTO'), `Opciones: ${TIPOS_MOVIMIENTO_FINANCIERO.join(', ')}.`);
+        if (!tipoMovimiento) agregarError(errores, 'FINANZAS', numeroFila, 'TIPO_MOVIMIENTO', leer('TIPO_MOVIMIENTO'), `Opciones: ${TIPOS_IMPORTACION_FINANCIERA.join(', ')}.`);
         if (!categoria) agregarError(errores, 'FINANZAS', numeroFila, 'CATEGORIA', leer('CATEGORIA'), 'La categoría no está activa en el catálogo financiero.');
         if (!descripcion) agregarError(errores, 'FINANZAS', numeroFila, 'DESCRIPCION', '', 'La descripción es obligatoria.', 'CAMPO_REQUERIDO');
-        if (monto === undefined || monto < 0) agregarError(errores, 'FINANZAS', numeroFila, 'MONTO', leer('MONTO'), 'Debe ser un número mayor o igual a cero.');
+        if (monto === undefined || monto < 0) agregarError(errores, 'FINANZAS', numeroFila, 'MONTO', leer('MONTO'), mensajeNumero(leer('MONTO'), 'Debe ser un número mayor o igual a cero.'));
         if (!moneda) agregarError(errores, 'FINANZAS', numeroFila, 'MONEDA', leer('MONEDA'), 'Usa CRC o USD.');
         if (limpiarTexto(leer('CANTIDAD')) && (cantidad === undefined || cantidad < 0)) agregarError(errores, 'FINANZAS', numeroFila, 'CANTIDAD', leer('CANTIDAD'), 'Debe ser un número mayor o igual a cero.');
         if (limpiarTexto(leer('PRECIO_UNITARIO')) && (precioUnitario === undefined || precioUnitario < 0)) agregarError(errores, 'FINANZAS', numeroFila, 'PRECIO_UNITARIO', leer('PRECIO_UNITARIO'), 'Debe ser un número mayor o igual a cero.');
         if (destinoTexto && !destinoUso) agregarError(errores, 'FINANZAS', numeroFila, 'DESTINO_USO', destinoTexto, 'El destino no está activo en el catálogo financiero.');
         if (metodoTexto && !metodoPago) agregarError(errores, 'FINANZAS', numeroFila, 'METODO_PAGO', metodoTexto, `Opciones: ${METODOS_PAGO_FINANCIERO.join(', ')}.`);
+        if (['PLANILLA', 'INVERSION', 'INVERSIONES'].includes(normalizarTexto(categoria)) && naturaleza !== 'Egreso') agregarError(errores, 'FINANZAS', numeroFila, 'NATURALEZA', naturaleza, `${categoria} solo puede registrarse como Egreso.`, 'NATURALEZA_INCOMPATIBLE');
 
         if (errores.length !== inicioErrores) return;
 
@@ -421,7 +619,6 @@ const mapearFinanzas = (hoja, errores, catalogos) => {
             proveedor: limpiarTexto(leer('PROVEEDOR')) || undefined,
             destinoUso,
             metodoPago,
-            empleado: limpiarTexto(leer('EMPLEADO')) || undefined,
             finca: limpiarTexto(leer('FINCA')) || undefined,
             observaciones: limpiarTexto(leer('OBSERVACIONES')) || undefined
         });
@@ -430,7 +627,7 @@ const mapearFinanzas = (hoja, errores, catalogos) => {
     return registros;
 };
 
-const mapearPesajes = (hoja, errores, diiosDisponibles) => {
+const mapearPesajes = (hoja, errores, animalesDisponibles) => {
     const registros = [];
     const claves = new Set();
 
@@ -444,14 +641,19 @@ const mapearPesajes = (hoja, errores, diiosDisponibles) => {
         const peso = numero(leer('PESO_KG'));
         const etapaTexto = limpiarTexto(leer('ETAPA_PRODUCTIVA'));
         const etapaProductiva = etapaTexto ? valorCanonico(etapaTexto, ['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde']) : undefined;
+        const animal = animalesDisponibles.get(normalizarTexto(diio));
         const clave = diio && fechaPesaje ? `${normalizarTexto(diio)}|${claveFecha(fechaPesaje)}` : '';
 
+        validarIdentificadorTexto(errores, 'PESAJES', numeroFila, 'DIIO', leer('DIIO'));
         if (!diio) agregarError(errores, 'PESAJES', numeroFila, 'DIIO', '', 'El DIIO es obligatorio.', 'CAMPO_REQUERIDO');
-        if (diio && !diiosDisponibles.has(normalizarTexto(diio))) agregarError(errores, 'PESAJES', numeroFila, 'DIIO', diio, 'El animal no existe ni está incluido en la hoja INVENTARIO.', 'REFERENCIA_NO_ENCONTRADA');
+        if (diio && !animal) agregarError(errores, 'PESAJES', numeroFila, 'DIIO', diio, 'El animal no existe ni está incluido en la hoja INVENTARIO.', 'REFERENCIA_NO_ENCONTRADA');
         if (!fechaPesaje) agregarError(errores, 'PESAJES', numeroFila, 'FECHA', leer('FECHA'), 'Usa una fecha válida en formato DD/MM/AAAA.');
-        if (peso === undefined || peso <= 0) agregarError(errores, 'PESAJES', numeroFila, 'PESO_KG', leer('PESO_KG'), 'Debe ser un número mayor que cero.');
+        if (fechaPesaje && fechaPesaje > fechaCivilHoy()) agregarError(errores, 'PESAJES', numeroFila, 'FECHA', leer('FECHA'), 'La fecha del pesaje no puede estar en el futuro.', 'FECHA_FUTURA');
+        if (fechaPesaje && animal?.fechaNacimiento && fechaPesaje < new Date(animal.fechaNacimiento)) agregarError(errores, 'PESAJES', numeroFila, 'FECHA', leer('FECHA'), 'La fecha del pesaje no puede ser anterior al nacimiento.', 'FECHA_ANTERIOR_NACIMIENTO');
+        if (peso === undefined || peso <= 0) agregarError(errores, 'PESAJES', numeroFila, 'PESO_KG', leer('PESO_KG'), mensajeNumero(leer('PESO_KG'), 'Debe ser un número mayor que cero.'));
         if (clave && claves.has(clave)) agregarError(errores, 'PESAJES', numeroFila, 'FECHA', leer('FECHA'), 'Ya existe otro pesaje para el mismo DIIO y fecha dentro del archivo.', 'DUPLICADO_ARCHIVO');
         if (etapaTexto && !etapaProductiva) agregarError(errores, 'PESAJES', numeroFila, 'ETAPA_PRODUCTIVA', etapaTexto, 'Etapa productiva no permitida.');
+        if (etapaProductiva && animal?.especie && animal.especie !== 'Porcino') agregarError(errores, 'PESAJES', numeroFila, 'ETAPA_PRODUCTIVA', etapaTexto, 'La etapa productiva por fases aplica únicamente a porcinos.', 'ETAPA_ESPECIE_INCOMPATIBLE');
 
         if (clave) claves.add(clave);
         if (errores.length !== inicioErrores) return;
@@ -465,13 +667,13 @@ const mapearPesajes = (hoja, errores, diiosDisponibles) => {
 const leerVersion = (workbook) => {
     const nombre = workbook.SheetNames.find((item) => normalizarTexto(item) === 'INSTRUCCIONES');
     if (!nombre) return null;
-    const matriz = XLSX.utils.sheet_to_json(workbook.Sheets[nombre], { header: 1, defval: null, raw: true });
+    const matriz = workbook.Sheets[nombre] || [];
     const fila = matriz.find((item) => normalizarTexto(item[0]) === 'VERSION_PLANTILLA');
     return fila ? limpiarTexto(fila[1]) : null;
 };
 
 const procesarExcelPreview = async (buffer, opciones = {}) => {
-    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+    const workbook = await parsearExcelAislado(buffer, opciones.limites || LIMITES_IMPORTACION);
     const errores = [];
     const advertencias = [];
     const catalogos = opciones.catalogosFinancieros || {};
@@ -498,6 +700,12 @@ const procesarExcelPreview = async (buffer, opciones = {}) => {
         MovimientoFinanciero: preparadas.FINANZAS?.columnasValidas ? mapearFinanzas(preparadas.FINANZAS, errores, catalogos) : [],
         Pesaje: []
     };
+    validarYEnriquecerAnimales({
+        registros: registros.Animal,
+        animalesExistentes: opciones.animalesExistentes || [],
+        errores,
+        advertencias
+    });
     const resolverCobertura = opciones.resolverPasto || resolverPastoPorTexto;
     for (const potrero of registros.Potrero) {
         if (!potrero.pastoTexto) continue;
@@ -514,8 +722,46 @@ const procesarExcelPreview = async (buffer, opciones = {}) => {
             });
         }
     }
-    const diiosDisponibles = new Set([...(opciones.diiosExistentes || []).map(normalizarTexto), ...registros.Animal.map((animal) => normalizarTexto(animal.diio))]);
-    if (preparadas.PESAJES?.columnasValidas) registros.Pesaje = mapearPesajes(preparadas.PESAJES, errores, diiosDisponibles);
+    const animalesDisponibles = new Map();
+    (opciones.diiosExistentes || []).forEach((diio) => animalesDisponibles.set(normalizarTexto(diio), { diio }));
+    [...(opciones.animalesExistentes || []), ...registros.Animal].forEach((animal) => {
+        [animal.diio, animal.identificadorFinca].filter(Boolean).forEach((identificador) => {
+            animalesDisponibles.set(normalizarTexto(identificador), animal);
+        });
+    });
+    if (preparadas.PESAJES?.columnasValidas) registros.Pesaje = mapearPesajes(preparadas.PESAJES, errores, animalesDisponibles);
+
+    const hojasPorModelo = { Potrero: 'POTREROS', Animal: 'INVENTARIO', MovimientoFinanciero: 'FINANZAS', Pesaje: 'PESAJES' };
+    const clavesVistas = new Set();
+    Object.entries(registros).forEach(([modelo, filas]) => filas.forEach((registro) => {
+        registro.claveImportacion = crearClaveImportacion({
+            organizacionId: opciones.organizacionId,
+            fincaId: opciones.fincaId,
+            hoja: hojasPorModelo[modelo],
+            registro
+        });
+        if (clavesVistas.has(`${modelo}:${registro.claveImportacion}`)) {
+            registro.posibleDuplicado = true;
+            registro.omitirPorDuplicado = true;
+            advertencias.push({ hoja: hojasPorModelo[modelo], mensaje: `Fila ${registro.filaOrigen}: posible duplicado dentro del archivo; se omitirá salvo confirmación explícita.` });
+        }
+        clavesVistas.add(`${modelo}:${registro.claveImportacion}`);
+    }));
+    if (opciones.resolverDuplicados) {
+        const duplicados = await opciones.resolverDuplicados(registros);
+        Object.entries(registros).forEach(([modelo, filas]) => filas.forEach((registro) => {
+            if (!duplicados?.[modelo]?.has(registro.claveImportacion)) return;
+            registro.posibleDuplicado = true;
+            registro.omitirPorDuplicado = true;
+            advertencias.push({ hoja: hojasPorModelo[modelo], mensaje: `Fila ${registro.filaOrigen}: coincide con una fila importada anteriormente; se omitirá salvo confirmación explícita.` });
+        }));
+    }
+    if (opciones.validarCupo) {
+        const resultadoCupo = await opciones.validarCupo(registros.Animal);
+        if (!resultadoCupo?.permitido) {
+            agregarError(errores, 'INVENTARIO', 0, 'CUPO', resultadoCupo?.cantidadSolicitada || '', resultadoCupo?.mensaje || 'El archivo supera el cupo disponible del plan.', 'CUPO_INSUFICIENTE');
+        }
+    }
 
     const resumen = {
         Potrero: registros.Potrero.length,
@@ -537,300 +783,12 @@ const procesarExcelPreview = async (buffer, opciones = {}) => {
         resumen,
         registros,
         muestras: Object.fromEntries(Object.entries(registros).map(([modelo, items]) => [modelo, items.slice(0, 5)])),
+        duplicados: Object.entries(registros).flatMap(([modelo, items]) => items
+            .filter((item) => item.posibleDuplicado)
+            .map((item) => ({ modelo, fila: item.filaOrigen, clave: item.claveImportacion, descripcion: item.diio || item.codigo || item.descripcion || 'Registro' }))),
         errores,
         advertencias
     };
-};
-
-const sinVacios = (datos) => Object.fromEntries(
-    Object.entries(datos).filter(([clave, valor]) => clave !== 'filaOrigen'
-        && clave !== 'potreroCodigo'
-        && clave !== 'codigoLote'
-        && clave !== 'nombreLote'
-        && clave !== 'propositoLote'
-        && clave !== 'pastoTexto'
-        && clave !== 'pastoPrincipal'
-        && clave !== 'fechaEstablecimientoPasto'
-        && clave !== 'diasDescansoObjetivo'
-        && clave !== 'observacionCobertura'
-        && clave !== 'descripcionCobertura'
-        && valor !== undefined
-        && valor !== null
-        && valor !== '')
-);
-
-const crearResumenResultado = () => ({ creados: 0, actualizados: 0, duplicados: 0, omitidos: 0, errores: [] });
-
-const registrarErrorConfirmacion = (resumen, registro, error) => {
-    resumen.omitidos += 1;
-    resumen.errores.push({ fila: registro.filaOrigen, mensaje: error.message });
-};
-
-const importarPotreros = async (registros, modo, resultado) => {
-    for (const registro of registros) {
-        try {
-            const existente = await Potrero.findOne({ codigo: registro.codigo });
-            if (existente) {
-                if (modo === 'solo_crear') {
-                    resultado.duplicados += 1;
-                    continue;
-                }
-                Object.assign(existente, sinVacios(registro));
-                await existente.save();
-                if (registro.pastoTexto || registro.diasDescansoObjetivo !== undefined || registro.intervaloCorteObjetivoDias !== undefined || registro.observacionCobertura) {
-                    const vigente = await HistorialCoberturaPotrero.findOne({ potrero: existente._id, fechaFin: null });
-                    const mismaCobertura = String(vigente?.pastoPrincipal || '') === String(registro.pastoPrincipal || '')
-                        && String(vigente?.descripcionCobertura || '') === String(registro.descripcionCobertura || '');
-                    if (!vigente || !mismaCobertura
-                        || Number(vigente.diasDescansoObjetivo ?? -1) !== Number(registro.diasDescansoObjetivo ?? -1)
-                        || Number(vigente.intervaloCorteObjetivoDias ?? -1) !== Number(registro.intervaloCorteObjetivoDias ?? -1)
-                        || String(vigente.observacionCobertura || '') !== String(registro.observacionCobertura || '')) {
-                        await guardarCobertura(existente._id, {
-                            pastoPrincipal: registro.pastoPrincipal,
-                            descripcionCobertura: registro.descripcionCobertura,
-                            fechaEstablecimientoPasto: registro.fechaEstablecimientoPasto,
-                            fechaCambio: registro.fechaEstablecimientoPasto || new Date(),
-                            diasDescansoObjetivo: registro.diasDescansoObjetivo,
-                            intervaloCorteObjetivoDias: registro.intervaloCorteObjetivoDias,
-                            observacionCobertura: registro.observacionCobertura
-                        }, { soloInicial: !vigente });
-                    }
-                }
-                resultado.actualizados += 1;
-                continue;
-            }
-            const creado = await Potrero.create(sinVacios(registro));
-            if (registro.pastoTexto || registro.diasDescansoObjetivo !== undefined || registro.intervaloCorteObjetivoDias !== undefined || registro.observacionCobertura) {
-                await guardarCobertura(creado._id, {
-                    pastoPrincipal: registro.pastoPrincipal,
-                    descripcionCobertura: registro.descripcionCobertura,
-                    fechaEstablecimientoPasto: registro.fechaEstablecimientoPasto,
-                    fechaCambio: registro.fechaEstablecimientoPasto || new Date(),
-                    diasDescansoObjetivo: registro.diasDescansoObjetivo,
-                    intervaloCorteObjetivoDias: registro.intervaloCorteObjetivoDias,
-                    observacionCobertura: registro.observacionCobertura
-                }, { soloInicial: true });
-            }
-            resultado.creados += 1;
-        } catch (error) {
-            registrarErrorConfirmacion(resultado, registro, error);
-        }
-    }
-};
-
-const importarAnimales = async (registros, modo, resultado, usuarioId) => {
-    for (const registro of registros) {
-        try {
-            const existente = await Animal.findOne({ $or: [{ diio: registro.diio }, { identificadorFinca: registro.diio }] });
-            let datos = sinVacios(registro);
-            if (registro.potreroCodigo) {
-                const potrero = await Potrero.findOne({ codigo: registro.potreroCodigo }).select('_id');
-                if (!potrero) throw new Error(`No existe el potrero ${registro.potreroCodigo}.`);
-                datos.potreroActual = potrero._id;
-            }
-
-            if (existente) {
-                if (modo === 'solo_crear') {
-                    resultado.duplicados += 1;
-                    continue;
-                }
-                if (datos.pesoActual !== undefined) {
-                    const tienePesajes = await Pesaje.exists({ animal: existente._id })
-                        .setOptions({ omitirAislamientoFinca: true });
-                    if (tienePesajes && Number(datos.pesoActual) !== Number(existente.pesoActual)) {
-                        throw new Error(`El peso actual de ${registro.diio} se administra desde la hoja PESAJES.`);
-                    }
-                    if (tienePesajes) delete datos.pesoActual;
-                }
-                const estadoFinal = datos.estado || existente.estado;
-                const especieFinal = datos.especie || existente.especie || 'Bovino';
-                const objetivoFinal = datos.objetivoProductivo || existente.objetivoProductivo;
-                if (especieFinal !== existente.especie || String(objetivoFinal || '') !== String(existente.objetivoProductivo || '')) {
-                    await validarObjetivoProductivoFinca({
-                        fincaId: obtenerFincaActual(),
-                        especie: especieFinal,
-                        objetivoProductivo: objetivoFinal
-                    });
-                }
-                if (estadoFinal === 'Activo') {
-                    const permisoEspecie = await puedeUsarEspecie(datos.especie || existente.especie || 'Bovino');
-                    if (!permisoEspecie.permitido) throw new Error(permisoEspecie.message);
-                    if (existente.estado !== 'Activo') {
-                        const permiso = await asegurarPuedeCrearAnimal({ especie: datos.especie || existente.especie || 'Bovino' });
-                        datos = prepararDatosRaciales(datos, existente.toObject());
-                        await ejecutarConReservaCuota({
-                            permiso,
-                            recurso: 'animales',
-                            operacion: async () => {
-                                Object.assign(existente, datos);
-                                await existente.save();
-                            }
-                        });
-                        resultado.actualizados += 1;
-                        continue;
-                    }
-                    if (existente.loteActual) {
-                        const loteActual = await Lote.findById(existente.loteActual);
-                        if (loteActual) validarAnimalParaLote({ ...existente.toObject(), ...datos, especie: especieFinal, objetivoProductivo: objetivoFinal, estado: estadoFinal }, loteActual);
-                    }
-                }
-                datos = prepararDatosRaciales(datos, existente.toObject());
-                Object.assign(existente, datos);
-                await existente.save();
-                if (estadoFinal !== 'Activo') {
-                    const pertenencia = await PertenenciaLote.findOne({ animal: existente._id, activo: true });
-                    if (pertenencia) await cerrarPertenencia(pertenencia, {
-                        motivoSalida: `Salida automática por estado ${estadoFinal}`,
-                        usuarioId
-                    });
-                }
-                resultado.actualizados += 1;
-                continue;
-            }
-            const permiso = (datos.estado || 'Activo') === 'Activo'
-                ? await asegurarPuedeCrearAnimal({ especie: datos.especie || 'Bovino' })
-                : null;
-            await validarObjetivoProductivoFinca({
-                fincaId: obtenerFincaActual(),
-                especie: datos.especie || 'Bovino',
-                objetivoProductivo: datos.objetivoProductivo
-            });
-            datos = prepararDatosRaciales(datos);
-            if (permiso) {
-                await ejecutarConReservaCuota({
-                    permiso,
-                    recurso: 'animales',
-                    operacion: () => Animal.create(datos)
-                });
-            } else {
-                await Animal.create(datos);
-            }
-            resultado.creados += 1;
-        } catch (error) {
-            registrarErrorConfirmacion(resultado, registro, error);
-        }
-    }
-
-    for (const registro of registros) {
-        if (!registro.codigoLote) continue;
-        try {
-            const [animal, lote] = await Promise.all([
-                Animal.findOne({ $or: [{ diio: registro.diio }, { identificadorFinca: registro.diio }] }),
-                Lote.findOne({ codigo: registro.codigoLote.toUpperCase() })
-            ]);
-            if (!animal) continue;
-            if (!lote) throw new Error(`No existe el lote ${registro.codigoLote}.`);
-            if (String(animal.loteActual || '') === String(lote._id)) continue;
-            await agregarAnimalesAlLote(lote._id, {
-                animales: [animal._id],
-                permitirMover: true,
-                motivoEntrada: 'Asignación desde importación estándar',
-                motivoSalida: 'Cambio de lote desde importación estándar'
-            }, usuarioId);
-        } catch (error) {
-            registrarErrorConfirmacion(resultado, registro, error);
-        }
-    }
-
-    for (const registro of registros) {
-        if (!registro.madreDiio && !registro.padreDiio) continue;
-        const animal = await Animal.findOne({ $or: [{ diio: registro.diio }, { identificadorFinca: registro.diio }] });
-        if (!animal) continue;
-        const [madre, padre] = await Promise.all([
-            registro.madreDiio ? Animal.findOne({ $or: [{ diio: registro.madreDiio }, { identificadorFinca: registro.madreDiio }] }).select('_id') : null,
-            registro.padreDiio ? Animal.findOne({ $or: [{ diio: registro.padreDiio }, { identificadorFinca: registro.padreDiio }] }).select('_id') : null
-        ]);
-        if (madre) animal.madre = madre._id;
-        if (padre) animal.padre = padre._id;
-        if (madre || padre) {
-            animal.origenGenealogico = 'Interno';
-            await animal.save();
-        }
-    }
-};
-
-const importarPesajes = async (registros, modo, resultado, usuarioId) => {
-    const animalesAfectados = new Set();
-    for (const registro of registros) {
-        try {
-            const animal = await Animal.findOne({ $or: [{ diio: registro.diio }, { identificadorFinca: registro.diio }] })
-                .select('_id etapaProductiva loteActual fechaNacimiento');
-            if (!animal) throw new Error(`No existe el animal ${registro.diio}.`);
-            const validacion = await validarDatosPesaje({
-                animal: animal._id,
-                fecha: registro.fecha,
-                peso: registro.peso
-            });
-            const claveFecha = validacion.fecha.toISOString().slice(0, 10);
-            const inicio = new Date(`${claveFecha}T00:00:00.000Z`);
-            const fin = new Date(inicio);
-            fin.setUTCDate(fin.getUTCDate() + 1);
-            const existente = await Pesaje.findOne({ animal: animal._id, fecha: { $gte: inicio, $lt: fin } });
-
-            let pesajeGuardado;
-            if (existente) {
-                if (modo === 'solo_crear') {
-                    resultado.duplicados += 1;
-                    continue;
-                }
-                existente.peso = registro.peso;
-                if (registro.etapaProductiva) existente.etapaProductiva = registro.etapaProductiva;
-                if (registro.observaciones) existente.observaciones = registro.observaciones;
-                existente.editadoPor = usuarioId;
-                existente.fechaEdicion = new Date();
-                existente.tipoPesaje = 'Importacion';
-                pesajeGuardado = await existente.save();
-                resultado.actualizados += 1;
-            } else {
-                pesajeGuardado = await Pesaje.create({
-                    animal: animal._id,
-                    lote: animal.loteActual || null,
-                    fecha: validacion.fecha,
-                    peso: validacion.peso,
-                    tipoPesaje: 'Importacion',
-                    etapaProductiva: registro.etapaProductiva || animal.etapaProductiva,
-                    observaciones: registro.observaciones,
-                    registradoPor: usuarioId
-                });
-                resultado.creados += 1;
-            }
-            await registrarEventoPesaje(pesajeGuardado, usuarioId, { titulo: 'Pesaje importado' });
-            animalesAfectados.add(animal._id.toString());
-        } catch (error) {
-            registrarErrorConfirmacion(resultado, registro, error);
-        }
-    }
-
-    for (const animalId of animalesAfectados) await actualizarPesoActualAnimal(animalId, { forzar: true });
-};
-
-const importarFinanzas = async (registros, resultado) => {
-    for (const registro of registros) {
-        try {
-            await MovimientoFinanciero.create(sinVacios(registro));
-            resultado.creados += 1;
-        } catch (error) {
-            registrarErrorConfirmacion(resultado, registro, error);
-        }
-    }
-};
-
-const confirmarImportacionExcel = async (payload, opciones = {}) => {
-    const registros = payload?.registros || {};
-    const modo = ['crear_actualizar', 'solo_crear'].includes(opciones.modo) ? opciones.modo : 'crear_actualizar';
-    const resultado = {
-        Potrero: crearResumenResultado(),
-        Animal: crearResumenResultado(),
-        MovimientoFinanciero: crearResumenResultado(),
-        Pesaje: crearResumenResultado()
-    };
-
-    await importarPotreros(registros.Potrero || [], modo, resultado.Potrero);
-    await importarAnimales(registros.Animal || [], modo, resultado.Animal, opciones.usuarioId);
-    await importarPesajes(registros.Pesaje || [], modo, resultado.Pesaje, opciones.usuarioId);
-    await importarFinanzas(registros.MovimientoFinanciero || [], resultado.MovimientoFinanciero);
-
-    return { mensaje: 'Importación estándar confirmada.', modo, resultado };
 };
 
 const hojaConColumnas = (columnas, anchos) => {
@@ -849,7 +807,7 @@ const generarPlantillaExcel = (catalogos = {}) => {
         ['IMPORTADOR', 'GanaderiaRomilio - formato estándar'],
         ['USO', 'Conserve los nombres de hojas y columnas. Puede eliminar hojas que no vaya a importar.'],
         ['FECHAS', 'Use DD/MM/AAAA.'],
-        ['INVENTARIO', 'DIIO, ESPECIE, SEXO y CATEGORIA son obligatorios. Si incluye FECHA_NACIMIENTO, la categoría debe coincidir con edad y sexo. Cría se acepta como formato antiguo y se normaliza a REPRODUCCION.'],
+        ['INVENTARIO', 'DIIO, ESPECIE, SEXO y CATEGORIA son obligatorios. DIIO, MADRE_DIIO y PADRE_DIIO deben ser celdas de tipo Texto. Si incluye FECHA_NACIMIENTO, la categoría debe coincidir con edad y sexo. Cría se acepta como formato antiguo y se normaliza a REPRODUCCION.'],
         ['RAZAS', 'RAZA conserva la descripción libre. RAZA_PRINCIPAL y RAZA_SECUNDARIA normalizan bovinos y porcinos. Las fracciones son opcionales e informativas.'],
         ['GENEALOGIA', 'MADRE_DIIO y PADRE_DIIO se enlazan si existen; si no, se conservan para resolverlos después.'],
         ['FINANZAS', 'Las categorías y destinos deben existir y estar activos en Catálogos de Finanzas.'],
@@ -874,13 +832,13 @@ const generarPlantillaExcel = (catalogos = {}) => {
     const pastos = CATALOGO_PASTOS_BASE.filter((item) => item.categoria === 'Pasto').map((item) => item.nombre);
     const forrajesCorte = CATALOGO_PASTOS_BASE.filter((item) => item.categoria === 'Pasto de corte').map((item) => item.nombre);
     const leguminosas = CATALOGO_PASTOS_BASE.filter((item) => item.categoria === 'Leguminosa/Forraje').map((item) => item.nombre);
-    const largo = Math.max(categorias.length, destinos.length, TIPOS_MOVIMIENTO_FINANCIERO.length, catalogoRacialBovino.razas.length, catalogoRacialPorcino.razas.length, pastos.length, forrajesCorte.length, CATEGORIAS_POR_ESPECIE.Bovino.length, CATEGORIAS_POR_ESPECIE.Porcino.length, OBJETIVOS_PRODUCTIVOS.length, PROPOSITOS_LOTE.length, 8);
+    const largo = Math.max(categorias.length, destinos.length, TIPOS_IMPORTACION_FINANCIERA.length, catalogoRacialBovino.razas.length, catalogoRacialPorcino.razas.length, pastos.length, forrajesCorte.length, CATEGORIAS_POR_ESPECIE.Bovino.length, CATEGORIAS_POR_ESPECIE.Porcino.length, OBJETIVOS_PRODUCTIVOS.length, PROPOSITOS_LOTE.length, 8);
     const filasCatalogos = [['CATEGORIAS_FINANCIERAS', 'DESTINOS_USO', 'TIPOS_MOVIMIENTO', 'NATURALEZAS', 'MONEDAS', 'ESPECIES', 'SEXOS', 'CATEGORIAS_BOVINOS', 'CATEGORIAS_PORCINOS', 'OBJETIVOS_PRODUCTIVOS', 'PROPOSITOS_LOTE', 'ESTADOS_POTRERO', 'TIPOS_AREA', 'RAZAS_BOVINAS', 'RAZAS_PORCINAS', 'GRADOS_RACIALES', 'FRACCIONES_RACIALES', 'COMPOSICIONES_RACIALES', 'PASTOS', 'FORRAJES_CORTE', 'LEGUMINOSAS_FORRAJES']];
     for (let indice = 0; indice < largo; indice += 1) {
         filasCatalogos.push([
             categorias[indice] || '',
             destinos[indice] || '',
-            TIPOS_MOVIMIENTO_FINANCIERO[indice] || '',
+            TIPOS_IMPORTACION_FINANCIERA[indice] || '',
             NATURALEZAS_FINANCIERAS[indice] || '',
             MONEDAS_FINANCIERAS[indice] || '',
             ['Bovino', 'Porcino'][indice] || '',
@@ -911,8 +869,10 @@ const generarPlantillaExcel = (catalogos = {}) => {
 module.exports = {
     COLUMNAS,
     HOJAS_DATOS,
+    LIMITES_IMPORTACION,
     VERSION_PLANTILLA,
-    confirmarImportacionExcel,
+    crearClaveImportacion,
+    confirmarImportacionExcel: confirmarImportacionExcelAtomica,
     generarPlantillaExcel,
     procesarExcelPreview
 };

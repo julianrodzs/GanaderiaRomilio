@@ -8,6 +8,7 @@ const auditoriaSchema = new Schema(
         usuarioCorreo: { type: String, trim: true },
         usuarioRol: { type: String, trim: true },
         accion: { type: String, required: true, trim: true },
+        evento: { type: String, trim: true },
         modulo: { type: String, required: true, trim: true },
         metodo: { type: String, required: true, trim: true },
         ruta: { type: String, required: true, trim: true },
@@ -35,5 +36,12 @@ auditoriaSchema.index({ createdAt: -1 });
 auditoriaSchema.index({ usuario: 1, createdAt: -1 });
 auditoriaSchema.index({ modulo: 1, createdAt: -1 });
 auditoriaSchema.index({ estado: 1, createdAt: -1 });
+
+['updateOne', 'updateMany', 'findOneAndUpdate', 'replaceOne', 'deleteOne', 'deleteMany', 'findOneAndDelete'].forEach((operacion) => {
+    auditoriaSchema.pre(operacion, function protegerAuditoria(next) {
+        if (this.getOptions()?.permitirRedaccionAuditoria === true) return next();
+        next(new Error('Los registros de auditoría son inmutables.'));
+    });
+});
 
 module.exports = model('Auditoria', auditoriaSchema);

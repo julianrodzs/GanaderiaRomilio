@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import useArchivoProtegido from '../hooks/useArchivoProtegido';
 import {
   actualizarAnimal,
   actualizarEstadoSanitarioAnimal,
@@ -193,6 +194,8 @@ const NodoGenealogico = ({ nodo, titulo = 'Animal' }) => {
 const FotoAnimal = ({ animal, detalle = false }) => {
   const [imagenInvalida, setImagenInvalida] = useState(false);
   const url = animal?.fotoPrincipal?.url;
+  const urlProtegida = useArchivoProtegido(url?.startsWith('/api/archivos/') ? url : '');
+  const imagen = url?.startsWith('/api/archivos/') ? urlProtegida : url;
 
   useEffect(() => { setImagenInvalida(false); }, [url]);
 
@@ -201,8 +204,8 @@ const FotoAnimal = ({ animal, detalle = false }) => {
 
   return (
     <div className={`foto-animal ${detalle ? 'foto-animal-detalle' : 'foto-animal-miniatura'}`}>
-      {url && !imagenInvalida
-        ? <img src={url} alt={`Fotografía de ${identificador}`} onError={() => setImagenInvalida(true)} />
+      {imagen && !imagenInvalida
+        ? <img src={imagen} alt={`Fotografía de ${identificador}`} onError={() => setImagenInvalida(true)} />
         : <span aria-label="Sin fotografía">{inicial}</span>}
     </div>
   );
@@ -332,6 +335,7 @@ const Animales = ({
   puedeGestionarSanidad = false,
   puedeCrearNotaBitacora = false,
   estaOnline = true,
+  rolUsuario = 'Consulta',
   onNavegar
 }) => {
   const { capacidadDisponible, tieneFeature } = usePlan();
@@ -931,7 +935,7 @@ const Animales = ({
       </div>
 
       {vistaInventario === 'Lotes' ? (
-        <Lotes especie={especie} animales={animales} soloLectura={soloLectura} onNavegar={onNavegar} />
+        <Lotes especie={especie} animales={animales} soloLectura={soloLectura} rolUsuario={rolUsuario} estaOnline={estaOnline} onNavegar={onNavegar} />
       ) : especie === 'Porcino' && vistaInventario === 'Camadas' ? (
         <TablaDinamica
           titulo="Camadas porcinas"
@@ -951,7 +955,7 @@ const Animales = ({
           textoAgregar="Nueva camada"
           onAgregar={soloLectura ? undefined : abrirNuevaCamada}
           onEditar={soloLectura ? undefined : abrirEdicionCamada}
-          onEliminar={soloLectura ? undefined : borrarCamada}
+          onEliminar={soloLectura || rolUsuario !== 'Administrador' ? undefined : borrarCamada}
           mostrarAcciones={!soloLectura}
         />
       ) : (

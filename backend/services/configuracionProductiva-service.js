@@ -12,6 +12,7 @@ const CAMPOS_CONFIGURABLES = [
     'porcinosCria.supervivenciaPredesteteObjetivoPct',
     'bovinosEngorde.gmdObjetivoKgDia',
     'bovinosEngorde.pesoObjetivoKg',
+    'diasEsperaPosparto',
     'diasPesajeReciente'
 ];
 

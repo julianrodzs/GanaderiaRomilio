@@ -31,6 +31,10 @@ const schema = new Schema({
     ejecuciones: { type: [ejecucionSchema], default: [] },
     historialEtapas: [{ etapaId: Schema.Types.ObjectId, codigo: String, fechaInicio: Date, fechaFin: Date, avanzadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' } }],
     responsable: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true },
+    responsablesPorRol: [{
+        rol: { type: String, enum: ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'], required: true },
+        usuario: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true }
+    }],
     creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
     motivoCierre: { type: String, trim: true }
 }, { timestamps: true, optimisticConcurrency: true });

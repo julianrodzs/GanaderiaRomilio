@@ -82,7 +82,7 @@ const actualizarEstadoSanitarioAnimalEnSession = async (
                 motivo: String(motivo).trim(),
                 tratamientoId: tratamientoId || undefined
             }
-        }], { session });
+        }], { session, ordered: true });
 
     return { animal, evento, sinCambios: false, estadoAnterior, estadoNuevo, motivo };
 };

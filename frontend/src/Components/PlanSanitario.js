@@ -31,6 +31,7 @@ import RegistrarAplicacionTratamiento from './RegistrarAplicacionTratamiento';
 import SelectorEspecie from './SelectorEspecie';
 import { ContenidoPaginado } from './PaginacionTabla';
 import { etiquetaUsuarioConRol } from '../utils/usuarios';
+import { cargarOpcional } from '../utils/cargarOpcional';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -60,7 +61,7 @@ const estadoVisualTratamiento = (tratamiento) => {
   return tratamiento.estado;
 };
 
-const PlanSanitario = ({ soloLectura = false }) => {
+const PlanSanitario = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const [pestana, setPestana] = useState('planes');
   const [especie, setEspecie] = useState(obtenerEspecieInicial);
   const [planes, setPlanes] = useState([]);
@@ -103,7 +104,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
         obtenerAplicacionesSanitarias({ ...filtrosAplicados, especie }),
         obtenerAnimales({ especie }),
         obtenerLotes({ especie, estado: 'ACTIVO' }),
-        soloLectura ? Promise.resolve([]) : obtenerUsuariosAsignables('Sanidad')
+        soloLectura ? Promise.resolve([]) : cargarOpcional(() => obtenerUsuariosAsignables('Sanidad'), [])
       ]);
       setPlanes(planesData || []);
       setTratamientos(tratamientosData || []);
@@ -395,7 +396,7 @@ const PlanSanitario = ({ soloLectura = false }) => {
                     <div className="acciones-tabla acciones-iconos-sanidad">
                       <button type="button" title="Registrar aplicación" aria-label="Registrar aplicación" onClick={() => setPlanAplicacion(plan)}>✓</button>
                       <button type="button" title="Editar plan" aria-label="Editar plan" onClick={() => { setPlanSeleccionado(plan); setVistaFormulario('plan'); }}>✎</button>
-                      <button className="accion-peligro" type="button" title="Eliminar plan" aria-label="Eliminar plan" onClick={() => borrarPlan(plan)}>⌫</button>
+                      {rolUsuario === 'Administrador' && <button className="accion-peligro" type="button" title="Eliminar plan" aria-label="Eliminar plan" onClick={() => borrarPlan(plan)}>⌫</button>}
                     </div>
                   </td>
                 )}

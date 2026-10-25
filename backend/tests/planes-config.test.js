@@ -4,7 +4,10 @@ const { PLAN_MINIMO_POR_FEATURE, planesConfig } = require('../config/planes');
 
 test('define los cuatro planes comerciales con precios y limites esperados', () => {
     assert.deepEqual(Object.keys(planesConfig), ['ESENCIAL', 'GESTION', 'PRO', 'PREMIUM']);
-    assert.equal(planesConfig.ESENCIAL.precioMensualUSD, 6);
+    assert.equal(planesConfig.ESENCIAL.precioMensualUSD, 10);
+    assert.equal(planesConfig.GESTION.precioMensualUSD, 20);
+    assert.equal(planesConfig.PRO.precioMensualUSD, 35);
+    assert.equal(planesConfig.PREMIUM.precioMensualUSD, 60);
     assert.equal(planesConfig.GESTION.limites.animalesActivosTotal, 2000);
     assert.equal(planesConfig.PRO.limites.conteosDroneMensuales, 150);
     assert.equal(planesConfig.PREMIUM.limites.modoConteoDrone, 'USO_INTENSIVO');

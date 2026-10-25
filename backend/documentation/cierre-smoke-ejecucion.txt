@@ -1,0 +1,28 @@
+{"check":"INDICES_65_MODELOS","status":"PASS","details":{"modelos":65,"mongodb":"8.0.5"}}
+Eliminando índice obsoleto organizacionId_1_fincaId_1_claveIdempotencia_1 de EventoAnimal...
+{"check":"MIGRACION_INDICE_SPARSE_EN_OTRA_BASE","status":"PASS","details":{"indiceParcial":true,"claveNulaOmitida":true,"baseAislada":true}}
+{"check":"SCRIPT_INDICES_65_MODELOS_E_IDEMPOTENCIA","status":"PASS","details":{"ejecuciones":[{"exit":0,"modelos":65},{"exit":0,"modelos":65}],"produccion":true,"baseAislada":true}}
+{"step":"1 Aprovisionar organización y aceptar invitación administrador","status":"PASS","details":{"org":"6ade64cccb32bf050c36e3f7","finca":"6ade64cccb32bf050c36e3f9"}}
+{"step":"2 Login y alta de Encargado y Veterinario","status":"PASS","details":{"roles":["Encargado","Veterinario"],"temporal":true}}
+{"step":"3 Potrero de pastoreo y lote de engorde","status":"PASS","details":{"potrero":"6ade64cdcb32bf050c36e473","lote":"6ade64cdcb32bf050c36e47f"}}
+{"step":"4 Dos bovinos, pertenencia al lote y rotación","status":"PASS","details":{"hembra":"6ade64cdcb32bf050c36e4a0","macho":"6ade64cdcb32bf050c36e4be","lote":"6ade64cdcb32bf050c36e47f","potrero":"6ade64cdcb32bf050c36e473"}}
+{"step":"5 Pesajes del lote y suministro de alimentación","status":"PASS","details":{"totalKg":20}}
+{"step":"6 Tratamiento con retiro y advertencia de venta","status":"PASS","details":{"status":409,"retiros":1}}
+{"step":"7 Ciclo, parto, ternero y consumo de cupo","status":"PASS","details":{"ternero":"6ade64cdcb32bf050c36e5fd","madre":"6ade64cdcb32bf050c36e4a0","antes":2,"despues":3}}
+{"step":"8 Venta confirmada, salida del lote e ingreso CRC","status":"PASS","details":{"venta":"6ade64cecb32bf050c36e624","estado":"Vendido","pertenencias":0,"ingreso":900,"moneda":"CRC"}}
+{"step":"9 Dashboard y reporte de resumen","status":"PASS","details":{"animales":3,"activos":2,"partos":1,"ingresos":900,"moneda":"CRC"}}
+{"check":"ALTA_ANIMAL_ROLLBACK_EVENTO","status":"PASS","details":{"status":400,"animalesPersistidos":0}}
+{"check":"EVENTOS_IDEMPOTENCIA_Y_CLAVES_OMITIDAS","status":"PASS","details":{"sinClave":4,"conClave":1,"deduplicado":true}}
+{"step":"X1 Traslado entre fincas con plugin de aislamiento","status":"PASS","details":{"finca2":"6ade64cecb32bf050c36e6a6","animal":"6ade64cdcb32bf050c36e4a0"}}
+{"check":"TRASLADO_HISTORIAL_Y_ROLLBACK","status":"PASS","details":{"bitacoraEnAmbasFincas":true,"rollbackCompleto":true,"status":500}}
+{"step":"X2 Transferencia, gasto compartido y anulaciones","status":"PASS","details":[{"route":"transferencias","movimientos":4,"neto":0},{"route":"gastos-compartidos","movimientos":4,"neto":0}]}
+{"step":"X2R Anulación de grupos preexistentes sintéticos","status":"PASS","details":[{"kind":"TRANSFERENCIA_INTERNA","status":200},{"kind":"GASTO_COMPARTIDO","status":200}]}
+{"check":"TRANSFERENCIA_ROLLBACK_SEGUNDA_PARTIDA","status":"PASS","details":{"status":500,"partidasPersistidas":0}}
+{"check":"GASTO_Y_ANULACIONES_ROLLBACK_E_IDEMPOTENCIA","status":"PASS","details":[{"route":"transferencias","rollbackCompleto":true,"anulacionIdempotente":true,"neto":0},{"route":"gastos-compartidos","rollbackCompleto":true,"anulacionIdempotente":true,"neto":0}]}
+{"step":"X3 Compra y egreso automático","status":"PASS","details":{"egreso":600,"moneda":"CRC"}}
+{"check":"COMPRAVENTAS_RECHAZAN_USD","status":"PASS","details":{"compra":400,"venta":400,"persistenciaAlterada":false}}
+{"step":"X4 Importación Excel y confirmación transaccional","status":"PASS","details":{"mensaje":"Importación estándar aplicada completamente.","modo":"solo_crear","resultado":{"Potrero":{"creados":0,"actualizados":0,"duplicados":0,"omitidos":0,"errores":[]},"Animal":{"creados":1,"actualizados":0,"duplicados":0,"omitidos":0,"errores":[]},"MovimientoFinanciero":{"creados":0,"actualizados":0,"duplicados":0,"omitidos":0,"errores":[]},"Pesaje":{"creados":0,"actualizados":0,"duplicados":0,"omitidos":0,"errores":[]}},"importacionId":"6ade64cfcb32bf050c36e8be","estado":"Aplicada","hojasDetectadas":[{"nombre":"INVENTARIO","reconocida":true,"_id":"6ade64cfcb32bf050c36e8bf"}],"resumenDetectado":{"Potrero":0,"Animal":1,"MovimientoFinanciero":0,"Pesaje":0,"filasInvalidas":0},"advertencias":[{"hoja":"INSTRUCCIONES","mensaje":"El archivo no declara VERSION_PLANTILLA. Se validará con la versión actual.","_id":"6ade64cfcb32bf050c36e8c0"}]}}
+{"step":"X5 Cron con organizaciones y fincas reales","status":"PASS","details":[{"route":"alertas","resultado":{"ejecutado":true,"organizacionesProcesadas":1,"notificacionesCreadas":0,"correosEnviados":0,"categoriasAnimalesActualizadas":1,"resultados":[{"organizacionId":"6ade64cccb32bf050c36e3f7","organizacion":"Empresa Audit Local","notificacionesCreadas":0,"correos":{"enviadas":0,"alertasEnviadas":0,"errores":[]},"categoriasAnimales":{"revisados":4,"actualizados":1}}]}},{"route":"resumenes-email","resultado":{"ejecutado":true,"organizacionesProcesadas":1,"correosEnviados":0,"resultados":[{"organizacionId":"6ade64cccb32bf050c36e3f7","envios":[]}]}}]}
+{"step":"X6 Selector organizaciones, finca y revocación tokenVersion","status":"PASS","details":{"cambioOrganizacion":true,"conservaExpAuthTime":true,"fincaAjena":403,"tokenRevocado":[401,401,401]}}
+Error registrando auditoria docs?.some is not a function
+Error registrando auditoria docs?.some is not a function

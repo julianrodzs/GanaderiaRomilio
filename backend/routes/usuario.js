@@ -1,13 +1,17 @@
 const { Router } = require('express');
 const router = Router();
 const { auth, autorizarPermiso } = require('../middleware/auth');
-const { rateLimitLogin, rateLimitRecuperacion } = require('../middleware/rateLimit');
+const { rateLimitInvitacion, rateLimitLogin, rateLimitRecuperacion } = require('../middleware/rateLimit');
 
 const {
     actualizarUsuario,
+    actualizarPerfil,
+    aceptarInvitacionExistente,
+    aceptarPrivacidad,
     cambiarEstadoUsuario,
     crearUsuario,
     eliminarUsuario,
+    eliminarPerfil,
     getPerfil,
     getMisOrganizaciones,
     getUsuarioById,
@@ -25,13 +29,17 @@ router.post('/login', rateLimitLogin, loginUsuario);
 router.post('/recuperar-contrasena', rateLimitRecuperacion, solicitarRecuperacionContrasena);
 router.post('/restablecer-contrasena', rateLimitRecuperacion, restablecerContrasena);
 router.get('/perfil', auth, getPerfil);
+router.put('/perfil', auth, actualizarPerfil);
+router.delete('/perfil', auth, eliminarPerfil);
+router.post('/perfil/consentimiento', auth, aceptarPrivacidad);
 router.get('/mis-organizaciones', auth, getMisOrganizaciones);
 router.post('/cambiar-organizacion-activa', auth, cambiarOrganizacionActiva);
+router.post('/invitaciones/aceptar', auth, rateLimitInvitacion, aceptarInvitacionExistente);
 router.get('/asignables', auth, getUsuariosAsignables);
 
 router.route('/')
     .get(soloAdministrador, getUsuarios)
-    .post(soloAdministrador, crearUsuario);
+    .post(soloAdministrador, rateLimitInvitacion, crearUsuario);
 
 router.patch('/:id/estado', soloAdministrador, cambiarEstadoUsuario);
 

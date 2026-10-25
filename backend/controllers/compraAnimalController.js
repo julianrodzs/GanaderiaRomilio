@@ -44,13 +44,24 @@ const parseLoteRapido = (loteRapido) => {
     return loteRapido;
 };
 
+const normalizarMoneda = (valor = 'CRC') => {
+    const moneda = String(valor || 'CRC').trim().toUpperCase();
+    if (moneda !== 'CRC') {
+        const error = new Error('Las compras de animales operan en CRC. Esta moneda no está soportada.');
+        error.status = 400;
+        throw error;
+    }
+    return moneda;
+};
+
 const extraerDatosCompra = (body = {}) => ({
     fechaCompra: body.fechaCompra,
     proveedor: body.proveedor,
     identificacionProveedor: body.identificacionProveedor,
     telefonoProveedor: body.telefonoProveedor,
     observaciones: body.observaciones,
-    montoFinal: body.montoFinal
+    montoFinal: body.montoFinal,
+    moneda: normalizarMoneda(body.moneda)
 });
 
 const prepararAnimalesCompra = (animales) => parseAnimales(animales).map((item) => ({
@@ -185,7 +196,7 @@ const crearAnimalesCompra = async (compra, usuarioId, session) => {
             estado: 'Activo',
             origenGenealogico: 'Externo',
             observaciones: item.observaciones
-        })], { session });
+        })], { session, ordered: true });
         const [animal] = animalesCreados;
 
         item.animal = animal._id;
@@ -272,7 +283,7 @@ const crearMovimientoCompra = async (compra, session) => {
             unidad: 'KG',
             precioUnitario: compra.pesoTotalKg ? compra.montoTotal / compra.pesoTotalKg : undefined,
             monto: compra.montoTotal,
-            moneda: 'CRC',
+            moneda: compra.moneda || 'CRC',
             proveedor: compra.proveedor,
             destinoUso: DESTINO_USO_MOVIMIENTOS_ANIMALES,
             observaciones: compra.observaciones,
@@ -432,7 +443,7 @@ compraAnimalCtrl.crearCompra = async (req, res) => {
                     registradoPor: req.usuario?.id,
                     organizacionId: req.organizacionId,
                     fincaId: req.fincaId
-                }], { session });
+                }], { session, ordered: true });
                 await aplicarCompraConfirmada(compraGuardada, req.usuario?.id, loteRapido, session);
                 return compraGuardada._id;
             })

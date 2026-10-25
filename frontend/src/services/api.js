@@ -31,6 +31,8 @@ const request = async (ruta, opciones = {}) => {
   }
 
   const esFormData = opciones.body instanceof FormData;
+  const metodo = String(opciones.method || 'GET').toUpperCase();
+  const contextoInicio = obtenerContextoOffline();
   const token = obtenerTokenSesion();
   const { headers, contextoEsperado, ...fetchOpciones } = opciones;
   if (contextoEsperado && obtenerContextoOffline().clave !== contextoEsperado.clave) {
@@ -55,6 +57,12 @@ const request = async (ruta, opciones = {}) => {
     headers: headersBase,
   });
 
+  if (metodo === 'GET' && obtenerContextoOffline().clave !== contextoInicio.clave) {
+    const error = new Error('La finca o sesión cambió mientras se cargaban los datos.');
+    error.code = 'REQUEST_CONTEXT_CHANGED';
+    throw error;
+  }
+
   const data = await respuesta.json().catch(() => ({}));
 
   if (!respuesta.ok) {
@@ -76,14 +84,16 @@ const request = async (ruta, opciones = {}) => {
     throw error;
   }
 
-  const metodo = String(fetchOpciones.method || 'GET').toUpperCase();
-  if (metodo !== 'GET' && /^(\/animales|\/compras|\/ventas|\/usuarios|\/fincas|\/plan\/especie|\/conteo-drone)/.test(ruta)) {
-    window.dispatchEvent(new CustomEvent('ganaderiaPlanActualizado', { detail: { ruta, metodo } }));
+  const metodoEfectivo = String(fetchOpciones.method || 'GET').toUpperCase();
+  if (metodoEfectivo !== 'GET' && /^(\/animales|\/compras|\/ventas|\/usuarios|\/fincas|\/plan\/especie|\/conteo-drone)/.test(ruta)) {
+    window.dispatchEvent(new CustomEvent('ganaderiaPlanActualizado', { detail: { ruta, metodo: metodoEfectivo } }));
   }
 
-  if (metodo !== 'GET') window.dispatchEvent(new Event('ganaderiaNotificacionesActualizadas'));
+  if (metodoEfectivo !== 'GET') window.dispatchEvent(new Event('ganaderiaNotificacionesActualizadas'));
   return data;
 };
+
+export const capturarContextoPeticion = () => ({ ...obtenerContextoOffline() });
 
 export const obtenerArchivoProtegido = async (ruta) => {
   if (!ruta) throw new Error('Ruta de archivo requerida');
@@ -110,6 +120,10 @@ export const obtenerArchivoProtegido = async (ruta) => {
 };
 
 export const obtenerPlanActual = () => request('/plan/actual');
+export const actualizarFincasOperativasPlan = (fincaIds) => request('/plan/fincas-operativas', {
+  method: 'PUT',
+  body: JSON.stringify({ fincaIds })
+});
 
 export const obtenerEstadoFacturacion = () => request('/facturacion/estado');
 export const crearCheckoutFacturacion = (codigoPlan) => request('/facturacion/checkout', {
@@ -158,6 +172,7 @@ export const registrarPesajesLote = (id, datos) => request(`/lotes/${id}/pesajes
 export const programarTareaLote = (id, datos) => request(`/lotes/${id}/tareas`, { method: 'POST', body: JSON.stringify(datos) });
 export const cambiarPotreroLote = (id, datos) => request(`/lotes/${id}/cambiar-potrero`, { method: 'POST', body: JSON.stringify(datos) });
 export const obtenerHistorialLote = (id) => request(`/lotes/${id}/historial`);
+export const obtenerEventosLote = (id, filtros = {}) => request(`/lotes/${id}/eventos${construirQuery(filtros)}`);
 export const obtenerPlanActualLote = (id) => request(`/lotes/${id}/plan-alimentacion`);
 export const asignarPlanLote = (id, datos) => request(`/lotes/${id}/plan-alimentacion`, { method: 'POST', body: JSON.stringify(datos) });
 export const obtenerHistorialAlimentacionLote = (id) => request(`/lotes/${id}/historial-alimentacion`);
@@ -238,6 +253,11 @@ export const crearGastoCompartido = (datos) => request('/finanzas/multi-finca/ga
   body: JSON.stringify(datos)
 });
 
+export const anularGrupoFinancieroMultiFinca = (grupoConsolidacion, motivo) => request(`/finanzas/multi-finca/grupos/${grupoConsolidacion}/anular`, {
+  method: 'POST',
+  body: JSON.stringify({ motivo })
+});
+
 export const obtenerMetasMultiFinca = () => request('/reportes/multi-finca/metas');
 
 export const guardarMetaMultiFinca = (datos) => request('/reportes/multi-finca/metas', {
@@ -252,6 +272,10 @@ export const obtenerCierresMultiFinca = () => request('/reportes/multi-finca/cie
 export const crearCierreMultiFinca = (datos) => request('/reportes/multi-finca/cierres', {
   method: 'POST',
   body: JSON.stringify(datos)
+});
+
+export const regenerarCierreMultiFinca = (id) => request(`/reportes/multi-finca/cierres/${id}/regenerar`, {
+  method: 'POST'
 });
 
 export const obtenerCierreMultiFinca = (id) => request(`/reportes/multi-finca/cierres/${id}`);
@@ -323,6 +347,15 @@ export const crearUsuario = (usuario) => {
 };
 
 export const obtenerPerfilUsuario = () => request('/usuarios/perfil');
+export const actualizarPerfilUsuario = (datos) => request('/usuarios/perfil', {
+  method: 'PUT', body: JSON.stringify(datos)
+});
+export const aceptarInvitacionNueva = (token, contrasena) => request('/invitaciones/aceptar', {
+  method: 'POST', body: JSON.stringify({ token, contrasena })
+});
+export const aceptarInvitacionExistente = (token) => request('/usuarios/invitaciones/aceptar', {
+  method: 'POST', body: JSON.stringify({ token })
+});
 
 export const obtenerMisOrganizaciones = () => request('/usuarios/mis-organizaciones');
 export const cambiarOrganizacionActiva = (organizacionId) => request('/usuarios/cambiar-organizacion-activa', {
@@ -471,10 +504,10 @@ export const previsualizarExcel = (archivo) => {
   });
 };
 
-export const confirmarImportacionExcel = (importacionId, modo) => {
+export const confirmarImportacionExcel = (importacionId, modo, duplicadosConfirmados = []) => {
   return request('/importar/excel/confirmar', {
     method: 'POST',
-    body: JSON.stringify({ importacionId, modo })
+    body: JSON.stringify({ importacionId, modo, duplicadosConfirmados })
   });
 };
 

@@ -9,6 +9,9 @@ const cierreConsolidadoSchema = new Schema({
     especie: { type: String, enum: ['Todos', 'Bovino', 'Porcino'], default: 'Todos' },
     fincas: [{ type: Schema.Types.ObjectId, ref: 'Finca', required: true }],
     datos: { type: Schema.Types.Mixed, required: true },
+    versionCalculo: { type: String, enum: ['legacy', 'historico-v2'], default: 'legacy' },
+    regeneradoEn: { type: Date },
+    regeneradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
     cerradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true },
     estado: { type: String, enum: ['Cerrado'], default: 'Cerrado' }
 }, { timestamps: true });

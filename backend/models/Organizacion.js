@@ -40,7 +40,8 @@ const organizacionSchema = new Schema(
             suscripcionPagoId: { type: String, trim: true },
             fechaRenovacion: { type: Date, default: null },
             fechaExpiracion: { type: Date, default: null },
-            ultimoPagoFallido: { type: Date, default: null }
+            ultimoPagoFallido: { type: Date, default: null },
+            fincasOperativas: [{ type: Schema.Types.ObjectId, ref: 'Finca' }]
         },
         configuracion: { type: Schema.Types.Mixed, default: {} }
     },

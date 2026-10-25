@@ -8,7 +8,9 @@ const MetaConsolidacion = require('../models/MetaConsolidacion');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const PertenenciaLote = require('../models/PertenenciaLote');
 const TrasladoFinca = require('../models/TrasladoFinca');
+const Auditoria = require('../models/Auditoria');
 const { validarObjetivoProductivoFinca } = require('./finca-service');
+const { limitesDiaEnZona } = require('./fechaZonaHoraria-service');
 
 const errorOperacion = (mensaje, status = 400, code = 'MULTI_FARM_INVALID_OPERATION') => {
     const error = new Error(mensaje);
@@ -23,11 +25,31 @@ const fechaValida = (valor, nombre) => {
     return fecha;
 };
 
-const redondearMoneda = (valor) => Math.round((Number(valor) + Number.EPSILON) * 100) / 100;
+const aCentimos = (valor) => Math.round((Number(valor) + Number.EPSILON) * 100);
+const desdeCentimos = (valor) => valor / 100;
+
+const repartirCentimos = (totalCentimos, porcentajes) => {
+    const calculos = porcentajes.map((porcentaje, indice) => {
+        const exacto = totalCentimos * porcentaje / 100;
+        const base = Math.floor(exacto);
+        return { indice, base, fraccion: exacto - base };
+    });
+    let residuo = totalCentimos - calculos.reduce((suma, item) => suma + item.base, 0);
+    [...calculos]
+        .sort((a, b) => b.fraccion - a.fraccion || b.indice - a.indice)
+        .forEach((item) => {
+            if (residuo <= 0) return;
+            calculos[item.indice].base += 1;
+            residuo -= 1;
+        });
+    return calculos.map((item) => item.base);
+};
 
 const calcularDistribucionGasto = ({ montoTotal, distribucion, modo = 'IGUAL' }) => {
     const total = Number(montoTotal);
-    if (!Number.isFinite(total) || total <= 0) throw errorOperacion('El monto total debe ser mayor que cero.');
+    const totalCentimos = aCentimos(total);
+    if (!Number.isFinite(total) || totalCentimos <= 0) throw errorOperacion('El monto total debe ser mayor que cero.');
+    if (Math.abs(total * 100 - totalCentimos) > 1e-8) throw errorOperacion('El monto total admite como máximo dos decimales.');
     if (!Array.isArray(distribucion) || !distribucion.length) throw errorOperacion('Selecciona al menos una finca para distribuir el gasto.');
 
     const fincas = [...new Set(distribucion.map((item) => String(item.fincaId || '')).filter(Boolean))];
@@ -35,27 +57,31 @@ const calcularDistribucionGasto = ({ montoTotal, distribucion, modo = 'IGUAL' })
 
     let calculada;
     if (modo === 'MONTO') {
-        calculada = distribucion.map((item) => ({ fincaId: String(item.fincaId), monto: redondearMoneda(item.monto) }));
-        const suma = redondearMoneda(calculada.reduce((totalMonto, item) => totalMonto + item.monto, 0));
-        if (calculada.some((item) => item.monto <= 0) || Math.abs(suma - total) > 0.01) {
+        const montos = distribucion.map((item) => Number(item.monto));
+        const centimos = montos.map(aCentimos);
+        const suma = centimos.reduce((acumulado, monto) => acumulado + monto, 0);
+        if (montos.some((monto, indice) => !Number.isFinite(monto) || Math.abs(monto * 100 - centimos[indice]) > 1e-8)
+            || centimos.some((monto) => !Number.isInteger(monto) || monto <= 0) || suma !== totalCentimos) {
             throw errorOperacion('Los montos por finca deben ser positivos y sumar exactamente el monto total.');
         }
+        calculada = distribucion.map((item, indice) => ({ fincaId: String(item.fincaId), monto: desdeCentimos(centimos[indice]) }));
     } else {
         const porcentajes = modo === 'PORCENTAJE'
             ? distribucion.map((item) => Number(item.porcentaje))
             : distribucion.map(() => 100 / distribucion.length);
         const suma = porcentajes.reduce((acumulado, porcentaje) => acumulado + porcentaje, 0);
-        if (porcentajes.some((porcentaje) => !Number.isFinite(porcentaje) || porcentaje <= 0) || Math.abs(suma - 100) > 0.001) {
+        if (porcentajes.some((porcentaje) => !Number.isFinite(porcentaje) || porcentaje <= 0) || Math.abs(suma - 100) > 0.01) {
             throw errorOperacion('Los porcentajes deben ser positivos y sumar 100%.');
         }
-        let asignado = 0;
-        calculada = distribucion.map((item, indice) => {
-            const monto = indice === distribucion.length - 1
-                ? redondearMoneda(total - asignado)
-                : redondearMoneda(total * porcentajes[indice] / 100);
-            asignado = redondearMoneda(asignado + monto);
-            return { fincaId: String(item.fincaId), porcentaje: porcentajes[indice], monto };
-        });
+        const centimos = repartirCentimos(totalCentimos, porcentajes);
+        if (centimos.some((monto) => monto <= 0)) {
+            throw errorOperacion('El monto total es insuficiente para asignar una partida positiva a cada finca.');
+        }
+        calculada = distribucion.map((item, indice) => ({
+            fincaId: String(item.fincaId),
+            porcentaje: porcentajes[indice],
+            monto: desdeCentimos(centimos[indice])
+        }));
     }
 
     return calculada;
@@ -68,7 +94,8 @@ const trasladarAnimalesEntreFincas = async ({
     fecha,
     motivo,
     observaciones,
-    usuarioId
+    usuarioId,
+    zonaHoraria = 'America/Costa_Rica'
 }) => {
     if (String(fincaOrigenId) === String(fincaDestino?._id)) throw errorOperacion('La finca de destino debe ser diferente a la finca activa.');
     if (!String(motivo || '').trim()) throw errorOperacion('El motivo del traslado es requerido.');
@@ -94,6 +121,30 @@ const trasladarAnimalesEntreFincas = async ({
     }
 
     const fechaTraslado = fechaValida(fecha, 'La fecha del traslado');
+    if (fechaTraslado >= limitesDiaEnZona(new Date(), zonaHoraria).finExclusivo) {
+        throw errorOperacion('La fecha del traslado no puede estar en el futuro.', 400, 'TRANSFER_DATE_IN_FUTURE');
+    }
+    const historiasRecientes = await HistorialFincaAnimal.find({ animal: { $in: animales.map((animal) => animal._id) } })
+        .setOptions({ omitirAislamientoFinca: true })
+        .sort({ fecha: -1 })
+        .lean();
+    const ultimaPorAnimal = new Map();
+    historiasRecientes.forEach((historia) => {
+        const id = String(historia.animal);
+        if (!ultimaPorAnimal.has(id)) ultimaPorAnimal.set(id, historia);
+    });
+    const cronologiaInvalida = animales.find((animal) => {
+        const nacimiento = animal.fechaNacimiento && new Date(animal.fechaNacimiento);
+        const ultimo = ultimaPorAnimal.get(String(animal._id));
+        return (nacimiento && fechaTraslado < nacimiento) || (ultimo && fechaTraslado < new Date(ultimo.fecha));
+    });
+    if (cronologiaInvalida) {
+        throw errorOperacion(
+            `La fecha del traslado no puede ser anterior al nacimiento ni al último traslado del animal ${cronologiaInvalida.diio || cronologiaInvalida.identificadorFinca || cronologiaInvalida._id}.`,
+            409,
+            'TRANSFER_DATE_BEFORE_HISTORY'
+        );
+    }
     const sesion = await mongoose.startSession();
     let trasladoCreado;
     try {
@@ -111,7 +162,7 @@ const trasladarAnimalesEntreFincas = async ({
                 motivo: String(motivo).trim(),
                 observaciones,
                 registradoPor: usuarioId
-            }], { session: sesion });
+            }], { session: sesion, ordered: true });
 
             for (const animal of animales) {
                 const tieneHistoria = await HistorialFincaAnimal.exists({ animal: animal._id }).session(sesion);
@@ -123,18 +174,18 @@ const trasladarAnimalesEntreFincas = async ({
                         fecha: animal.createdAt || fechaTraslado,
                         motivo: 'Pertenencia anterior al primer traslado registrado',
                         registradoPor: usuarioId
-                    }], { session: sesion });
+                    }], { session: sesion, ordered: true });
                 }
 
                 await PertenenciaLote.updateMany(
                     { animal: animal._id, activo: true },
                     { $set: { activo: false, fechaSalida: fechaTraslado, motivoSalida: 'Traslado a otra finca' } },
-                    { session: sesion }
+                    { session: sesion, permitirFincaExplicita: true }
                 );
                 const resultadoTraslado = await Animal.updateOne(
                     { _id: animal._id, fincaId: fincaOrigenId },
                     { $set: { fincaId: fincaDestino._id, loteActual: null, potreroActual: null } },
-                    { session: sesion }
+                    { session: sesion, permitirFincaExplicita: true }
                 );
                 if (resultadoTraslado.modifiedCount !== 1) {
                     throw errorOperacion(
@@ -153,7 +204,7 @@ const trasladarAnimalesEntreFincas = async ({
                     motivo: String(motivo).trim(),
                     traslado: trasladoCreado._id,
                     registradoPor: usuarioId
-                }], { session: sesion });
+                }], { session: sesion, ordered: true, permitirFincaExplicita: true });
 
                 const descripcion = `Traslado de finca por ${String(motivo).trim()}.`;
                 await EventoAnimal.create([{
@@ -178,7 +229,7 @@ const trasladarAnimalesEntreFincas = async ({
                     creadoPor: usuarioId,
                     fincaId: fincaDestino._id,
                     metadata: { fincaOrigenId, fincaDestinoId: fincaDestino._id, pesoTraslado: animal.pesoActual }
-                }], { session: sesion });
+                }], { session: sesion, ordered: true, permitirFincaExplicita: true });
             }
         });
     } finally {
@@ -224,7 +275,7 @@ const crearTransferenciaFinancieraInterna = async ({ fincaOrigenId, fincaDestino
                 fincaId: fincaDestino._id,
                 fincaContraparte: fincaOrigenId,
                 naturaleza: 'Ingreso'
-            }], { session: sesion });
+            }], { session: sesion, ordered: true, permitirFincaExplicita: true });
         });
     } finally {
         await sesion.endSession();
@@ -262,12 +313,116 @@ const crearGastoCompartido = async ({ datos, fincasAutorizadas, usuarioId }) => 
                 porcentajeDistribucion: item.porcentaje,
                 referenciaModelo: 'GastoCompartido',
                 referenciaId: grupo
-            })), { session: sesion });
+            })), { session: sesion, ordered: true, permitirFincaExplicita: true });
         });
     } finally {
         await sesion.endSession();
     }
     return { grupoConsolidacion: grupo, montoTotal: Number(datos.montoTotal), distribucion, movimientos, registradoPor: usuarioId };
+};
+
+const anularGrupoFinancieroMultiFinca = async ({
+    grupoConsolidacion,
+    motivo,
+    fincasAutorizadas,
+    usuario
+}) => {
+    if (!mongoose.Types.ObjectId.isValid(grupoConsolidacion)) throw errorOperacion('El grupo financiero no es válido.');
+    const motivoLimpio = String(motivo || '').trim();
+    if (!motivoLimpio) throw errorOperacion('El motivo de anulación es obligatorio.');
+
+    const opciones = { omitirAislamientoFinca: true };
+    const originales = await MovimientoFinanciero.find({
+        grupoConsolidacion,
+        referenciaModelo: { $ne: 'AnulacionOperacionMultiFinca' },
+        alcanceFinanciero: { $in: ['TRANSFERENCIA_INTERNA', 'GASTO_COMPARTIDO'] }
+    }).setOptions(opciones).lean();
+    if (!originales.length) throw errorOperacion('No se encontró el grupo financiero.', 404, 'MULTI_FARM_GROUP_NOT_FOUND');
+
+    const autorizadas = new Set((fincasAutorizadas || []).map((finca) => String(finca._id || finca)));
+    if (originales.some((movimiento) => !autorizadas.has(String(movimiento.fincaId)))) {
+        throw errorOperacion('No tienes acceso a todas las fincas involucradas en esta operación.', 403, 'FINCA_ACCESS_DENIED');
+    }
+
+    const sesion = await mongoose.startSession();
+    let contrapartidas = [];
+    try {
+        await sesion.withTransaction(async () => {
+            const existente = await MovimientoFinanciero.findOne({
+                grupoConsolidacion,
+                referenciaModelo: 'AnulacionOperacionMultiFinca'
+            }).setOptions(opciones).session(sesion).lean();
+            if (existente) {
+                contrapartidas = await MovimientoFinanciero.find({
+                    grupoConsolidacion,
+                    referenciaModelo: 'AnulacionOperacionMultiFinca'
+                }).setOptions(opciones).session(sesion).lean();
+                return;
+            }
+
+            const bloqueo = await MovimientoFinanciero.findOneAndUpdate(
+                { _id: originales[0]._id, grupoAnuladoEn: null },
+                { $set: { grupoAnuladoEn: new Date(), grupoAnuladoPor: usuario?.id, motivoAnulacionGrupo: motivoLimpio } },
+                { new: true, session: sesion, omitirAislamientoFinca: true }
+            );
+            if (!bloqueo) {
+                contrapartidas = await MovimientoFinanciero.find({
+                    grupoConsolidacion,
+                    referenciaModelo: 'AnulacionOperacionMultiFinca'
+                }).setOptions(opciones).session(sesion).lean();
+                return;
+            }
+
+            contrapartidas = await MovimientoFinanciero.create(originales.map((movimiento) => ({
+                fecha: new Date(),
+                fincaId: movimiento.fincaId,
+                tipoMovimiento: movimiento.tipoMovimiento,
+                naturaleza: movimiento.naturaleza === 'Ingreso' ? 'Egreso' : 'Ingreso',
+                categoria: movimiento.categoria,
+                categoriaNormalizada: movimiento.categoriaNormalizada,
+                descripcion: `Anulación: ${movimiento.descripcion}`,
+                producto: movimiento.producto,
+                monto: movimiento.monto,
+                moneda: movimiento.moneda,
+                metodoPago: movimiento.metodoPago,
+                observaciones: motivoLimpio,
+                alcanceFinanciero: movimiento.alcanceFinanciero,
+                grupoConsolidacion: movimiento.grupoConsolidacion,
+                fincaContraparte: movimiento.fincaContraparte,
+                excluirConsolidacion: movimiento.excluirConsolidacion,
+                porcentajeDistribucion: movimiento.porcentajeDistribucion,
+                referenciaModelo: 'AnulacionOperacionMultiFinca',
+                referenciaId: movimiento.grupoConsolidacion
+            })), { session: sesion, ordered: true, permitirFincaExplicita: true });
+
+            await MovimientoFinanciero.updateMany(
+                { grupoConsolidacion, referenciaModelo: { $ne: 'AnulacionOperacionMultiFinca' } },
+                { $set: { grupoAnuladoEn: new Date(), grupoAnuladoPor: usuario?.id, motivoAnulacionGrupo: motivoLimpio } },
+                { session: sesion, omitirAislamientoFinca: true }
+            );
+
+            await Auditoria.create([{
+                usuario: usuario?.id,
+                usuarioNombre: usuario?.nombre,
+                usuarioCorreo: usuario?.correo,
+                usuarioRol: usuario?.rol,
+                accion: 'ANULAR_GRUPO_MULTI_FINCA',
+                evento: 'finanzas.multiFinca.anular',
+                modulo: 'Finanzas',
+                metodo: 'POST',
+                ruta: `/api/finanzas/multi-finca/grupos/${grupoConsolidacion}/anular`,
+                recursoTipo: 'GrupoConsolidacion',
+                recursoId: String(grupoConsolidacion),
+                descripcion: motivoLimpio,
+                datos: { movimientosOriginales: originales.length, contrapartidas: contrapartidas.length },
+                estado: 'Exitoso',
+                codigoRespuesta: 200
+            }], { session: sesion, ordered: true });
+        });
+    } finally {
+        await sesion.endSession();
+    }
+    return { grupoConsolidacion, anulada: true, movimientos: contrapartidas };
 };
 
 const validarRango = (fechaInicio, fechaFin) => {
@@ -321,11 +476,13 @@ const crearCierreConsolidado = async ({ nombre, reporte, fincas, usuarioId }) =>
         especie: reporte.filtros.especie,
         fincas: fincaIds,
         datos: reporte,
+        versionCalculo: 'historico-v2',
         cerradoPor: usuarioId
     });
 };
 
 module.exports = {
+    anularGrupoFinancieroMultiFinca,
     calcularDistribucionGasto,
     claveCierre,
     crearCierreConsolidado,

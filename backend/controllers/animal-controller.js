@@ -28,6 +28,7 @@ const { sanitizarAnimal } = require('../services/animal-dto');
 const { limpiarFotoAnimalEliminado } = require('../services/fotoAnimal-service');
 const { asegurarAnimalSinHistorial } = require('../services/animal-dependencias-service');
 const { liberarCriasCamada, reservarCriasCamada } = require('../services/camada-service');
+const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
 
 const limpiarDiio = (diio) => {
     if (diio === undefined) return undefined;
@@ -107,7 +108,7 @@ const prepararRelacionCamada = async (datos) => {
     };
 };
 
-const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId }) => {
+const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId, session = null }) => {
     const referenciaId = animal._id;
     const creadoPor = usuarioId;
 
@@ -128,7 +129,7 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
                 diioActual,
                 identificadorFinca: animal.identificadorFinca
             }
-        });
+        }, { session });
     }
 
     if (animal.fechaNacimiento) {
@@ -149,7 +150,7 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
                 padreDiio: animal.padreDiio,
                 camadaOrigen: animal.camadaOrigen
             }
-        });
+        }, { session });
     }
 
     if (animal.fechaCompra || animal.montoCompra) {
@@ -166,7 +167,7 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
                 montoCompra: animal.montoCompra,
                 fechaCompra: animal.fechaCompra
             }
-        });
+        }, { session });
     }
 
     const datosVentaCambiaron = animalAnterior
@@ -190,7 +191,7 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
                 montoVenta: animal.montoVenta,
                 fechaVenta: animal.fechaVenta
             }
-        });
+        }, { session });
     }
 
     const datosMuerteCambiaron = animalAnterior
@@ -211,7 +212,7 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
                 fechaMuerte: animal.fechaMuerte,
                 observaciones: animal.observaciones
             }
-        });
+        }, { session });
     }
 };
 
@@ -265,24 +266,21 @@ animalCtrl.createAnimal = async (req, res) => {
         await validarDiioDisponible(datos.diio);
         await validarRelacionGenealogica(null, datos.padre, datos.madre);
         const esIndividualizacionCamada = Boolean(datos.camadaOrigen);
-        const guardar = async () => {
-            if (!esIndividualizacionCamada) return new Animal(datos).save();
+        const guardar = async (session) => {
+            if (!esIndividualizacionCamada) return new Animal(datos).save({ session });
             await reservarCriasCamada({
                 camadaId: datos.camadaOrigen,
                 cantidad: 1,
-                destino: 'individualizacion'
+                destino: 'individualizacion',
+                session
             });
-            try {
-                return await new Animal(datos).save();
-            } catch (error) {
-                await liberarCriasCamada({
-                    camadaId: datos.camadaOrigen,
-                    cantidad: 1,
-                    destino: 'individualizacion'
-                }).catch(() => null);
-                throw error;
-            }
+            return new Animal(datos).save({ session });
         };
+        const guardarConEvento = () => ejecutarEnTransaccion(async (session) => {
+            const animal = await guardar(session);
+            await crearEventosInventario({ animal, usuarioId: req.usuario?.id, session });
+            return animal;
+        });
         const animalGuardado = (datos.estado || 'Activo') === 'Activo'
             ? await ejecutarConReservaCuota({
                 permiso: await asegurarPuedeCrearAnimal({
@@ -293,10 +291,9 @@ animalCtrl.createAnimal = async (req, res) => {
                 recurso: 'animales',
                 organizacionId: req.organizacionId,
                 cantidad: esIndividualizacionCamada ? 0 : 1,
-                operacion: guardar
+                operacion: guardarConEvento
             })
-            : await guardar();
-        await crearEventosInventario({ animal: animalGuardado, usuarioId: req.usuario?.id });
+            : await guardarConEvento();
         res.status(201).json(animalGuardado);
     } catch (error) {
         if (respuestaErrorPlan(error, res)) return;

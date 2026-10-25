@@ -11,15 +11,25 @@ const {
     registrarEventoOperativoLote,
     registrarPesajesLote,
     retirarAnimalesDelLote,
-    proyectarDetalleLotePorPlan
+    proyectarDetalleLotePorPlan,
+    obtenerResumenListadoLotes,
+    listarEventosLote,
+    normalizarFechaOperacion
 } = require('../services/lote-service');
 const HistorialEtapaLote = require('../models/HistorialEtapaLote');
 const { ejecutarNotificacionSegura, notificarTareaAsignada } = require('../services/tarea-notificacion-service');
 const { normalizarPropositoLote } = require('../config/lotes');
 const { asegurarPuedeUsarEspecie, tieneFeature } = require('../services/plan-service');
 const { respuestaErrorPlan } = require('../middleware/plan');
+const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
+const { sanitizarActualizacionLote, sanitizarCreacionLote } = require('../services/lote-integridad-service');
 
 const responderError = (res, error) => res.status(error.status || 400).json({ mensaje: error.message, codigo: error.codigo });
+const escaparRegex = (valor = '') => String(valor).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 80);
+const detalleVisible = async (loteId, organizacionId, zonaHoraria) => proyectarDetalleLotePorPlan(
+    await obtenerDetalleLote(loteId, { zonaHoraria }),
+    await tieneFeature('analiticaProductiva', organizacionId)
+);
 
 const listar = async (req, res) => {
     try {
@@ -31,110 +41,164 @@ const listar = async (req, res) => {
         if (req.query.etapa) filtro.etapaOperativa = req.query.etapa;
         if (req.query.potrero) filtro.ubicacionActual = req.query.potrero;
         if (req.query.buscar) filtro.$or = [
-            { codigo: { $regex: req.query.buscar, $options: 'i' } },
-            { nombre: { $regex: req.query.buscar, $options: 'i' } }
+            { codigo: { $regex: escaparRegex(req.query.buscar), $options: 'i' } },
+            { nombre: { $regex: escaparRegex(req.query.buscar), $options: 'i' } }
         ];
-        const lotes = await Lote.find(filtro).populate('ubicacionActual', 'codigo nombre').sort({ estado: 1, createdAt: -1 }).lean();
-        const enriquecidos = await Promise.all(lotes.map(async (lote) => {
-            const [cantidadAnimales, asignacion, detalle] = await Promise.all([
-                PertenenciaLote.countDocuments({ lote: lote._id, activo: true }),
-                AsignacionPlanAlimentacion.findOne({ lote: lote._id, activo: true }).populate('plan', 'nombre etapa activo').lean(),
-                obtenerDetalleLote(lote._id)
-            ]);
-            const visible = proyectarDetalleLotePorPlan(detalle, incluirAnalitica);
-            return { ...lote, gmdObjetivoKgDia: visible.gmdObjetivoKgDia, cantidadAnimales, resumen: visible.resumen, planAlimentacionActual: asignacion?.plan || null };
-        }));
-        res.json(enriquecidos);
+        const lotes = await obtenerResumenListadoLotes(filtro);
+        res.json(lotes.map((lote) => proyectarDetalleLotePorPlan(lote, incluirAnalitica)));
     } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
 
 const crear = async (req, res) => {
     try {
-        const { ubicacionActual, animales, ...datos } = req.body;
+        const limpio = sanitizarCreacionLote(req.body);
+        const { ubicacionActual, animales = [], ...datos } = limpio;
         await asegurarPuedeUsarEspecie(datos.especie, req.organizacionId);
         if (datos.proposito) datos.proposito = normalizarPropositoLote(datos.proposito) || datos.proposito;
-        const lote = await Lote.create({ ...datos, creadoPor: req.usuario?.id });
-        if (lote.etapaOperativa) await HistorialEtapaLote.create({ lote: lote._id, etapa: lote.etapaOperativa, fechaInicio: lote.fechaInicio, registradoPor: req.usuario?.id });
-        await registrarEventoOperativoLote({ lote: lote._id, tipo: 'LOTE_CREADO', titulo: 'Lote creado', descripcion: lote.nombre, fecha: lote.fechaInicio, usuarioId: req.usuario?.id });
-        if (animales?.length) {
-            await agregarAnimalesAlLote(lote._id, { animales, motivoEntrada: 'Creación del lote' }, req.usuario?.id);
+        datos.fechaInicio = normalizarFechaOperacion(datos.fechaInicio, req.organizacion?.zonaHoraria);
+        if (datos.fechaInicio > new Date()) {
+            throw Object.assign(new Error('La fecha inicial del lote no puede estar en el futuro.'), { status: 400, codigo: 'FECHA_LOTE_FUTURA' });
         }
-        if (ubicacionActual) await moverLoteAPotrero(lote._id, { potrero: ubicacionActual, fechaEntrada: lote.fechaInicio }, req.usuario?.id);
-        res.status(201).json(await obtenerDetalleLote(lote._id));
+        const loteId = await ejecutarEnTransaccion(async (session) => {
+            const [lote] = await Lote.create([{
+                ...datos,
+                estado: 'ACTIVO',
+                fechaCierre: undefined,
+                organizacionId: req.organizacionId,
+                fincaId: req.fincaId,
+                creadoPor: req.usuario?.id
+            }], { session, ordered: true });
+            if (lote.etapaOperativa) {
+                await HistorialEtapaLote.create([{
+                    lote: lote._id,
+                    etapa: lote.etapaOperativa,
+                    fechaInicio: lote.fechaInicio,
+                    registradoPor: req.usuario?.id
+                }], { session, ordered: true });
+            }
+            await registrarEventoOperativoLote({
+                lote: lote._id,
+                tipo: 'LOTE_CREADO',
+                titulo: 'Lote creado',
+                descripcion: lote.nombre,
+                fecha: lote.fechaInicio,
+                usuarioId: req.usuario?.id,
+                session
+            });
+            if (animales.length) {
+                await agregarAnimalesAlLote(lote._id, {
+                    animales,
+                    fechaEntrada: lote.fechaInicio,
+                    motivoEntrada: 'Creación del lote'
+                }, req.usuario?.id, { session, zonaHoraria: req.organizacion?.zonaHoraria });
+                if (ubicacionActual) {
+                    await moverLoteAPotrero(lote._id, {
+                        potrero: ubicacionActual,
+                        fechaEntrada: lote.fechaInicio
+                    }, req.usuario?.id, { session });
+                }
+            }
+            return lote._id;
+        });
+        res.status(201).json(await detalleVisible(loteId, req.organizacionId, req.organizacion?.zonaHoraria));
     } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
 
 const obtener = async (req, res) => {
     try {
         const incluirAnalitica = await tieneFeature('analiticaProductiva', req.organizacionId);
-        res.json(proyectarDetalleLotePorPlan(await obtenerDetalleLote(req.params.id), incluirAnalitica));
+        res.json(proyectarDetalleLotePorPlan(await obtenerDetalleLote(req.params.id, { zonaHoraria: req.organizacion?.zonaHoraria }), incluirAnalitica));
     } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
 
 const actualizar = async (req, res) => {
     try {
-        if (req.body.proposito) req.body.proposito = normalizarPropositoLote(req.body.proposito) || req.body.proposito;
-        const lote = await Lote.findById(req.params.id);
-        if (!lote) return res.status(404).json({ mensaje: 'Lote no encontrado.' });
-        await asegurarPuedeUsarEspecie(req.body.especie || lote.especie, req.organizacionId);
-        if (lote.estado !== 'ACTIVO' && (req.body.especie || req.body.proposito)) {
-            return res.status(409).json({ mensaje: 'No se puede cambiar especie o propósito de un lote cerrado.' });
-        }
-        const cambiaClasificacion = (req.body.especie && req.body.especie !== lote.especie)
-            || (req.body.proposito && req.body.proposito !== lote.proposito);
-        if (cambiaClasificacion) {
-            const [animalesActivos, planActivo] = await Promise.all([
-                PertenenciaLote.countDocuments({ lote: lote._id, activo: true }),
-                AsignacionPlanAlimentacion.exists({ lote: lote._id, activo: true })
-            ]);
-            if (animalesActivos || planActivo) {
-                return res.status(409).json({ mensaje: 'Retira los animales y cierra el plan actual antes de cambiar especie o propósito.' });
+        const datos = sanitizarActualizacionLote(req.body);
+        if (datos.proposito) datos.proposito = normalizarPropositoLote(datos.proposito) || datos.proposito;
+        await ejecutarEnTransaccion(async (session) => {
+            const lote = await Lote.findById(req.params.id).session(session);
+            if (!lote) throw Object.assign(new Error('Lote no encontrado.'), { status: 404 });
+            await asegurarPuedeUsarEspecie(datos.especie || lote.especie, req.organizacionId);
+            if (lote.estado !== 'ACTIVO') throw Object.assign(new Error('No se puede editar un lote cerrado.'), { status: 409 });
+            const fechaInicioNueva = datos.fechaInicio
+                ? normalizarFechaOperacion(datos.fechaInicio, req.organizacion?.zonaHoraria)
+                : null;
+            if (fechaInicioNueva && fechaInicioNueva > new Date()) {
+                throw Object.assign(new Error('La fecha inicial del lote no puede estar en el futuro.'), { status: 400, codigo: 'FECHA_LOTE_FUTURA' });
             }
-        }
-        const etapaNueva = req.body.etapaOperativa;
-        const permitidos = ['codigo', 'nombre', 'especie', 'proposito', 'fechaInicio', 'descripcion', 'pesoObjetivoKg', 'gmdObjetivoKgDia'];
-        permitidos.forEach((campo) => { if (req.body[campo] !== undefined) lote[campo] = req.body[campo] || undefined; });
-        await lote.save();
-        if (etapaNueva !== undefined && etapaNueva !== lote.etapaOperativa) await cambiarEtapa(lote._id, etapaNueva || null, req.usuario?.id);
-        res.json(await obtenerDetalleLote(lote._id));
+            const cambiaClasificacion = (datos.especie && datos.especie !== lote.especie)
+                || (datos.proposito && datos.proposito !== lote.proposito);
+            const cambiaInicio = fechaInicioNueva && fechaInicioNueva.getTime() !== new Date(lote.fechaInicio).getTime();
+            if (cambiaClasificacion || cambiaInicio) {
+                const [animalesActivos, planActivo, historial] = await Promise.all([
+                    PertenenciaLote.countDocuments({ lote: lote._id, activo: true }).session(session),
+                    AsignacionPlanAlimentacion.exists({ lote: lote._id, activo: true }).session(session),
+                    HistorialEtapaLote.countDocuments({ lote: lote._id }).session(session)
+                ]);
+                if (animalesActivos || planActivo || (cambiaInicio && historial)) {
+                    throw Object.assign(new Error('No se puede cambiar clasificación o fecha inicial mientras el lote tenga historia operativa.'), { status: 409 });
+                }
+            }
+            const etapaNueva = Object.hasOwn(datos, 'etapaOperativa') ? datos.etapaOperativa : undefined;
+            const campos = ['codigo', 'nombre', 'especie', 'proposito', 'fechaInicio', 'descripcion', 'pesoObjetivoKg', 'gmdObjetivoKgDia'];
+            campos.forEach((campo) => {
+                if (Object.hasOwn(datos, campo)) lote[campo] = campo === 'fechaInicio'
+                    ? fechaInicioNueva
+                    : datos[campo];
+            });
+            await lote.save({ session });
+            if (etapaNueva !== undefined && etapaNueva !== lote.etapaOperativa) {
+                await cambiarEtapa(lote._id, etapaNueva, req.usuario?.id, new Date(), {
+                    session,
+                    zonaHoraria: req.organizacion?.zonaHoraria
+                });
+            }
+        });
+        res.json(await detalleVisible(req.params.id, req.organizacionId, req.organizacion?.zonaHoraria));
     } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
 
 const agregarAnimales = async (req, res) => {
     try {
-        const pertenencias = await agregarAnimalesAlLote(req.params.id, { ...req.body, permitirMover: false }, req.usuario?.id);
-        res.status(201).json({ agregados: pertenencias.length, lote: await obtenerDetalleLote(req.params.id) });
+        const pertenencias = await agregarAnimalesAlLote(req.params.id, { ...req.body, permitirMover: false }, req.usuario?.id, { zonaHoraria: req.organizacion?.zonaHoraria });
+        res.status(201).json({ agregados: pertenencias.length, lote: await detalleVisible(req.params.id, req.organizacionId, req.organizacion?.zonaHoraria) });
     } catch (error) { responderError(res, error); }
 };
 
 const moverAnimales = async (req, res) => {
     try {
         const destinoId = req.body.loteDestino || req.params.id;
-        const pertenencias = await agregarAnimalesAlLote(destinoId, { ...req.body, permitirMover: true }, req.usuario?.id);
-        res.json({ movidos: pertenencias.length, lote: await obtenerDetalleLote(destinoId) });
+        const pertenencias = await agregarAnimalesAlLote(destinoId, { ...req.body, permitirMover: true }, req.usuario?.id, { zonaHoraria: req.organizacion?.zonaHoraria });
+        res.json({ movidos: pertenencias.length, lote: await detalleVisible(destinoId, req.organizacionId, req.organizacion?.zonaHoraria) });
     } catch (error) { responderError(res, error); }
 };
 
 const retirarAnimales = async (req, res) => {
     try {
-        const pertenencias = await retirarAnimalesDelLote(req.params.id, req.body, req.usuario?.id);
-        res.json({ retirados: pertenencias.length, lote: await obtenerDetalleLote(req.params.id) });
+        const pertenencias = await retirarAnimalesDelLote(req.params.id, req.body, req.usuario?.id, { zonaHoraria: req.organizacion?.zonaHoraria });
+        res.json({ retirados: pertenencias.length, lote: await detalleVisible(req.params.id, req.organizacionId, req.organizacion?.zonaHoraria) });
     } catch (error) { responderError(res, error); }
 };
 
 const cerrar = async (req, res) => {
-    try { res.json(await cerrarLote(req.params.id, req.body, req.usuario?.id)); } catch (error) { responderError(res, error); }
+    try {
+        await cerrarLote(req.params.id, req.body, req.usuario?.id, { zonaHoraria: req.organizacion?.zonaHoraria });
+        res.json(await detalleVisible(req.params.id, req.organizacionId, req.organizacion?.zonaHoraria));
+    } catch (error) { responderError(res, error); }
 };
 
 const cambiarEtapaLote = async (req, res) => {
-    try { await cambiarEtapa(req.params.id, req.body.etapaOperativa || null, req.usuario?.id, req.body.fechaCambio); res.json(await obtenerDetalleLote(req.params.id)); } catch (error) { responderError(res, error); }
+    try {
+        await cambiarEtapa(req.params.id, req.body.etapaOperativa || null, req.usuario?.id, req.body.fechaCambio, { zonaHoraria: req.organizacion?.zonaHoraria });
+        res.json(await detalleVisible(req.params.id, req.organizacionId, req.organizacion?.zonaHoraria));
+    } catch (error) { responderError(res, error); }
 };
 
 const registrarPesajes = async (req, res) => {
     try {
-        const pesajes = await registrarPesajesLote(req.params.id, req.body, req.usuario?.id);
+        const pesajes = await registrarPesajesLote(req.params.id, req.body, req.usuario?.id, { zonaHoraria: req.organizacion?.zonaHoraria });
         const incluirAnalitica = await tieneFeature('analiticaProductiva', req.organizacionId);
-        const detalle = proyectarDetalleLotePorPlan(await obtenerDetalleLote(req.params.id), incluirAnalitica);
+        const detalle = proyectarDetalleLotePorPlan(await obtenerDetalleLote(req.params.id, { zonaHoraria: req.organizacion?.zonaHoraria }), incluirAnalitica);
         res.status(201).json({ registrados: pesajes.length, lote: detalle });
     } catch (error) { if (!respuestaErrorPlan(error, res)) responderError(res, error); }
 };
@@ -149,7 +213,14 @@ const programarTarea = async (req, res) => {
 };
 
 const cambiarPotrero = async (req, res) => {
-    try { await moverLoteAPotrero(req.params.id, req.body, req.usuario?.id); res.json(await obtenerDetalleLote(req.params.id)); } catch (error) { responderError(res, error); }
+    try {
+        await moverLoteAPotrero(req.params.id, req.body, req.usuario?.id, { zonaHoraria: req.organizacion?.zonaHoraria });
+        res.json(await detalleVisible(req.params.id, req.organizacionId, req.organizacion?.zonaHoraria));
+    } catch (error) { responderError(res, error); }
+};
+
+const eventos = async (req, res) => {
+    try { res.json(await listarEventosLote(req.params.id, req.query)); } catch (error) { responderError(res, error); }
 };
 
 const historial = async (req, res) => {
@@ -179,4 +250,4 @@ const historialAlimentacion = async (req, res) => {
     } catch (error) { responderError(res, error); }
 };
 
-module.exports = { listar, crear, obtener, actualizar, agregarAnimales, moverAnimales, retirarAnimales, cerrar, cambiarEtapaLote, registrarPesajes, programarTarea, cambiarPotrero, historial, planActual, historialAlimentacion };
+module.exports = { listar, crear, obtener, actualizar, agregarAnimales, moverAnimales, retirarAnimales, cerrar, cambiarEtapaLote, registrarPesajes, programarTarea, cambiarPotrero, historial, planActual, historialAlimentacion, eventos };

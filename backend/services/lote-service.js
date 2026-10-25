@@ -11,13 +11,15 @@ const { TratamientoSanitario } = require('../models/TratamientoSanitario');
 const { Tarea } = require('../models/Tarea');
 const AsignacionRacionLote = require('../models/AsignacionRacionLote');
 const SuministroAlimentacion = require('../models/SuministroAlimentacion');
+const CicloEngorde = require('../models/CicloEngorde');
 const { calcularGmd } = require('./indicesProductivos-service');
 const { validarUsuarioAsignable } = require('./usuarioAsignable-service');
-const { limpiarDatosTarea, validarRelacionesTarea } = require('./tarea-integridad-service');
+const { diasHastaTarea, limpiarDatosTarea, validarRelacionesTarea } = require('./tarea-integridad-service');
 const { upsertEventoAnimal } = require('./eventoAnimal-service');
-const { OBJETIVO_POR_PROPOSITO, PROPOSITOS_LOTE, normalizarPropositoLote, propositoCompatibleConObjetivo } = require('../config/lotes');
+const { ETAPAS_LOTE, OBJETIVO_POR_PROPOSITO, PROPOSITOS_LOTE, normalizarPropositoLote, propositoCompatibleConObjetivo } = require('../config/lotes');
 const { ejecutarEnTransaccion } = require('./mongo-transaccion-service');
 const { validarDestinoPastoreo } = require('./potrero-integridad-service');
+const { fechaCivilEnZonaAUTC } = require('./fechaZonaHoraria-service');
 const {
     actualizarPesoActualAnimal,
     registrarEventoPesaje,
@@ -39,6 +41,22 @@ const ABREVIATURAS_PROPOSITO = Object.freeze({
     VENTA: 'VEN',
     OTRO: 'OTR'
 });
+
+const normalizarFechaOperacion = (valor, zonaHoraria = 'America/Costa_Rica') => {
+    if (!valor) return new Date();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(valor))) {
+        const [year, month, day] = String(valor).split('-').map(Number);
+        return fechaCivilEnZonaAUTC({ year, month, day }, zonaHoraria);
+    }
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) throw crearError('La fecha indicada no es válida.', 400, 'FECHA_INVALIDA');
+    return fecha;
+};
+
+const validarFechaEntre = (fecha, minimo, maximo = new Date(), codigo = 'FECHA_OPERACION_INVALIDA') => {
+    if (minimo && fecha < new Date(minimo)) throw crearError('La fecha no puede ser anterior al inicio del lote.', 400, codigo);
+    if (maximo && fecha > new Date(maximo)) throw crearError('La fecha efectiva no puede estar en el futuro.', 400, codigo);
+};
 
 const construirPrefijoCodigoLote = (especie, proposito, fecha = new Date()) => {
     const fechaValida = new Date(fecha);
@@ -68,7 +86,7 @@ const crearLoteRapido = async ({ nombre, especie, proposito, fechaInicio }, usua
                 proposito: propositoNormalizado,
                 fechaInicio: fechaInicio || new Date(),
                 creadoPor: usuarioId
-            }], session ? { session } : {});
+            }], session ? { session, ordered: true } : {});
             [lote] = creados;
         } catch (error) {
             if (error?.code !== 11000 || intento === 4) throw error;
@@ -100,7 +118,7 @@ const registrarEventoOperativoLote = async (datos) => {
         metadata: datos.metadata || {}
     };
     if (datos.session) {
-        const creados = await EventoLote.create([documento], { session: datos.session });
+        const creados = await EventoLote.create([documento], { session: datos.session, ordered: true });
         return creados[0];
     }
     return EventoLote.create(documento);
@@ -128,33 +146,51 @@ const registrarEventoLote = ({ animal, lote, pertenencia, titulo, descripcion, u
         descripcion,
         moduloOrigen: 'Lotes',
         referenciaId: pertenencia?._id,
+        claveIdempotencia: pertenencia?._id && metadata.accion
+            ? `LOTE:${pertenencia._id}:${metadata.accion}`
+            : undefined,
         creadoPor: usuarioId,
         metadata: { loteId: lote?._id, codigoLote: lote?.codigo, ...metadata }
     }, { session })
 );
 
-const cambiarEtapa = async (loteId, etapa, usuarioId, fechaCambio = new Date()) => {
-    const lote = await obtenerLote(loteId);
+const cambiarEtapa = async (loteId, etapa, usuarioId, fechaCambio = new Date(), opciones = {}) => {
+    if (!opciones.session) {
+        return ejecutarEnTransaccion((session) => cambiarEtapa(
+            loteId,
+            etapa,
+            usuarioId,
+            fechaCambio,
+            { ...opciones, session }
+        ));
+    }
+    if (etapa && !ETAPAS_LOTE.includes(etapa)) throw crearError('La etapa del lote no es válida.', 422, 'ETAPA_LOTE_INVALIDA');
+    const { session } = opciones;
+    const lote = await obtenerLote(loteId, { session });
     if (lote.estado !== 'ACTIVO') throw crearError('Solo se puede cambiar la etapa de un lote activo.', 409);
     if (lote.etapaOperativa === etapa) return lote;
+    const fecha = normalizarFechaOperacion(fechaCambio, opciones.zonaHoraria);
+    validarFechaEntre(fecha, lote.fechaInicio);
     await HistorialEtapaLote.updateMany(
         { lote: lote._id, fechaFin: null },
-        { $set: { fechaFin: fechaCambio } }
+        { $set: { fechaFin: fecha } },
+        { session }
     );
     const etapaAnterior = lote.etapaOperativa;
     lote.etapaOperativa = etapa || null;
-    await lote.save();
+    await lote.save({ session });
     if (etapa) {
-        await HistorialEtapaLote.create({ lote: lote._id, etapa, fechaInicio: fechaCambio, registradoPor: usuarioId });
+        await HistorialEtapaLote.create([{ lote: lote._id, etapa, fechaInicio: fecha, registradoPor: usuarioId }], { session, ordered: true });
     }
     await registrarEventoOperativoLote({
         lote: lote._id,
         tipo: 'CAMBIO_ETAPA',
         titulo: 'Cambio de etapa',
         descripcion: `${etapaAnterior || 'Sin etapa'} → ${etapa || 'Sin etapa'}`,
-        fecha: fechaCambio,
+        fecha,
         usuarioId,
-        metadata: { etapaAnterior, etapaNueva: etapa || null }
+        metadata: { etapaAnterior, etapaNueva: etapa || null },
+        session
     });
     return lote;
 };
@@ -166,8 +202,12 @@ const obtenerLote = async (loteId, opciones = {}) => {
 };
 
 const cerrarPertenencia = async (pertenencia, { fechaSalida = new Date(), motivoSalida, usuarioId, lote, session }) => {
+    const fechaEfectiva = new Date(fechaSalida);
+    if (Number.isNaN(fechaEfectiva.getTime()) || fechaEfectiva < new Date(pertenencia.fechaEntrada)) {
+        throw crearError('La salida del lote no puede ser anterior a la entrada.', 400, 'FECHA_PERTENENCIA_INVALIDA');
+    }
     pertenencia.activo = false;
-    pertenencia.fechaSalida = fechaSalida;
+    pertenencia.fechaSalida = fechaEfectiva;
     pertenencia.motivoSalida = motivoSalida || 'Salida del lote';
     await pertenencia.save(session ? { session } : {});
     const animal = await Animal.findById(pertenencia.animal).session(session || null);
@@ -184,7 +224,7 @@ const cerrarPertenencia = async (pertenencia, { fechaSalida = new Date(), motivo
             titulo: 'Salida de lote',
             descripcion: pertenencia.motivoSalida,
             usuarioId,
-            metadata: { fecha: fechaSalida, accion: 'SALIDA' },
+            metadata: { fecha: fechaEfectiva, accion: 'SALIDA_LOTE' },
             session
         });
     }
@@ -210,9 +250,37 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {
     if (animales.length !== ids.length) throw crearError('Uno o más animales no existen.', 404);
     animales.forEach((animal) => validarAnimalParaLote(animal, lote));
 
+    const fechaEntrada = normalizarFechaOperacion(datos.fechaEntrada, opciones.zonaHoraria);
+    validarFechaEntre(fechaEntrada, lote.fechaInicio);
+
+    await Lote.updateOne(
+        { _id: lote._id, estado: 'ACTIVO' },
+        { $inc: { revisionPoblacion: 1 } },
+        { session }
+    );
+
     const activas = await PertenenciaLote.find({ animal: { $in: ids }, activo: true }).populate('lote', 'codigo nombre').session(session || null);
     if (activas.length && !datos.permitirMover) {
         throw crearError('Uno o más animales ya pertenecen a un lote activo. Usa la acción Mover.', 409, 'ANIMAL_CON_LOTE_ACTIVO');
+    }
+
+    if (lote.ubicacionActual) {
+        const [potrero, cantidadActual] = await Promise.all([
+            Potrero.findById(lote.ubicacionActual).session(session),
+            PertenenciaLote.countDocuments({ lote: lote._id, activo: true }).session(session)
+        ]);
+        if (!potrero) throw crearError('El potrero actual del lote ya no existe.', 409, 'POTRERO_NO_ENCONTRADO');
+        const nuevos = animales.filter((animal) => !activas.some((item) => (
+            String(item.animal) === String(animal._id)
+            && String(item.lote?._id || item.lote) === String(lote._id)
+        ))).length;
+        if (Number(potrero.capacidadMaxima) > 0 && cantidadActual + nuevos > Number(potrero.capacidadMaxima)) {
+            throw crearError(
+                `La incorporación superaría la capacidad máxima de ${potrero.capacidadMaxima} animales del potrero.`,
+                409,
+                'CAPACIDAD_POTRERO_SUPERADA'
+            );
+        }
     }
 
     const resultados = [];
@@ -228,7 +296,7 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {
         }
         if (anterior) {
             await cerrarPertenencia(anterior, {
-                fechaSalida: datos.fechaEntrada || new Date(),
+                fechaSalida: fechaEntrada,
                 motivoSalida: datos.motivoSalida || `Movido al lote ${lote.codigo}`,
                 usuarioId,
                 lote: anterior.lote,
@@ -238,10 +306,10 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {
         const pertenencias = await PertenenciaLote.create([{
             animal: animal._id,
             lote: lote._id,
-            fechaEntrada: datos.fechaEntrada || new Date(),
+            fechaEntrada,
             motivoEntrada: datos.motivoEntrada || (anterior ? 'Movimiento entre lotes' : 'Ingreso al lote'),
             registradoPor: usuarioId
-        }], session ? { session } : {});
+        }], session ? { session, ordered: true } : {});
         const [pertenencia] = pertenencias;
         animal.loteActual = lote._id;
         animal.potreroActual = lote.ubicacionActual || null;
@@ -255,7 +323,7 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {
                 ? `Movido de ${anterior.lote?.codigo || 'otro lote'} a ${lote.codigo}.`
                 : `Ingresó al lote ${lote.codigo}.`,
             usuarioId,
-            metadata: { accion: anterior ? 'MOVIMIENTO' : 'ENTRADA', loteAnteriorId: anterior?.lote?._id },
+            metadata: { fecha: fechaEntrada, accion: anterior ? 'ENTRADA_TRAS_MOVIMIENTO' : 'ENTRADA_LOTE', loteAnteriorId: anterior?.lote?._id },
             session
         });
         resultados.push(pertenencia);
@@ -268,6 +336,7 @@ const agregarAnimalesAlLote = async (loteId, datos = {}, usuarioId, opciones = {
             titulo: `${agregados.length} animal(es) incorporados`,
             descripcion: datos.motivoEntrada || 'Ingreso al lote',
             usuarioId,
+            fecha: fechaEntrada,
             metadata: { animales: agregados.map((item) => item.animal) },
             session
         });
@@ -281,7 +350,14 @@ const cerrarLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
     }
     const { session } = opciones;
     const lote = await obtenerLote(loteId, { session });
+    if (['CERRADO', 'CANCELADO'].includes(lote.estado)) return lote;
+    const fechaCierre = normalizarFechaOperacion(datos.fechaCierre, opciones.zonaHoraria);
+    validarFechaEntre(fechaCierre, lote.fechaInicio);
     const pertenencias = await PertenenciaLote.find({ lote: lote._id, activo: true }).session(session);
+    if (pertenencias.some((item) => fechaCierre < new Date(item.fechaEntrada))) {
+        throw crearError('La fecha de cierre no puede ser anterior al ingreso de un animal.', 400, 'FECHA_CIERRE_INVALIDA');
+    }
+    const metricasFinales = await obtenerResumenPesajes(lote, pertenencias, { session });
     if (pertenencias.length && !['SIN_LOTE', 'MOVER'].includes(datos.accionAnimales)) {
         throw crearError('El lote tiene animales activos. Indica si quedarán sin lote o serán movidos.', 409, 'LOTE_CON_ANIMALES');
     }
@@ -291,14 +367,14 @@ const cerrarLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
         await agregarAnimalesAlLote(datos.loteDestino, {
             animales: pertenencias.map((item) => item.animal),
             permitirMover: true,
-            fechaEntrada: datos.fechaCierre || new Date(),
+            fechaEntrada: fechaCierre,
             motivoSalida: datos.motivo || `Cierre del lote ${lote.codigo}`,
             motivoEntrada: `Traslado por cierre del lote ${lote.codigo}`
         }, usuarioId, { session });
     } else if (datos.accionAnimales === 'SIN_LOTE') {
         for (const pertenencia of pertenencias) {
             await cerrarPertenencia(pertenencia, {
-                fechaSalida: datos.fechaCierre || new Date(),
+                fechaSalida: fechaCierre,
                 motivoSalida: datos.motivo || `Cierre del lote ${lote.codigo}`,
                 usuarioId,
                 lote,
@@ -307,7 +383,13 @@ const cerrarLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
         }
     }
     lote.estado = datos.estado === 'CANCELADO' ? 'CANCELADO' : 'CERRADO';
-    lote.fechaCierre = datos.fechaCierre || new Date();
+    lote.fechaCierre = fechaCierre;
+    lote.gmdFinalLote = metricasFinales.gmdPromedioLote;
+    lote.kilosGanadosTotales = metricasFinales.kilosGanadosTotales;
+    lote.diasTotalesCiclo = Math.max(Math.floor((fechaCierre - new Date(lote.fechaInicio)) / MS_DIA), 0);
+    lote.cantidadAnimalesCierre = pertenencias.length;
+    lote.pesoPromedioFinalKg = metricasFinales.pesoPromedioActual;
+    lote.coberturaPesajesFinal = metricasFinales.coberturaPesajes;
     const rotacionActiva = await RotacionPotrero.findOne({ loteRef: lote._id, estado: 'Activa' }).session(session);
     if (rotacionActiva) {
         if (new Date(lote.fechaCierre) < new Date(rotacionActiva.fechaEntrada)) {
@@ -335,6 +417,44 @@ const cerrarLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
         { $set: { activo: false, fechaFin: lote.fechaCierre } },
         { session }
     );
+    const ciclosActivos = await CicloEngorde.find({
+        lote: lote._id,
+        estado: { $in: ['PROGRAMADO', 'ACTIVO'] }
+    }).session(session);
+    for (const ciclo of ciclosActivos) {
+        const tienePendientes = ciclo.ejecuciones.some((item) => ['PENDIENTE', 'PARCIAL'].includes(item.estado));
+        ciclo.estado = lote.estado === 'CANCELADO' || tienePendientes ? 'CANCELADO' : 'FINALIZADO';
+        ciclo.fechaFin = fechaCierre;
+        ciclo.motivoCierre = datos.motivo || `Cierre del lote ${lote.codigo}`;
+        const etapaAbierta = ciclo.historialEtapas.find((item) => !item.fechaFin);
+        if (etapaAbierta) etapaAbierta.fechaFin = fechaCierre;
+        ciclo.ejecuciones
+            .filter((item) => ['PENDIENTE', 'PARCIAL'].includes(item.estado))
+            .forEach((item) => { item.estado = 'CANCELADO'; });
+        await ciclo.save({ session });
+        await registrarEventoOperativoLote({
+            lote: lote._id,
+            tipo: `PROTOCOLO_ENGORDE_${ciclo.estado}`,
+            titulo: ciclo.estado === 'FINALIZADO' ? 'Protocolo finalizado por cierre del lote' : 'Protocolo cancelado por cierre del lote',
+            descripcion: ciclo.motivoCierre,
+            referenciaId: ciclo._id,
+            entidadTipo: 'CicloEngorde',
+            fecha: fechaCierre,
+            usuarioId,
+            session
+        });
+    }
+    await Tarea.updateMany(
+        { lote: lote._id, estado: { $in: ['Pendiente', 'En proceso'] } },
+        {
+            $set: {
+                estado: 'Cancelada',
+                cancelacionAutomaticaOrigen: 'CIERRE_LOTE',
+                canceladaAutomaticamenteEn: fechaCierre
+            }
+        },
+        { session }
+    );
     await lote.save({ session });
     await HistorialEtapaLote.updateMany(
         { lote: lote._id, fechaFin: null },
@@ -353,18 +473,31 @@ const cerrarLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
     return lote;
 };
 
-const retirarAnimalesDelLote = async (loteId, datos = {}, usuarioId) => {
-    const lote = await obtenerLote(loteId);
+const retirarAnimalesDelLote = async (loteId, datos = {}, usuarioId, opciones = {}) => {
+    if (!opciones.session) {
+        return ejecutarEnTransaccion((session) => retirarAnimalesDelLote(
+            loteId,
+            datos,
+            usuarioId,
+            { ...opciones, session }
+        ));
+    }
+    const { session } = opciones;
+    const lote = await obtenerLote(loteId, { session });
+    if (lote.estado !== 'ACTIVO') throw crearError('Solo se pueden retirar animales de un lote activo.', 409);
     const ids = [...new Set((datos.animales || []).map(String))];
     if (!ids.length) throw crearError('Selecciona al menos un animal.');
-    const pertenencias = await PertenenciaLote.find({ lote: lote._id, animal: { $in: ids }, activo: true });
+    const pertenencias = await PertenenciaLote.find({ lote: lote._id, animal: { $in: ids }, activo: true }).session(session);
     if (pertenencias.length !== ids.length) throw crearError('Uno o más animales no pertenecen actualmente a este lote.', 409);
+    const fechaSalida = normalizarFechaOperacion(datos.fechaSalida, opciones.zonaHoraria);
+    validarFechaEntre(fechaSalida, lote.fechaInicio);
     for (const pertenencia of pertenencias) {
         await cerrarPertenencia(pertenencia, {
-            fechaSalida: datos.fechaSalida || new Date(),
+            fechaSalida,
             motivoSalida: datos.motivoSalida || 'Salida manual del lote',
             usuarioId,
-            lote
+            lote,
+            session
         });
     }
     await registrarEventoOperativoLote({
@@ -372,8 +505,10 @@ const retirarAnimalesDelLote = async (loteId, datos = {}, usuarioId) => {
         tipo: 'ANIMALES_RETIRADOS',
         titulo: `${pertenencias.length} animal(es) retirados`,
         descripcion: datos.motivoSalida || 'Salida manual del lote',
+        fecha: fechaSalida,
         usuarioId,
-        metadata: { animales: pertenencias.map((item) => item.animal) }
+        metadata: { animales: pertenencias.map((item) => item.animal) },
+        session
     });
     return pertenencias;
 };
@@ -389,6 +524,7 @@ const registrarPesajesLote = async (loteId, datos = {}, usuarioId, opciones = {}
     }
     const { session } = opciones;
     const capturaMasiva = sanitizarPesajeMasivo(datos);
+    if (capturaMasiva.fecha) capturaMasiva.fecha = normalizarFechaOperacion(capturaMasiva.fecha, opciones.zonaHoraria);
     const lote = await obtenerLote(loteId, { session });
     if (lote.estado !== 'ACTIVO') throw crearError('Solo se pueden registrar pesajes en un lote activo.', 409);
     const entradas = capturaMasiva.pesajes.filter((item) => item.peso !== '' && item.peso !== null && item.peso !== undefined);
@@ -489,7 +625,8 @@ const moverLoteAPotrero = async (loteId, datos = {}, usuarioId, opciones = {}) =
     const lote = await obtenerLote(loteId, { session });
     if (lote.estado !== 'ACTIVO') throw crearError('Solo se puede mover un lote activo.', 409);
     if (!datos.potrero) throw crearError('Selecciona el potrero de destino.');
-    const fecha = datos.fechaEntrada || new Date();
+    const fecha = normalizarFechaOperacion(datos.fechaEntrada, opciones.zonaHoraria);
+    validarFechaEntre(fecha, lote.fechaInicio);
     const destino = validarDestinoPastoreo(await Potrero.findById(datos.potrero).session(session));
     const cantidad = await PertenenciaLote.countDocuments({ lote: lote._id, activo: true }).session(session);
     if (cantidad < 1) throw crearError('El lote debe tener al menos un animal activo para iniciar una rotacion.', 409, 'LOTE_SIN_ANIMALES');
@@ -520,7 +657,7 @@ const moverLoteAPotrero = async (loteId, datos = {}, usuarioId, opciones = {}) =
         numeroAnimales: cantidad,
         estado: 'Activa',
         observaciones: datos.observaciones
-    }], { session });
+    }], { session, ordered: true });
     const anterior = lote.ubicacionActual;
     lote.ubicacionActual = datos.potrero;
     await lote.save({ session });
@@ -545,10 +682,9 @@ const moverLoteAPotrero = async (loteId, datos = {}, usuarioId, opciones = {}) =
     return rotacion;
 };
 
-const obtenerResumenPesajes = async (lote, pertenencias) => {
+const calcularResumenPesajes = (lote, pertenencias, pesajes = []) => {
     const ids = pertenencias.map((item) => item.animal?._id || item.animal).filter(Boolean);
     if (!ids.length) return { pesoPromedioActual: null, coberturaPesajes: { conPesaje: 0, total: 0 }, gmdPromedioLote: null, cumplimientoGmd: null, alcanzaronPesoObjetivo: 0 };
-    const pesajes = await Pesaje.find({ animal: { $in: ids } }).sort({ fecha: 1 }).lean();
     const porAnimal = new Map(ids.map((id) => [String(id), []]));
     pesajes.forEach((pesaje) => porAnimal.get(String(pesaje.animal))?.push(pesaje));
     const ultimos = [];
@@ -558,14 +694,17 @@ const obtenerResumenPesajes = async (lote, pertenencias) => {
     pertenencias.forEach((pertenencia) => {
         const lista = porAnimal.get(String(pertenencia.animal?._id || pertenencia.animal)) || [];
         const fechaEntrada = new Date(pertenencia.fechaEntrada);
-        const cercanoEntrada = [...lista].sort((a, b) => Math.abs(new Date(a.fecha) - fechaEntrada) - Math.abs(new Date(b.fecha) - fechaEntrada))[0];
-        if (cercanoEntrada && Math.abs(new Date(cercanoEntrada.fecha) - fechaEntrada) <= 30 * MS_DIA) pesosEntrada.push(Number(cercanoEntrada.peso));
-        if (lista.length) {
-            const ultimo = lista[lista.length - 1];
+        const desdeEntrada = lista.filter((pesaje) => (
+            new Date(pesaje.fecha) >= fechaEntrada
+            && (!pertenencia.fechaSalida || new Date(pesaje.fecha) <= new Date(pertenencia.fechaSalida))
+        ));
+        const medicionEntrada = desdeEntrada[0];
+        if (medicionEntrada) pesosEntrada.push(Number(medicionEntrada.peso));
+        if (desdeEntrada.length) {
+            const ultimo = desdeEntrada[desdeEntrada.length - 1];
             ultimos.push(Number(ultimo.peso));
             if (lote.pesoObjetivoKg && Number(ultimo.peso) >= Number(lote.pesoObjetivoKg)) alcanzaronPesoObjetivo += 1;
         }
-        const desdeEntrada = lista.filter((pesaje) => new Date(pesaje.fecha) >= new Date(pertenencia.fechaEntrada));
         const gmd = calcularGmd(desdeEntrada);
         if (gmd) crecimientos.push(gmd);
     });
@@ -578,9 +717,19 @@ const obtenerResumenPesajes = async (lote, pertenencias) => {
         coberturaPesoEntrada: { conDato: pesosEntrada.length, total: ids.length },
         coberturaPesajes: { conPesaje: ultimos.length, total: ids.length },
         gmdPromedioLote: redondear(gmd, 3),
+        kilosGanadosTotales: redondear(ganancia, 2),
+        animalDias: redondear(dias, 2),
         cumplimientoGmd: gmd !== null && lote.gmdObjetivoKgDia ? redondear((gmd / lote.gmdObjetivoKgDia) * 100, 1) : null,
         alcanzaronPesoObjetivo
     };
+};
+
+const obtenerResumenPesajes = async (lote, pertenencias, opciones = {}) => {
+    const ids = pertenencias.map((item) => item.animal?._id || item.animal).filter(Boolean);
+    if (!ids.length) return calcularResumenPesajes(lote, pertenencias, []);
+    const consulta = Pesaje.find({ animal: { $in: ids } }).sort({ fecha: 1 });
+    if (opciones.session) consulta.session(opciones.session);
+    return calcularResumenPesajes(lote, pertenencias, await consulta.lean());
 };
 
 const obtenerResumenSanitario = async (animales) => {
@@ -591,13 +740,92 @@ const obtenerResumenSanitario = async (animales) => {
     return { estados, tratamientosActivos };
 };
 
-const obtenerResumenTareas = async (loteId) => {
+const obtenerResumenTareas = async (loteId, zonaHoraria = 'America/Costa_Rica') => {
     const tareas = await Tarea.find({ lote: loteId, estado: { $in: ['Pendiente', 'En proceso'] } }).sort({ fechaProgramada: 1 }).lean();
-    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-    return { pendientes: tareas.length, vencidas: tareas.filter((tarea) => new Date(tarea.fechaProgramada) < hoy).length, proxima: tareas[0] || null };
+    return {
+        pendientes: tareas.length,
+        vencidas: tareas.filter((tarea) => diasHastaTarea(tarea.fechaLimite || tarea.fechaProgramada, zonaHoraria) < 0).length,
+        proxima: tareas[0] || null
+    };
 };
 
-const obtenerDetalleLote = async (loteId) => {
+const obtenerResumenListadoLotes = async (filtro = {}) => {
+    const lotes = await Lote.find(filtro)
+        .select('codigo nombre especie proposito etapaOperativa fechaInicio fechaCierre estado pesoObjetivoKg gmdObjetivoKgDia ubicacionActual gmdFinalLote kilosGanadosTotales diasTotalesCiclo cantidadAnimalesCierre pesoPromedioFinalKg coberturaPesajesFinal')
+        .populate('ubicacionActual', 'codigo nombre')
+        .sort({ estado: 1, createdAt: -1 })
+        .lean();
+    if (!lotes.length) return [];
+    const ids = lotes.map((lote) => lote._id);
+    const [pertenencias, asignaciones] = await Promise.all([
+        PertenenciaLote.find({ lote: { $in: ids }, activo: true })
+            .select('lote animal')
+            .populate('animal', 'pesoActual')
+            .lean(),
+        AsignacionPlanAlimentacion.find({ lote: { $in: ids }, activo: true })
+            .select('lote plan')
+            .populate('plan', 'nombre etapa activo')
+            .lean()
+    ]);
+    const poblacion = new Map();
+    pertenencias.forEach((item) => {
+        const clave = String(item.lote);
+        const actual = poblacion.get(clave) || { cantidad: 0, conPeso: 0, pesoTotal: 0 };
+        actual.cantidad += 1;
+        if (Number(item.animal?.pesoActual) > 0) {
+            actual.conPeso += 1;
+            actual.pesoTotal += Number(item.animal.pesoActual);
+        }
+        poblacion.set(clave, actual);
+    });
+    const planes = new Map(asignaciones.map((item) => [String(item.lote), item.plan || null]));
+    return lotes.map((lote) => {
+        const datos = poblacion.get(String(lote._id)) || { cantidad: 0, conPeso: 0, pesoTotal: 0 };
+        const cerrado = lote.estado !== 'ACTIVO';
+        return {
+            ...lote,
+            cantidadAnimales: cerrado ? lote.cantidadAnimalesCierre || 0 : datos.cantidad,
+            resumen: {
+                pesoPromedioActual: cerrado
+                    ? lote.pesoPromedioFinalKg ?? null
+                    : datos.conPeso ? redondear(datos.pesoTotal / datos.conPeso) : null,
+                coberturaPesajes: cerrado
+                    ? lote.coberturaPesajesFinal || { conPesaje: 0, total: lote.cantidadAnimalesCierre || 0 }
+                    : { conPesaje: datos.conPeso, total: datos.cantidad },
+                gmdPromedioLote: cerrado ? lote.gmdFinalLote ?? null : undefined,
+                kilosGanadosTotales: cerrado ? lote.kilosGanadosTotales ?? null : undefined
+            },
+            planAlimentacionActual: planes.get(String(lote._id)) || null
+        };
+    });
+};
+
+const listarEventosLote = async (loteId, { pagina = 1, limite = 50 } = {}) => {
+    await obtenerLote(loteId);
+    const paginaValida = Math.max(1, Number(pagina) || 1);
+    const limiteValido = Math.min(100, Math.max(10, Number(limite) || 50));
+    const filtro = { lote: loteId };
+    const [datos, total] = await Promise.all([
+        EventoLote.find(filtro)
+            .populate('registradoPor', 'nombre apellido rol')
+            .sort({ fecha: -1, _id: -1 })
+            .skip((paginaValida - 1) * limiteValido)
+            .limit(limiteValido)
+            .lean(),
+        EventoLote.countDocuments(filtro)
+    ]);
+    return {
+        datos,
+        paginacion: {
+            pagina: paginaValida,
+            limite: limiteValido,
+            total,
+            hayMas: paginaValida * limiteValido < total
+        }
+    };
+};
+
+const obtenerDetalleLote = async (loteId, opciones = {}) => {
     const lote = await Lote.findById(loteId).populate('ubicacionActual', 'codigo nombre').lean();
     if (!lote) throw crearError('Lote no encontrado.', 404);
     const pertenencias = await PertenenciaLote.find({ lote: loteId, activo: true })
@@ -607,7 +835,7 @@ const obtenerDetalleLote = async (loteId) => {
     const [pesajes, sanidad, tareas, plan, racion, ultimoSuministro, etapas, rotaciones, eventos] = await Promise.all([
         obtenerResumenPesajes(lote, pertenencias),
         obtenerResumenSanitario(animales),
-        obtenerResumenTareas(loteId),
+        obtenerResumenTareas(loteId, opciones.zonaHoraria),
         AsignacionPlanAlimentacion.findOne({ lote: loteId, activo: true }).populate('plan').lean(),
         AsignacionRacionLote.findOne({ lote: loteId, activo: true }).populate('racion', 'nombre etapa activo').lean(),
         SuministroAlimentacion.findOne({ lote: loteId }).sort({ fechaHora: -1 }).lean(),
@@ -627,7 +855,21 @@ const obtenerDetalleLote = async (loteId) => {
     return {
         ...lote,
         animales: pertenencias.map((item) => ({ ...item.animal, pertenencia: item })),
-        resumen: { diasActivo, ...pesajes, sanidad, tareas, origen, camadasOrigen },
+        resumen: {
+            diasActivo,
+            ...pesajes,
+            ...(lote.estado !== 'ACTIVO' ? {
+                pesoPromedioActual: lote.pesoPromedioFinalKg ?? pesajes.pesoPromedioActual,
+                coberturaPesajes: lote.coberturaPesajesFinal || pesajes.coberturaPesajes,
+                gmdPromedioLote: lote.gmdFinalLote ?? pesajes.gmdPromedioLote,
+                kilosGanadosTotales: lote.kilosGanadosTotales ?? pesajes.kilosGanadosTotales,
+                cantidadAnimalesCierre: lote.cantidadAnimalesCierre ?? 0
+            } : {}),
+            sanidad,
+            tareas,
+            origen,
+            camadasOrigen
+        },
         planAlimentacionActual: plan || null,
         racionActual: racion || null,
         ultimoSuministro: ultimoSuministro || null,
@@ -643,7 +885,14 @@ const proyectarDetalleLotePorPlan = (detalle, incluirAnalitica) => {
     delete resumen.gmdPromedioLote;
     delete resumen.cumplimientoGmd;
     delete resumen.alcanzaronPesoObjetivo;
-    return { ...detalle, gmdObjetivoKgDia: undefined, resumen };
+    delete resumen.kilosGanadosTotales;
+    return {
+        ...detalle,
+        gmdObjetivoKgDia: undefined,
+        gmdFinalLote: undefined,
+        kilosGanadosTotales: undefined,
+        resumen
+    };
 };
 
 module.exports = {
@@ -657,11 +906,15 @@ module.exports = {
     cambiarEtapa,
     registrarEventoOperativoLote,
     obtenerResumenPesajes,
+    calcularResumenPesajes,
     obtenerResumenSanitario,
     registrarPesajesLote,
     crearTareaLote,
     moverLoteAPotrero,
     construirPrefijoCodigoLote,
     crearLoteRapido,
-    proyectarDetalleLotePorPlan
+    proyectarDetalleLotePorPlan,
+    obtenerResumenListadoLotes,
+    listarEventosLote,
+    normalizarFechaOperacion
 };

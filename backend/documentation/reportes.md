@@ -1,5 +1,7 @@
 # Reportes - Variables, origen y transformaciones
 
+Revisión de implementación: **2026-10-21**. Catálogo completo de rutas, guards, evidencias y pendientes: [AUDIT_MODULO_REPORTES.md](../../AUDIT_MODULO_REPORTES.md). Esta documentación describe el comportamiento actual; los hallazgos RP pendientes no se consideran corregidos por documentarlos.
+
 ## Disponibilidad por plan
 
 Los resumenes operativos de inventario, potreros, sanidad, finanzas, ventas, productos, dron, camadas y tareas por camada son reportes basicos disponibles desde Esencial.
@@ -18,24 +20,16 @@ Este documento explica de donde salen los datos de los reportes de GanaderiaRomi
 
 ### Filtros de fechas
 
-La mayoria de reportes aceptan:
+La mayoría acepta `fechaInicio` y `fechaFin`, pero no hay un contrato temporal único:
 
-- `fechaInicio`
-- `fechaFin`
+- `crearFiltroFechas` convierte inicio con `new Date` y fija fin a `23:59:59.999` **UTC**. No valida rango invertido/fecha inválida.
+- Índices y multi-finca normalizan ambos extremos UTC y validan el rango.
+- El reporte de lotes usa `setHours`, dependiente de la zona del servidor.
+- Potreros recorta intervalos por días civiles UTC; la fecha fin del período es inclusiva y las salidas se tratan como límite exclusivo.
 
-El backend usa `crearFiltroFechas(campo, fechaInicio, fechaFin)`.
+Para timestamps reales, octubre UTC excluye las últimas seis horas del 31 de octubre en Costa Rica e incluye seis horas del 30 de septiembre. Para fechas civiles almacenadas convencionalmente a medianoche UTC no debe aplicarse una conversión indiscriminada. **RP-15**: definir por campo fecha civil o instante y normalizar en consecuencia. `toLocaleDateString('es-CR')` fija idioma, no zona horaria.
 
-Regla:
-
-- Si viene `fechaInicio`, usa `$gte`.
-- Si viene `fechaFin`, ajusta la fecha al final del dia `23:59:59.999` y usa `$lte`.
-
-Ejemplo:
-
-```txt
-fecha >= fechaInicio
-fecha <= fechaFin 23:59:59.999
-```
+`especie` no se aplica a todos los bloques: finanzas de cría/sustentabilidad no lo leen; raza representa inventario actual. No se admiten filtros universales de sexo/lote/potrero en todos los endpoints. Véase RP-19.
 
 ### Redondeo
 
@@ -45,7 +39,7 @@ Funcion:
 redondear(valor, decimales = 2)
 ```
 
-Convierte valores nulos a `0` y aplica `toFixed`.
+En el controlador general convierte valores nulos a `0` y aplica `toFixed`. No es una convención universal: destete, ICP/IEE y lotes conservan `null` para varios indicadores sin evidencia. No interpretar falta de datos como rendimiento cero.
 
 ### Porcentaje
 
@@ -285,11 +279,11 @@ Filtro:
 
 Variables:
 
-- `porNaturaleza`: agrupa por `naturaleza`.
-- `porTipo`: agrupa por `tipoMovimiento`.
-- `porCategoria`: agrupa por `categoria`, ordena por total y limita a 8.
-- `porMes`: agrupa por ano y mes de `fecha`.
-- `gastosPorMes`: agrupa solo movimientos con `naturaleza = 'Egreso'` por ano y mes de `fecha`.
+- `porNaturaleza`: agrupa por `naturaleza` y `moneda` (CRC por defecto).
+- `porTipo`: agrupa por `tipoMovimiento` y `moneda`.
+- `porCategoria`: agrupa por `categoria` y `moneda`, ordena por total y limita a 8.
+- `porMes`: agrupa por año, mes de `fecha` y moneda.
+- `gastosPorMes`: agrupa solo movimientos con `naturaleza = 'Egreso'` por año, mes y moneda. Las filas devueltas incluyen `moneda`; el consumidor debe conservarla.
 
 Transformaciones:
 
@@ -437,6 +431,14 @@ ipg = tasaNatalidad * 0.40
     + tasaSupervivencia * 0.15
 ```
 
+### Limitaciones confirmadas del ICB
+
+- `fechaDestete` de RegistroReproductivo es programada/calculada desde parto: este contador no demuestra destete ejecutado (RP-03).
+- «Terneros nacidos» cuenta partos, no número de crías nacidas.
+- Gestantes no exige ciclo activo ni diagnóstico positivo; FPP conservada en ciclo cancelado puede contar (RP-04).
+- Mortalidad usa `updatedAt`, aunque IEE ya utiliza `fechaMuerte` (RP-05).
+- Denominadores usan inventario/edad actuales, no cohorte al corte; finca vacía recibe ICB cero/Deficiente (RP-06).
+
 ### Clasificacion
 
 - `>= 95`: Excelente
@@ -488,368 +490,74 @@ Las camadas activas sin destete no se convierten en mortalidad ni reducen artifi
 
 ## Finanzas de cria
 
-Endpoint:
+`GET /api/reportes/finanzas-cria?fechaInicio=&fechaFin=`. Requiere Pro (`analiticaEconomica`) y `reportes.ver`. `especie` no se aplica.
 
-```txt
-GET /api/reportes/finanzas-cria
-```
-
-Query:
-
-- `fechaInicio`
-- `fechaFin`
-
-Frontend:
+Fuentes: MovimientoFinanciero (histórico y período) y Animal de la finca activa.
 
 ```js
-obtenerFinanzasCria({ fechaInicio, fechaFin })
-```
-
-### Variables de salida
-
-```js
-inversionAcumulada
-gastosOperativosPeriodo
-ingresosPeriodo
-balanceOperativo
+monedas.CRC.inversionOperativaHistorica
+monedas.CRC.gastosOperativosPeriodo
+monedas.CRC.ingresosPeriodo
+monedas.CRC.balanceOperativo
+monedas.USD // mismos campos, sin conversión
 valorEstimadoHato
-crecimientoHato
+patrimonioGanaderoEstimado
 animalesInicioPeriodo
 animalesActuales
-patrimonioGanaderoEstimado
+crecimientoHato
+metodologiaPatrimonio
 ```
 
-### Origen de datos
+La inversión operativa histórica exige egreso y tipo `Inversion` o categoría de infraestructura/maquinaria; excluye referencias CompraAnimal, compra de animales y categorías de hato. El gasto operativo exige egreso de tipo Compra/Planilla, excluyendo inversión según `esMovimientoInversion`. Los ingresos son movimientos de naturaleza Ingreso. No se clasifica gasto operativo mediante palabras de descripción.
 
-- `MovimientoFinanciero`
-- `Animal`
-
-### Clasificacion de movimientos
-
-Inversion:
-
-```js
-tipoMovimiento === 'Inversion'
+```text
+balanceOperativo[moneda] = ingresosPeriodo[moneda] − gastosOperativosPeriodo[moneda]
+valorEstimadoHato = suma valor de animales actuales no vendidos/muertos
+patrimonioGanaderoEstimado = valorEstimadoHato
 ```
 
-o texto relacionado en:
+La valoración usa valorEstimado, montoCompra o pesoActual × precio estimado disponible; no es tasación de mercado. No suma inversión histórica al valor del ganado.
 
-- `tipoMovimiento`
-- `categoria`
-- `descripcion`
-- `observaciones`
-
-Palabras consideradas inversion:
-
-- ganado
-- animal
-- animales
-- novillo
-- vaca
-- toro
-- ternero
-- finca
-- infraestructura
-- cerca
-- corral
-- maquinaria
-- inversion
-
-Gasto operativo:
-
-- `naturaleza === 'Egreso'`.
-- No debe ser inversion.
-- Debe ser:
-  - `tipoMovimiento === 'Planilla'`
-  - o `tipoMovimiento === 'Compra'`
-  - o contener categorias operativas.
-
-Palabras operativas:
-
-- vacuna
-- desparasitante
-- sales
-- medicamento
-- salario
-- mano de obra
-- combustible
-- mantenimiento
-- veterinario
-- sanidad
-- alimentacion
-
-Ingreso:
-
-```js
-naturaleza === 'Ingreso'
-```
-
-### Transformaciones
-
-`inversionAcumulada`:
-
-```txt
-suma de todos los movimientos no ingreso clasificados como inversion
-```
-
-No usa filtro de periodo. Es acumulada historica.
-
-`gastosOperativosPeriodo`:
-
-```txt
-suma de gastos operativos dentro del periodo
-```
-
-`ingresosPeriodo`:
-
-```txt
-suma de movimientos con naturaleza Ingreso dentro del periodo
-```
-
-`balanceOperativo`:
-
-```txt
-ingresosPeriodo - gastosOperativosPeriodo
-```
-
-`animalesActuales`:
-
-```txt
-cantidad de animales cuyo estado no es Muerto ni Vendido
-```
-
-`animalesInicioPeriodo`:
-
-```txt
-animales activos cuyo createdAt <= inicioPeriodo
-```
-
-`crecimientoHato`:
-
-```txt
-animalesActuales - animalesInicioPeriodo
-```
-
-`valorEstimadoHato`:
-
-Usa animales activos.
-
-Funcion:
-
-```js
-calcularValorAnimal(animal)
-```
-
-Reglas actuales:
-
-1. Si existe `animal.valorEstimado`, usa ese valor.
-2. Si existe `animal.montoCompra`, usa ese valor.
-3. Si existe `animal.pesoActual` y algun precio estimado (`precioEstimadoKg`, `precioKg`, `valorKg`), multiplica.
-4. Si nada existe, devuelve `0`.
-
-Nota: algunos campos como `valorEstimado`, `precioEstimadoKg`, `precioKg` o `valorKg` no forman parte fuerte del modelo actual de `Animal`; por eso hoy normalmente este valor puede quedar en `0` o depender de `montoCompra`.
-
-`patrimonioGanaderoEstimado`:
-
-```txt
-valorEstimadoHato + inversionAcumulada
-```
+**RP-09:** animalesInicioPeriodo usa `createdAt <= inicio` y excluye animales vendidos/muertos hoy. animalesActuales es inventario actual, no al fin seleccionado. crecimientoHato es su diferencia y no reconstruye movimientos históricos. Un vendido a mitad del período falta incorrectamente en el inventario inicial.
 
 ## Sustentabilidad de cria
 
-Endpoint:
+`GET /api/reportes/sustentabilidad-cria?fechaInicio=&fechaFin=`. Requiere Pro. Es una **estimación por animal vendido**, no margen bruto contable con consumo real. La selección global de especie no se aplica aquí.
 
-```txt
-GET /api/reportes/sustentabilidad-cria
-```
-
-Query:
-
-- `fechaInicio`
-- `fechaFin`
-
-Frontend:
+### Contrato monetario
 
 ```js
-obtenerSustentabilidadCria({ fechaInicio, fechaFin })
-```
-
-### Objetivo
-
-Estimar si la finca puede sostenerse con ventas de animales, considerando:
-
-- venta por kilo.
-- compra por kilo.
-- costo operativo por animal.
-- meses que el animal estuvo en finca.
-
-### Variables de salida
-
-```js
+monedas.CRC // y monedas.USD
+// Dentro de cada moneda:
 montoVentasAnimales
 montoComprasAnimales
 gastosOperativosPeriodo
 costoProduccionAsignado
 costoProduccionMensualPorAnimal
 margenSustentabilidad
-utilidadPerdida
-animalesCompradosPeriodo
-animalesVendidosPeriodo
-animalesActivosCosto
-mesesPeriodo
-precioVentaPromedioKg
-precioCompraPromedioKg
-pesoCompraTotal
-pesoVentaTotal
-duracionPromedioMeses
-detalleAnimales
-animalesIgnorados
-formula
-criterioFechas
 ```
 
-### Origen de datos
+La raíz conserva montoVentasAnimales/montoComprasAnimales (CRC), conteos, kilos, precios medios, mesesPeriodo, duracionPromedioMeses, detalleAnimales, animalesIgnorados, formula y criterioFechas. **No hay gastosOperativosPeriodo ni margenSustentabilidad monetarios en la raíz.** Los detalles contienen `costosProduccionAsignados` y `utilidadPerdidaPorMoneda`.
 
-- `Animal`
-- `MovimientoFinanciero`
+### Cálculo vigente
 
-### Animales activos para costo
+- Se incluyen vendidos del período con pesoVenta y precioVentaPorKg positivos. Los incompletos aparecen en animalesIgnorados.
+- Compra: si hay fechaCompra, prioriza montoCompra, incluido cero; solo si falta usa pesoCompra × precioCompraPorKg. F07 está corregido.
+- Venta: pesoVenta × precioVentaPorKg. El flujo actual de ventas guarda precio efectivo = monto final asignado / peso, conservando ajustes. Para datos históricos/importados inconsistentes no se prioriza montoVenta.
+- Permanencia: compra o nacimiento hasta venta, en meses de 30,4375 días. Animales muertos se excluyen del conjunto de costo.
 
-Funcion:
-
-```js
-esAnimalConsideradoActivoEnPeriodo(animal, fechaInicio, fechaFin)
+```text
+costoMensual[moneda] = gastosOperativosPeriodo[moneda] / animalesConsiderados / mesesPeriodo
+costoAsignadoAnimal[moneda] = costoMensual[moneda] × mesesTotalesEnFinca
+utilidadAnimal.CRC = venta − compra − costoAsignadoAnimal.CRC
+utilidadAnimal.USD = −costoAsignadoAnimal.USD
 ```
 
-Reglas:
+USD no se convierte a CRC; compras/ventas animales de este cálculo se atribuyen a CRC. El margen consolidado suma los resultados de animales analizados. Los promedios por kg usan totales monetarios/pesos, no promedio simple de precios.
 
-- Excluye `estado === 'Muerto'`.
-- Usa como fecha de ingreso:
-  - `fechaCompra`
-  - o `fechaNacimiento`
-  - o `createdAt`
-- Si ingreso es posterior al fin del periodo, no cuenta.
-- Si no tiene `fechaVenta`, cuenta.
-- Si tiene venta, cuenta si la venta fue despues o durante el inicio del periodo.
+**RP-10:** se extrapolan gastos del período a toda la vida del animal en finca. Con CRC100 de gasto de octubre y un animal ingresado en enero, el costo asignado puede superar CRC900. No demuestra alimentación consumida ni costos históricos devengados. Etiquetar la proyección y diseñar atribución temporal antes de usarlo como rentabilidad realizada.
 
-### Gastos operativos
-
-Fuente:
-
-- `MovimientoFinanciero` dentro del periodo.
-- Usa la misma funcion `esMovimientoGastoOperativo`.
-
-Formula:
-
-```txt
-costoProduccionMensualPorAnimal =
-  gastosOperativosPeriodo / animalesActivosCosto / mesesPeriodo
-```
-
-Si no hay animales activos, el costo queda `0`.
-
-### Animales vendidos analizados
-
-Fuente:
-
-- `Animal`
-
-Filtros:
-
-- `estado === 'Vendido'`
-- `fechaVenta` dentro del periodo.
-- `pesoVenta > 0`
-- `precioVentaPorKg > 0`
-
-Si falta `pesoVenta` o `precioVentaPorKg`, el animal aparece en `animalesIgnorados`.
-
-### Compra del animal
-
-Funcion:
-
-```js
-calcularTotalCompraAnimal(animal)
-```
-
-Reglas:
-
-- Si no tiene `fechaCompra`, devuelve `0`.
-- Si tiene `pesoCompra` y `precioCompraPorKg`, usa:
-
-```txt
-pesoCompra * precioCompraPorKg
-```
-
-- Si no, usa `montoCompra`.
-
-Para animales nacidos en finca, la compra es `0`.
-
-### Venta del animal
-
-Funcion:
-
-```js
-calcularTotalVentaAnimal(animal)
-```
-
-Regla:
-
-```txt
-pesoVenta * precioVentaPorKg
-```
-
-Si falta alguno, devuelve `0`.
-
-### Duracion en finca
-
-Fuente:
-
-- fecha de ingreso:
-  - `fechaCompra`
-  - o `fechaNacimiento`
-  - o `createdAt`
-- fecha salida:
-  - `fechaVenta`
-
-Formula:
-
-```txt
-duracionMeses = dias(fechaIngreso, fechaVenta) / 30.4375
-```
-
-### Costo asignado por animal
-
-```txt
-costoProduccionAsignado =
-  costoProduccionMensualPorAnimal * duracionMeses
-```
-
-### Utilidad/perdida por animal
-
-```txt
-utilidadPerdida =
-  totalVenta - totalCompra - costoProduccionAsignado
-```
-
-### Totales
-
-```txt
-montoVentasAnimales = suma(totalVenta)
-montoComprasAnimales = suma(totalCompra)
-costoProduccionAsignado = suma(costoProduccionAsignado de cada animal)
-margenSustentabilidad = montoVentasAnimales - montoComprasAnimales - costoProduccionAsignado
-```
-
-`utilidadPerdida` es igual a `margenSustentabilidad`.
-
-### Promedios por kilo
-
-```txt
-precioVentaPromedioKg = montoVentasAnimales / pesoVentaTotal
-precioCompraPromedioKg = montoComprasAnimales / pesoCompraTotal
-```
-
-Si el peso total es cero, devuelve `0`.
+**RP-01:** el dashboard aún lee campos antiguos de raíz y muestra cero en tarjetas de gastos/margen aunque monedas contenga importes. Reportes.js sí lee los bloques monetarios.
 
 ## Analisis de compras de animales
 
@@ -1104,6 +812,8 @@ Nota:
 
 ## Vacas improductivas o a revisar
 
+**Limitaciones vigentes (RP-07/RP-08):** `diasAbierta` es parto–fecha de corte, no parto–concepción. No hay exclusión posparto de 45 días; una hembra a diez días puede aparecer por «Sin gestación activa». Último parto/edad no reconstruyen estado al corte; destete bajo usa madreDiio. Al buscar por DIIO/nombre se reemplaza el `$or` de especie y pueden entrar porcinas. No interpretar esta lista como diagnóstico clínico.
+
 Endpoint:
 
 ```txt
@@ -1255,6 +965,8 @@ destetesBajos
 ```
 
 ## Crecimiento por pesajes
+
+El GMD global de este reporte promedia GMD individuales. Lotes y consolidado de protocolos ponderan por animal-días y usan el período de pertenencia. `/engorde` calcula IEE por objetivo productivo, no el mismo conjunto del lote: no comparar las tres cifras sin igualar cohorte, fechas y ponderación. La remediación local LE-13 sí comparte el helper del lote con el consolidado de protocolos.
 
 Endpoint:
 
@@ -1992,134 +1704,24 @@ claveAutomatica
 
 ## Reporte economico por camada
 
-Endpoint:
+`GET /api/reportes/porcinos/economia-camadas?fechaInicio=&fechaFin=`. Requiere Pro (`analiticaEconomica`).
 
-```txt
-GET /api/reportes/porcinos/economia-camadas
+Fuentes: Camada por fechaNacimiento y MovimientoFinanciero por fecha financiera. Se unen movimientos con referenciaId de las camadas seleccionadas y movimientos identificados como porcinos por referenciaModelo Camada o texto porc/chan/cerd/lech/camada en categoría, descripción, producto u observaciones. La unión deduplica por `_id`.
+
+### Respuesta y distribución
+
+`resumen` incluye conteos y `monedas.CRC`/`monedas.USD`. Los indicadores monetarios pertenecen a esos bloques, no a campos escalares sin moneda. Cada elemento de `camadas` también incluye `monedas`.
+
+```text
+costoEstimadoCamada[moneda] = egresosDirectos + egresoIndirectoAsignado
+ingresoEstimadoCamada[moneda] = ingresosDirectos + ingresoIndirectoAsignado
+margenEstimado[moneda] = ingresoEstimado − costoEstimado
+costoPorCriaDestetada[moneda] = costo / destetados
 ```
 
-Query:
+Los indirectos se distribuyen entre todas las camadas seleccionadas, incluso las que tienen directos; se conservan centavos. No existe ya la fórmula `directo || promedio`. Totales, balance y promedios se calculan separadamente por moneda. Si falta denominador, el código devuelve cero: no representa costo demostrado cero.
 
-- `fechaInicio`
-- `fechaFin`
-
-Frontend:
-
-```js
-obtenerReporteEconomicoCamadas({ fechaInicio, fechaFin })
-```
-
-### Origen de datos
-
-- `Camada`
-- `MovimientoFinanciero`
-
-### Filtros
-
-Camadas:
-
-```js
-fechaNacimiento dentro del periodo
-```
-
-Movimientos financieros directos:
-
-```js
-MovimientoFinanciero.fecha dentro del periodo
-referenciaId en ids de camadas
-```
-
-Movimientos porcinos por texto:
-
-```js
-MovimientoFinanciero.fecha dentro del periodo
-y alguno de estos campos contiene porc/chan/cerd/lech/camada:
-  categoria
-  descripcion
-  producto
-  observaciones
-o referenciaModelo = 'Camada'
-```
-
-Los movimientos directos y los detectados por texto se deduplican por `_id`.
-
-### Variables de salida
-
-```js
-resumen.camadasEvaluadas
-resumen.movimientosPorcinos
-resumen.ingresosPorcinos
-resumen.egresosPorcinos
-resumen.balancePorcino
-resumen.costoPromedioPorCamada
-resumen.ingresoPromedioPorCamada
-resumen.costoPorCriaViva
-resumen.costoPorCriaDestetada
-camadas
-```
-
-### Transformaciones
-
-Ingresos:
-
-```txt
-movimientos donde naturaleza = Ingreso
-```
-
-Egresos:
-
-```txt
-movimientos donde naturaleza = Egreso
-```
-
-Totales:
-
-```txt
-ingresosPorcinos = suma monto de ingresos
-egresosPorcinos = suma monto de egresos
-balancePorcino = ingresosPorcinos - egresosPorcinos
-```
-
-Prorrateos:
-
-```txt
-costoPromedioPorCamada = egresosPorcinos / camadasEvaluadas
-ingresoPromedioPorCamada = ingresosPorcinos / camadasEvaluadas
-costoPorCriaViva = egresosPorcinos / total nacidos vivos
-costoPorCriaDestetada = egresosPorcinos / total destetados
-```
-
-Si el denominador es `0`, se usa `1` internamente para evitar division invalida y devolver un valor estable.
-
-### Por camada
-
-Para cada camada:
-
-```js
-ingresosDirectos
-egresosDirectos
-costoEstimado
-ingresoEstimado
-margenEstimado
-costoPorCriaViva
-costoPorCriaDestetada
-movimientosDirectos
-```
-
-Reglas:
-
-- Si hay movimientos directos ligados por `referenciaId`, usa esos valores.
-- Si no hay movimientos directos, usa el ingreso/costo prorrateado del periodo.
-
-Formulas:
-
-```txt
-costoEstimado = egresosDirectos || costoPromedioPorCamada
-ingresoEstimado = ingresosDirectos || ingresoPromedioPorCamada
-margenEstimado = ingresoEstimado - costoEstimado
-costoPorCriaViva = costoEstimado / nacidosVivos
-costoPorCriaDestetada = costoEstimado / destetados
-```
+**RP-11:** un directo de camada fuera de la cohorte seleccionada puede entrar por referenciaModelo/texto y terminar prorrateado como indirecto entre otras camadas. La cohorte es por nacimiento, no por fecha de destete ni días de maternidad/lactancia; no debe presentarse como costeo exacto por fase. Las consultas no excluyen sistemáticamente camadas canceladas. Se requiere definición de alcance, cobertura y conciliación por moneda.
 
 ## Estandarizacion financiera usada por reportes
 
@@ -2614,46 +2216,39 @@ Fuentes metodologicas:
 
 ## Comparativo y consolidado multi-finca
 
-```text
-GET /api/reportes/multi-finca?fechaInicio=&fechaFin=&especie=&fincaIds=
-```
+`GET /api/reportes/multi-finca?fechaInicio=&fechaFin=&especie=&fincaIds=` requiere Premium, reportes.ver y acceso a todas las fincas seleccionadas. `fincaIds` acepta lista separada por comas; omitirlo selecciona las fincas activas accesibles. No se acepta una finca ajena a la membresía.
 
-Requiere la función Premium `reportesMultiFinca`. `fincaIds` es una lista separada por comas; si se omite, se incluyen todas las fincas activas autorizadas para la membresía. El backend rechaza IDs ajenos, inactivos o no asignados al usuario.
+El inventario/peso y los tratamientos activos son **actuales**; finanzas, partos y aplicaciones corresponden al período. Peso consolidado = suma pesos / animales con dato. Finanzas excluye excluirConsolidacion de resultados externos y separa moneda. Los campos escalares ingresos/egresos/balance son alias CRC; usar monedas para presentar todos los importes. El filtro especie no segrega movimientos financieros.
 
-El reporte responde una pregunta concreta: cómo se comparan el inventario, las finanzas, la reproducción y la sanidad entre las fincas seleccionadas. Entrega por finca:
+Destetes usa Animal.fechaDestete y la finca histórica de HistorialFincaAnimal; no incluye destetes colectivos de Camada (RP-13). El detalle de métrica limita a 200 sin paginación ni total; finanzas puede incluir internos que el KPI excluye (RP-18).
 
-- animales activos, bovinos y porcinos;
-- peso actual promedio y cantidad de animales con peso;
-- ingresos, egresos y balance del período;
-- partos reales, destetes reales y peso promedio al destete;
-- aplicaciones sanitarias del período y tratamientos activos.
+Metas y cierres están implementados. Los cierres guardan una fotografía del reporte sin recalcularla, pero no reconstruyen inventario al fin del período ni usan una lectura snapshot de todos sus componentes (RP-12). El detalle sí muestra resumen y fincas; sus importes visibles son alias CRC, aunque el JSON contiene ambas monedas (RP-14).
 
-También entrega un consolidado. Las cantidades y montos se suman; el peso promedio consolidado se recalcula como `pesoTotal / animalesConPeso`. No se promedian los promedios de cada finca, porque eso daría el mismo peso estadístico a fincas con tamaños diferentes.
+- XLSX vivo: cinco hojas, incluida Finanzas por moneda.
+- XLSX histórico: cuatro hojas; resumen/fincas omiten desglose USD.
+- PDF histórico: PDFKit; problemas de alineación/altura de filas y encabezados por página (RP-17).
+- No hay exportación general CSV o PDF de cada reporte individual.
 
-Los reportes restantes continúan operando sobre la finca activa. Gestión y Pro pueden cambiar de finca y analizarlas individualmente; el cruce simultáneo permanece reservado a Premium.
+Rutas, permisos, límites y criterios completos: [consolidacion-multifinca.md](consolidacion-multifinca.md) y [auditoría](../../AUDIT_MODULO_REPORTES.md).
 
-La consolidación ampliada también distingue transferencias internas, gastos compartidos, traslados de animales y monedas. CRC y USD se muestran por separado; no se aplica un tipo de cambio inferido. Los destetes se atribuyen a la finca vigente en la fecha real mediante `HistorialFincaAnimal`.
+## Dashboard y carga de reportes
 
-Premium permite guardar metas por finca u organización, cerrar una fotografía inmutable del período, consultar el detalle que forma cada indicador y exportar un libro XLSX con resumen, fincas, evolución mensual y metas. La especificación operativa completa está en `consolidacion-multifinca.md`.
+ListaUsuario.js calcula KPIs en cliente con seis peticiones básicas y hasta cuatro condicionales; usa perfil productivo de la finca para seleccionar índices. No hay endpoint dashboard agregado ni datos mock. Un fallo de Promise.all puede dejar ceros/datos previos sin aviso visible; no se refresca con cada operación en otra vista (RP-20).
 
-Filtros porcinos:
+Las tarjetas financieras aún leen la estructura anterior a monedas (RP-01). Contadores de vacas no filtran especie y alertas de parto usan estado calculado con 15 días, no ventana explícita de próximos 30 (RP-02).
 
-- `fechaInicio`
-- `fechaFin`
+Reportes.js usa 22 posiciones en Promise.all, varias resueltas localmente cuando no aplica especie/feature, y luego consulta lotes. Su ruta financiera destinos-resumen requiere reportes.ver: Consulta y Contador están autorizados. Un fallo HTTP sí afecta la carga conjunta; no debe confundirse con un permiso inexistente.
 
-Nota:
-
-- Los reportes porcinos de camadas usan `fechaNacimiento` como fecha principal.
-- El reporte reproductivo porcino combina ciclos por `fechaInseminacion` y camadas por `fechaNacimiento`.
+Hay paginación de productos; muchos otros conjuntos y el reporte de lotes siguen siendo pesados (RP-16). No se ha certificado carga real de 5.000 animales.
 
 ## Riesgos o puntos a vigilar
 
 - `valorEstimadoHato` depende de campos estimados que no siempre existen en el modelo actual.
-- `muertesPeriodo` usa `Animal.updatedAt`, no `fechaMuerte`; si se quiere precision historica, conviene cambiarlo a `fechaMuerte`.
+- ICB: `muertesPeriodo` aún usa Animal.updatedAt (RP-05); IEE ya usa fechaMuerte. No extender esa limitación a todos los índices.
 - `partos por vaca y ano` solo analiza animales Bovinos con partos registrados en el periodo; no incluye Porcinos aunque el filtro global este en Todos.
 - `sustentabilidad` ignora animales vendidos sin `pesoVenta` o `precioVentaPorKg`.
 - `precioKg.minimo` puede tomar `0` si algun item vendido no trae precio por kg.
-- `animalesInicioPeriodo` usa `createdAt`, no fecha nacimiento/compra.
+- `animalesInicioPeriodo` usa createdAt y estado actual; omite vendidos/muertos posteriores al inicio (RP-09).
 - El reporte de gastos operativos usa `tipoMovimiento`, `naturaleza` y categorias financieras estandarizadas; ya no clasifica por texto libre de descripcion u observaciones.
 - El reporte economico por camada es mas exacto cuando los movimientos financieros se ligan directamente a la camada con `referenciaId`.
 - Si los gastos porcinos no estan ligados a camada, el reporte economico los detecta por texto y los prorratea entre camadas del periodo.
@@ -2674,7 +2269,7 @@ Pendientes tecnicos:
 - Definir reglas de tipo de cambio para reportes mixtos `CRC` y `USD`.
 - Mantener `precioUnitario` como valor de linea/importacion y usar `precioUnitarioFisico` para costo real por litro, kilo, unidad, saco, etc.
 - Crear validaciones mas fuertes para evitar movimientos de compra de productos sin `producto`, `cantidad` o `unidad`.
-- Crear exportacion de reportes financieros a Excel/PDF.
+- Completar exportación financiera individual; Premium ya tiene XLSX vivo y PDF/XLSX históricos, con pendientes monetarios/visuales RP-14/RP-17.
 
 Pendientes de negocio:
 
@@ -2684,6 +2279,6 @@ Pendientes de negocio:
 - Definir destinos de uso oficiales finales: chapia, tractor, sanidad, potrero, mantenimiento, alimentacion, camada, animal, finca, galera, cortadora, cerca, rancho, aguas, administracion, etc.
 - Asociar gastos porcinos directamente a camada cuando se quiera medir rentabilidad por camada.
 - Asociar gastos bovinos a animal, potrero o tarea cuando aplique.
-- Definir tratamiento de impuestos, descuentos, fletes y ajustes en compras/ventas.
+- Completar reglas para impuestos/fletes y trazabilidad de datos antiguos. Los ajustes de monto final en compras/ventas ya se implementan; F07 no debe figurar como pendiente sin evidencia nueva.
 - Definir si planillas se registran por empleado, por corte, por tarea o por periodo completo.
 - Definir depreciacion real para inversiones en maquinaria, infraestructura o equipo.

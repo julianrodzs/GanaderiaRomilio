@@ -3,6 +3,7 @@ const Camada = require('../models/Camada');
 const VentaAnimal = require('../models/VentaAnimal');
 const Finca = require('../models/Finca');
 const { Membresia } = require('../models/Membresia');
+const Invitacion = require('../models/Invitacion');
 const Organizacion = require('../models/Organizacion');
 const UsoPlan = require('../models/UsoPlan');
 const ReservaCuotaPlan = require('../models/ReservaCuotaPlan');
@@ -151,7 +152,7 @@ const ejecutarConReservaCuota = async ({ permiso, recurso, organizacionId, canti
 
 const obtenerPlanActual = async (organizacionId) => {
     const id = resolverOrganizacionId(organizacionId);
-    const organizacion = await Organizacion.findById(id).select('nombre slug estado plan').lean();
+    const organizacion = await Organizacion.findById(id).select('nombre slug estado plan fincaPrincipal').lean();
     if (!organizacion) throw crearErrorPlan('PLAN_ORGANIZATION_NOT_FOUND', 'Organización no encontrada.', {}, 404);
 
     const codigo = organizacion.plan?.codigo || 'ESENCIAL';
@@ -167,6 +168,72 @@ const obtenerPlanActual = async (organizacionId) => {
         vigencia,
         configuracion
     };
+};
+
+const obtenerPoliticaFincasOperativas = async (organizacionId) => {
+    const actual = await obtenerPlanActual(organizacionId);
+    const limite = actual.configuracion.limites.fincas;
+    const fincas = await Finca.find({ organizacionId: resolverOrganizacionId(organizacionId), estado: 'Activa' })
+        .setOptions({ omitirAislamientoOrganizacion: true, omitirAislamientoFinca: true })
+        .sort({ createdAt: 1, _id: 1 })
+        .select('_id codigo nombre estado')
+        .lean();
+    if (limite === null || fincas.length <= limite) {
+        return { limite, sobreLimite: false, operativas: fincas, soloLectura: [] };
+    }
+
+    const porId = new Map(fincas.map((finca) => [String(finca._id), finca]));
+    const prioridad = [
+        String(actual.organizacion.fincaPrincipal || ''),
+        ...(actual.organizacion.plan?.fincasOperativas || []).map(String),
+        ...fincas.map((finca) => String(finca._id))
+    ];
+    const idsOperativos = [];
+    prioridad.forEach((id) => {
+        if (porId.has(id) && !idsOperativos.includes(id) && idsOperativos.length < limite) idsOperativos.push(id);
+    });
+    const conjunto = new Set(idsOperativos);
+    return {
+        limite,
+        sobreLimite: true,
+        operativas: idsOperativos.map((id) => porId.get(id)),
+        soloLectura: fincas.filter((finca) => !conjunto.has(String(finca._id)))
+    };
+};
+
+const seleccionarFincasOperativas = async ({ organizacionId, fincaIds }) => {
+    const id = resolverOrganizacionId(organizacionId);
+    const actual = await obtenerPlanActual(id);
+    asegurarPlanVigente(actual);
+    const limite = actual.configuracion.limites.fincas;
+    const ids = [...new Set((fincaIds || []).map(String).filter(Boolean))];
+    if (!Array.isArray(fincaIds) || !ids.length || (limite !== null && ids.length > limite)) {
+        throw crearErrorPlan('PLAN_OPERATIONAL_FARMS_INVALID', `Selecciona entre 1 y ${limite} fincas operativas.`, {}, 400);
+    }
+    if (!ids.includes(String(actual.organizacion.fincaPrincipal || ''))) {
+        throw crearErrorPlan('PLAN_PRIMARY_FARM_REQUIRED', 'La finca principal debe permanecer operativa.', {}, 400);
+    }
+    const existentes = await Finca.countDocuments({ organizacionId: id, _id: { $in: ids }, estado: 'Activa' })
+        .setOptions({ omitirAislamientoOrganizacion: true, omitirAislamientoFinca: true });
+    if (existentes !== ids.length) {
+        throw crearErrorPlan('PLAN_OPERATIONAL_FARMS_INVALID', 'Una de las fincas seleccionadas no existe o está inactiva.', {}, 400);
+    }
+    await Organizacion.findByIdAndUpdate(id, { $set: { 'plan.fincasOperativas': ids } });
+    return obtenerPoliticaFincasOperativas(id);
+};
+
+const asegurarFincasOperativasPlan = async ({ organizacionId, fincaIds }) => {
+    const politica = await obtenerPoliticaFincasOperativas(organizacionId);
+    const bloqueadas = new Set(politica.soloLectura.map((finca) => String(finca._id)));
+    const denegada = (fincaIds || []).map(String).find((id) => bloqueadas.has(id));
+    if (denegada) {
+        throw crearErrorPlan(
+            'PLAN_FINCA_EXCEDENTE_LECTURA',
+            'Una de las fincas seleccionadas excede el cupo del plan y se encuentra en modo solo lectura.',
+            { fincaId: denegada }
+        );
+    }
+    return politica;
 };
 
 const obtenerConfiguracionPlan = async (organizacionId) => asegurarPlanVigente(await obtenerPlanActual(organizacionId)).configuracion;
@@ -318,10 +385,14 @@ const asegurarPuedeCrearAnimal = async (datos) => {
     return resultado;
 };
 
-const contarUsuariosActivos = (organizacionId) => Membresia.countDocuments({
-    organizacionId: resolverOrganizacionId(organizacionId),
-    estado: 'Activo'
-});
+const contarUsuariosActivos = async (organizacionId) => {
+    const id = resolverOrganizacionId(organizacionId);
+    const [miembros, invitaciones] = await Promise.all([
+        Membresia.countDocuments({ organizacionId: id, estado: 'Activo' }),
+        Invitacion.countDocuments({ organizacionId: id, estado: 'Pendiente', expiraEn: { $gt: new Date() } })
+    ]);
+    return miembros + invitaciones;
+};
 
 const puedeUsarRol = async (rol, organizacionId) => {
     const actual = await obtenerPlanActual(organizacionId);
@@ -539,13 +610,18 @@ const obtenerEstadoLimites = async (organizacionId) => {
         : animales.total;
     const limiteDrone = obtenerLimiteDrone(actual);
 
+    const politicaFincas = await obtenerPoliticaFincasOperativas(organizacionId);
     return {
         actual,
         limites: {
             animales: limiteAnimales,
+            animalesBovinos: actual.configuracion.limites.bovinosSiSeleccionados,
+            animalesPorcinos: actual.configuracion.limites.porcinosSiSeleccionados,
             usuarios: actual.configuracion.limites.usuarios,
             fincas: actual.configuracion.limites.fincas,
             conteosDrone: limiteDrone,
+            conteosDroneBovinos: actual.configuracion.limites.conteosDroneMensualesBovino
+                ?? actual.configuracion.limites.conteosDroneMensuales,
             modoConteoDrone: actual.configuracion.limites.modoConteoDrone
         },
         uso: {
@@ -562,7 +638,9 @@ const obtenerEstadoLimites = async (organizacionId) => {
             usuarios: usuarios > actual.configuracion.limites.usuarios,
             fincas: fincas > actual.configuracion.limites.fincas,
             conteosDrone: limiteDrone !== null && Number(uso.conteosDrone || 0) > limiteDrone
-        }
+        },
+        fincasOperativas: politicaFincas.operativas,
+        fincasSoloLectura: politicaFincas.soloLectura
     };
 };
 
@@ -600,6 +678,7 @@ const obtenerMensajeFeature = (feature) => {
 module.exports = {
     ESTADOS_PLAN_VIGENTES,
     asegurarPlanVigente,
+    asegurarFincasOperativasPlan,
     asegurarPuedeCrearAnimal,
     asegurarPuedeCrearFinca,
     asegurarPuedeCrearUsuario,
@@ -620,6 +699,7 @@ module.exports = {
     obtenerConfiguracionPlan,
     obtenerEstadoLimites,
     obtenerMensajeFeature,
+    obtenerPoliticaFincasOperativas,
     obtenerPlanActual,
     obtenerUsoMensual,
     puedeCrearAnimal,
@@ -631,5 +711,6 @@ module.exports = {
     periodoMensual,
     reservarUsoDrone,
     reservarCuotaPlan,
+    seleccionarFincasOperativas,
     tieneFeature
 };

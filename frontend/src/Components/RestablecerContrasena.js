@@ -20,8 +20,8 @@ const RestablecerContrasena = ({ token, onVolver }) => {
     setMensaje('');
     setError('');
 
-    if (formulario.password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
+    if (formulario.password.length < 10) {
+      setError('La contraseña debe tener al menos 10 caracteres.');
       return;
     }
 
@@ -68,8 +68,8 @@ const RestablecerContrasena = ({ token, onVolver }) => {
             type="password"
             value={formulario.password}
             onChange={actualizarCampo}
-            placeholder="Mínimo 8 caracteres"
-            minLength="8"
+            placeholder="Mínimo 10 caracteres"
+            minLength="10"
             required
           />
         </label>
@@ -82,7 +82,7 @@ const RestablecerContrasena = ({ token, onVolver }) => {
             value={formulario.confirmarPassword}
             onChange={actualizarCampo}
             placeholder="Repite la contraseña"
-            minLength="8"
+            minLength="10"
             required
           />
         </label>

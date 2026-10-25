@@ -4,6 +4,8 @@ const { auth, authPlataforma } = require('./middleware/auth');
 const { auditoriaPeticiones } = require('./middleware/auditoria');
 const app = express();
 
+app.set('trust proxy', 1);
+
 // configuracion
 app.set('port', process.env.PORT || 4000);
 
@@ -12,6 +14,31 @@ app.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     credentials: true
 }));
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+    if (process.env.NODE_ENV === 'production') {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        const protocolo = req.get('x-forwarded-proto');
+        if (protocolo && protocolo !== 'https') {
+            return res.status(400).json({ mensaje: 'HTTPS es requerido.' });
+        }
+    }
+    return next();
+});
+app.use((req, res, next) => {
+    const responderJson = res.json.bind(res);
+    res.json = (contenido) => {
+        if (process.env.NODE_ENV === 'production' && res.statusCode >= 500) {
+            return responderJson({ mensaje: 'Error interno del servidor.' });
+        }
+        return responderJson(contenido);
+    };
+    next();
+});
 app.use(
     '/api/facturacion/webhook/stripe',
     express.raw({ type: 'application/json' }),
@@ -27,10 +54,12 @@ app.get('/', (req, res)=>{
 
 // rutas principales
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/invitaciones', require('./routes/invitacionRoutes'));
 app.use('/api/cron', require('./routes/cronRoutes'));
 app.use('/api/usuarios', require('./routes/usuario'));
 app.use('/api/usuario', auth, require('./routes/configuracionEmailRoutes'));
 app.use('/api/admin/organizaciones', authPlataforma, require('./routes/adminOrganizacionRoutes'));
+app.use('/api/admin/auditoria', authPlataforma, require('./routes/adminAuditoriaRoutes'));
 app.use('/api/auditoria', auth, require('./routes/auditoriaRoutes'));
 app.use('/api/notificaciones', auth, require('./routes/notificacionRoutes'));
 app.use('/api/archivos', auth, require('./routes/archivoRoutes'));

@@ -70,6 +70,11 @@ const movimientoFinancieroSchema = new Schema(
         fincaContraparte: { type: Schema.Types.ObjectId, ref: 'Finca' },
         excluirConsolidacion: { type: Boolean, default: false, index: true },
         porcentajeDistribucion: { type: Number, min: 0, max: 100 },
+        grupoAnuladoEn: { type: Date, default: null },
+        grupoAnuladoPor: { type: Schema.Types.ObjectId, ref: 'Usuario', default: null },
+        motivoAnulacionGrupo: { type: String, trim: true },
+        claveImportacion: { type: String, trim: true },
+        importacionOrigen: { type: Schema.Types.ObjectId, ref: 'ImportacionExcel' },
         observaciones: { type: String, trim: true }
     },
     {
@@ -152,5 +157,9 @@ movimientoFinancieroSchema.index({ tipoMovimiento: 1, tipoTrabajo: 1, fecha: -1 
 movimientoFinancieroSchema.index({ tipoMovimiento: 1, tipoInversion: 1, fecha: -1 });
 movimientoFinancieroSchema.index({ referenciaModelo: 1, referenciaId: 1 });
 movimientoFinancieroSchema.index({ organizacionId: 1, grupoConsolidacion: 1, fincaId: 1 });
+movimientoFinancieroSchema.index(
+    { organizacionId: 1, fincaId: 1, claveImportacion: 1 },
+    { unique: true, partialFilterExpression: { claveImportacion: { $type: 'string' } } }
+);
 
 module.exports = model('MovimientoFinanciero', movimientoFinancieroSchema);

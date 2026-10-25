@@ -51,8 +51,15 @@ const sincronizarCambio = async (cambio) => {
     return { id: cambio.id, estado: 'Sincronizado' };
   } catch (error) {
     const esConflicto = error.status === 409;
+    const accesoRevocado = error.status === 401
+      || error.data?.code === 'ACCESS_REVOKED'
+      || error.data?.code === 'ACCOUNT_INACTIVE'
+      || error.data?.code === 'ORGANIZATION_INACTIVE';
     const agotado = intentos >= MAX_INTENTOS_AUTOMATICOS;
-    const estadoSincronizacion = esConflicto ? 'Conflicto' : agotado ? 'Fallido' : 'Pendiente';
+    if (error.status === 401) {
+      return { id: cambio.id, estado: 'SesionExpirada', error: error.message };
+    }
+    const estadoSincronizacion = esConflicto ? 'Conflicto' : (accesoRevocado || agotado) ? 'Fallido' : 'Pendiente';
     const proximoIntentoEn = estadoSincronizacion === 'Pendiente'
       ? new Date(Date.now() + demoraReintentoMs(intentos)).toISOString()
       : null;
@@ -60,9 +67,16 @@ const sincronizarCambio = async (cambio) => {
     await actualizarCambioPendiente(cambio.id, {
       estadoSincronizacion,
       proximoIntentoEn,
-      codigoError: error.data?.codigo || '',
-      errorSincronizacion: error.message || 'No se pudo sincronizar el cambio.'
+      codigoError: error.data?.code || error.data?.codigo || '',
+      errorSincronizacion: accesoRevocado
+        ? 'El acceso fue revocado. Inicia sesión nuevamente; este registro no se volverá a enviar.'
+        : (error.message || 'No se pudo sincronizar el cambio.')
     });
+    if (accesoRevocado && error.status !== 401) {
+      let sesion = null;
+      try { sesion = JSON.parse(localStorage.getItem('ganaderiaSesion') || 'null'); } catch (errorSesion) { sesion = null; }
+      window.dispatchEvent(new CustomEvent('ganaderiaSesionExpirada', { detail: { sesion } }));
+    }
     return { id: cambio.id, estado: estadoSincronizacion, error: error.message };
   }
 };
@@ -75,7 +89,17 @@ const ejecutarSincronizacion = async ({ forzar = false } = {}) => {
   const resultados = [];
 
   for (const cambio of candidatos) {
-    resultados.push(await sincronizarCambio(cambio));
+    const resultado = await sincronizarCambio(cambio);
+    resultados.push(resultado);
+    if (resultado.estado === 'SesionExpirada') {
+      return {
+        sincronizados: resultados.filter((item) => item.estado === 'Sincronizado').length,
+        pendientes: 0,
+        conflictos: 0,
+        fallidos: 0,
+        sesionExpirada: true
+      };
+    }
   }
 
   const restantes = await obtenerCambiosPendientes().catch(() => []);

@@ -11,21 +11,38 @@ const crearFiltroEvento = ({ animal, moduloOrigen, referenciaId, tipoEvento }) =
     };
 };
 
+const crearFiltroIdempotente = (datosEvento) => {
+    if (datosEvento.claveIdempotencia) {
+        return { animal: datosEvento.animal, claveIdempotencia: datosEvento.claveIdempotencia };
+    }
+    return crearFiltroEvento(datosEvento);
+};
+
 const upsertEventoAnimal = async (datosEvento, opciones = {}) => {
     if (!datosEvento?.animal || !datosEvento?.tipoEvento || !datosEvento?.fecha || !datosEvento?.titulo) {
         return null;
     }
 
-    const filtro = crearFiltroEvento(datosEvento);
+    const evento = { ...datosEvento };
+    const claveIdempotencia = typeof evento.claveIdempotencia === 'string'
+        ? evento.claveIdempotencia.trim()
+        : '';
+    if (claveIdempotencia) evento.claveIdempotencia = claveIdempotencia;
+    else delete evento.claveIdempotencia;
+
+    const filtro = crearFiltroIdempotente(evento);
 
     if (!filtro) {
-        const creados = await EventoAnimal.create([datosEvento], opciones.session ? { session: opciones.session } : {});
+        const creados = await EventoAnimal.create(
+            [evento],
+            opciones.session ? { session: opciones.session, ordered: true } : {}
+        );
         return creados[0];
     }
 
     return EventoAnimal.findOneAndUpdate(
         filtro,
-        { $set: datosEvento },
+        { $set: evento },
         { upsert: true, new: true, setDefaultsOnInsert: true, ...(opciones.session ? { session: opciones.session } : {}) }
     );
 };

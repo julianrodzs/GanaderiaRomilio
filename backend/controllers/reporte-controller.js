@@ -11,6 +11,7 @@ const { Tarea } = require('../models/Tarea');
 const { AplicacionSanitaria } = require('../models/AplicacionSanitaria');
 const { TratamientoSanitario } = require('../models/TratamientoSanitario');
 const CompraAnimal = require('../models/CompraAnimal');
+const HistorialFincaAnimal = require('../models/HistorialFincaAnimal');
 const { construirReporteCompras } = require('../services/reporteComprasAnimales-service');
 const { tieneFeature } = require('../services/plan-service');
 const {
@@ -32,11 +33,18 @@ const { calcularProductividadPorcina } = require('../services/productividadCria-
 const {
     asignarEconomiaPorCamada,
     calcularTotalCompraAnimal,
+    construirContratoSustentabilidad,
     crearMapaMonedas,
     esMovimientoInversionOperativa,
     normalizarMoneda,
     sumarMovimientosPorMoneda
 } = require('../services/finanzas-calculos-service');
+const { parsearFechaCivil, rangoFechaCivil } = require('../services/fechaZonaHoraria-service');
+const {
+    obtenerAnimalesConHechoPeriodo,
+    obtenerAnimalesDiaPeriodo,
+    obtenerPoblacionAFecha
+} = require('../services/poblacionHistorica-service');
 
 const reporteCtrl = {};
 const { obtenerRendimientoForrajes } = require('../services/forrajeRendimiento-service');
@@ -198,15 +206,30 @@ const crearFiltroFechas = (campo, fechaInicio, fechaFin) => {
 
     if (fechaInicio || fechaFin) {
         filtro[campo] = {};
-        if (fechaInicio) filtro[campo].$gte = new Date(fechaInicio);
+        if (fechaInicio) filtro[campo].$gte = parsearFechaCivil(fechaInicio, 'La fecha inicial');
         if (fechaFin) {
-            const fechaFinDia = new Date(fechaFin);
+            const fechaFinDia = parsearFechaCivil(fechaFin, 'La fecha final');
             fechaFinDia.setUTCHours(23, 59, 59, 999);
             filtro[campo].$lte = fechaFinDia;
+        }
+        if (filtro[campo].$gte && filtro[campo].$lte && filtro[campo].$gte > filtro[campo].$lte) {
+            const error = new Error('La fecha inicial no puede ser posterior a la final.');
+            error.status = 400;
+            throw error;
         }
     }
 
     return filtro;
+};
+
+const obtenerPeriodoCivil = (fechaInicio, fechaFin) => {
+    const hoy = new Date();
+    const inicioPredeterminado = `${hoy.getUTCFullYear()}-01-01`;
+    const finPredeterminado = hoy.toISOString().slice(0, 10);
+    return rangoFechaCivil({
+        fechaInicio: fechaInicio || inicioPredeterminado,
+        fechaFin: fechaFin || finPredeterminado
+    });
 };
 
 const crearFiltroMesActual = (campo) => {
@@ -403,13 +426,6 @@ const calcularMesesEntre = (fechaInicio, fechaFin = new Date()) => {
     return redondear(Math.max(dias / 30.4375, 0), 2);
 };
 
-const calcularMesesPeriodo = (fechaInicio, fechaFin) => {
-    const inicio = fechaInicio ? new Date(fechaInicio) : new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
-    const fin = fechaFin ? new Date(fechaFin) : new Date();
-    const meses = calcularMesesEntre(inicio, fin);
-    return meses && meses > 0 ? meses : 1;
-};
-
 const restarMeses = (fecha, meses) => {
     const resultado = new Date(fecha);
     resultado.setUTCMonth(resultado.getUTCMonth() - meses);
@@ -431,11 +447,6 @@ const clasificarIpg = (ipg) => {
     return 'Deficiente';
 };
 
-const crearFiltroPeriodo = (campo, fechaInicio, fechaFin) => {
-    const filtro = crearFiltroFechas(campo, fechaInicio, fechaFin);
-    return filtro[campo] || {};
-};
-
 const estaFechaEnPeriodo = (fecha, fechaInicio, fechaFin) => {
     if (!fecha) return false;
 
@@ -454,62 +465,11 @@ const estaFechaEnPeriodo = (fecha, fechaInicio, fechaFin) => {
 
 const obtenerFechaIngresoFinca = (animal) => animal.fechaCompra || animal.fechaNacimiento || animal.createdAt;
 
-const esAnimalConsideradoActivoEnPeriodo = (animal, fechaInicio, fechaFin) => {
-    if (animal.estado === 'Muerto') return false;
-
-    const ingreso = obtenerFechaIngresoFinca(animal);
-    const finPeriodo = fechaFin ? new Date(fechaFin) : new Date();
-    finPeriodo.setUTCHours(23, 59, 59, 999);
-    if (ingreso && new Date(ingreso) > finPeriodo) return false;
-
-    if (!animal.fechaVenta) return true;
-    if (!fechaInicio) return true;
-
-    return new Date(animal.fechaVenta).getTime() >= new Date(fechaInicio).getTime();
-};
-
 const calcularTotalVentaAnimal = (animal) => {
     if (animal.pesoVenta && animal.precioVentaPorKg) {
         return animal.pesoVenta * animal.precioVentaPorKg;
     }
     return 0;
-};
-
-const obtenerInicioPeriodo = (fechaInicio) => {
-    if (fechaInicio) return new Date(fechaInicio);
-
-    const hoy = new Date();
-    return new Date(Date.UTC(hoy.getUTCFullYear(), 0, 1));
-};
-
-const esVacaReproductora = (animal, animalesConRegistroReproductivo = new Set()) => {
-    if (animal.sexo !== 'Hembra' || ['Muerto', 'Vendido'].includes(animal.estado)) return false;
-    const edadMeses = calcularEdadMeses(animal.fechaNacimiento);
-    return edadMeses >= 24 || animalesConRegistroReproductivo.has(animal._id.toString());
-};
-
-const obtenerVacasReproductoras = async (especie) => {
-    const filtroEspecie = crearFiltroEspecieAnimal(especie);
-    const [hembras, registros] = await Promise.all([
-        Animal.find({ sexo: 'Hembra', ...filtroEspecie }),
-        RegistroReproductivo.find().populate({ path: 'animal', match: filtroEspecie, select: '_id' }).select('animal')
-    ]);
-    const animalesConRegistro = new Set(registros.map((registro) => registro.animal?._id?.toString()).filter(Boolean));
-
-    return hembras.filter((animal) => esVacaReproductora(animal, animalesConRegistro));
-};
-
-const obtenerVacasGestantes = async (especie) => {
-    const filtroEspecie = crearFiltroEspecieAnimal(especie);
-    const registros = await RegistroReproductivo.find({
-        fechaPartoEstimada: { $exists: true, $ne: null },
-        $or: [
-            { fechaPartoReal: { $exists: false } },
-            { fechaPartoReal: null }
-        ]
-    }).populate({ path: 'animal', match: filtroEspecie, select: '_id' }).select('animal');
-
-    return new Set(registros.map((registro) => registro.animal?._id?.toString()).filter(Boolean)).size;
 };
 
 const crearRecomendacionesProductividad = ({
@@ -579,12 +539,20 @@ reporteCtrl.getProductividadCria = async (req, res) => {
     try {
         const { fechaInicio, fechaFin, especie } = req.query;
         if (especie === 'Porcino') {
-            const [camadas, configuracion] = await Promise.all([
+            const [camadas, camadasDestetadasPeriodo, configuracion] = await Promise.all([
                 Camada.find(crearFiltroFechas('fechaNacimiento', fechaInicio, fechaFin)).lean(),
+                Camada.find({
+                    ...crearFiltroFechas('fechaDesteteReal', fechaInicio, fechaFin),
+                    fechaDesteteReal: {
+                        ...(crearFiltroFechas('fechaDesteteReal', fechaInicio, fechaFin).fechaDesteteReal || {}),
+                        $exists: true,
+                        $ne: null
+                    }
+                }).lean(),
                 obtenerConfiguracionProductiva()
             ]);
             return res.json({
-                ...calcularProductividadPorcina(camadas, { configuracion: configuracion.toObject() }),
+                ...calcularProductividadPorcina(camadas, { configuracion: configuracion.toObject(), camadasDestetadasPeriodo }),
                 filtros: {
                     fechaInicio: fechaInicio || null,
                     fechaFin: fechaFin || null,
@@ -594,66 +562,74 @@ reporteCtrl.getProductividadCria = async (req, res) => {
         }
 
         const especieAnalizada = 'Bovino';
-        const idsEspecie = await obtenerIdsAnimalesPorEspecie(especieAnalizada);
-        const filtroPartos = crearFiltroFechas('fechaPartoReal', fechaInicio, fechaFin);
-        filtroPartos.fechaPartoReal = {
-            ...(filtroPartos.fechaPartoReal || {}),
-            $exists: true,
-            $ne: null
+        const { inicio, fin } = obtenerPeriodoCivil(fechaInicio, fechaFin);
+        const alcance = {
+            organizacionId: req.organizacionId,
+            fincaId: req.fincaId,
+            especie: especieAnalizada
         };
-
-        const filtroDestetes = crearFiltroFechas('fechaDestete', fechaInicio, fechaFin);
-        filtroDestetes.fechaDestete = {
-            ...(filtroDestetes.fechaDestete || {}),
-            $exists: true,
-            $ne: null
-        };
-
-        const periodoMuertes = crearFiltroPeriodo('updatedAt', fechaInicio, fechaFin);
-        const filtroMuertes = { estado: 'Muerto', ...crearFiltroEspecieAnimal(especieAnalizada) };
-        if (Object.keys(periodoMuertes).length) {
-            filtroMuertes.updatedAt = periodoMuertes;
-        }
-        if (idsEspecie) {
-            filtroPartos.animal = { $in: idsEspecie };
-            filtroDestetes.animal = { $in: idsEspecie };
-        }
-
         const [
-            vacasReproductorasLista,
-            ternerosNacidosPeriodo,
-            ternerosDestetadosPeriodo,
-            vacasGestantes,
-            muertesPeriodo,
-            totalAnimales
+            poblacionFinal,
+            poblacionPromedio,
+            nacidos,
+            destetados,
+            muertes,
+            registrosHastaCorte
         ] = await Promise.all([
-            obtenerVacasReproductoras(especieAnalizada),
-            RegistroReproductivo.countDocuments(filtroPartos),
-            RegistroReproductivo.countDocuments(filtroDestetes),
-            obtenerVacasGestantes(especieAnalizada),
-            Animal.countDocuments(filtroMuertes),
-            Animal.countDocuments(crearFiltroEspecieAnimal(especieAnalizada))
+            obtenerPoblacionAFecha({ ...alcance, fecha: fin }),
+            obtenerAnimalesDiaPeriodo({ ...alcance, fechaInicio: inicio, fechaFin: fin }),
+            obtenerAnimalesConHechoPeriodo({ ...alcance, campo: 'fechaNacimiento', fechaInicio: inicio, fechaFin: fin }),
+            obtenerAnimalesConHechoPeriodo({ ...alcance, campo: 'fechaDestete', fechaInicio: inicio, fechaFin: fin }),
+            obtenerAnimalesConHechoPeriodo({ ...alcance, campo: 'fechaMuerte', fechaInicio: inicio, fechaFin: fin }),
+            RegistroReproductivo.find({
+                especie: 'Bovino',
+                $or: [
+                    { fechaMonta: { $lte: fin } },
+                    { fechaInseminacion: { $lte: fin } },
+                    { fechaUltimoDiagnosticoGestacion: { $lte: fin } },
+                    { fechaPartoReal: { $lte: fin } }
+                ]
+            }).select('animal estadoCiclo gestacionConfirmada resultadoDiagnosticoGestacion fechaUltimoDiagnosticoGestacion').lean()
         ]);
+        const idsConRegistro = new Set(registrosHastaCorte.map((registro) => String(registro.animal)));
+        const calcularEdadAlCorte = (animal) => {
+            if (!animal.fechaNacimiento) return null;
+            return Math.max(0, (fin - new Date(animal.fechaNacimiento)) / (30.4375 * 24 * 60 * 60 * 1000));
+        };
+        const vacasReproductorasLista = poblacionFinal.filter((animal) => animal.sexo === 'Hembra'
+            && ((calcularEdadAlCorte(animal) || 0) >= 24 || idsConRegistro.has(String(animal._id))));
+        const idsVacasCorte = new Set(vacasReproductorasLista.map((animal) => String(animal._id)));
+        const idsGestantes = new Set(registrosHastaCorte
+            .filter((registro) => idsVacasCorte.has(String(registro.animal)))
+            .filter((registro) => !registro.estadoCiclo || registro.estadoCiclo === 'Activo')
+            .filter((registro) => registro.gestacionConfirmada === true || registro.resultadoDiagnosticoGestacion === 'PREÑADA')
+            .map((registro) => String(registro.animal)));
 
         const vacasReproductoras = vacasReproductorasLista.length;
-        const tasaNatalidad = redondear(porcentaje(ternerosNacidosPeriodo, vacasReproductoras));
-        const tasaDestete = redondear(porcentaje(ternerosDestetadosPeriodo, ternerosNacidosPeriodo));
-        const tasaGestacion = redondear(porcentaje(vacasGestantes, vacasReproductoras));
+        const ternerosNacidosPeriodo = nacidos.filter((animal) => !animal.fechaCompra).length;
+        const ternerosDestetadosPeriodo = destetados.length;
+        const vacasGestantes = idsGestantes.size;
+        const muertesPeriodo = muertes.length;
+        const totalAnimales = poblacionPromedio.promedio;
+        const tasaNatalidad = vacasReproductoras ? redondear(porcentaje(ternerosNacidosPeriodo, vacasReproductoras)) : null;
+        const tasaDestete = ternerosNacidosPeriodo ? redondear(porcentaje(ternerosDestetadosPeriodo, ternerosNacidosPeriodo)) : null;
+        const tasaGestacion = vacasReproductoras ? redondear(porcentaje(vacasGestantes, vacasReproductoras)) : null;
         const tasaSupervivencia = totalAnimales > 0
             ? redondear(Math.max(Math.min((1 - (muertesPeriodo / totalAnimales)) * 100, 100), 0))
-            : 0;
-        const ipg = redondear(
+            : null;
+        const tasasCompletas = [tasaNatalidad, tasaDestete, tasaGestacion, tasaSupervivencia].every((valor) => valor !== null);
+        const ipg = tasasCompletas ? redondear(
             tasaNatalidad * 0.40
             + tasaDestete * 0.25
             + tasaGestacion * 0.20
             + tasaSupervivencia * 0.15
-        );
+        ) : null;
 
         res.json({
             tipo: 'Bovino',
             especieAnalizada,
             ipg,
-            clasificacion: clasificarIpg(ipg),
+            clasificacion: ipg === null ? 'Sin datos suficientes' : clasificarIpg(ipg),
             tasaNatalidad,
             tasaDestete,
             tasaGestacion,
@@ -663,7 +639,8 @@ reporteCtrl.getProductividadCria = async (req, res) => {
             vacasReproductoras,
             vacasGestantes,
             muertesPeriodo,
-            totalAnimales,
+            totalAnimales: redondear(totalAnimales),
+            animalesDia: redondear(poblacionPromedio.animalesDia),
             recomendaciones: crearRecomendacionesProductividad({
                 vacasReproductoras,
                 ternerosNacidosPeriodo,
@@ -678,7 +655,7 @@ reporteCtrl.getProductividadCria = async (req, res) => {
             })
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener productividad de cria', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener productividad de cria', error: error.message });
     }
 };
 
@@ -686,12 +663,21 @@ reporteCtrl.getFinanzasCria = async (req, res) => {
     try {
         const { fechaInicio, fechaFin } = req.query;
         const filtroPeriodo = crearFiltroFechas('fecha', fechaInicio, fechaFin);
-        const inicioPeriodo = obtenerInicioPeriodo(fechaInicio);
+        const { inicio, fin } = obtenerPeriodoCivil(fechaInicio, fechaFin);
+        const inicioMovimientosInventario = new Date(inicio.getTime() + 1);
+        const alcance = { organizacionId: req.organizacionId, fincaId: req.fincaId };
 
-        const [movimientos, movimientosPeriodo, animales] = await Promise.all([
+        const [movimientos, movimientosPeriodo, poblacionInicial, poblacionFinal, nacimientos, compras, ventas, muertes, traslados] = await Promise.all([
             MovimientoFinanciero.find().lean(),
             MovimientoFinanciero.find(filtroPeriodo).lean(),
-            Animal.find().lean()
+            obtenerPoblacionAFecha({ ...alcance, fecha: inicio }),
+            obtenerPoblacionAFecha({ ...alcance, fecha: fin }),
+            obtenerAnimalesConHechoPeriodo({ ...alcance, campo: 'fechaNacimiento', fechaInicio: inicioMovimientosInventario, fechaFin: fin }),
+            obtenerAnimalesConHechoPeriodo({ ...alcance, campo: 'fechaCompra', fechaInicio: inicioMovimientosInventario, fechaFin: fin }),
+            obtenerAnimalesConHechoPeriodo({ ...alcance, campo: 'fechaVenta', fechaInicio: inicioMovimientosInventario, fechaFin: fin }),
+            obtenerAnimalesConHechoPeriodo({ ...alcance, campo: 'fechaMuerte', fechaInicio: inicioMovimientosInventario, fechaFin: fin }),
+            HistorialFincaAnimal.find({ tipo: 'Traslado', fecha: { $gte: inicioMovimientosInventario, $lte: fin } })
+                .setOptions({ omitirAislamientoFinca: true }).lean()
         ]);
 
         const inversionOperativaHistorica = sumarMovimientosPorMoneda(movimientos, esMovimientoInversionOperativa);
@@ -703,26 +689,44 @@ reporteCtrl.getFinanzasCria = async (req, res) => {
             ingresosPeriodo: redondear(ingresosPeriodo[moneda]),
             balanceOperativo: redondear(ingresosPeriodo[moneda] - gastosOperativosPeriodo[moneda])
         }));
-        const animalesActivos = animales.filter((animal) => !['Muerto', 'Vendido'].includes(animal.estado));
-        const animalesActuales = animalesActivos.length;
-        const animalesInicioPeriodo = animales.filter((animal) => {
-            if (['Muerto', 'Vendido'].includes(animal.estado)) return false;
-            if (!animal.createdAt) return false;
-            return new Date(animal.createdAt) <= inicioPeriodo;
-        }).length;
-        const valorEstimadoHato = sumarMovimientos(animalesActivos.map((animal) => ({ monto: calcularValorAnimal(animal) })));
+        const animalesInicioPeriodo = poblacionInicial.length;
+        const animalesFinalPeriodo = poblacionFinal.length;
+        const trasladosEntrada = traslados.filter((item) => String(item.fincaDestino) === String(req.fincaId)).length;
+        const trasladosSalida = traslados.filter((item) => String(item.fincaOrigen) === String(req.fincaId)).length;
+        const entradasNacimiento = nacimientos.filter((animal) => !animal.fechaCompra).length;
+        const entradasCompra = compras.length;
+        const inventarioEsperado = animalesInicioPeriodo + entradasNacimiento + entradasCompra + trasladosEntrada
+            - ventas.length - muertes.length - trasladosSalida;
+        const diferenciaConciliacion = animalesFinalPeriodo - inventarioEsperado;
+        const advertencias = diferenciaConciliacion === 0 ? [] : [{
+            codigo: 'INVENTARIO_NO_CONCILIA',
+            mensaje: `El inventario final difiere en ${diferenciaConciliacion} animal(es) respecto de los hechos disponibles. Revise fechas históricas faltantes.`,
+            diferencia: diferenciaConciliacion
+        }];
+        const valorEstimadoHato = sumarMovimientos(poblacionFinal.map((animal) => ({ monto: calcularValorAnimal(animal) })));
 
         res.json({
             monedas,
             valorEstimadoHato: redondear(valorEstimadoHato),
-            crecimientoHato: animalesActuales - animalesInicioPeriodo,
+            crecimientoHato: animalesFinalPeriodo - animalesInicioPeriodo,
             animalesInicioPeriodo,
-            animalesActuales,
+            animalesActuales: animalesFinalPeriodo,
+            animalesFinalPeriodo,
+            movimientosInventario: {
+                nacimientos: entradasNacimiento,
+                compras: entradasCompra,
+                trasladosEntrada,
+                ventas: ventas.length,
+                muertes: muertes.length,
+                descartes: 0,
+                trasladosSalida
+            },
+            advertencias,
             patrimonioGanaderoEstimado: redondear(valorEstimadoHato),
-            metodologiaPatrimonio: 'El valor del hato activo se presenta por separado del flujo histórico de inversión operativa.'
+            metodologiaPatrimonio: 'El inventario inicial y final se reconstruye a la fecha del período. El valor usa los datos monetarios disponibles en la ficha y se presenta separado del flujo financiero.'
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener finanzas de cria', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener finanzas de cria', error: error.message });
     }
 };
 
@@ -730,23 +734,28 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
     try {
         const { fechaInicio, fechaFin } = req.query;
         const filtroPeriodo = crearFiltroFechas('fecha', fechaInicio, fechaFin);
+        const { inicio, fin } = obtenerPeriodoCivil(fechaInicio, fechaFin);
 
-        const [animales, movimientosPeriodo] = await Promise.all([
+        const [animales, movimientosPeriodo, poblacionPeriodo] = await Promise.all([
             Animal.find().lean(),
-            MovimientoFinanciero.find(filtroPeriodo).lean()
+            MovimientoFinanciero.find(filtroPeriodo).lean(),
+            obtenerAnimalesDiaPeriodo({
+                organizacionId: req.organizacionId,
+                fincaId: req.fincaId,
+                fechaInicio: inicio,
+                fechaFin: fin
+            })
         ]);
 
-        const mesesPeriodo = calcularMesesPeriodo(fechaInicio, fechaFin);
-        const animalesActivosCosto = animales.filter((animal) => esAnimalConsideradoActivoEnPeriodo(animal, fechaInicio, fechaFin));
         const gastosOperativosPeriodo = sumarMovimientosPorMoneda(movimientosPeriodo, esMovimientoGastoOperativo);
-        const costoProduccionMensualPorAnimal = crearMapaMonedas((moneda) => (
-            animalesActivosCosto.length
-                ? gastosOperativosPeriodo[moneda] / animalesActivosCosto.length / mesesPeriodo
-                : 0
+        const movimientosVentas = sumarMovimientosPorMoneda(movimientosPeriodo, (movimiento) => (
+            movimiento.tipoMovimiento === 'Venta de animales' || movimiento.referenciaModelo === 'VentaAnimal'
+        ));
+        const movimientosCompras = sumarMovimientosPorMoneda(movimientosPeriodo, (movimiento) => (
+            movimiento.tipoMovimiento === 'Compra de animales' || movimiento.referenciaModelo === 'CompraAnimal'
         ));
         const animalesVendidos = animales.filter((animal) => {
-            return animal.estado === 'Vendido'
-                && estaFechaEnPeriodo(animal.fechaVenta, fechaInicio, fechaFin)
+            return estaFechaEnPeriodo(animal.fechaVenta, fechaInicio, fechaFin)
                 && animal.pesoVenta > 0
                 && animal.precioVentaPorKg > 0;
         });
@@ -755,14 +764,6 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
             const duracionMeses = calcularMesesEntre(fechaIngreso, animal.fechaVenta) || 0;
             const totalCompra = calcularTotalCompraAnimal(animal);
             const totalVenta = calcularTotalVentaAnimal(animal);
-            const costosProduccionAsignados = crearMapaMonedas((moneda) => (
-                costoProduccionMensualPorAnimal[moneda] * duracionMeses
-            ));
-            const utilidadPerdidaPorMoneda = {
-                CRC: totalVenta - totalCompra - costosProduccionAsignados.CRC,
-                USD: -costosProduccionAsignados.USD
-            };
-
             return {
                 animalId: animal._id,
                 diio: animal.diio || animal.identificadorFinca || '--',
@@ -777,28 +778,19 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
                 totalCompra: redondear(totalCompra),
                 totalVenta: redondear(totalVenta),
                 duracionMeses,
-                costosProduccionAsignados: crearMapaMonedas((moneda) => redondear(costosProduccionAsignados[moneda])),
-                utilidadPerdidaPorMoneda: crearMapaMonedas((moneda) => redondear(utilidadPerdidaPorMoneda[moneda]))
+                resultadoComercialDirecto: redondear(totalVenta - totalCompra)
             };
         });
         const montoComprasAnimales = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.totalCompra })));
         const montoVentasAnimales = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.totalVenta })));
-        const costoProduccionAsignado = crearMapaMonedas((moneda) => animalesAnalizados.reduce(
-            (total, animal) => total + Number(animal.costosProduccionAsignados?.[moneda] || 0),
-            0
-        ));
-        const margenSustentabilidad = {
-            CRC: montoVentasAnimales - montoComprasAnimales - costoProduccionAsignado.CRC,
-            USD: -costoProduccionAsignado.USD
-        };
-        const monedas = crearMapaMonedas((moneda) => ({
-            montoVentasAnimales: moneda === 'CRC' ? redondear(montoVentasAnimales) : 0,
-            montoComprasAnimales: moneda === 'CRC' ? redondear(montoComprasAnimales) : 0,
-            gastosOperativosPeriodo: redondear(gastosOperativosPeriodo[moneda]),
-            costoProduccionAsignado: redondear(costoProduccionAsignado[moneda]),
-            costoProduccionMensualPorAnimal: redondear(costoProduccionMensualPorAnimal[moneda]),
-            margenSustentabilidad: redondear(margenSustentabilidad[moneda])
-        }));
+        const contratoSustentabilidad = construirContratoSustentabilidad({
+            gastos: gastosOperativosPeriodo,
+            ventas: movimientosVentas,
+            compras: movimientosCompras,
+            animalesPromedio: poblacionPeriodo.promedio,
+            movimientosPeriodo: movimientosPeriodo.length
+        });
+        const monedas = contratoSustentabilidad.monedas;
         const pesoCompraTotal = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.pesoCompra })));
         const pesoVentaTotal = sumarMovimientos(animalesAnalizados.map((animal) => ({ monto: animal.pesoVenta })));
         const duracionPromedioMeses = animalesAnalizados.length
@@ -813,8 +805,10 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
             montoComprasAnimales: redondear(montoComprasAnimales),
             animalesCompradosPeriodo: animalesAnalizados.filter((animal) => animal.origen === 'Comprado').length,
             animalesVendidosPeriodo: animalesAnalizados.length,
-            animalesActivosCosto: animalesActivosCosto.length,
-            mesesPeriodo: redondear(mesesPeriodo),
+            animalesPromedioPeriodo: redondear(poblacionPeriodo.promedio),
+            animalesDia: redondear(poblacionPeriodo.animalesDia),
+            diasPeriodo: poblacionPeriodo.diasPeriodo,
+            movimientosPeriodo: contratoSustentabilidad.movimientosPeriodo,
             precioVentaPromedioKg: redondear(precioVentaPromedioKg),
             precioCompraPromedioKg: redondear(precioCompraPromedioKg),
             pesoCompraTotal: redondear(pesoCompraTotal),
@@ -822,24 +816,23 @@ reporteCtrl.getSustentabilidadCria = async (req, res) => {
             duracionPromedioMeses: redondear(duracionPromedioMeses),
             detalleAnimales: animalesAnalizados,
             animalesIgnorados: animales.filter((animal) => {
-                return animal.estado === 'Vendido'
-                    && estaFechaEnPeriodo(animal.fechaVenta, fechaInicio, fechaFin)
+                return estaFechaEnPeriodo(animal.fechaVenta, fechaInicio, fechaFin)
                     && (!animal.pesoVenta || !animal.precioVentaPorKg);
             }).map((animal) => ({
                 animalId: animal._id,
                 diio: animal.diio || animal.identificadorFinca || '--',
                 motivo: 'Falta pesoVenta o precioVentaPorKg'
             })),
-            formula: 'venta por kilo - compra por kilo - costo operativo mensual por animal segun meses en finca',
+            formula: 'Balance del período = ventas reales del período - compras reales del período - gastos operativos reales del período.',
             criterioFechas: {
                 ingreso: 'fechaNacimiento para nacidos en finca y fechaCompra para comprados',
                 ventas: 'fechaVenta del animal cuando estado es Vendido',
                 gastosOperativos: 'fecha del movimiento financiero',
-                costoOperativo: 'gastos operativos del periodo / animales activos considerados / meses del periodo'
+                costoOperativo: 'gastos operativos del período / promedio de animales-día del mismo período'
             }
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener sustentabilidad de cria', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener sustentabilidad de cria', error: error.message });
     }
 };
 
@@ -943,14 +936,15 @@ const crearReportePartos = async ({ fechaInicio, fechaFin, diio, filtroExtra = {
 
 const tieneGestacionActiva = (registros, fechaCorte) => {
     return registros.some((registro) => {
-        if (!registro.fechaPartoEstimada || registro.fechaPartoReal) return false;
-        return new Date(registro.fechaPartoEstimada) >= fechaCorte;
+        if (registro.fechaPartoReal || ['Cancelado', 'No preñada', 'Cerrado sin parto'].includes(registro.estadoCiclo)) return false;
+        if (!(registro.gestacionConfirmada === true || registro.resultadoDiagnosticoGestacion === 'PREÑADA')) return false;
+        return !registro.fechaUltimoDiagnosticoGestacion || new Date(registro.fechaUltimoDiagnosticoGestacion) <= fechaCorte;
     });
 };
 
-const obtenerUltimoParto = (registros) => {
+const obtenerUltimoParto = (registros, fechaCorte = new Date()) => {
     return registros
-        .filter((registro) => registro.fechaPartoReal)
+        .filter((registro) => registro.fechaPartoReal && new Date(registro.fechaPartoReal) <= fechaCorte)
         .sort((a, b) => new Date(b.fechaPartoReal) - new Date(a.fechaPartoReal))[0] || null;
 };
 
@@ -958,7 +952,7 @@ const obtenerDestetesBajos = (vaca, terneros, pesoDesteteMin, fechaInicio, fecha
     const posiblesMadres = [vaca.diio, vaca.identificadorFinca].filter(Boolean);
 
     return terneros.filter((ternero) => {
-        if (!posiblesMadres.includes(ternero.madreDiio)) return false;
+        if (String(ternero.madre || '') !== String(vaca._id) && !posiblesMadres.includes(ternero.madreDiio)) return false;
         if (!ternero.pesoDestete || ternero.pesoDestete >= pesoDesteteMin) return false;
         if (fechaInicio || fechaFin) {
             return estaFechaEnPeriodo(ternero.fechaDestete || ternero.updatedAt, fechaInicio, fechaFin);
@@ -1113,7 +1107,7 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
             crecimientoTerneros: especie === 'Porcino' ? [] : crecimientoCrias
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener reporte de crecimiento', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener reporte de crecimiento', error: error.message });
     }
 };
 
@@ -1144,30 +1138,44 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
         const mesesSinPartoNumero = Number(mesesSinParto) || 12;
         const diasAbiertosNumero = Number(diasAbiertos) || 120;
         const pesoDesteteMinNumero = Number(pesoDesteteMin) || 140;
-        const fechaCorte = fechaFin ? new Date(fechaFin) : new Date();
-        fechaCorte.setUTCHours(23, 59, 59, 999);
+        const fechaCorte = fechaFin
+            ? (() => { const fecha = parsearFechaCivil(fechaFin, 'La fecha final'); fecha.setUTCHours(23, 59, 59, 999); return fecha; })()
+            : new Date();
         const limiteParto = restarMeses(fechaCorte, mesesSinPartoNumero);
+        const configuracion = await obtenerConfiguracionProductiva();
+        const diasEsperaPosparto = Number(configuracion?.diasEsperaPosparto || 45);
 
-        const filtroHembras = {
+        const filtroEspecieBovina = crearFiltroEspecieAnimal('Bovino');
+        let filtroHembras = {
             sexo: 'Hembra',
-            estado: 'Activo',
-            ...crearFiltroEspecieAnimal('Bovino')
+            estado: 'Activo'
         };
 
         if (diio) {
-            filtroHembras.$or = [
-                { diio: { $regex: diio, $options: 'i' } },
-                { identificadorFinca: { $regex: diio, $options: 'i' } },
-                { nombre: { $regex: diio, $options: 'i' } }
-            ];
+            filtroHembras = { $and: [
+                filtroHembras,
+                filtroEspecieBovina,
+                { $or: [
+                    { diio: { $regex: diio, $options: 'i' } },
+                    { identificadorFinca: { $regex: diio, $options: 'i' } },
+                    { nombre: { $regex: diio, $options: 'i' } }
+                ] }
+            ] };
+        } else {
+            filtroHembras = { $and: [filtroHembras, filtroEspecieBovina] };
         }
 
         const [hembras, registros, terneros] = await Promise.all([
             Animal.find(filtroHembras).lean(),
             RegistroReproductivo.find().lean(),
             Animal.find({
-                madreDiio: { $exists: true, $ne: null },
-                ...crearFiltroEspecieAnimal('Bovino')
+                $and: [
+                    crearFiltroEspecieAnimal('Bovino'),
+                    { $or: [
+                        { madre: { $exists: true, $ne: null } },
+                        { madreDiio: { $exists: true, $ne: null } }
+                    ] }
+                ]
             }).lean()
         ]);
         const registrosPorAnimal = registros.reduce((mapa, registro) => {
@@ -1178,13 +1186,17 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
             return mapa;
         }, new Map());
 
+        const enEsperaPosparto = [];
         const vacas = hembras
             .map((vaca) => {
-                const edadMeses = calcularEdadMeses(vaca.fechaNacimiento);
+                const edadMeses = vaca.fechaNacimiento
+                    ? Math.floor((fechaCorte - new Date(vaca.fechaNacimiento)) / (30.4375 * 24 * 60 * 60 * 1000))
+                    : null;
                 const registrosVaca = registrosPorAnimal.get(vaca._id.toString()) || [];
-                const ultimoParto = obtenerUltimoParto(registrosVaca);
+                const ultimoParto = obtenerUltimoParto(registrosVaca, fechaCorte);
                 const gestacionActiva = tieneGestacionActiva(registrosVaca, fechaCorte);
                 const diasAbierta = ultimoParto ? calcularDiasEntre(ultimoParto.fechaPartoReal, fechaCorte) : null;
+                const esperandoPosparto = diasAbierta !== null && diasAbierta < diasEsperaPosparto;
                 const destetesBajos = obtenerDestetesBajos(vaca, terneros, pesoDesteteMinNumero, fechaInicio, fechaFin);
                 const motivos = [];
 
@@ -1194,11 +1206,11 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
                     motivos.push('Sin parto reciente');
                 }
 
-                if (!gestacionActiva) {
+                if (!gestacionActiva && !esperandoPosparto) {
                     motivos.push('Sin gestación activa');
                 }
 
-                if (ultimoParto && !gestacionActiva && diasAbierta > diasAbiertosNumero) {
+                if (ultimoParto && !gestacionActiva && !esperandoPosparto && diasAbierta > diasAbiertosNumero) {
                     motivos.push('Muchos días abiertos');
                 }
 
@@ -1206,6 +1218,15 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
                     motivos.push('Destete bajo');
                 }
 
+                if (esperandoPosparto) {
+                    enEsperaPosparto.push({
+                        animalId: vaca._id,
+                        diio: vaca.diio || vaca.identificadorFinca || '--',
+                        nombre: vaca.nombre || '',
+                        ultimoParto: ultimoParto?.fechaPartoReal || null,
+                        diasPosparto: diasAbierta
+                    });
+                }
                 if (motivos.length === 0) return null;
 
                 return {
@@ -1233,6 +1254,7 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
                 mesesSinParto: mesesSinPartoNumero,
                 diasAbiertos: diasAbiertosNumero,
                 pesoDesteteMin: pesoDesteteMinNumero,
+                diasEsperaPosparto,
                 fechaInicio: fechaInicio || null,
                 fechaFin: fechaFin || null
             },
@@ -1241,12 +1263,14 @@ reporteCtrl.getVacasImproductivas = async (req, res) => {
                 sinPartoReciente: vacas.filter((vaca) => vaca.motivos.includes('Sin parto reciente')).length,
                 sinGestacionActiva: vacas.filter((vaca) => vaca.motivos.includes('Sin gestación activa')).length,
                 muchosDiasAbiertos: vacas.filter((vaca) => vaca.motivos.includes('Muchos días abiertos')).length,
-                destetesBajos: vacas.filter((vaca) => vaca.motivos.includes('Destete bajo')).length
+                destetesBajos: vacas.filter((vaca) => vaca.motivos.includes('Destete bajo')).length,
+                enPeriodoEsperaPosparto: enEsperaPosparto.length
             },
-            vacas
+            vacas,
+            enEsperaPosparto
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener vacas a revisar', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener vacas a revisar', error: error.message });
     }
 };
 
@@ -1376,7 +1400,7 @@ reporteCtrl.getProductosResumen = async (req, res) => {
             }))
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener resumen de productos', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener resumen de productos', error: error.message });
     }
 };
 
@@ -1448,7 +1472,7 @@ reporteCtrl.getProductosPorProducto = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener productos agrupados', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener productos agrupados', error: error.message });
     }
 };
 
@@ -1501,7 +1525,7 @@ reporteCtrl.getProductosPorCategoria = async (req, res) => {
 
         res.json(categorias);
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener productos por categoria', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener productos por categoria', error: error.message });
     }
 };
 
@@ -1608,7 +1632,7 @@ reporteCtrl.getProductosCombustibles = async (req, res) => {
             registros: Object.values(monedas).reduce((total, item) => total + item.registros, 0)
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener reporte de combustibles', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener reporte de combustibles', error: error.message });
     }
 };
 
@@ -1655,7 +1679,7 @@ reporteCtrl.getProductosPrecioPromedio = async (req, res) => {
 
         res.json(precios);
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener precio promedio de productos', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener precio promedio de productos', error: error.message });
     }
 };
 
@@ -1692,7 +1716,7 @@ reporteCtrl.getProductosProveedores = async (req, res) => {
 
         res.json(proveedores);
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener proveedores de productos', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener proveedores de productos', error: error.message });
     }
 };
 
@@ -1735,7 +1759,7 @@ reporteCtrl.getProductosDestinos = async (req, res) => {
 
         res.json(destinos);
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener destinos de productos', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener destinos de productos', error: error.message });
     }
 };
 
@@ -1781,7 +1805,7 @@ reporteCtrl.getProductosTop = async (req, res) => {
 
         res.json(productos);
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener top de productos', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener top de productos', error: error.message });
     }
 };
 
@@ -1884,7 +1908,7 @@ reporteCtrl.getReporteCamadas = async (req, res) => {
             camadas: camadas.map(mapearCamadaResumen)
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener reporte de camadas', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener reporte de camadas', error: error.message });
     }
 };
 
@@ -1989,7 +2013,7 @@ reporteCtrl.getReporteReproductivoPorcino = async (req, res) => {
             })).sort((a, b) => b.partos - a.partos || b.nacidosVivos - a.nacidosVivos)
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener reporte reproductivo porcino', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener reporte reproductivo porcino', error: error.message });
     }
 };
 
@@ -2066,7 +2090,7 @@ reporteCtrl.getReporteTareasCamadas = async (req, res) => {
             })
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener tareas por camada', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener tareas por camada', error: error.message });
     }
 };
 
@@ -2096,7 +2120,7 @@ reporteCtrl.getReporteEconomicoCamadas = async (req, res) => {
             ...movimientosDirectos,
             ...movimientosPorcinos.filter((movimiento) => !idsDirectos.has(movimiento._id.toString()))
         ];
-        const { asignaciones, resumenMonedas } = asignarEconomiaPorCamada({ camadaIds, movimientos });
+        const { asignaciones, resumenMonedas, cobertura } = asignarEconomiaPorCamada({ camadaIds, movimientos });
         const totalCriasVivas = camadas.reduce((total, camada) => total + (camada.nacidosVivos || 0), 0);
         const totalCriasDestetadas = camadas.reduce((total, camada) => total + (camada.destetados || 0), 0);
         Object.values(resumenMonedas).forEach((resumen) => {
@@ -2108,10 +2132,10 @@ reporteCtrl.getReporteEconomicoCamadas = async (req, res) => {
                 : 0;
             resumen.costoPorCriaViva = totalCriasVivas
                 ? redondear(resumen.egresosPorcinos / totalCriasVivas)
-                : 0;
+                : null;
             resumen.costoPorCriaDestetada = totalCriasDestetadas
                 ? redondear(resumen.egresosPorcinos / totalCriasDestetadas)
-                : 0;
+                : null;
         });
         const detalleCamadas = camadas.map((camada) => {
             const asignacion = asignaciones[camada._id.toString()] || {
@@ -2137,10 +2161,10 @@ reporteCtrl.getReporteEconomicoCamadas = async (req, res) => {
                     margenEstimado: redondear(datos.ingresoAsignado - datos.costoAsignado),
                     costoPorCriaViva: camada.nacidosVivos
                         ? redondear(datos.costoAsignado / camada.nacidosVivos)
-                        : 0,
+                        : null,
                     costoPorCriaDestetada: camada.destetados
                         ? redondear(datos.costoAsignado / camada.destetados)
-                        : 0
+                        : null
                 };
             });
             return {
@@ -2155,12 +2179,17 @@ reporteCtrl.getReporteEconomicoCamadas = async (req, res) => {
                 camadasEvaluadas: camadas.length,
                 movimientosPorcinos: movimientos.length,
                 monedas: resumenMonedas,
-                criterioAsignacionIndirecta: 'Distribución equitativa entre las camadas evaluadas; los costos directos permanecen en su camada.'
+                cobertura: {
+                    ...cobertura,
+                    criasDestetadasConDenominador: totalCriasDestetadas,
+                    costoPorDestetadoDisponible: totalCriasDestetadas > 0
+                },
+                criterioAsignacionIndirecta: cobertura.criterioIndirectos
             },
             camadas: detalleCamadas
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener reporte economico por camada', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener reporte economico por camada', error: error.message });
     }
 };
 
@@ -2206,14 +2235,23 @@ reporteCtrl.getReporteSanidad = async (req, res) => {
             AplicacionSanitaria.aggregate([
                 { $match: { ...filtroAplicaciones, naturaleza: 'Tratamiento' } },
                 { $unwind: '$animales' },
-                { $group: { _id: '$animales', cantidad: { $sum: 1 } } },
+                { $group: { _id: '$animales', cantidad: { $sum: 1 }, organizacionId: { $first: '$organizacionId' } } },
                 { $sort: { cantidad: -1 } },
                 { $limit: 8 },
                 {
                     $lookup: {
                         from: 'animals',
-                        localField: '_id',
-                        foreignField: '_id',
+                        let: { animalId: '$_id', organizacionId: '$organizacionId' },
+                        pipeline: [{
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$_id', '$$animalId'] },
+                                        { $eq: ['$organizacionId', '$$organizacionId'] }
+                                    ]
+                                }
+                            }
+                        }],
                         as: 'animal'
                     }
                 },
@@ -2262,7 +2300,7 @@ reporteCtrl.getReporteSanidad = async (req, res) => {
             proximosPlanes
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener reporte sanitario', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener reporte sanitario', error: error.message });
     }
 };
 
@@ -2309,7 +2347,7 @@ reporteCtrl.getReporteComprasAnimales = async (req, res) => {
             filtros: { especie, sexo, proveedor, raza }
         }));
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener el reporte de compras de animales', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener el reporte de compras de animales', error: error.message });
     }
 };
 
@@ -2528,7 +2566,7 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener reportes', error: error.message });
+        res.status(error.status || 500).json({ mensaje: 'Error al obtener reportes', error: error.message });
     }
 };
 

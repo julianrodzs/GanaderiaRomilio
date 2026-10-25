@@ -14,6 +14,17 @@ const loteSchema = new Schema({
     descripcion: { type: String, trim: true },
     pesoObjetivoKg: { type: Number, min: 0 },
     gmdObjetivoKgDia: { type: Number, min: 0 },
+    // Una pérdida real de peso también es un resultado productivo válido.
+    gmdFinalLote: { type: Number },
+    kilosGanadosTotales: { type: Number },
+    diasTotalesCiclo: { type: Number, min: 0 },
+    cantidadAnimalesCierre: { type: Number, min: 0 },
+    pesoPromedioFinalKg: { type: Number, min: 0 },
+    coberturaPesajesFinal: {
+        conPesaje: { type: Number, min: 0, default: 0 },
+        total: { type: Number, min: 0, default: 0 }
+    },
+    revisionPoblacion: { type: Number, default: 0, select: false },
     ubicacionActual: { type: Schema.Types.ObjectId, ref: 'Potrero' },
     creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' }
 }, { timestamps: true });

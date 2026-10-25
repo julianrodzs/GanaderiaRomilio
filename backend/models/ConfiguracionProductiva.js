@@ -26,6 +26,7 @@ const configuracionProductivaSchema = new Schema({
     porcinos: { type: metaSchema, default: () => ({}) },
     porcinosCria: { type: porcinosCriaSchema, default: () => ({}) },
     bovinosEngorde: { type: bovinosEngordeSchema, default: () => ({}) },
+    diasEsperaPosparto: { type: Number, min: 1, default: 45 },
     diasPesajeReciente: { type: Number, min: 1, default: 60 },
     actualizadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' }
 }, { timestamps: true });

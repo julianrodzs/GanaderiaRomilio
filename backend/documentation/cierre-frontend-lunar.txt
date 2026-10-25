@@ -1,0 +1,18 @@
+
+> frontend@0.1.0 test:lunar
+> node --test tests/calendarioLunarService.test.mjs
+
+✔ clasifica las cuatro fases principales en fechas conocidas (27.5091ms)
+✔ calcula iluminación coherente para luna nueva, luna llena y días intermedios (2.8546ms)
+✔ usa mediodía local y conserva el día elegido en Costa Rica (1.0106ms)
+✔ enumera las próximas cuatro fases en orden incluso al cambiar de año (6.5987ms)
+✔ resuelve próximas lunas principales para fechas históricas y futuras (7.4509ms)
+✔ detecta reproducción y siembra mediante campos estructurados, no por el título (0.3404ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 148.2386

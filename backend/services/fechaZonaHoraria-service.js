@@ -38,4 +38,53 @@ const claveDiaEnZona = (fecha = new Date(), zonaHoraria = 'America/Costa_Rica') 
     return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
 };
 
-module.exports = { claveDiaEnZona, fechaCivilEnZonaAUTC, limitesDiaEnZona, obtenerPartes };
+const errorFecha = (mensaje) => Object.assign(new Error(mensaje), { status: 400 });
+
+const parsearFechaCivil = (valor, nombre = 'La fecha') => {
+    if (valor instanceof Date) {
+        if (Number.isNaN(valor.getTime())) throw errorFecha(`${nombre} no es válida.`);
+        return new Date(Date.UTC(valor.getUTCFullYear(), valor.getUTCMonth(), valor.getUTCDate()));
+    }
+    const coincidencia = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(valor || '').trim());
+    if (!coincidencia) throw errorFecha(`${nombre} debe usar el formato AAAA-MM-DD.`);
+    const [, year, month, day] = coincidencia.map(Number);
+    const fecha = new Date(Date.UTC(year, month - 1, day));
+    if (fecha.getUTCFullYear() !== year || fecha.getUTCMonth() !== month - 1 || fecha.getUTCDate() !== day) {
+        throw errorFecha(`${nombre} no es válida.`);
+    }
+    return fecha;
+};
+
+const rangoFechaCivil = ({ fechaInicio, fechaFin } = {}) => {
+    const inicio = parsearFechaCivil(fechaInicio, 'La fecha inicial');
+    const finDia = parsearFechaCivil(fechaFin, 'La fecha final');
+    if (inicio > finDia) throw errorFecha('La fecha inicial no puede ser posterior a la final.');
+    const finExclusivo = new Date(finDia);
+    finExclusivo.setUTCDate(finExclusivo.getUTCDate() + 1);
+    return { inicio, fin: new Date(finExclusivo.getTime() - 1), finExclusivo };
+};
+
+const rangoInstantesEnZona = ({ fechaInicio, fechaFin, zonaHoraria = 'America/Costa_Rica' } = {}) => {
+    const inicioCivil = parsearFechaCivil(fechaInicio, 'La fecha inicial');
+    const finCivil = parsearFechaCivil(fechaFin, 'La fecha final');
+    if (inicioCivil > finCivil) throw errorFecha('La fecha inicial no puede ser posterior a la final.');
+    const inicio = fechaCivilEnZonaAUTC({
+        year: inicioCivil.getUTCFullYear(), month: inicioCivil.getUTCMonth() + 1, day: inicioCivil.getUTCDate()
+    }, zonaHoraria);
+    const siguiente = new Date(finCivil);
+    siguiente.setUTCDate(siguiente.getUTCDate() + 1);
+    const finExclusivo = fechaCivilEnZonaAUTC({
+        year: siguiente.getUTCFullYear(), month: siguiente.getUTCMonth() + 1, day: siguiente.getUTCDate()
+    }, zonaHoraria);
+    return { inicio, fin: new Date(finExclusivo.getTime() - 1), finExclusivo };
+};
+
+module.exports = {
+    claveDiaEnZona,
+    fechaCivilEnZonaAUTC,
+    limitesDiaEnZona,
+    obtenerPartes,
+    parsearFechaCivil,
+    rangoFechaCivil,
+    rangoInstantesEnZona
+};

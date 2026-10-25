@@ -227,7 +227,7 @@ tratamientoSanitarioCtrl.createTratamiento = async (req, res) => {
                 fechaFin: null,
                 estado: 'Activo',
                 registradoPor: req.usuario?.id
-            }], { session });
+            }], { session, ordered: true });
 
             let aplicacion = null;
             if (datos.registrarPrimeraAplicacion === true) {

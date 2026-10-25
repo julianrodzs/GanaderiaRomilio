@@ -305,7 +305,7 @@ const crearCampana = async ({ datos, usuarioId }) => {
                 costosAdicionales: datos.costosAdicionales,
                 observaciones: datos.observaciones,
                 creadoPor: usuarioId
-            }], { session });
+            }], { session, ordered: true });
             const cronograma = calcularCronograma(snapshots.pasos, campana.fechaHoraInicio);
             const tareas = await generarTareasCampana({ campana, cronograma, session, usuarioId });
             for (const item of cronograma) {
@@ -319,9 +319,9 @@ const crearCampana = async ({ datos, usuarioId }) => {
                     ventanaFin: item.ventanaFin,
                     responsable: campana.responsablesPorRol?.[item.paso.rolResponsable] || campana.responsable,
                     tarea: tarea?._id
-                }], { session });
+                }], { session, ordered: true });
             }
-            await EventoCampanaIATF.create([{ campana: campana._id, tipo: 'CREADA', descripcion: 'Campaña IATF creada.', usuario: usuarioId }], { session });
+            await EventoCampanaIATF.create([{ campana: campana._id, tipo: 'CREADA', descripcion: 'Campaña IATF creada.', usuario: usuarioId }], { session, ordered: true });
             creada = campana;
         });
     } finally {
@@ -467,7 +467,7 @@ const ejecutarPaso = async ({ campanaId, pasoId, datos, usuarioId, rolUsuario })
                 { $set: ejecucion.estado === 'REALIZADO' ? { estado: 'Completada', fechaCompletada: ejecucion.fechaHoraReal } : { estado: 'En proceso' } },
                 { session }
             );
-            await EventoCampanaIATF.create([{ campana: campana._id, tipo: 'PASO_EJECUTADO', descripcion: ejecucion.pasoSnapshot.nombre, datos: { ejecucion: ejecucion._id, estado: ejecucion.estado }, usuario: usuarioId }], { session });
+            await EventoCampanaIATF.create([{ campana: campana._id, tipo: 'PASO_EJECUTADO', descripcion: ejecucion.pasoSnapshot.nombre, datos: { ejecucion: ejecucion._id, estado: ejecucion.estado }, usuario: usuarioId }], { session, ordered: true });
             for (const animal of iniciados) {
                 await upsertEventoAnimal({
                     animal, tipoEvento: 'Observacion', fecha: ejecucion.fechaHoraReal,
@@ -606,7 +606,7 @@ const registrarIATF = async ({ campanaId, datos, usuarioId, rolUsuario }) => {
                     { session }
                 );
             }
-            await EventoCampanaIATF.create([{ campana: campana._id, tipo: 'INSEMINACION', descripcion: `${registros.length} inseminaciones registradas.`, usuario: usuarioId }], { session });
+            await EventoCampanaIATF.create([{ campana: campana._id, tipo: 'INSEMINACION', descripcion: `${registros.length} inseminaciones registradas.`, usuario: usuarioId }], { session, ordered: true });
             salida = campana;
         });
         return obtenerCampana(salida._id);
@@ -633,7 +633,7 @@ const registrarDiagnosticos = async ({ campanaId, datos, usuarioId }) => {
                     metodo: item.metodo || datos.metodo, resultado: item.resultado,
                     responsable: item.responsable || datos.responsable || usuarioId,
                     observaciones: item.observaciones, registradoPor: usuarioId
-                }], { session });
+                }], { session, ordered: true });
                 participante.resultadoActual = item.resultado;
                 if (participante.registroReproductivo) {
                     const ciclo = await RegistroReproductivo.findById(participante.registroReproductivo).session(session);
@@ -671,7 +671,7 @@ const registrarDiagnosticos = async ({ campanaId, datos, usuarioId }) => {
             }
             campana.estado = 'DIAGNOSTICO';
             await campana.save({ session });
-            await EventoCampanaIATF.create([{ campana: campana._id, tipo: 'DIAGNOSTICO', descripcion: `${items.length} diagnósticos registrados.`, usuario: usuarioId }], { session });
+            await EventoCampanaIATF.create([{ campana: campana._id, tipo: 'DIAGNOSTICO', descripcion: `${items.length} diagnósticos registrados.`, usuario: usuarioId }], { session, ordered: true });
             salida = campana;
         });
         return obtenerCampana(salida._id);

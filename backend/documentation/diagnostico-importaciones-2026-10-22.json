@@ -1,0 +1,98 @@
+{
+  "generadoEn": "2026-10-22T23:18:28.689Z",
+  "soloLectura": true,
+  "organizaciones": [
+    {
+      "organizacion": {
+        "_id": "6ab9e8bdf026c12e62fef1fa",
+        "nombre": "Ganadería Romilio"
+      },
+      "posiblesResucitados": [],
+      "potrerosInconsistentes": [],
+      "movimientosFinancierosDuplicados": [],
+      "pesosDesincronizados": [
+        {
+          "animalId": "6a18bb14f0e826c31b7621f6",
+          "diio": "188000568030",
+          "pesoActual": 284,
+          "ultimoPesaje": 285.5,
+          "fechaPesaje": "2025-09-13T00:00:00.000Z"
+        },
+        {
+          "animalId": "6a18bb15f0e826c31b762202",
+          "diio": "188000568026",
+          "pesoActual": 143,
+          "ultimoPesaje": 143.5,
+          "fechaPesaje": "2025-09-13T00:00:00.000Z"
+        },
+        {
+          "animalId": "6a18bb1af0e826c31b762267",
+          "diio": "188000567994",
+          "pesoActual": null,
+          "ultimoPesaje": 60,
+          "fechaPesaje": "2025-09-13T00:00:00.000Z"
+        }
+      ],
+      "genealogiasInvalidas": [],
+      "animalesImportadosSinAlta": [],
+      "categoriasIncompatibles": []
+    },
+    {
+      "organizacion": {
+        "_id": "6abbf40fa9f69a615d218830",
+        "nombre": "Julian Rodriguez Sarmiento"
+      },
+      "posiblesResucitados": [],
+      "potrerosInconsistentes": [
+        {
+          "rotacionId": "6abd4d0b6fb5efebc8ecac03",
+          "potreroId": "6abbf7afa9f69a615d218ac3",
+          "estado": "Ocupado"
+        },
+        {
+          "rotacionId": "6abeaf0c6e6f6beda7b6c6af",
+          "potreroId": "6abbf7afa9f69a615d218ac9",
+          "estado": "Ocupado"
+        }
+      ],
+      "movimientosFinancierosDuplicados": [],
+      "pesosDesincronizados": [],
+      "genealogiasInvalidas": [],
+      "animalesImportadosSinAlta": [
+        {
+          "animalId": "6abbf7afa9f69a615d218ad8",
+          "diio": "990001000002"
+        },
+        {
+          "animalId": "6abbf7afa9f69a615d218adf",
+          "diio": "990001000003"
+        },
+        {
+          "animalId": "6abbf7afa9f69a615d218ae6",
+          "diio": "990001000004"
+        },
+        {
+          "animalId": "6abbf7b0a9f69a615d218aed",
+          "diio": "990001000005"
+        },
+        {
+          "animalId": "6abbf7b0a9f69a615d218af4",
+          "diio": "990001000006"
+        },
+        {
+          "animalId": "6abbf7b0a9f69a615d218b00",
+          "diio": "990001000008"
+        },
+        {
+          "animalId": "6abbf7b0a9f69a615d218b07",
+          "diio": "990001000009"
+        },
+        {
+          "animalId": "6abbf7b0a9f69a615d218b0e",
+          "diio": "990001000010"
+        }
+      ],
+      "categoriasIncompatibles": []
+    }
+  ]
+}

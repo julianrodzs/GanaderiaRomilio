@@ -19,7 +19,7 @@ const upsertEventoCamada = async (datosEvento, opciones = {}) => {
     }
 
     if (opciones.session) {
-        const creados = await EventoCamada.create([datosEvento], { session: opciones.session });
+        const creados = await EventoCamada.create([datosEvento], { session: opciones.session, ordered: true });
         return creados[0];
     }
     return EventoCamada.create(datosEvento);

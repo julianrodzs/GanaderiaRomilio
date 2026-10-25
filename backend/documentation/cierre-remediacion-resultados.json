@@ -1,0 +1,78 @@
+{
+  "fecha": "2026-10-25T20:22:10.786Z",
+  "resultado": "PASS",
+  "resultados": [
+    {
+      "id": "frontend-build",
+      "exit": 0,
+      "ms": 4190,
+      "evidencia": "cierre-frontend-build.txt"
+    },
+    {
+      "id": "smoke-ejecucion",
+      "exit": 0,
+      "ms": 17808,
+      "evidencia": "cierre-smoke-ejecucion.txt"
+    },
+    {
+      "id": "reproductores-ejecucion",
+      "exit": 0,
+      "ms": 10281,
+      "evidencia": "cierre-reproductores-ejecucion.txt"
+    },
+    {
+      "id": "standalone",
+      "exit": 0,
+      "ms": 9427,
+      "evidencia": "cierre-standalone.txt"
+    },
+    {
+      "id": "configuracion-ejecucion",
+      "exit": 0,
+      "ms": 1236,
+      "evidencia": "cierre-configuracion-ejecucion.txt"
+    },
+    {
+      "id": "offline",
+      "exit": 0,
+      "ms": 125,
+      "evidencia": "cierre-offline.txt"
+    },
+    {
+      "id": "pwa-navegador",
+      "exit": 0,
+      "ms": 4084,
+      "evidencia": "cierre-pwa-navegador.txt"
+    },
+    {
+      "id": "backend-tests",
+      "exit": 0,
+      "ms": 7175,
+      "evidencia": "cierre-backend-tests.txt"
+    },
+    {
+      "id": "frontend-lunar",
+      "exit": 0,
+      "ms": 444,
+      "evidencia": "cierre-frontend-lunar.txt"
+    },
+    {
+      "id": "frontend-tareas",
+      "exit": 0,
+      "ms": 413,
+      "evidencia": "cierre-frontend-tareas.txt"
+    },
+    {
+      "id": "backend-npm-audit",
+      "exit": 0,
+      "ms": 893,
+      "evidencia": "cierre-backend-npm-audit.json"
+    },
+    {
+      "id": "frontend-npm-audit",
+      "exit": 0,
+      "ms": 858,
+      "evidencia": "cierre-frontend-npm-audit.json"
+    }
+  ]
+}

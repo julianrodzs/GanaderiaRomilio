@@ -1,22 +1,31 @@
 
 import './App.css';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import IniciarSesion from './Components/IniciarSesion';
-import ListaUsuario from './Components/ListaUsuario';
 import OlvideContrasena from './Components/OlvideContrasena';
 import RestablecerContrasena from './Components/RestablecerContrasena';
-import { cambiarOrganizacionActiva, obtenerPerfilUsuario } from './services/api';
+import AceptarInvitacion from './Components/AceptarInvitacion';
+import { aceptarInvitacionExistente, cambiarOrganizacionActiva, obtenerPerfilUsuario } from './services/api';
 import { PlanProvider } from './context/PlanContext';
 import { AparienciaProvider } from './context/AparienciaContext';
 import {
   limpiarCacheApiLegado,
-  limpiarDatosOfflineContexto,
-  obtenerCambiosPendientes
+  limpiarDatosOfflineUsuario,
+  limpiarTodosDatosOffline,
+  obtenerCambiosPendientes,
+  obtenerCambiosPendientesUsuario
 } from './services/offlineStorage';
+import { sincronizarCambiosOffline } from './services/offlineSync';
+
+const ListaUsuario = lazy(() => import('./Components/ListaUsuario'));
 
 const obtenerTokenRestablecimiento = () => {
   const partes = window.location.pathname.split('/').filter(Boolean);
   return partes[0] === 'restablecer-contrasena' ? partes[1] || '' : '';
+};
+const obtenerTokenInvitacion = () => {
+  const partes = window.location.pathname.split('/').filter(Boolean);
+  return partes[0] === 'aceptar-invitacion' ? partes[1] || '' : '';
 };
 
 const tokenOfflineVigente = (token) => {
@@ -24,15 +33,24 @@ const tokenOfflineVigente = (token) => {
     const payloadBase = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const payload = payloadBase.padEnd(Math.ceil(payloadBase.length / 4) * 4, '=');
     const datos = JSON.parse(atob(payload));
-    return Boolean(datos.exp && Date.now() < datos.exp * 1000);
+    return Boolean(datos.exp && datos.authTime && Date.now() < datos.exp * 1000);
   } catch (error) {
     return false;
   }
 };
 
+const limpiarAlmacenUsuario = async (sesion) => {
+  try {
+    await limpiarDatosOfflineUsuario(sesion);
+  } catch (error) {
+    await limpiarTodosDatosOffline();
+  }
+};
+
 function App() {
-  const [vista, setVista] = useState(obtenerTokenRestablecimiento() ? 'restablecer-contrasena' : 'login');
+  const [vista, setVista] = useState(obtenerTokenRestablecimiento() ? 'restablecer-contrasena' : (obtenerTokenInvitacion() ? 'aceptar-invitacion' : 'login'));
   const [tokenRestablecimiento, setTokenRestablecimiento] = useState(obtenerTokenRestablecimiento());
+  const [tokenInvitacion, setTokenInvitacion] = useState(obtenerTokenInvitacion());
   const [sesion, setSesion] = useState(null);
   const [mensaje, setMensaje] = useState('');
   const [validandoSesion, setValidandoSesion] = useState(true);
@@ -41,10 +59,22 @@ function App() {
     const validarSesion = async () => {
       limpiarCacheApiLegado().catch(() => {});
       const tokenRuta = obtenerTokenRestablecimiento();
+      const invitacionRuta = obtenerTokenInvitacion();
 
       if (tokenRuta) {
         setTokenRestablecimiento(tokenRuta);
         setVista('restablecer-contrasena');
+        setValidandoSesion(false);
+        return;
+      }
+
+      if (invitacionRuta) {
+        setTokenInvitacion(invitacionRuta);
+        const guardada = localStorage.getItem('ganaderiaSesion');
+        if (guardada) {
+          try { setSesion(JSON.parse(guardada)); } catch (error) { localStorage.removeItem('ganaderiaSesion'); }
+        }
+        setVista('aceptar-invitacion');
         setValidandoSesion(false);
         return;
       }
@@ -60,6 +90,7 @@ function App() {
         const sesionLocal = JSON.parse(sesionGuardada);
         if (!navigator.onLine) {
           if (!tokenOfflineVigente(sesionLocal?.token || '')) {
+            await limpiarAlmacenUsuario(sesionLocal).catch(() => {});
             localStorage.removeItem('ganaderiaSesion');
             setMensaje('La sesion offline expiro. Conectate a internet para iniciar sesion nuevamente.');
             setValidandoSesion(false);
@@ -89,6 +120,12 @@ function App() {
         setSesion(sesionValidada);
         setVista('dashboard');
       } catch (error) {
+        try {
+          const sesionAnterior = JSON.parse(sesionGuardada);
+          await limpiarAlmacenUsuario(sesionAnterior).catch(() => {});
+        } catch (errorSesion) {
+          // La sesión corrupta no contiene un contexto reutilizable.
+        }
         localStorage.removeItem('ganaderiaSesion');
         setSesion(null);
         setVista('login');
@@ -98,7 +135,9 @@ function App() {
       }
     };
 
-    const manejarSesionExpirada = () => {
+    const manejarSesionExpirada = async (evento) => {
+      await limpiarAlmacenUsuario(evento.detail?.sesion).catch(() => {});
+      localStorage.removeItem('ganaderiaSesion');
       setSesion(null);
       setVista('login');
       setMensaje('Tu sesion expiro o no es valida. Inicia sesion nuevamente.');
@@ -109,6 +148,21 @@ function App() {
 
     return () => window.removeEventListener('ganaderiaSesionExpirada', manejarSesionExpirada);
   }, []);
+
+  useEffect(() => {
+    if (!sesion?.token) return undefined;
+    const revisar = () => {
+      if (!tokenOfflineVigente(sesion.token)) {
+        window.dispatchEvent(new CustomEvent('ganaderiaSesionExpirada', { detail: { sesion } }));
+      }
+    };
+    const intervalo = window.setInterval(revisar, 60000);
+    window.addEventListener('focus', revisar);
+    return () => {
+      window.clearInterval(intervalo);
+      window.removeEventListener('focus', revisar);
+    };
+  }, [sesion]);
 
   useEffect(() => {
     const actualizarFincasSesion = (evento) => {
@@ -136,7 +190,7 @@ function App() {
     return () => window.removeEventListener('ganaderiaFincasActualizadas', actualizarFincasSesion);
   }, []);
 
-  const iniciarSesion = (data) => {
+  const iniciarSesion = async (data) => {
     const sesionNueva = {
       ...data,
       fincaActiva: data.finca,
@@ -144,6 +198,15 @@ function App() {
       validadaEn: new Date().toISOString()
     };
     localStorage.setItem('ganaderiaSesion', JSON.stringify(sesionNueva));
+    const invitacionPendiente = localStorage.getItem('ganaderiaInvitacionPendiente');
+    if (invitacionPendiente) {
+      try {
+        await aceptarInvitacionExistente(invitacionPendiente);
+        localStorage.removeItem('ganaderiaInvitacionPendiente');
+      } catch (error) {
+        setMensaje(error.message);
+      }
+    }
     setSesion(sesionNueva);
     setVista('dashboard');
     setMensaje('');
@@ -188,14 +251,25 @@ function App() {
   };
 
   const cerrarSesion = async () => {
-    const pendientes = await obtenerCambiosPendientes().catch(() => []);
+    let pendientes = await obtenerCambiosPendientesUsuario(sesion).catch(() => []);
     if (pendientes.length > 0) {
-      const confirmar = window.confirm(
-        `Hay ${pendientes.length} cambio(s) sin sincronizar. Cerrar sesion los descartara de este dispositivo. ¿Deseas continuar?`
+      const sincronizar = window.confirm(
+        `Tiene ${pendientes.length} registro(s) sin sincronizar. Aceptar intentará sincronizarlos ahora; Cancelar permite decidir si desea descartarlos.`
       );
-      if (!confirmar) return;
+      if (sincronizar && navigator.onLine) {
+        await sincronizarCambiosOffline().catch(() => {});
+        pendientes = await obtenerCambiosPendientesUsuario(sesion).catch(() => pendientes);
+      }
+      if (pendientes.length > 0 && !window.confirm(
+        `Aún hay ${pendientes.length} registro(s) sin sincronizar. ¿Descartarlos y cerrar sesión?`
+      )) return;
     }
-    await limpiarDatosOfflineContexto(sesion).catch(() => {});
+    try {
+      await limpiarAlmacenUsuario(sesion);
+    } catch (error) {
+      window.alert('No se pudo limpiar el almacenamiento local. Cierra las otras pestañas de la aplicación e intenta nuevamente.');
+      return;
+    }
     localStorage.removeItem('ganaderiaSesion');
     setSesion(null);
     setVista('login');
@@ -221,14 +295,16 @@ function App() {
     return (
       <PlanProvider key={claveFinca}>
         <AparienciaProvider key={claveFinca} contextoId={claveFinca}>
-          <ListaUsuario
-            key={claveFinca}
-            usuario={sesion?.usuario}
-            sesion={sesion}
-            onCambiarFinca={cambiarFincaActiva}
-            onCambiarOrganizacion={cambiarOrganizacion}
-            onLogout={cerrarSesion}
-          />
+          <Suspense fallback={<div className="estado-importacion">Cargando aplicación...</div>}>
+            <ListaUsuario
+              key={claveFinca}
+              usuario={sesion?.usuario}
+              sesion={sesion}
+              onCambiarFinca={cambiarFincaActiva}
+              onCambiarOrganizacion={cambiarOrganizacion}
+              onLogout={cerrarSesion}
+            />
+          </Suspense>
         </AparienciaProvider>
       </PlanProvider>
     );
@@ -247,6 +323,8 @@ function App() {
         <OlvideContrasena onVolver={irLogin} />
       ) : vista === 'restablecer-contrasena' ? (
         <RestablecerContrasena token={tokenRestablecimiento} onVolver={irLogin} />
+      ) : vista === 'aceptar-invitacion' ? (
+        <AceptarInvitacion token={tokenInvitacion} sesion={sesion} onVolver={irLogin} />
       ) : (
         <IniciarSesion onLogin={iniciarSesion} onOlvideContrasena={() => setVista('olvide-contrasena')} />
       )}

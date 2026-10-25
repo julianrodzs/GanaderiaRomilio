@@ -30,11 +30,11 @@ const listarUsuariosAsignables = async (modulo, organizacionId = obtenerOrganiza
     }).populate({
         path: 'usuario',
         match: { estado: 'Activo' },
-        select: 'nombre apellido correo estado'
+        select: 'nombre apellido correo estado esSuperAdministrador'
     });
 
     return membresias
-        .filter((item) => item.usuario)
+        .filter((item) => item.usuario && item.usuario.esSuperAdministrador !== true)
         .map((item) => ({
             ...item.usuario.toObject(),
             rol: item.rol,
@@ -61,10 +61,10 @@ const validarUsuarioAsignable = async (usuarioId, modulo, { session = null } = {
     const membresia = await consulta.populate({
         path: 'usuario',
         match: { estado: 'Activo' },
-        select: '_id nombre apellido correo estado'
+        select: '_id nombre apellido correo estado esSuperAdministrador'
     });
 
-    if (!membresia?.usuario) {
+    if (!membresia?.usuario || membresia.usuario.esSuperAdministrador === true) {
         const error = new Error(`El usuario seleccionado no puede recibir tareas de ${modulo}`);
         error.status = 400;
         throw error;

@@ -1,6 +1,7 @@
 const {
     cambiarEspeciePlanEsencial,
-    obtenerEstadoLimites
+    obtenerEstadoLimites,
+    seleccionarFincasOperativas
 } = require('../services/plan-service');
 const { respuestaErrorPlan } = require('../middleware/plan');
 
@@ -25,7 +26,9 @@ const presentarPlan = (estado) => ({
     funcionalidades: Object.fromEntries(Object.keys(estado.actual.configuracion.funcionalidades)
         .map((feature) => [feature, estado.actual.vigente && estado.actual.configuracion.funcionalidades[feature]])),
     rolesPermitidos: estado.actual.configuracion.rolesPermitidos,
-    caracteristicasComerciales: estado.actual.configuracion.caracteristicasComerciales || {}
+    caracteristicasComerciales: estado.actual.configuracion.caracteristicasComerciales || {},
+    fincasOperativas: estado.fincasOperativas || [],
+    fincasSoloLectura: estado.fincasSoloLectura || []
 });
 
 planCtrl.getPlanActual = async (req, res) => {
@@ -34,6 +37,22 @@ planCtrl.getPlanActual = async (req, res) => {
     } catch (error) {
         if (respuestaErrorPlan(error, res)) return;
         res.status(500).json({ mensaje: 'Error al obtener la información del plan', error: error.message });
+    }
+};
+
+planCtrl.actualizarFincasOperativas = async (req, res) => {
+    try {
+        if (req.usuario?.accesoTodasFincas !== true) {
+            return res.status(403).json({
+                mensaje: 'Esta operación requiere acceso a todas las fincas de la organización.',
+                code: 'ORGANIZACION_FULL_SCOPE_REQUIRED'
+            });
+        }
+        await seleccionarFincasOperativas({ organizacionId: req.organizacionId, fincaIds: req.body.fincaIds });
+        res.json(presentarPlan(await obtenerEstadoLimites(req.organizacionId)));
+    } catch (error) {
+        if (respuestaErrorPlan(error, res)) return;
+        res.status(error.status || 400).json({ mensaje: error.message, code: error.code });
     }
 };
 

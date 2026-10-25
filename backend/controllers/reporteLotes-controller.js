@@ -41,7 +41,7 @@ const generarReporteLotes = async (req, res, incluirAnalitica) => {
                 pesoPromedioActual: lote.resumen.pesoPromedioActual,
                 coberturaPesajes: lote.resumen.coberturaPesajes,
                 gmdPromedioLote: incluirAnalitica ? lote.resumen.gmdPromedioLote : undefined,
-                gmdObjetivoKgDia: lote.gmdObjetivoKgDia,
+                gmdObjetivoKgDia: incluirAnalitica ? lote.gmdObjetivoKgDia : undefined,
                 cumplimientoGmd: incluirAnalitica ? lote.resumen.cumplimientoGmd : undefined,
                 alcanzaronPesoObjetivo: incluirAnalitica ? lote.resumen.alcanzaronPesoObjetivo : undefined,
                 diasActivo: lote.resumen.diasActivo,

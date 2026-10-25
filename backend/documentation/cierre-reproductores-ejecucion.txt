@@ -1,0 +1,5 @@
+{"file":"auditoria-fincas-organizaciones.repro.cjs","exit":0,"signal":null,"ms":2508,"log":"cierre-auditoria-fincas-organizaciones.repro.txt"}
+{"file":"auditoria-importaciones.repro.cjs","exit":0,"signal":null,"ms":3123,"log":"cierre-auditoria-importaciones.repro.txt"}
+{"file":"auditoria-lotes-engorde.repro.cjs","exit":0,"signal":null,"ms":841,"log":"cierre-auditoria-lotes-engorde.repro.txt"}
+{"file":"auditoria-reportes.repro.cjs","exit":0,"signal":null,"ms":1049,"log":"cierre-auditoria-reportes.repro.txt"}
+{"file":"auditoria-usuarios.repro.cjs","exit":0,"signal":null,"ms":2683,"log":"cierre-auditoria-usuarios.repro.txt"}

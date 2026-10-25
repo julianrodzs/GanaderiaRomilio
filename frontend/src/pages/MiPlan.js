@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import PlanLimit from '../Components/PlanLimit';
 import { usePlan } from '../context/PlanContext';
 import {
+  actualizarFincasOperativasPlan,
   actualizarFinca,
   actualizarLineasProductivasFinca,
   cambiarEstadoFinca,
@@ -38,6 +39,7 @@ const MiPlan = () => {
   const [fincas, setFincas] = useState([]);
   const [mostrarNuevaFinca, setMostrarNuevaFinca] = useState(false);
   const [nuevaFinca, setNuevaFinca] = useState({ nombre: '', codigo: '', ubicacion: '', descripcion: '' });
+  const [seleccionOperativa, setSeleccionOperativa] = useState([]);
 
   const publicarFincas = (items) => {
     setFincas(items);
@@ -54,6 +56,19 @@ const MiPlan = () => {
     cargarFincas()
       .catch((err) => setMensaje(err.message));
   }, []);
+
+  useEffect(() => {
+    setSeleccionOperativa((plan?.fincasOperativas || []).map((finca) => String(finca._id || finca)));
+  }, [plan?.fincasOperativas]);
+
+  const guardarFincasOperativas = async () => {
+    setGuardando(true); setMensaje('');
+    try {
+      await actualizarFincasOperativasPlan(seleccionOperativa);
+      await recargarPlan();
+      setMensaje('Fincas operativas actualizadas. Las demás conservan sus datos en modo solo lectura.');
+    } catch (err) { setMensaje(err.message); } finally { setGuardando(false); }
+  };
 
   const elegirEspecie = async (especiePlan) => {
     setGuardando(true);
@@ -211,7 +226,9 @@ const MiPlan = () => {
           <div className="selector-especie">
             {['Bovino', 'Porcino'].map((especie) => (
               <button key={especie} type="button" disabled={guardando} className={plan.plan.especiePlan === especie ? 'activo' : ''} onClick={() => elegirEspecie(especie)}>
-                {especie === 'Bovino' ? 'Bovinos · hasta 210 activos · 15 conteos de dron/mes' : 'Porcinos · hasta 500 activos'}
+                {especie === 'Bovino'
+                  ? `Bovinos · hasta ${plan.limites.animalesBovinos} activos · ${plan.limites.conteosDroneBovinos ?? 0} conteos de dron/mes`
+                  : `Porcinos · hasta ${plan.limites.animalesPorcinos} activos`}
               </button>
             ))}
           </div>
@@ -221,10 +238,24 @@ const MiPlan = () => {
       {mensaje && <p className="form-message">{mensaje}</p>}
       <div className="plan-limits-grid">
         <PlanLimit etiqueta="Animales activos" actual={plan.uso.animalesActuales} limite={plan.limites.animales} sobreLimite={plan.sobreLimite.animales} />
-        <PlanLimit etiqueta="Usuarios activos" actual={plan.uso.usuariosActuales} limite={plan.limites.usuarios} sobreLimite={plan.sobreLimite.usuarios} />
+        <PlanLimit etiqueta="Usuarios e invitaciones activas" actual={plan.uso.usuariosActuales} limite={plan.limites.usuarios} sobreLimite={plan.sobreLimite.usuarios} />
         <PlanLimit etiqueta="Fincas activas" actual={plan.uso.fincasActuales} limite={plan.limites.fincas} sobreLimite={plan.sobreLimite.fincas} />
         <PlanLimit etiqueta={`Conteos de dron (${plan.uso.periodo})`} actual={plan.uso.conteosDroneMes} limite={plan.limites.conteosDrone} sobreLimite={plan.sobreLimite.conteosDrone} />
       </div>
+      {plan.sobreLimite.fincas && (
+        <section className="mi-plan-especie">
+          <h2>Fincas operativas del plan</h2>
+          <p>Selecciona hasta {plan.limites.fincas}. Las fincas restantes seguirán disponibles para consulta, sin perder información.</p>
+          <div className="selector-especie">
+            {fincas.filter((finca) => finca.estado === 'Activa').map((finca) => {
+              const marcada = seleccionOperativa.includes(String(finca._id));
+              const principal = finca.esPrincipal;
+              return <button key={finca._id} type="button" className={marcada ? 'activo' : ''} disabled={principal || (!marcada && seleccionOperativa.length >= plan.limites.fincas)} onClick={() => setSeleccionOperativa((actual) => marcada ? actual.filter((id) => id !== String(finca._id)) : [...actual, String(finca._id)])}>{finca.codigo} · {finca.nombre}{principal ? ' · Principal' : ''}</button>;
+            })}
+          </div>
+          <button className="boton-primario" type="button" disabled={guardando || seleccionOperativa.length !== plan.limites.fincas} onClick={guardarFincasOperativas}>Guardar fincas operativas</button>
+        </section>
+      )}
       <section className="mi-plan-fincas">
         <div className="panel-title">
           <div><p className="eyebrow">Operación</p><h2>Fincas y líneas productivas</h2></div>

@@ -1,5 +1,6 @@
 const DB_NAME = 'ganaderia-romilio-offline';
 const DB_VERSION = 3;
+const DB_REGISTRY_KEY = 'ganaderiaOfflineDatabases';
 
 const STORES = {
   tareas: 'tareas',
@@ -12,6 +13,43 @@ const STORES = {
 
 const normalizarId = (valor) => valor?._id?.toString?.() || valor?.toString?.() || '';
 
+const leerRegistroBases = () => {
+  try {
+    const registro = JSON.parse(localStorage.getItem(DB_REGISTRY_KEY) || '[]');
+    return Array.isArray(registro) ? registro : [];
+  } catch (error) {
+    return [];
+  }
+};
+
+const registrarBaseOffline = (nombre) => {
+  const sesion = obtenerSesionGuardada();
+  const usuarioId = normalizarId(sesion?.usuario?._id || sesion?.usuario?.id);
+  if (!usuarioId) return;
+  const registro = leerRegistroBases();
+  if (!registro.some((item) => item.nombre === nombre && item.usuarioId === usuarioId)) {
+    localStorage.setItem(DB_REGISTRY_KEY, JSON.stringify([...registro, { nombre, usuarioId }]));
+  }
+};
+
+const tokenVigente = (token = '') => {
+  try {
+    const base = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const datos = JSON.parse(atob(base.padEnd(Math.ceil(base.length / 4) * 4, '=')));
+    return Boolean(datos.exp && datos.authTime && Date.now() < datos.exp * 1000);
+  } catch (error) {
+    return false;
+  }
+};
+
+export const asegurarSesionOfflineVigente = (sesion = obtenerSesionGuardada()) => {
+  if (!sesion?.token || !tokenVigente(sesion.token)) {
+    window.dispatchEvent(new CustomEvent('ganaderiaSesionExpirada', { detail: { sesion } }));
+    throw new Error('La sesión offline expiró. Conéctate e inicia sesión nuevamente.');
+  }
+  return sesion;
+};
+
 const obtenerSesionGuardada = () => {
   try {
     return JSON.parse(localStorage.getItem('ganaderiaSesion') || 'null');
@@ -21,6 +59,7 @@ const obtenerSesionGuardada = () => {
 };
 
 export const obtenerContextoOffline = (sesion = obtenerSesionGuardada()) => {
+  if (sesion?.token) asegurarSesionOfflineVigente(sesion);
   const organizacionId = normalizarId(sesion?.organizacion?._id || sesion?.usuario?.organizacionId);
   const fincaId = normalizarId(
     sesion?.fincaActiva?._id
@@ -79,7 +118,10 @@ const abrirDB = () => new Promise((resolve, reject) => {
     });
   };
 
-  request.onsuccess = () => resolve(request.result);
+  request.onsuccess = () => {
+    registrarBaseOffline(DB_NAME);
+    resolve(request.result);
+  };
   request.onerror = () => reject(request.error);
 });
 
@@ -133,8 +175,10 @@ const obtenerMetadata = async (contexto) => (
   obtenerRegistro(STORES.metadata, `${contexto.clave}:estado`)
 );
 
-const guardarMetadata = async (cambios = {}, sesion) => {
-  const contexto = obtenerContextoOffline(sesion);
+const guardarMetadata = async (cambios = {}, sesion, contextoEsperado = null) => {
+  const contextoActual = obtenerContextoOffline(sesion);
+  if (contextoEsperado && contextoEsperado.clave !== contextoActual.clave) return false;
+  const contexto = contextoEsperado || contextoActual;
   const id = `${contexto.clave}:estado`;
   const actual = await obtenerMetadata(contexto);
   await ejecutarTransaccion(STORES.metadata, 'readwrite', (store) => store.put({
@@ -143,10 +187,13 @@ const guardarMetadata = async (cambios = {}, sesion) => {
     ...cambios,
     id
   }));
+  return true;
 };
 
-const guardarColeccion = async (storeName, items, variante = 'default') => {
-  const contexto = obtenerContextoOffline();
+const guardarColeccion = async (storeName, items, variante = 'default', contextoEsperado = null) => {
+  const contextoActual = obtenerContextoOffline();
+  if (contextoEsperado && contextoEsperado.clave !== contextoActual.clave) return false;
+  const contexto = contextoEsperado || contextoActual;
   const varianteNormalizada = serializarVariante(variante);
   const actualizadoEn = new Date().toISOString();
   await ejecutarTransaccion(storeName, 'readwrite', (store) => store.put({
@@ -156,13 +203,14 @@ const guardarColeccion = async (storeName, items, variante = 'default') => {
     actualizadoEn,
     items: items || []
   }));
+  if (obtenerContextoOffline().clave !== contexto.clave) return false;
   const metadata = await obtenerMetadata(contexto);
   await guardarMetadata({
     recursos: {
       ...(metadata?.recursos || {}),
       [`${storeName}:${varianteNormalizada}`]: actualizadoEn
     }
-  });
+  }, undefined, contexto);
   return true;
 };
 
@@ -231,7 +279,8 @@ export const eliminarCambioPendiente = async (id) => {
 export const guardarTareasOffline = (tareas, opciones = {}) => guardarColeccion(
   STORES.tareas,
   tareas,
-  { filtros: opciones.filtros || {} }
+  { filtros: opciones.filtros || {} },
+  opciones.contexto
 );
 // Actualizar todas las variantes (agenda, mes y filtros) del mismo contexto.
 export const actualizarTareaEnCache = async (tarea) => {
@@ -253,20 +302,22 @@ export const obtenerTareasOffline = (opciones = {}) => obtenerColeccion(
 export const guardarInventarioOffline = (animales, opciones = {}) => guardarColeccion(
   STORES.inventario,
   animales,
-  { especie: opciones.especie || 'Bovino' }
+  { especie: opciones.especie || 'Bovino' },
+  opciones.contexto
 );
 export const obtenerInventarioOffline = (opciones = {}) => obtenerColeccion(
   STORES.inventario,
   { especie: opciones.especie || 'Bovino' }
 );
 
-export const guardarPotrerosOffline = (potreros) => guardarColeccion(STORES.potreros, potreros);
+export const guardarPotrerosOffline = (potreros, opciones = {}) => guardarColeccion(STORES.potreros, potreros, 'default', opciones.contexto);
 export const obtenerPotrerosOffline = () => obtenerColeccion(STORES.potreros);
 
-export const guardarEventosAnimalOffline = (animalId, eventos) => guardarColeccion(
+export const guardarEventosAnimalOffline = (animalId, eventos, opciones = {}) => guardarColeccion(
   STORES.eventosAnimal,
   eventos,
-  { animalId: normalizarId(animalId) }
+  { animalId: normalizarId(animalId) },
+  opciones.contexto
 );
 export const obtenerEventosAnimalOffline = (animalId) => obtenerColeccion(
   STORES.eventosAnimal,
@@ -324,13 +375,67 @@ export const limpiarDatosOfflineContexto = async (sesion) => {
   emitirCambio();
 };
 
+const perteneceAUsuario = (registro, usuarioId) => String(registro?.clave || '').split(':').at(-1) === String(usuarioId);
+
+const eliminarBase = (nombre) => new Promise((resolve, reject) => {
+  const request = indexedDB.deleteDatabase(nombre);
+  request.onsuccess = () => resolve(true);
+  request.onerror = () => reject(request.error);
+  request.onblocked = () => reject(new Error(`La base offline ${nombre} está en uso.`));
+});
+
+const limpiarBasesHeredadasUsuario = async (usuarioId) => {
+  const registro = leerRegistroBases();
+  const registradas = registro
+    .filter((item) => item.usuarioId === usuarioId && item.nombre !== DB_NAME)
+    .map((item) => item.nombre);
+  let detectadas = [];
+  if (typeof indexedDB.databases === 'function') {
+    const bases = await indexedDB.databases();
+    detectadas = bases
+      .map((base) => base.name)
+      .filter((nombre) => nombre && nombre !== DB_NAME && nombre.startsWith(DB_NAME) && nombre.includes(usuarioId));
+  }
+  await Promise.all([...new Set([...registradas, ...detectadas])].map(eliminarBase));
+  localStorage.setItem(
+    DB_REGISTRY_KEY,
+    JSON.stringify(registro.filter((item) => item.usuarioId !== usuarioId))
+  );
+};
+
+export const obtenerCambiosPendientesUsuario = async (sesion) => {
+  const usuarioId = normalizarId(sesion?.usuario?._id || sesion?.usuario?.id);
+  if (!usuarioId) return [];
+  const registros = await obtenerRegistros(STORES.cambiosPendientes);
+  return registros.filter((registro) => perteneceAUsuario(registro, usuarioId));
+};
+
+export const limpiarDatosOfflineUsuario = async (sesion) => {
+  const usuarioId = normalizarId(sesion?.usuario?._id || sesion?.usuario?.id);
+  if (!usuarioId) return;
+  await Promise.all(Object.values(STORES).map(async (storeName) => {
+    const registros = await obtenerRegistros(storeName);
+    const ids = registros.filter((registro) => perteneceAUsuario(registro, usuarioId)).map((registro) => registro.id);
+    if (ids.length) await ejecutarTransaccion(storeName, 'readwrite', (store) => ids.forEach((id) => store.delete(id)));
+  }));
+  await limpiarBasesHeredadasUsuario(usuarioId);
+  if ('caches' in window) {
+    const nombres = await caches.keys();
+    await Promise.all(nombres.filter((nombre) => /ganaderia|api-cache/i.test(nombre)).map((nombre) => caches.delete(nombre)));
+  }
+  emitirCambio();
+};
+
 export const limpiarTodosDatosOffline = () => new Promise((resolve, reject) => {
   if (!('indexedDB' in window)) {
     resolve(true);
     return;
   }
   const request = indexedDB.deleteDatabase(DB_NAME);
-  request.onsuccess = () => resolve(true);
+  request.onsuccess = () => {
+    localStorage.removeItem(DB_REGISTRY_KEY);
+    resolve(true);
+  };
   request.onerror = () => reject(request.error);
   request.onblocked = () => reject(new Error('No se pudo limpiar el almacenamiento offline porque esta en uso.'));
 });

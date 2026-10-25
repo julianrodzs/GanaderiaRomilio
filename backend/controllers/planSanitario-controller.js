@@ -90,7 +90,7 @@ planSanitarioCtrl.createPlanSanitario = async (req, res) => {
             const [nuevoPlan] = await PlanSanitario.create([{
                 ...datos,
                 creadoPor: req.usuario?.id
-            }], { session });
+            }], { session, ordered: true });
             await sincronizarTareaPlanSanitario(nuevoPlan, req.usuario?.id, {
                 session,
                 omitirNotificacion: true

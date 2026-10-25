@@ -1,4 +1,5 @@
 const precioConfigurable = (variable, valorInicial) => {
+    if (!String(process.env[variable] || '').trim()) return valorInicial;
     const valor = Number(process.env[variable]);
     return Number.isFinite(valor) && valor >= 0 ? valor : valorInicial;
 };
@@ -29,7 +30,7 @@ const planesConfig = Object.freeze({
     ESENCIAL: {
         codigo: 'ESENCIAL',
         nombre: 'Esencial',
-        precioMensualUSD: precioConfigurable('PLAN_PRECIO_ESENCIAL_USD', 6),
+        precioMensualUSD: precioConfigurable('PLAN_PRECIO_ESENCIAL_USD', 10),
         limites: {
             fincas: 1,
             usuarios: 3,
@@ -65,7 +66,7 @@ const planesConfig = Object.freeze({
     GESTION: {
         codigo: 'GESTION',
         nombre: 'Gestión',
-        precioMensualUSD: precioConfigurable('PLAN_PRECIO_GESTION_USD', 12),
+        precioMensualUSD: precioConfigurable('PLAN_PRECIO_GESTION_USD', 20),
         limites: {
             fincas: 2,
             usuarios: 8,
@@ -98,7 +99,7 @@ const planesConfig = Object.freeze({
     PRO: {
         codigo: 'PRO',
         nombre: 'Pro',
-        precioMensualUSD: precioConfigurable('PLAN_PRECIO_PRO_USD', 20),
+        precioMensualUSD: precioConfigurable('PLAN_PRECIO_PRO_USD', 35),
         limites: {
             fincas: 5,
             usuarios: 20,
@@ -131,7 +132,7 @@ const planesConfig = Object.freeze({
     PREMIUM: {
         codigo: 'PREMIUM',
         nombre: 'Premium',
-        precioMensualUSD: precioConfigurable('PLAN_PRECIO_PREMIUM_USD', 35),
+        precioMensualUSD: precioConfigurable('PLAN_PRECIO_PREMIUM_USD', 60),
         limites: {
             fincas: 10,
             usuarios: 50,

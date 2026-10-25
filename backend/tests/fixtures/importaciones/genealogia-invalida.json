@@ -1,0 +1,7 @@
+{
+  "INVENTARIO": [
+    ["DIIO", "ESPECIE", "SEXO", "CATEGORIA", "MADRE_DIIO"],
+    ["B-400", "Bovino", "Hembra", "Vaca", "P-400"],
+    ["P-400", "Porcino", "Macho", "Cerdo adulto", "P-400"]
+  ]
+}

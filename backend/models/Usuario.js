@@ -5,7 +5,7 @@ const usuarioSchema = new Schema(
         nombre: { type: String, required: true, trim: true },
         apellido: { type: String, trim: true },
         correo: { type: String, required: true, unique: true, lowercase: true, trim: true },
-        contrasena: { type: String, required: true },
+        contrasena: { type: String, required: true, select: false },
         telefono: { type: String, trim: true },
         rol: {
             type: String,
@@ -22,9 +22,15 @@ const usuarioSchema = new Schema(
             default: false,
             index: true
         },
+        tokenVersion: { type: Number, default: 0, min: 0 },
+        debeCambiarContrasena: { type: Boolean, default: false },
+        consentimiento: {
+            version: { type: String, trim: true },
+            aceptadoEn: { type: Date }
+        },
         ultimoAcceso: { type: Date },
-        resetPasswordToken: { type: String },
-        resetPasswordExpires: { type: Date },
+        resetPasswordToken: { type: String, select: false },
+        resetPasswordExpires: { type: Date, select: false },
         resetPasswordRequestedAt: { type: Date },
         resetPasswordRequestIp: { type: String }
     },

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js",
+    "dev": "node --watch index.js",
     "test": "node --test tests/*.test.js",
     "migrate:sanidad:check": "node scripts/migrarAplicacionesPlanesSanitarios.js",
     "migrate:sanidad": "node scripts/migrarAplicacionesPlanesSanitarios.js --apply",
@@ -41,7 +41,14 @@
     "migrate:archivos-obsoletos:check": "node scripts/limpiarArchivosObsoletos.js",
     "migrate:archivos-obsoletos": "node scripts/limpiarArchivosObsoletos.js --apply",
     "migrate:historial-fincas:check": "node scripts/inicializarHistorialFincasAnimales.js",
-    "migrate:historial-fincas": "node scripts/inicializarHistorialFincasAnimales.js --apply"
+    "migrate:historial-fincas": "node scripts/inicializarHistorialFincasAnimales.js --apply",
+    "migrate:fecha-muerte:check": "node scripts/completarFechaMuerteDesdeEventos.js",
+    "migrate:fecha-muerte": "node scripts/completarFechaMuerteDesdeEventos.js --apply",
+    "diagnostico:importaciones": "node scripts/diagnostico-importaciones.js",
+    "diagnostico:u01": "node scripts/diagnostico-u01.js",
+    "migrate:auditoria-redactar:check": "node scripts/redactarAuditoriaSensible.js",
+    "migrate:auditoria-redactar": "node scripts/redactarAuditoriaSensible.js --apply",
+    "indexes:sync": "node scripts/sincronizar-indices.js"
   },
   "keywords": [],
   "author": "",
@@ -49,16 +56,20 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1147.0",
     "bcrypt": "^6.0.0",
+    "body-parser": "^1.20.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.22.3",
     "mongoose": "^8.24.1",
-    "multer": "^2.4.0",
+    "multer": "^2.5.0",
     "pdfkit": "^0.20.2",
+    "proxy-addr": "2.0.8",
     "stripe": "^23.0.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
-  "devDependencies": {
-    "nodemon": "^3.1.9"
+  "overrides": {
+    "brace-expansion": "1.1.21",
+    "minimatch": "3.1.4",
+    "picomatch": "2.3.2"
   }
 }

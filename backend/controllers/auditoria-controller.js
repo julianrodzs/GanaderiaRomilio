@@ -62,4 +62,30 @@ auditoriaCtrl.getAuditoriaById = async (req, res) => {
     }
 };
 
+auditoriaCtrl.getAuditoriasPlataforma = async (req, res) => {
+    try {
+        const { organizacionId, modulo, estado, fechaInicio, fechaFin, limite = 100 } = req.query;
+        const filtro = {};
+        if (organizacionId) filtro.organizacionId = organizacionId;
+        if (modulo) filtro.modulo = modulo;
+        if (estado) filtro.estado = estado;
+        const filtroFecha = construirFiltroFecha({ fechaInicio, fechaFin });
+        if (filtroFecha) filtro.createdAt = filtroFecha;
+        const limiteSeguro = Math.min(Math.max(Number(limite) || 100, 1), 500);
+        const auditorias = await Auditoria.find(filtro)
+            .setOptions({ omitirAislamientoOrganizacion: true })
+            .populate('organizacionId', 'nombre slug')
+            .populate('usuario', 'nombre apellido correo estado')
+            .sort({ createdAt: -1 })
+            .limit(limiteSeguro)
+            .lean();
+        return res.json(auditorias);
+    } catch (error) {
+        return res.status(500).json({
+            mensaje: 'Error al obtener la auditoría de plataforma.',
+            ...(process.env.NODE_ENV !== 'production' ? { error: error.message } : {})
+        });
+    }
+};
+
 module.exports = auditoriaCtrl;

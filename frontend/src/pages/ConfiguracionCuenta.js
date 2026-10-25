@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import UpgradeMessage from '../Components/UpgradeMessage';
 import { usePlan } from '../context/PlanContext';
-import { actualizarConfiguracionEmails, obtenerConfiguracionEmails } from '../services/api';
+import { actualizarConfiguracionEmails, actualizarPerfilUsuario, obtenerConfiguracionEmails } from '../services/api';
 import { puedeAccederModulo } from '../constants/permisosRoles';
 
 const opcionesModulos = [
@@ -21,6 +21,33 @@ const ConfiguracionCuenta = ({ usuario }) => {
   });
   const [mensaje, setMensaje] = useState('');
   const [guardando, setGuardando] = useState(false);
+  const [perfil, setPerfil] = useState({
+    nombre: usuario?.nombre || '', apellido: usuario?.apellido || '', telefono: usuario?.telefono || '',
+    contrasenaActual: '', contrasenaNueva: '', confirmarContrasena: ''
+  });
+  const [mensajePerfil, setMensajePerfil] = useState('');
+
+  const guardarPerfil = async (evento) => {
+    evento.preventDefault();
+    setMensajePerfil('');
+    if (perfil.contrasenaNueva && perfil.contrasenaNueva !== perfil.confirmarContrasena) {
+      setMensajePerfil('Las contraseñas no coinciden.'); return;
+    }
+    try {
+      setGuardando(true);
+      const respuesta = await actualizarPerfilUsuario({
+        nombre: perfil.nombre, apellido: perfil.apellido, telefono: perfil.telefono,
+        ...(perfil.contrasenaNueva ? { contrasenaActual: perfil.contrasenaActual, contrasenaNueva: perfil.contrasenaNueva } : {})
+      });
+      setMensajePerfil(respuesta.mensaje);
+      if (respuesta.requiereNuevoInicioSesion) {
+        let sesionActual = null;
+        try { sesionActual = JSON.parse(localStorage.getItem('ganaderiaSesion') || 'null'); } catch (error) { sesionActual = null; }
+        localStorage.removeItem('ganaderiaSesion');
+        window.dispatchEvent(new CustomEvent('ganaderiaSesionExpirada', { detail: { sesion: sesionActual } }));
+      }
+    } catch (error) { setMensajePerfil(error.message); } finally { setGuardando(false); }
+  };
 
   useEffect(() => {
     if (!disponible) return;
@@ -52,6 +79,20 @@ const ConfiguracionCuenta = ({ usuario }) => {
       <p className="eyebrow">Cuenta</p>
       <h1>Configuración</h1>
       <p className="configuracion-identidad">{usuario?.nombre} {usuario?.apellido || ''} · {usuario?.rol}</p>
+      <section className="configuracion-email">
+        <h2>Perfil y contraseña</h2>
+        {usuario?.debeCambiarContrasena && <div className="alerta-formulario">Debes reemplazar la contraseña temporal antes de continuar.</div>}
+        <form onSubmit={guardarPerfil} className="configuracion-email-form">
+          <label>Nombre<input value={perfil.nombre} onChange={(e) => setPerfil({ ...perfil, nombre: e.target.value })} required /></label>
+          <label>Apellido<input value={perfil.apellido} onChange={(e) => setPerfil({ ...perfil, apellido: e.target.value })} /></label>
+          <label>Teléfono<input value={perfil.telefono} onChange={(e) => setPerfil({ ...perfil, telefono: e.target.value })} /></label>
+          <label>Contraseña actual<input type="password" value={perfil.contrasenaActual} onChange={(e) => setPerfil({ ...perfil, contrasenaActual: e.target.value })} required={Boolean(perfil.contrasenaNueva || usuario?.debeCambiarContrasena)} /></label>
+          <label>Nueva contraseña<input type="password" minLength="10" value={perfil.contrasenaNueva} onChange={(e) => setPerfil({ ...perfil, contrasenaNueva: e.target.value })} required={usuario?.debeCambiarContrasena} /></label>
+          <label>Confirmar nueva contraseña<input type="password" minLength="10" value={perfil.confirmarContrasena} onChange={(e) => setPerfil({ ...perfil, confirmarContrasena: e.target.value })} required={Boolean(perfil.contrasenaNueva || usuario?.debeCambiarContrasena)} /></label>
+          {mensajePerfil && <p className="form-message">{mensajePerfil}</p>}
+          <button className="boton-primario" type="submit" disabled={guardando}>Guardar perfil</button>
+        </form>
+      </section>
       <section className="configuracion-email">
         <h2>Notificaciones y resumen</h2>
         {!disponible ? (

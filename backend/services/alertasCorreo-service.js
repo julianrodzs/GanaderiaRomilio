@@ -189,7 +189,9 @@ const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zon
             }
             for (const [asunto, grupo] of Object.entries(agruparPorAsunto(pendientes))) {
                 const resultado = await enviarCorreoResend({
-                    to: process.env.EMAIL_TEST_TO || membresia.usuario.correo,
+                    to: process.env.NODE_ENV !== 'production' && process.env.EMAIL_TEST_TO
+                        ? process.env.EMAIL_TEST_TO
+                        : membresia.usuario.correo,
                     subject: `${asunto} - ${nombreOrganizacion}`,
                     html: crearHtml(asunto, grupo, nombreOrganizacion, zonaHoraria),
                     text: crearTexto(asunto, grupo, zonaHoraria)

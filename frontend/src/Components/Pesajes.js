@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { cargarOpcional } from '../utils/cargarOpcional';
 import {
   actualizarPesaje,
   crearPesaje,
@@ -94,7 +95,7 @@ const Pesajes = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
       const [pesajesData, animalesData, potrerosData] = await Promise.all([
         obtenerPesajes({ especie }),
         obtenerAnimales({ especie }),
-        obtenerPotreros().catch(() => [])
+        cargarOpcional(() => obtenerPotreros(), [])
       ]);
       setPesajes(pesajesData);
       setAnimales(animalesData);

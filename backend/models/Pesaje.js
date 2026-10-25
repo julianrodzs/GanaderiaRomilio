@@ -18,7 +18,9 @@ const pesajeSchema = new Schema(
         observaciones: { type: String, trim: true },
         registradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
         editadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
-        fechaEdicion: { type: Date }
+        fechaEdicion: { type: Date },
+        claveImportacion: { type: String, trim: true },
+        importacionOrigen: { type: Schema.Types.ObjectId, ref: 'ImportacionExcel' }
     },
     {
         timestamps: true
@@ -28,5 +30,9 @@ const pesajeSchema = new Schema(
 pesajeSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 pesajeSchema.index({ animal: 1, fecha: -1 });
 pesajeSchema.index({ organizacionId: 1, animal: 1, fecha: -1, createdAt: -1 });
+pesajeSchema.index(
+    { organizacionId: 1, fincaId: 1, claveImportacion: 1 },
+    { unique: true, partialFilterExpression: { claveImportacion: { $type: 'string' } } }
+);
 
 module.exports = model('Pesaje', pesajeSchema);

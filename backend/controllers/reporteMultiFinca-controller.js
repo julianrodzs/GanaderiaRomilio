@@ -14,7 +14,9 @@ const getReporteMultiFinca = async (req, res) => {
             fincas,
             fechaInicio: req.query.fechaInicio,
             fechaFin: req.query.fechaFin,
-            especie: ['Bovino', 'Porcino'].includes(req.query.especie) ? req.query.especie : 'Todos'
+            especie: ['Bovino', 'Porcino'].includes(req.query.especie) ? req.query.especie : 'Todos',
+            organizacionId: req.organizacionId,
+            zonaHoraria: req.organizacion?.zonaHoraria
         }));
     } catch (error) {
         res.status(error.status || 500).json({ mensaje: error.message || 'No se pudo generar el reporte multi-finca' });

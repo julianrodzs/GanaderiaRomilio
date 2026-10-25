@@ -1,0 +1,6 @@
+{
+  "INVENTARIO": [
+    ["DIIO", "ESPECIE", "SEXO", "CATEGORIA", "organizacionId", "fincaId", "__proto__", "constructor", "$set"],
+    ["B-200", "Bovino", "Macho", "Toro", "ajena", "ajena", "x", "x", "x"]
+  ]
+}

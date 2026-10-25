@@ -29,6 +29,8 @@ const potreroSchema = new Schema(
         diasDescansoObjetivo: { type: Number, min: 0 },
         intervaloCorteObjetivoDias: { type: Number, min: 1 },
         responsableCorte: { type: Schema.Types.ObjectId, ref: 'Usuario' },
+        claveImportacion: { type: String, trim: true },
+        importacionOrigen: { type: Schema.Types.ObjectId, ref: 'ImportacionExcel' },
         observacionCobertura: { type: String, trim: true },
         descripcionCobertura: { type: String, trim: true }
     },
@@ -41,5 +43,9 @@ potreroSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 potreroSchema.index({ organizacionId: 1, fincaId: 1, codigo: 1 }, { unique: true });
 potreroSchema.index({ estado: 1 });
 potreroSchema.index({ organizacionId: 1, fincaId: 1, tipoArea: 1, estado: 1 });
+potreroSchema.index(
+    { organizacionId: 1, fincaId: 1, claveImportacion: 1 },
+    { unique: true, partialFilterExpression: { claveImportacion: { $type: 'string' } } }
+);
 
 module.exports = model('Potrero', potreroSchema);

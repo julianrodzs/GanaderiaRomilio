@@ -1,0 +1,7 @@
+{
+  "FINANZAS": [
+    ["FECHA", "NATURALEZA", "TIPO_MOVIMIENTO", "CATEGORIA", "DESCRIPCION", "MONTO", "MONEDA"],
+    ["20/10/2026", "Egreso", "Compra", "Alimentación", "Concentrado", 125000, "CRC"],
+    ["20/10/2026", "Egreso", "Compra", "Alimentación", "Concentrado", 125000, "CRC"]
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "INVENTARIO": [
+    ["DIIO", "ESPECIE", "SEXO", "CATEGORIA", "PESO_ACTUAL_KG", "FECHA_PESAJE"],
+    ["B-100", "Bovino", "Hembra", "Vaca", 420, "20/10/2026"]
+  ],
+  "FINANZAS": [
+    ["FECHA", "NATURALEZA", "TIPO_MOVIMIENTO", "CATEGORIA", "DESCRIPCION", "MONTO", "MONEDA"],
+    ["20/10/2026", "Egreso", "Compra", "Alimentación", "Concentrado", 125000, "CRC"]
+  ]
+}

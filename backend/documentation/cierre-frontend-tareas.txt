@@ -1,0 +1,17 @@
+
+> frontend@0.1.0 test:tareas
+> node --test tests/tareasOffline.test.mjs
+
+✔ las fechas civiles no retroceden un día en Costa Rica y los instantes sí usan la zona (22.028ms)
+✔ offline envía la hora de campo, clave y versión; concilia caché solo tras éxito (1.9935ms)
+✔ un conflicto conserva la operación y no se reenvía automáticamente (1.1212ms)
+✔ no se envía una operación de la sesión anterior después de cambiar de finca (1.0835ms)
+✔ un 401 con sesión ya eliminada corta toda la cola sin rechazar la promesa (1.1797ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 124.2578

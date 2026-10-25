@@ -1,5 +1,6 @@
 import { claveFechaTarea, formatearFechaTarea, diasHastaFechaTarea, esTareaEspecializada } from '../utils/fechasTareas.mjs';
 import React, { useEffect, useMemo, useState } from 'react';
+import { cargarOpcional } from '../utils/cargarOpcional';
 import {
   actualizarTarea,
   agregarComentarioTarea,
@@ -180,9 +181,9 @@ const Tareas = ({ usuario, tareaInicialId = '', onNavegarSanidad }) => {
       if (puedeGestionar) {
         try {
           const [usuariosData, potrerosData, animalesData] = await Promise.all([
-            obtenerUsuariosAsignables('Tareas'),
-            obtenerPotreros(),
-            obtenerAnimales()
+            cargarOpcional(() => obtenerUsuariosAsignables('Tareas'), []),
+            cargarOpcional(() => obtenerPotreros(), []),
+            cargarOpcional(() => obtenerAnimales(), [])
           ]);
           setUsuarios(usuariosData.filter((usuarioItem) => usuarioItem.estado !== 'Inactivo'));
           setPotreros(potrerosData);

@@ -78,7 +78,7 @@ test('el endpoint de productividad porcina calcula camadas sin mezclar bovinos',
     const findCamadaOriginal = Camada.find;
     const findConfiguracionOriginal = ConfiguracionProductiva.findOneAndUpdate;
     Camada.find = () => ({
-        lean: async () => [{ madre: 'm1', estado: 'Destetada', nacidosVivos: 10, destetados: 9 }]
+        lean: async () => [{ madre: 'm1', estado: 'Destetada', fechaDesteteReal: new Date('2026-10-01'), nacidosVivos: 10, destetados: 9 }]
     });
     ConfiguracionProductiva.findOneAndUpdate = async () => ({
         toObject: () => ({

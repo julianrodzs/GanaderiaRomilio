@@ -98,8 +98,10 @@ const calcularIndiceCriaPorcina = ({
     };
 };
 
-const calcularProductividadPorcina = (camadas = [], { configuracion = {} } = {}) => {
-    const camadasDestetadas = camadas.filter(camadaConDesteteCerrado);
+const calcularProductividadPorcina = (camadas = [], { configuracion = {}, camadasDestetadasPeriodo } = {}) => {
+    const camadasDestetadas = Array.isArray(camadasDestetadasPeriodo)
+        ? camadasDestetadasPeriodo.filter((camada) => Boolean(camada.fechaDesteteReal))
+        : camadas.filter(camadaConDesteteCerrado);
     const nacidosVivos = camadas.reduce((total, camada) => total + Number(camada.nacidosVivos || 0), 0);
     const nacidosVivosDestetables = camadasDestetadas.reduce((total, camada) => total + Number(camada.nacidosVivos || 0), 0);
     const destetados = camadasDestetadas.reduce((total, camada) => total + Number(camada.destetados || 0), 0);
@@ -137,7 +139,9 @@ const calcularProductividadPorcina = (camadas = [], { configuracion = {} } = {})
         destetadosPorMadre: redondear(madresConDestete ? destetados / madresConDestete : 0, 2),
         metodologia: {
             supervivenciaPredestete: 'Destetados / nacidos vivos de camadas cuyo destete ya fue cerrado.',
-            criterioDesteteCerrado: 'Fecha de destete real o estado Destetada, Vendida o Cerrada.',
+            criterioDesteteCerrado: Array.isArray(camadasDestetadasPeriodo)
+                ? 'Fecha de destete real dentro del período consultado.'
+                : 'Fecha de destete real o estado Destetada, Vendida o Cerrada.',
             indiceCriaPorcina: '30% nacidos vivos por camada, 45% destetados por camada y 25% supervivencia predestete, normalizados contra las metas internas.'
         }
     };

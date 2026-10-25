@@ -10,6 +10,7 @@ import {
   moverAnimalesLote,
   obtenerHistorialAlimentacionLote,
   obtenerHistorialLote,
+  obtenerEventosLote,
   obtenerLote,
   obtenerLotes,
   obtenerPlanesAlimentacion,
@@ -24,16 +25,23 @@ import { etiquetaObjetivoProductivo, etiquetaPropositoLote, PROPOSITOS_LOTE } fr
 import { usePlan } from '../context/PlanContext';
 import FeatureGate from './FeatureGate';
 import ProtocolosEngorde from './ProtocolosEngorde';
+import { puedeRealizarAccion } from '../constants/permisosRoles';
+import { hoyFechaLocal } from '../utils/fechas';
 
 const PROPOSITOS = PROPOSITOS_LOTE;
 const ETAPAS = ['INGRESO', 'ADAPTACION', 'DESARROLLO', 'ENGORDE', 'FINALIZACION', 'LISTO_VENTA', 'MANTENIMIENTO', 'OTRA'];
 const OBJETIVO_POR_PROPOSITO = { ENGORDE: 'ENGORDE', REPRODUCCION: 'REPRODUCCION', REEMPLAZO: 'REEMPLAZO' };
-const hoy = () => new Date().toISOString().slice(0, 10);
+const hoy = hoyFechaLocal;
 const etiquetaAnimal = (animal) => [animal.diio || animal.identificadorFinca, animal.nombre].filter(Boolean).join(' - ');
 
-const Lotes = ({ especie, animales = [], soloLectura = false, onNavegar }) => {
+const Lotes = ({ especie, animales = [], soloLectura = false, rolUsuario = 'Consulta', estaOnline = true, onNavegar }) => {
   const { tieneFeature } = usePlan();
   const incluyeAnalitica = tieneFeature('analiticaProductiva');
+  const permisosProtocolo = {
+    configurar: estaOnline && puedeRealizarAccion(rolUsuario, 'lotes.protocoloConfigurar'),
+    crear: estaOnline && puedeRealizarAccion(rolUsuario, 'lotes.protocoloCrear'),
+    ejecutar: estaOnline && puedeRealizarAccion(rolUsuario, 'lotes.protocoloEjecutar')
+  };
   const [lotes, setLotes] = useState([]);
   const [detalle, setDetalle] = useState(null);
   const [historial, setHistorial] = useState([]);
@@ -65,13 +73,14 @@ const Lotes = ({ especie, animales = [], soloLectura = false, onNavegar }) => {
 
   const abrirDetalle = async (lote) => {
     try {
-      const [datos, movimientos, alimentacion, planesDisponibles] = await Promise.all([
+      const [datos, movimientos, alimentacion, planesDisponibles, eventos] = await Promise.all([
         obtenerLote(lote._id),
         obtenerHistorialLote(lote._id),
         obtenerHistorialAlimentacionLote(lote._id),
-        obtenerPlanesAlimentacion({ especie: lote.especie, proposito: lote.proposito, activo: true })
+        obtenerPlanesAlimentacion({ especie: lote.especie, proposito: lote.proposito, activo: true }),
+        obtenerEventosLote(lote._id, { pagina: 1, limite: 50 })
       ]);
-      setDetalle(datos);
+      setDetalle({ ...datos, eventos: eventos.datos, paginacionEventos: eventos.paginacion });
       setHistorial(movimientos);
       setHistorialPlanes(alimentacion);
       setPlanes(planesDisponibles);
@@ -87,9 +96,11 @@ const Lotes = ({ especie, animales = [], soloLectura = false, onNavegar }) => {
       setGuardando(true); setError('');
       const datos = {
         ...formulario,
-        pesoObjetivoKg: formulario.pesoObjetivoKg === '' ? undefined : Number(formulario.pesoObjetivoKg),
-        ...(incluyeAnalitica ? { gmdObjetivoKgDia: formulario.gmdObjetivoKgDia === '' ? undefined : Number(formulario.gmdObjetivoKgDia) } : {})
+        etapaOperativa: formulario.etapaOperativa || null,
+        pesoObjetivoKg: formulario.pesoObjetivoKg === '' ? null : Number(formulario.pesoObjetivoKg),
+        ...(incluyeAnalitica ? { gmdObjetivoKgDia: formulario.gmdObjetivoKgDia === '' ? null : Number(formulario.gmdObjetivoKgDia) } : {})
       };
+      if (!formulario._id && !formulario.ubicacionActual) delete datos.ubicacionActual;
       if (formulario._id) await actualizarLote(formulario._id, datos);
       else await crearLote(datos);
       setMostrarFormulario(false);
@@ -176,6 +187,21 @@ const Lotes = ({ especie, animales = [], soloLectura = false, onNavegar }) => {
     onNavegar?.('Ventas');
   };
 
+  const cargarMasEventos = async () => {
+    if (!detalle?.paginacionEventos?.hayMas) return;
+    try {
+      const respuesta = await obtenerEventosLote(detalle._id, {
+        pagina: detalle.paginacionEventos.pagina + 1,
+        limite: detalle.paginacionEventos.limite
+      });
+      setDetalle((actual) => ({
+        ...actual,
+        eventos: [...(actual.eventos || []), ...respuesta.datos],
+        paginacionEventos: respuesta.paginacion
+      }));
+    } catch (err) { setError(err.message); }
+  };
+
   const columnas = [
     { id: 'codigo', label: 'Código', accessor: (lote) => lote.codigo, render: (lote) => <button className="tabla-link" type="button" onClick={() => abrirDetalle(lote)}>{lote.codigo}</button> },
     { id: 'nombre', label: 'Nombre', accessor: (lote) => lote.nombre },
@@ -200,7 +226,7 @@ const Lotes = ({ especie, animales = [], soloLectura = false, onNavegar }) => {
         <label>Fecha de inicio<input type="date" value={formulario.fechaInicio} onChange={(e) => setFormulario({ ...formulario, fechaInicio: e.target.value })} required /></label>
         <label>Peso objetivo (kg)<input type="number" min="0" value={formulario.pesoObjetivoKg} onChange={(e) => setFormulario({ ...formulario, pesoObjetivoKg: e.target.value })} /></label>
          {incluyeAnalitica && <label>GMD objetivo (kg/día)<input type="number" min="0" step="0.01" value={formulario.gmdObjetivoKgDia} onChange={(e) => setFormulario({ ...formulario, gmdObjetivoKgDia: e.target.value })} /></label>}
-        {!formulario._id && <label>Ubicación inicial<select value={formulario.ubicacionActual} onChange={(e) => setFormulario({ ...formulario, ubicacionActual: e.target.value })}><option value="">Sin potrero asociado</option>{potreros.map((potrero) => <option key={potrero._id} value={potrero._id}>{potrero.codigo} · {potrero.nombre}</option>)}</select></label>}
+        {!formulario._id && <label>Ubicación inicial<select value={formulario.ubicacionActual} onChange={(e) => setFormulario({ ...formulario, ubicacionActual: e.target.value })} disabled><option value="">Se asigna al incorporar animales</option></select></label>}
         <label className="campo-ancho">Descripción<textarea value={formulario.descripcion} onChange={(e) => setFormulario({ ...formulario, descripcion: e.target.value })} /></label>
         <div className="acciones-formulario campo-ancho"><button type="button" className="boton-secundario" onClick={() => setMostrarFormulario(false)}>Cancelar</button><button className="boton-primario" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar lote'}</button></div>
       </form>
@@ -213,15 +239,15 @@ const Lotes = ({ especie, animales = [], soloLectura = false, onNavegar }) => {
       <TablaDinamica titulo={`Lotes de ${especie.toLowerCase()}s`} subtitulo="Inventario" columnas={columnas} datos={lotes} error={error} filtros={[{ id: 'proposito', accessor: (lote) => lote.proposito }, { id: 'etapa', accessor: (lote) => lote.etapaOperativa || 'Sin etapa' }, { id: 'estado', accessor: (lote) => lote.estado }, { id: 'potrero', accessor: (lote) => lote.ubicacionActual?.nombre || 'Sin potrero' }]} textoAgregar="Nuevo lote" onAgregar={soloLectura ? undefined : () => { setFormulario({ codigo: '', nombre: '', especie, proposito: 'ENGORDE', etapaOperativa: '', fechaInicio: hoy(), pesoObjetivoKg: '', gmdObjetivoKgDia: '', ubicacionActual: '', descripcion: '' }); setMostrarFormulario(true); }} onEditar={soloLectura ? undefined : (lote) => { setFormulario({ ...lote, fechaInicio: lote.fechaInicio?.slice(0, 10) || hoy(), pesoObjetivoKg: lote.pesoObjetivoKg ?? '', gmdObjetivoKgDia: lote.gmdObjetivoKgDia ?? '', ubicacionActual: lote.ubicacionActual?._id || lote.ubicacionActual || '' }); setMostrarFormulario(true); }} mostrarAcciones={!soloLectura} />
       {detalle && <div className="modal-backdrop"><section className="modal-panel detalle-lote-panel">
         <div className="panel-title"><div><p className="eyebrow">Lote {detalle.codigo}</p><h2>{detalle.nombre}</h2></div><button className="boton-link" type="button" onClick={() => setDetalle(null)}>Cerrar</button></div>
-        <div className="detalle-animal-grid"><article><span>Especie</span><strong>{detalle.especie}</strong></article><article><span>Propósito</span><strong>{detalle.proposito}</strong></article><article><span>Etapa</span><strong>{detalle.etapaOperativa || 'Sin etapa'}</strong></article><article><span>Estado</span><strong>{detalle.estado}</strong></article><article><span>Animales</span><strong>{detalle.animales?.length || 0}</strong></article><article><span>Días activo</span><strong>{detalle.resumen?.diasActivo ?? 0}</strong></article><article><span>Peso promedio</span><strong>{detalle.resumen?.pesoPromedioActual != null ? `${detalle.resumen.pesoPromedioActual} kg` : 'Sin datos'}</strong><small>{detalle.resumen?.coberturaPesajes?.conPesaje || 0}/{detalle.resumen?.coberturaPesajes?.total || 0} pesados</small></article>{incluyeAnalitica && <article><span>GMD actual / meta</span><strong>{detalle.resumen?.gmdPromedioLote != null ? `${detalle.resumen.gmdPromedioLote} / ${detalle.gmdObjetivoKgDia || '—'} kg/día` : 'Sin datos suficientes'}</strong></article>}<article><span>Potrero</span><strong>{detalle.ubicacionActual?.nombre || 'Sin potrero'}</strong></article><article><span>Próxima tarea</span><strong>{detalle.resumen?.tareas?.proxima?.titulo || 'Sin tareas'}</strong></article></div>
+        <div className="detalle-animal-grid"><article><span>Especie</span><strong>{detalle.especie}</strong></article><article><span>Propósito</span><strong>{detalle.proposito}</strong></article><article><span>Etapa</span><strong>{detalle.etapaOperativa || 'Sin etapa'}</strong></article><article><span>Estado</span><strong>{detalle.estado}</strong></article><article><span>Animales</span><strong>{detalle.estado === 'ACTIVO' ? (detalle.animales?.length || 0) : (detalle.resumen?.cantidadAnimalesCierre ?? 0)}</strong></article><article><span>Días activo</span><strong>{detalle.resumen?.diasActivo ?? 0}</strong></article><article><span>Peso promedio</span><strong>{detalle.resumen?.pesoPromedioActual != null ? `${detalle.resumen.pesoPromedioActual} kg` : 'Sin datos'}</strong><small>{detalle.resumen?.coberturaPesajes?.conPesaje || 0}/{detalle.resumen?.coberturaPesajes?.total || 0} pesados</small></article>{incluyeAnalitica && <article><span>GMD actual / meta</span><strong>{detalle.resumen?.gmdPromedioLote != null ? `${detalle.resumen.gmdPromedioLote} / ${detalle.gmdObjetivoKgDia || '—'} kg/día` : 'Sin datos suficientes'}</strong></article>}<article><span>Potrero</span><strong>{detalle.ubicacionActual?.nombre || 'Sin potrero'}</strong></article><article><span>Próxima tarea</span><strong>{detalle.resumen?.tareas?.proxima?.titulo || 'Sin tareas'}</strong></article></div>
         {!soloLectura && detalle.estado === 'ACTIVO' && <section className="lote-seccion"><h3>Acciones del lote</h3><div className="acciones-lote"><button type="button" onClick={() => navegarConLote('Alimentacion')}>Registrar alimentación</button><button type="button" onClick={() => abrirAccion('pesajes')}>Registrar pesajes</button><button type="button" onClick={() => navegarConLote('Sanidad')}>Aplicación sanitaria</button><button type="button" onClick={() => abrirAccion('potrero')}>Mover potrero</button><button type="button" onClick={() => abrirAccion('tarea')}>Programar tarea</button><button type="button" onClick={() => navegarConLote('Ventas')}>Preparar venta</button></div><label>Etapa operativa<select value={detalle.etapaOperativa || ''} onChange={(e) => cambiarEtapa(e.target.value)}><option value="">Sin etapa</option>{ETAPAS.map((item) => <option key={item}>{item}</option>)}</select></label></section>}
-        {detalle.especie === 'Bovino' && detalle.proposito === 'ENGORDE' && <section className="lote-seccion"><FeatureGate feature="protocolosEngorde" titulo="Protocolos avanzados de engorde" pregunta="Organiza el lote por etapas, tareas, pesos reales y candidatos de venta."><ProtocolosEngorde lote={detalle} soloLectura={soloLectura} onPrepararVenta={prepararVentaProtocolo} /></FeatureGate></section>}
+        {detalle.especie === 'Bovino' && detalle.proposito === 'ENGORDE' && <section className="lote-seccion"><FeatureGate feature="protocolosEngorde" titulo="Protocolos avanzados de engorde" pregunta="Organiza el lote por etapas, tareas, pesos reales y candidatos de venta."><ProtocolosEngorde lote={detalle} permisos={permisosProtocolo} onPrepararVenta={prepararVentaProtocolo} /></FeatureGate></section>}
         <section className="lote-seccion"><h3>Sanidad y operación</h3><div className="resumen-lote-compacto"><span>Sanos <strong>{detalle.resumen?.sanidad?.estados?.Sano || 0}</strong></span><span>En observación <strong>{detalle.resumen?.sanidad?.estados?.['En observación'] || 0}</strong></span><span>Enfermos <strong>{detalle.resumen?.sanidad?.estados?.Enfermo || 0}</strong></span><span>Recuperación <strong>{detalle.resumen?.sanidad?.estados?.Recuperación || 0}</strong></span><span>Tratamientos activos <strong>{detalle.resumen?.sanidad?.tratamientosActivos || 0}</strong></span><span>Tareas pendientes <strong>{detalle.resumen?.tareas?.pendientes || 0}</strong></span><span>Vencidas <strong>{detalle.resumen?.tareas?.vencidas || 0}</strong></span><span>Comprados <strong>{detalle.resumen?.origen?.comprados || 0}</strong></span><span>Nacidos en finca <strong>{detalle.resumen?.origen?.nacidosEnFinca || 0}</strong></span>{detalle.especie === 'Porcino' && <span>Camadas de origen <strong>{detalle.resumen?.camadasOrigen || 0}</strong></span>}</div></section>
         <section className="lote-seccion"><h3>Animales actuales</h3>{detalle.animales?.length ? <div className="tabla-scroll tabla-dinamica"><table><thead><tr>{!soloLectura && <th>Seleccionar</th>}<th>DIIO / ID</th><th>Nombre</th><th>Sexo</th><th>Categoría</th><th>Peso actual</th><th>Objetivo</th><th>Estado sanitario</th><th>Entrada al lote</th></tr></thead><tbody>{detalle.animales.map((animal) => <tr key={animal._id}>{!soloLectura && <td><input type="checkbox" aria-label={`Seleccionar ${etiquetaAnimal(animal)}`} checked={seleccionadosActuales.includes(animal._id)} onChange={(e) => setSeleccionadosActuales(e.target.checked ? [...seleccionadosActuales, animal._id] : seleccionadosActuales.filter((id) => id !== animal._id))} /></td>}<td>{animal.diio || animal.identificadorFinca || '—'}</td><td>{animal.nombre || '—'}</td><td>{animal.sexo}</td><td>{animal.categoria || '—'}</td><td>{animal.pesoActual != null ? `${animal.pesoActual} kg` : '—'}</td><td>{etiquetaObjetivoProductivo(animal.objetivoProductivo)}</td><td>{animal.estadoSanitario || 'Sano'}</td><td>{new Date(animal.pertenencia.fechaEntrada).toLocaleDateString('es-CR')}</td></tr>)}</tbody></table></div> : <p>Este lote no tiene animales.</p>}{!soloLectura && seleccionadosActuales.length > 0 && <div className="acciones-lote-movimiento"><select value={loteDestino} onChange={(e) => setLoteDestino(e.target.value)}><option value="">Mover a otro lote...</option>{lotes.filter((lote) => lote._id !== detalle._id && lote.estado === 'ACTIVO' && lote.proposito === detalle.proposito && lote.especie === detalle.especie).map((lote) => <option key={lote._id} value={lote._id}>{lote.codigo} · {lote.nombre}</option>)}</select><button className="boton-secundario" type="button" disabled={!loteDestino} onClick={mover}>Mover</button><button className="boton-peligro" type="button" onClick={retirar}>Dejar sin lote</button></div>}</section>
         {!soloLectura && detalle.estado === 'ACTIVO' && <section className="lote-seccion"><h3>Agregar animales</h3><div className="selector-multiple-lote">{candidatos.map((animal) => <label key={animal._id}><input type="checkbox" checked={seleccionados.includes(animal._id)} onChange={(e) => setSeleccionados(e.target.checked ? [...seleccionados, animal._id] : seleccionados.filter((id) => id !== animal._id))} /> {etiquetaAnimal(animal)} · {etiquetaObjetivoProductivo(animal.objetivoProductivo)}</label>)}</div><button className="boton-secundario" type="button" disabled={!seleccionados.length} onClick={agregar}>Agregar seleccionados</button></section>}
         <section className="lote-seccion"><h3>Alimentación actual</h3><div className="resumen-lote-compacto"><span>Plan <strong>{historialPlanes.find((item) => item.activo)?.plan?.nombre || 'Sin plan'}</strong></span><span>Ración <strong>{detalle.racionActual?.racion?.nombre || 'Sin ración'}</strong></span><span>Último suministro <strong>{detalle.ultimoSuministro ? `${detalle.ultimoSuministro.totalKgSuministrados} kg · ${new Date(detalle.ultimoSuministro.fechaHora).toLocaleDateString('es-CR')}` : 'Sin registros'}</strong></span></div>{!soloLectura && detalle.estado === 'ACTIVO' && <select defaultValue="" onChange={(e) => asignarPlan(e.target.value)}><option value="">Cambiar plan...</option>{planes.map((plan) => <option key={plan._id} value={plan._id}>{plan.nombre} · {plan.etapa}</option>)}</select>}<div className="lista-compacta">{historialPlanes.map((item) => <span key={item._id}>{item.plan?.nombre} · {new Date(item.fechaInicio).toLocaleDateString('es-CR')} · {item.activo ? 'Actual' : 'Finalizado'}</span>)}</div></section>
         <section className="lote-seccion"><h3>Historial de pertenencia</h3><div className="lista-compacta">{historial.map((item) => <span key={item._id}>{etiquetaAnimal(item.animal)} · entrada {new Date(item.fechaEntrada).toLocaleDateString('es-CR')}{item.fechaSalida ? ` · salida ${new Date(item.fechaSalida).toLocaleDateString('es-CR')}` : ' · actual'}</span>)}</div></section>
-        <section className="lote-seccion"><h3>Historial operativo</h3><div className="lista-compacta">{(detalle.eventos || []).map((item) => <span key={item._id}>{new Date(item.fecha).toLocaleDateString('es-CR')} · {item.titulo}{item.descripcion ? ` · ${item.descripcion}` : ''}</span>)}</div></section>
+        <section className="lote-seccion"><h3>Historial operativo</h3><div className="lista-compacta">{(detalle.eventos || []).map((item) => <span key={item._id}>{new Date(item.fecha).toLocaleDateString('es-CR')} · {item.titulo}{item.descripcion ? ` · ${item.descripcion}` : ''}</span>)}</div>{detalle.paginacionEventos?.hayMas && <button type="button" className="boton-secundario" onClick={cargarMasEventos}>Cargar eventos anteriores</button>}</section>
         {!soloLectura && detalle.estado === 'ACTIVO' && <div className="acciones-formulario"><button className="boton-peligro" type="button" onClick={cerrar}>Cerrar lote</button></div>}
       </section></div>}
       {accion && <div className="modal-backdrop"><form className="modal-panel lote-accion-form" onSubmit={ejecutarAccion}><div className="panel-title"><h2>{accion === 'pesajes' ? `Pesajes · ${detalle.codigo}` : accion === 'tarea' ? 'Programar tarea' : 'Mover lote a potrero'}</h2><button className="boton-link" type="button" onClick={() => setAccion(null)}>Cerrar</button></div>{accion === 'pesajes' && <><label>Fecha<input type="date" value={datosAccion.fecha} onChange={(e) => setDatosAccion({ ...datosAccion, fecha: e.target.value })} required /></label><div className="pesajes-lote-grid">{datosAccion.pesajes.map((item, indice) => <label key={item.animal}>{etiquetaAnimal(detalle.animales.find((animal) => animal._id === item.animal))}<input type="number" min="0.01" step="0.01" value={item.peso} onChange={(e) => setDatosAccion({ ...datosAccion, pesajes: datosAccion.pesajes.map((actual, posicion) => posicion === indice ? { ...actual, peso: e.target.value } : actual) })} placeholder="kg" /></label>)}</div></>}{accion === 'tarea' && <div className="formulario-grid"><label>Título<input value={datosAccion.titulo} onChange={(e) => setDatosAccion({ ...datosAccion, titulo: e.target.value })} required /></label><label>Tipo<select value={datosAccion.tipo} onChange={(e) => setDatosAccion({ ...datosAccion, tipo: e.target.value })}><option>Pesaje</option><option>Sanidad</option><option>Revisión de potrero</option><option>Alimentación</option><option>Otro</option></select></label><label>Fecha<input type="date" value={datosAccion.fechaProgramada} onChange={(e) => setDatosAccion({ ...datosAccion, fechaProgramada: e.target.value })} required /></label><label>Responsable<select value={datosAccion.asignadoA} onChange={(e) => setDatosAccion({ ...datosAccion, asignadoA: e.target.value })} required><option value="">Seleccionar</option>{usuarios.map((usuario) => <option key={usuario._id} value={usuario._id}>{usuario.nombre} {usuario.apellido || ''} · {usuario.rol}</option>)}</select></label></div>}{accion === 'potrero' && <div className="formulario-grid"><label>Potrero destino<select value={datosAccion.potrero} onChange={(e) => setDatosAccion({ ...datosAccion, potrero: e.target.value })} required><option value="">Seleccionar</option>{potreros.map((potrero) => <option key={potrero._id} value={potrero._id}>{potrero.codigo} · {potrero.nombre}</option>)}</select></label><label>Fecha de entrada<input type="date" value={datosAccion.fechaEntrada} onChange={(e) => setDatosAccion({ ...datosAccion, fechaEntrada: e.target.value })} required /></label></div>}<div className="acciones-formulario"><button type="button" className="boton-secundario" onClick={() => setAccion(null)}>Cancelar</button><button className="boton-primario" disabled={guardando}>{guardando ? 'Guardando...' : 'Confirmar'}</button></div>{error && <p className="mensaje-error">{error}</p>}</form></div>}

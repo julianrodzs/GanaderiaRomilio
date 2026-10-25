@@ -39,7 +39,15 @@ export const rolesGestionPorModulo = {
 
 export const permisosPorAccion = {
   'finanzas.administrarCatalogos': ['Administrador'],
-  'bitacora.crearNotas': ['Administrador', 'Encargado', 'Veterinario']
+  'bitacora.crearNotas': ['Administrador', 'Encargado', 'Veterinario'],
+  'lotes.protocoloConfigurar': ['Administrador'],
+  'lotes.protocoloCrear': ['Administrador', 'Encargado'],
+  'lotes.protocoloEjecutar': ['Administrador', 'Encargado', 'Trabajador', 'Veterinario'],
+  'reproduccion.protocoloPorcinoCrear': ['Administrador', 'Veterinario'],
+  'reproduccion.eliminar': ['Administrador'],
+  'sanidad.eliminar': ['Administrador'],
+  'compras.eliminar': ['Administrador'],
+  'ventas.eliminar': ['Administrador']
 };
 
 export const puedeAccederModulo = (rol, modulo) => {

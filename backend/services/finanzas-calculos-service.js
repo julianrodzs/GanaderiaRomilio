@@ -15,6 +15,21 @@ const sumarMovimientosPorMoneda = (movimientos = [], predicado = () => true) => 
     return totales;
 };
 
+const construirContratoSustentabilidad = ({ gastos = {}, ventas = {}, compras = {}, animalesPromedio = 0, movimientosPeriodo = 0 } = {}) => ({
+    movimientosPeriodo: Number(movimientosPeriodo || 0),
+    monedas: crearMapaMonedas((moneda) => ({
+        montoVentasAnimales: redondearMoneda(ventas[moneda]),
+        montoComprasAnimales: redondearMoneda(compras[moneda]),
+        gastosOperativosPeriodo: redondearMoneda(gastos[moneda]),
+        costoPorAnimalPeriodo: animalesPromedio > 0 ? redondearMoneda(gastos[moneda] / animalesPromedio) : 0,
+        balancePeriodo: redondearMoneda(numeroSeguro(ventas[moneda]) - numeroSeguro(compras[moneda]) - numeroSeguro(gastos[moneda]))
+    }))
+});
+
+function numeroSeguro(valor) {
+    return Number(valor || 0);
+}
+
 const tieneNumero = (valor) => valor !== null
     && valor !== undefined
     && valor !== ''
@@ -64,16 +79,19 @@ const asignarEconomiaPorCamada = ({ camadaIds = [], movimientos = [] } = {}) => 
     const idsValidos = new Set(ids);
     const directosPorCamada = new Map(ids.map((id) => [id, []]));
     const indirectos = [];
+    const directosFueraCohorte = [];
 
     movimientos.forEach((movimiento) => {
         const referencia = idTexto(movimiento.referenciaId);
         if (idsValidos.has(referencia)) directosPorCamada.get(referencia).push(movimiento);
+        else if (movimiento.referenciaModelo === 'Camada') directosFueraCohorte.push(movimiento);
         else indirectos.push(movimiento);
     });
 
     const resumenMonedas = crearMapaMonedas((moneda) => {
-        const porMoneda = movimientos.filter((item) => normalizarMoneda(item.moneda) === moneda);
+        const porMoneda = movimientos.filter((item) => normalizarMoneda(item.moneda) === moneda && !directosFueraCohorte.includes(item));
         const indirectosMoneda = indirectos.filter((item) => normalizarMoneda(item.moneda) === moneda);
+        const fueraCohorte = directosFueraCohorte.filter((item) => normalizarMoneda(item.moneda) === moneda);
         const ingresos = porMoneda.filter((item) => item.naturaleza === 'Ingreso').reduce((total, item) => total + Number(item.monto || 0), 0);
         const egresos = porMoneda.filter((item) => item.naturaleza === 'Egreso').reduce((total, item) => total + Number(item.monto || 0), 0);
         const ingresosIndirectos = indirectosMoneda.filter((item) => item.naturaleza === 'Ingreso').reduce((total, item) => total + Number(item.monto || 0), 0);
@@ -85,7 +103,9 @@ const asignarEconomiaPorCamada = ({ camadaIds = [], movimientos = [] } = {}) => 
             ingresosDirectos: redondearMoneda(ingresos - ingresosIndirectos),
             egresosDirectos: redondearMoneda(egresos - egresosIndirectos),
             ingresosIndirectos: redondearMoneda(ingresosIndirectos),
-            egresosIndirectos: redondearMoneda(egresosIndirectos)
+            egresosIndirectos: redondearMoneda(egresosIndirectos),
+            ingresosDirectosFueraCohorte: redondearMoneda(fueraCohorte.filter((item) => item.naturaleza === 'Ingreso').reduce((total, item) => total + Number(item.monto || 0), 0)),
+            egresosDirectosFueraCohorte: redondearMoneda(fueraCohorte.filter((item) => item.naturaleza === 'Egreso').reduce((total, item) => total + Number(item.monto || 0), 0))
         };
     });
 
@@ -116,13 +136,24 @@ const asignarEconomiaPorCamada = ({ camadaIds = [], movimientos = [] } = {}) => 
         return [id, { monedas, movimientosDirectos: directos.length }];
     }));
 
-    return { asignaciones, resumenMonedas };
+    return {
+        asignaciones,
+        resumenMonedas,
+        cobertura: {
+            camadasIncluidas: ids.length,
+            movimientosDirectosIncluidos: [...directosPorCamada.values()].reduce((total, items) => total + items.length, 0),
+            movimientosIndirectosDistribuidos: indirectos.length,
+            movimientosDirectosFueraCohorte: directosFueraCohorte.length,
+            criterioIndirectos: 'Movimientos porcinos del período sin referencia directa a otra entidad o camada.'
+        }
+    };
 };
 
 module.exports = {
     MONEDAS_FINANCIERAS,
     asignarEconomiaPorCamada,
     calcularTotalCompraAnimal,
+    construirContratoSustentabilidad,
     crearMapaMonedas,
     distribuirMontoEquitativo,
     esMovimientoInversionOperativa,

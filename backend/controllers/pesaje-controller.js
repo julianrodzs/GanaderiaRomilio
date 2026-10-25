@@ -61,7 +61,7 @@ pesajeCtrl.createPesaje = async (req, res) => {
                 lote: validacion.animal.loteActual || null,
                 tipoPesaje: 'Individual',
                 registradoPor: req.usuario?.id
-            }], { session });
+            }], { session, ordered: true });
             await actualizarPesoActualAnimal(pesaje.animal, {
                 session,
                 organizacionId: req.organizacionId

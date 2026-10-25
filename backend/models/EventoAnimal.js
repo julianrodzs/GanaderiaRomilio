@@ -46,7 +46,17 @@ const eventoAnimalSchema = new Schema(
         moduloOrigen: { type: String, enum: MODULOS_ORIGEN, default: 'Manual' },
         referenciaId: { type: Schema.Types.ObjectId },
         creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
-        claveIdempotencia: { type: String, trim: true, maxlength: 160, select: false },
+        claveIdempotencia: {
+            type: String,
+            trim: true,
+            maxlength: 160,
+            select: false,
+            set: (valor) => {
+                if (typeof valor !== 'string') return undefined;
+                const limpio = valor.trim();
+                return limpio || undefined;
+            }
+        },
         metadata: { type: Schema.Types.Mixed }
     },
     {
@@ -59,7 +69,10 @@ eventoAnimalSchema.index({ animal: 1, fecha: -1 });
 eventoAnimalSchema.index({ animal: 1, moduloOrigen: 1, referenciaId: 1, tipoEvento: 1 });
 eventoAnimalSchema.index(
     { organizacionId: 1, fincaId: 1, claveIdempotencia: 1 },
-    { unique: true, sparse: true }
+    {
+        unique: true,
+        partialFilterExpression: { claveIdempotencia: { $type: 'string' } }
+    }
 );
 
 module.exports = model('EventoAnimal', eventoAnimalSchema);

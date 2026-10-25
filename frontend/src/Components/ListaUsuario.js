@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { useEffect, useState } from 'react';
 import Animales from './Animales';
 import Compras from './Compras';
@@ -7,7 +7,6 @@ import Finanzas from './Finanzas';
 import ImportarExcel from './ImportarExcel';
 import Navegacion from './Navegacion';
 import Pesajes from './Pesajes';
-import PlanSanitario from './PlanSanitario';
 import Potreros from './Potreros';
 import Reproduccion from './Reproduccion';
 import Reportes from './Reportes';
@@ -41,6 +40,8 @@ import { reintentarCambioOffline, sincronizarCambiosOffline } from '../services/
 import { usePlan } from '../context/PlanContext';
 import CalendarioOperativo from './CalendarioOperativo';
 import Alimentacion from './Alimentacion';
+
+const PlanSanitario = lazy(() => import('./PlanSanitario'));
 
 const obtenerRangoAnioActual = () => {
   const anio = new Date().getFullYear();
@@ -125,12 +126,25 @@ const formatearMoneda = (valor) => new Intl.NumberFormat('es-CR', {
   maximumFractionDigits: 0
 }).format(valor || 0);
 
+const formatearMonedas = (monedas, campo, hayMovimientos) => {
+  if (!hayMovimientos) return 'Sin movimientos';
+  const formatos = { CRC: { locale: 'es-CR', currency: 'CRC' }, USD: { locale: 'en-US', currency: 'USD' } };
+  const presentes = Object.entries(monedas || {})
+    .filter(([, valores]) => Number(valores?.[campo] || 0) !== 0)
+    .map(([codigo, valores]) => new Intl.NumberFormat(formatos[codigo]?.locale || 'es-CR', {
+      style: 'currency', currency: formatos[codigo]?.currency || codigo, maximumFractionDigits: 0
+    }).format(Number(valores?.[campo] || 0)));
+  return presentes.length ? presentes.join(' | ') : formatearMoneda(0);
+};
+
 const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, onLogout }) => {
   const { dashboard: imagenDashboard } = useApariencia();
   const { tieneFeature } = usePlan();
   const rol = usuario?.rol || 'Consulta';
   const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Alimentacion', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
-  const obtenerVistaInicial = () => modulosOrden.find((modulo) => puedeAccederModulo(rol, modulo)) || 'Mis tareas';
+  const obtenerVistaInicial = () => usuario?.debeCambiarContrasena
+    ? 'Configuración'
+    : modulosOrden.find((modulo) => puedeAccederModulo(rol, modulo)) || 'Mis tareas';
   const [vistaActiva, setVistaActiva] = useState(obtenerVistaInicial);
   const [tareaInicialId, setTareaInicialId] = useState('');
   const [metricas, setMetricas] = useState({
@@ -143,14 +157,15 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     lotesPorcinos: 0,
     lotesFinalizacion: 0,
     vacasReproductivas: 0,
+    cerdasReproductoras: 0,
     vacasPrenadas: 0,
     proximosPartos: 0,
     proximosCelos: 0,
     destetesProximos: 0,
     hembras: 0,
     machos: 0,
-    gastosOperativosMes: 0,
-    utilidadPerdidaMes: 0,
+    monedasSustentabilidadMes: {},
+    movimientosFinancierosMes: 0,
     potrerosDescanso: 0,
     proximasSanidad: 0,
     vencidasSanidad: 0,
@@ -195,16 +210,32 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
           obtenerResumenAlimentacionHoy()
         ]);
         const animalesActivos = animales.filter((animal) => !['Muerto', 'Vendido'].includes(animal.estado));
+        const idsAnimalesActivos = new Set(animalesActivos.map((animal) => String(animal._id)));
         const ciclosActivos = reproduccion.filter((registro) => (registro.estadoCiclo || 'Activo') === 'Activo' && registro.activoParaAlertas !== false);
-        const animalesConRegistroReproductivo = new Set(
-          reproduccion.map((registro) => registro.animal?._id || registro.animal).filter(Boolean)
-        );
+        const animalesConRegistroReproductivo = new Set(reproduccion.map((registro) => String(registro.animal?._id || registro.animal || '')).filter(Boolean));
         const vacasReproductivas = animalesActivos.filter((animal) => {
-          if (animal.sexo !== 'Hembra') return false;
+          if (animal.sexo !== 'Hembra' || (animal.especie || 'Bovino') !== 'Bovino') return false;
           const edadMeses = calcularEdadMeses(animal.fechaNacimiento);
-          return (edadMeses !== null && edadMeses >= 24) || animalesConRegistroReproductivo.has(animal._id);
+          return (edadMeses !== null && edadMeses >= 24) || animalesConRegistroReproductivo.has(String(animal._id));
         }).length;
-        const vacasPrenadas = ciclosActivos.filter((registro) => ['Gestante', 'Próxima a parto'].includes(registro.estado)).length;
+        const cerdasReproductoras = animalesActivos.filter((animal) => animal.sexo === 'Hembra'
+          && animal.especie === 'Porcino'
+          && (['Chancha', 'Cerda joven'].includes(animal.categoria) || animalesConRegistroReproductivo.has(String(animal._id)))).length;
+        const idsVacasPrenadas = new Set(ciclosActivos
+          .filter((registro) => (registro.especie || registro.animal?.especie || 'Bovino') === 'Bovino')
+          .filter((registro) => idsAnimalesActivos.has(String(registro.animal?._id || registro.animal)))
+          .filter((registro) => registro.gestacionConfirmada === true || registro.resultadoDiagnosticoGestacion === 'PREÑADA')
+          .map((registro) => String(registro.animal?._id || registro.animal)));
+        const vacasPrenadas = idsVacasPrenadas.size;
+        const hoy = new Date();
+        const limitePartos = new Date(hoy);
+        limitePartos.setDate(limitePartos.getDate() + 30);
+        const proximosPartosBovinos = new Set(ciclosActivos
+          .filter((registro) => (registro.especie || registro.animal?.especie || 'Bovino') === 'Bovino')
+          .filter((registro) => idsAnimalesActivos.has(String(registro.animal?._id || registro.animal)))
+          .filter((registro) => registro.gestacionConfirmada === true || registro.resultadoDiagnosticoGestacion === 'PREÑADA')
+          .filter((registro) => registro.fechaPartoEstimada && new Date(registro.fechaPartoEstimada) >= hoy && new Date(registro.fechaPartoEstimada) <= limitePartos)
+          .map((registro) => String(registro.animal?._id || registro.animal)));
 
         setMetricas({
           animales: animalesActivos.length,
@@ -216,14 +247,15 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
           lotesPorcinos: lotes.filter((lote) => lote.especie === 'Porcino').length,
           lotesFinalizacion: lotes.filter((lote) => lote.etapaOperativa === 'FINALIZACION').length,
           vacasReproductivas,
+          cerdasReproductoras,
           vacasPrenadas,
-          proximosPartos: ciclosActivos.filter((registro) => registro.estado === 'Próxima a parto').length,
+          proximosPartos: proximosPartosBovinos.size,
           proximosCelos: ciclosActivos.filter((registro) => registro.estado === 'Próximo celo estimado').length,
           destetesProximos: ciclosActivos.filter((registro) => registro.estado === 'Destete próximo').length,
           hembras: animalesActivos.filter((animal) => animal.sexo === 'Hembra').length,
           machos: animalesActivos.filter((animal) => animal.sexo === 'Macho').length,
-          gastosOperativosMes: sustentabilidadMes?.gastosOperativosPeriodo || 0,
-          utilidadPerdidaMes: sustentabilidadMes?.utilidadPerdida || sustentabilidadMes?.margenSustentabilidad || 0,
+          monedasSustentabilidadMes: sustentabilidadMes?.monedas || {},
+          movimientosFinancierosMes: sustentabilidadMes?.movimientosPeriodo || 0,
           potrerosDescanso: potreros.filter((potrero) => potrero.estado === 'Descanso').length,
           proximasSanidad: planes.filter((plan) => plan.estado === 'Próximo').length,
           vencidasSanidad: planes.filter((plan) => plan.estado === 'Vencido').length,
@@ -430,6 +462,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
           puedeGestionarSanidad={puedeGestionarModulo(rol, 'Sanidad') && estadoConexion.online}
           puedeCrearNotaBitacora={puedeRealizarAccion(rol, 'bitacora.crearNotas')}
           estaOnline={estadoConexion.online}
+          rolUsuario={rol}
           onNavegar={setVistaActiva}
         />
       </main>
@@ -470,7 +503,9 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <PlanSanitario soloLectura={!puedeGestionarModulo(rol, 'Sanidad') || !estadoConexion.online} />
+        <Suspense fallback={<p>Cargando sanidad...</p>}>
+          <PlanSanitario rolUsuario={rol} soloLectura={!puedeGestionarModulo(rol, 'Sanidad') || !estadoConexion.online} />
+        </Suspense>
       </main>
     );
   }
@@ -497,7 +532,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Ventas soloLectura={!puedeGestionarModulo(rol, 'Ventas') || !estadoConexion.online} />
+        <Ventas rolUsuario={rol} soloLectura={!puedeGestionarModulo(rol, 'Ventas') || !estadoConexion.online} />
       </main>
     );
   }
@@ -506,7 +541,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Compras soloLectura={!puedeGestionarModulo(rol, 'Compras') || !estadoConexion.online} />
+        <Compras rolUsuario={rol} soloLectura={!puedeGestionarModulo(rol, 'Compras') || !estadoConexion.online} />
       </main>
     );
   }
@@ -585,6 +620,11 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
           <strong>{metricas.animales}</strong>
           <small>{metricas.bovinos} bovinos / {metricas.porcinos} porcinos</small>
         </article>
+        {metricas.porcinos > 0 && <article className="metric-card">
+          <span>Cerdas reproductoras</span>
+          <strong>{metricas.cerdasReproductoras}</strong>
+          <small>Hembras porcinas adultas o con ciclo</small>
+        </article>}
         <article className="metric-card">
           <span>Sexo del hato</span>
           <strong>{metricas.hembras}</strong>
@@ -603,7 +643,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
         <article className="metric-card">
           <span>Próximos partos</span>
           <strong>{metricas.proximosPartos}</strong>
-          <small>Dentro de la ventana de alerta</small>
+          <small>Vacas confirmadas dentro de los próximos 30 días</small>
         </article>
         <article className="metric-card">
           <span>Próximos celos</span>
@@ -617,13 +657,13 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
         </article>
         <article className="metric-card">
           <span>Gastos operativos mes</span>
-          <strong>{formatearMoneda(metricas.gastosOperativosMes)}</strong>
+          <strong>{formatearMonedas(metricas.monedasSustentabilidadMes, 'gastosOperativosPeriodo', metricas.movimientosFinancierosMes > 0)}</strong>
           <small>Finanzas del mes actual</small>
         </article>
-        <article className={metricas.utilidadPerdidaMes >= 0 ? 'metric-card metric-card-positive' : 'metric-card metric-card-negative'}>
-          <span>Utilidad / pérdida estimada</span>
-          <strong>{formatearMoneda(metricas.utilidadPerdidaMes)}</strong>
-          <small>Ventas - compras - costo operativo</small>
+        <article className={Object.values(metricas.monedasSustentabilidadMes).some((item) => Number(item?.balancePeriodo || 0) < 0) ? 'metric-card metric-card-negative' : 'metric-card metric-card-positive'}>
+          <span>Balance observado del mes</span>
+          <strong>{formatearMonedas(metricas.monedasSustentabilidadMes, 'balancePeriodo', metricas.movimientosFinancierosMes > 0)}</strong>
+          <small>Ventas - compras - gastos operativos del período</small>
         </article>
         <article className="metric-card">
           <span>Potreros</span>
@@ -690,8 +730,8 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
             </article>
             <article>
               <span>Margen mes</span>
-              <strong>{formatearMoneda(metricas.utilidadPerdidaMes)}</strong>
-              <small>estimado</small>
+              <strong>{formatearMonedas(metricas.monedasSustentabilidadMes, 'balancePeriodo', metricas.movimientosFinancierosMes > 0)}</strong>
+              <small>observado</small>
             </article>
           </div>
           <div className="dashboard-logout-row">

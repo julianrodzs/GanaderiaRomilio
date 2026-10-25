@@ -40,6 +40,13 @@ const listarOrganizaciones = async (req, res) => {
 const crearOrganizacion = async (req, res) => {
     try {
         const resultado = await aprovisionarOrganizacion(req.body, req.usuarioPlataforma.id);
+        req.auditoriaOrganizacionId = resultado.organizacion._id.toString();
+        req.auditoriaEvento = 'Organización cliente creada';
+        req.auditoriaDespues = {
+            organizacionId: resultado.organizacion._id,
+            plan: resultado.organizacion.plan?.codigo,
+            fincaPrincipal: resultado.finca?._id
+        };
         res.status(201).json({
             mensaje: 'Cliente SaaS creado correctamente.',
             ...resultado
@@ -64,12 +71,18 @@ const cambiarEstadoOrganizacion = async (req, res) => {
             return res.status(400).json({ mensaje: 'Estado de organización no válido.' });
         }
 
+        const anterior = await Organizacion.findById(req.params.id).select('estado plan.codigo').lean();
+        if (!anterior) return res.status(404).json({ mensaje: 'Organización no encontrada.' });
         const organizacion = await Organizacion.findByIdAndUpdate(
             req.params.id,
             { $set: { estado } },
             { new: true, runValidators: true }
         ).populate('fincaPrincipal', 'nombre codigo');
         if (!organizacion) return res.status(404).json({ mensaje: 'Organización no encontrada.' });
+        req.auditoriaOrganizacionId = organizacion._id.toString();
+        req.auditoriaEvento = 'Estado de organización actualizado';
+        req.auditoriaAntes = { estado: anterior.estado };
+        req.auditoriaDespues = { estado: organizacion.estado };
 
         res.json({ mensaje: `Organización ${estado.toLowerCase()}.`, organizacion });
     } catch (error) {

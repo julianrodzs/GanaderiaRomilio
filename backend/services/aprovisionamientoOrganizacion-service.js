@@ -17,6 +17,7 @@ const Finca = require('../models/Finca');
 const { Membresia } = require('../models/Membresia');
 const Organizacion = require('../models/Organizacion');
 const Usuario = require('../models/Usuario');
+const Invitacion = require('../models/Invitacion');
 const {
     crearTokenRecuperacion,
     enviarCorreoInvitacion
@@ -160,12 +161,8 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
                     ...datos.administrador,
                     contrasena: await bcrypt.hash(contrasenaTemporal, 10),
                     rol: 'Administrador',
-                    estado: 'Activo'
-                }], { session });
-                usuario.resetPasswordToken = tokenHash;
-                usuario.resetPasswordExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-                usuario.resetPasswordRequestedAt = new Date();
-                await usuario.save({ session });
+                    estado: 'Inactivo'
+                }], { session, ordered: true });
             }
 
             const [organizacion] = await Organizacion.create([{
@@ -179,13 +176,13 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
                     aprovisionadaPor: creadoPor,
                     fechaAprovisionamiento: new Date()
                 }
-            }], { session });
+            }], { session, ordered: true });
 
             const [finca] = await Finca.create([{
                 organizacionId: organizacion._id,
                 ...datos.finca,
                 estado: 'Activa'
-            }], { session });
+            }], { session, ordered: true });
 
             organizacion.fincaPrincipal = finca._id;
             await organizacion.save({ session });
@@ -194,20 +191,40 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
                 organizacionId: organizacion._id,
                 usuario: usuario._id,
                 rol: 'Administrador',
-                estado: 'Activo',
+                estado: usuarioExistente ? 'Activo' : 'Inactivo',
                 esPrincipal: true,
                 accesoTodasFincas: true,
                 fincas: [finca._id]
-            }], { session });
+            }], { session, ordered: true });
 
             await ConfiguracionProductiva.create([{
                 organizacionId: organizacion._id,
                 clave: 'principal',
                 actualizadoPor: creadoPor
-            }], { session });
+            }], { session, ordered: true });
             await crearCatalogosIniciales(organizacion._id, session);
 
-            resultado = { organizacion, finca, usuario, membresia, usuarioExistente };
+            let invitacionFormal = null;
+            if (!usuarioExistente) {
+                [invitacionFormal] = await Invitacion.create([{
+                    organizacionId: organizacion._id,
+                    correo: usuario.correo,
+                    usuario: usuario._id,
+                    nombre: usuario.nombre,
+                    apellido: usuario.apellido,
+                    telefono: usuario.telefono,
+                    rol: 'Administrador',
+                    estadoMembresia: 'Activo',
+                    accesoTodasFincas: true,
+                    fincas: [finca._id],
+                    tokenHash,
+                    expiraEn: new Date(Date.now() + 72 * 60 * 60 * 1000),
+                    requiereContrasena: true,
+                    invitadoPor: creadoPor
+                }], { session, ordered: true });
+            }
+
+            resultado = { organizacion, finca, usuario, membresia, usuarioExistente, invitacionFormal };
         });
     } finally {
         await session.endSession();

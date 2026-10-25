@@ -62,7 +62,7 @@ test('bloquea DIIO duplicado dentro del mismo archivo', async () => {
     assert.ok(resultado.errores.some((item) => item.codigo === 'DUPLICADO_ARCHIVO'));
 });
 
-test('acepta columnas raciales y genealógicas opcionales', async () => {
+test('acepta columnas raciales y deja vacías las referencias genealógicas no encontradas', async () => {
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([['VERSION_PLANTILLA', '1']]), 'INSTRUCCIONES');
     XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([
@@ -72,7 +72,8 @@ test('acepta columnas raciales y genealógicas opcionales', async () => {
     const resultado = await procesarExcelPreview(XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }));
     assert.equal(resultado.valido, true);
     assert.equal(resultado.registros.Animal[0].razaPrincipal, 'Brahman');
-    assert.equal(resultado.registros.Animal[0].madreDiio, '1001');
+    assert.equal(resultado.registros.Animal[0].madreDiio, undefined);
+    assert.ok(resultado.advertencias.some((item) => item.mensaje.includes('no se encontró 1001')));
 });
 
 test('acepta razas y fracciones porcinas en el importador', async () => {

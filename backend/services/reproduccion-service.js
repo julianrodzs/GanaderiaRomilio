@@ -156,7 +156,7 @@ const conciliarCicloVacioActivo = async ({ ciclo, usuarioId, session = null, mot
         referenciaId: ciclo._id,
         creadoPor: usuarioId,
         metadata: { estadoCiclo: 'No preñada', conciliacionAutomatica: true }
-    }], { session });
+    }], { session, ordered: true });
     return true;
 };
 
@@ -196,6 +196,9 @@ const cambiarEstadoCiclo = async ({ cicloId, estadoCiclo, motivo, usuarioId }) =
             observaciones: ciclo.motivoCierre,
             registradoPor: usuarioId
         });
+    } else if (estadoCiclo === 'Cancelado') {
+        ciclo.gestacionConfirmada = false;
+        ciclo.fechaPartoEstimada = undefined;
     }
 
     const cicloGuardado = await ciclo.save();

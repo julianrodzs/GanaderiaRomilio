@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  anularGrupoFinancieroMultiFinca,
   crearGastoCompartido,
   crearTransferenciaFinancieraInterna,
   obtenerCatalogosFinancieros,
@@ -40,6 +41,18 @@ const OperacionesFinancierasMultiFinca = ({ onCerrar, onActualizado }) => {
 
   useEffect(() => { cargar(); }, []);
   const fincaActiva = useMemo(() => fincas.find((item) => item.esActiva), [fincas]);
+  const gruposAnulados = useMemo(() => new Set(movimientos
+    .filter((item) => item.referenciaModelo === 'AnulacionOperacionMultiFinca')
+    .map((item) => String(item.grupoConsolidacion))), [movimientos]);
+  const primeraFilaGrupo = useMemo(() => {
+    const vistos = new Set();
+    return new Set(movimientos.filter((item) => {
+      const grupo = String(item.grupoConsolidacion || '');
+      if (!grupo || vistos.has(grupo)) return false;
+      vistos.add(grupo);
+      return item.referenciaModelo !== 'AnulacionOperacionMultiFinca';
+    }).map((item) => item._id));
+  }, [movimientos]);
 
   const registrarTransferencia = async (evento) => {
     evento.preventDefault();
@@ -67,6 +80,17 @@ const OperacionesFinancierasMultiFinca = ({ onCerrar, onActualizado }) => {
       await crearGastoCompartido({ ...gasto, distribucion });
       setGasto(baseGasto); setSeleccionadas([]); setValores({});
       setMensaje('El gasto quedó distribuido sin duplicar el monto consolidado.');
+      await cargar(); await onActualizado?.();
+    } catch (err) { setError(err.message); } finally { setGuardando(false); }
+  };
+
+  const anularGrupo = async (grupoConsolidacion) => {
+    const motivo = window.prompt('Motivo de la anulación:');
+    if (!motivo?.trim()) return;
+    try {
+      setGuardando(true); setError(''); setMensaje('');
+      await anularGrupoFinancieroMultiFinca(grupoConsolidacion, motivo.trim());
+      setMensaje('La operación fue anulada con contrapartidas auditables.');
       await cargar(); await onActualizado?.();
     } catch (err) { setError(err.message); } finally { setGuardando(false); }
   };
@@ -112,7 +136,7 @@ const OperacionesFinancierasMultiFinca = ({ onCerrar, onActualizado }) => {
 
       <section className="finanzas-panel"><div className="panel-title compacto"><div><p className="eyebrow">Trazabilidad</p><h3>Operaciones multi-finca recientes</h3></div></div>
         <ContenidoPaginado datos={movimientos} clavePaginacion="finanzas-multifinca">
-          {(pagina) => <div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Fecha</th><th>Finca</th><th>Tipo</th><th>Naturaleza</th><th>Descripción</th><th>Monto</th></tr></thead><tbody>{pagina.map((item) => <tr key={item._id}><td>{new Date(item.fecha).toLocaleDateString('es-CR')}</td><td>{item.fincaId?.codigo || '--'}</td><td>{item.alcanceFinanciero === 'TRANSFERENCIA_INTERNA' ? 'Transferencia interna' : 'Gasto compartido'}</td><td>{item.naturaleza}</td><td>{item.descripcion}</td><td>{dinero(item.monto, item.moneda)}</td></tr>)}</tbody></table></div>}
+          {(pagina) => <div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Fecha</th><th>Finca</th><th>Tipo</th><th>Naturaleza</th><th>Descripción</th><th>Monto</th><th>Acciones</th></tr></thead><tbody>{pagina.map((item) => { const grupo = String(item.grupoConsolidacion || ''); const esAnulacion = item.referenciaModelo === 'AnulacionOperacionMultiFinca'; const anulado = gruposAnulados.has(grupo); return <tr key={item._id}><td>{new Date(item.fecha).toLocaleDateString('es-CR')}</td><td>{item.fincaId?.codigo || '--'}</td><td>{esAnulacion ? 'Anulación' : item.alcanceFinanciero === 'TRANSFERENCIA_INTERNA' ? 'Transferencia interna' : 'Gasto compartido'}</td><td>{item.naturaleza}</td><td>{item.descripcion}</td><td>{dinero(item.monto, item.moneda)}</td><td>{!esAnulacion && primeraFilaGrupo.has(item._id) ? (anulado ? <span className="estado-badge cancelado">Anulada</span> : <button className="boton-secundario compacto peligro" type="button" disabled={guardando} onClick={() => anularGrupo(grupo)}>Anular grupo</button>) : '--'}</td></tr>; })}</tbody></table></div>}
         </ContenidoPaginado>
       </section>
     </section>

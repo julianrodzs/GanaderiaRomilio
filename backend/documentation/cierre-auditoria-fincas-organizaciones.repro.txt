@@ -1,0 +1,37 @@
+OK 1 C01 find inyecta organización y finca
+OK 2 C01 findOne inyecta organización y finca
+OK 3 C01 findById inyecta organización y finca
+OK 4 C01 countDocuments inyecta organización y finca
+OK 5 C01 distinct inyecta organización y finca
+OK 6 C01 updateOne inyecta organización y finca
+OK 7 C01 updateMany inyecta organización y finca
+OK 8 C01 findOneAndUpdate inyecta organización y finca
+OK 9 C01 deleteOne inyecta organización y finca
+OK 10 C01 deleteMany inyecta organización y finca
+OK 11 C02 aggregate limita raíz y el lookup sanitario valida organización
+OK 12 C03 populate modelo aislado rechaza referencia B; Usuario global sí retorna identidad B
+OK 13 C04 sin contexto lectura obligatoria vacía; contexto solo org abarca 3 fincas
+OK 14 F01 bulkWrite inyecta organización y finca
+OK 15 F01 save/insertMany imponen el tenant del contexto
+OK 16 F01 updateOne elimina cambios de tenant
+OK 17 C05 100 contextos asíncronos entrelazados sin mezcla {"contexts":100}
+OK 18 C06 finca A2/B1 e inactiva rechazadas para Encargado A1
+OK 19 C07 reporte resuelve solo fincas autorizadas
+OK 20 C08 matriz HTTP: 3 usuarios x 4 fincas x GET/POST x 27 módulos {"requests":648,"denied":378}
+OK 21 C09 60 peticiones HTTP simultáneas no mezclan contexto {"requests":60}
+OK 22 F02 reparto exige centavos exactos y partidas positivas
+OK 23 C10 sumas y ponderaciones por finca/moneda: 3 fincas desiguales {"animales":6,"pesoPromedio":233.33333333333334,"CRC":{"ingresos":600,"egresos":3,"balance":597,"transferenciasInternas":3,"gastosCompartidos":3},"USD":{"ingresos":6,"egresos":3,"balance":3,"transferenciasInternas":3,"gastosCompartidos":3}}
+OK 24 F03 corte histórico usa Pesaje y ventana temporal de tratamientos
+OK 25 F04 agrupación mensual usa zona horaria de la organización
+OK 26 F05 consultas históricas incluyen fincas inactivas autorizadas
+OK 27 F06 traslado futuro se rechaza antes de modificar inventario {"futureAccepted":false}
+OK 28 C11 meta/cierre no acepta fincas ajenas en resolver; clave cierre estable
+OK 29 F07 downgrade conserva excedentes en solo lectura y permite elegir operativas
+OK 30 F08 respuesta tardía A1 se descarta al cambiar a A2
+OK 31 F09 carga 10000 animales una sola vez para 10 fincas {"fincas":10,"animales":10000,"ms":[25.26,25.68,21.71,26.5,30],"httpMs":[34.15,22.4,23.14,22.23,19.8],"animalRowsReadPerRun":10000,"environment":"Node v24.16.0 local win32 x64, DB adaptada en memoria; HTTP loopback sin middleware de auth"}
+OK 32 F10 administrador limitado a A1 no puede editar A2 por ID {"listedFarms":1,"unauthorizedSameOrgUpdate":403,"foreignOrgUpdate":403}
+OK 33 C12 último cupo de finca: dos creaciones concurrentes y reactivación concurrente {"createStatuses":["fulfilled","rejected"],"mixedStatuses":["fulfilled","rejected"],"scope":"Servicios reales, CAS Mongo simulado; no replica set"}
+OK 34 C13 índices de negocio contienen organización/finca y Esencial rechaza segunda especie
+OK 35 F11 fotos operativas R2 son privadas y sin URL permanente {"public":false,"cache":"private, no-store","scope":"Contrato local; bucket real no consultado"}
+OK 36 F12 operaciones financieras protegidas tienen anulación transaccional del grupo
+TOTAL 36 comprobaciones; 648 casos de matriz HTTP. Sin conexiones MongoDB.

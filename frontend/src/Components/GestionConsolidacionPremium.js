@@ -9,7 +9,8 @@ import {
   obtenerCierreMultiFinca,
   obtenerConsolidadoBandasPorcinas,
   obtenerConsolidadoProtocolosEngorde,
-  obtenerMetasMultiFinca
+  obtenerMetasMultiFinca,
+  regenerarCierreMultiFinca
 } from '../services/api';
 
 const camposMeta = [
@@ -49,6 +50,10 @@ const MontoMensual = ({ monedas = {}, campo }) => {
   if (!conMovimiento.length) return <span className="monto-sin-movimiento">--</span>;
   return <span className="montos-por-moneda">{conMovimiento.map((codigo) => <span key={codigo}><small>{codigo}</small>{formatearMonto(monedas[codigo][campo], codigo)}</span>)}</span>;
 };
+const fechaCivil = (valor) => valor ? new Date(valor).toLocaleDateString('es-CR', { timeZone: 'UTC' }) : '--';
+const monedasCompatibles = (datos = {}) => datos.monedas || { CRC: {
+  ingresos: Number(datos.ingresos || 0), egresos: Number(datos.egresos || 0), balance: Number(datos.balance || 0)
+} };
 
 const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fechaFin, especie, datos, puedeConfigurar, onActualizar }) => {
   const [metas, setMetas] = useState([]);
@@ -123,6 +128,16 @@ const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fecha
     } catch (err) { setError(err.message); } finally { setProcesando(false); }
   };
 
+  const regenerarCierre = async (id) => {
+    if (!window.confirm('Este cálculo reemplazará explícitamente el snapshot legado usando la fórmula histórica vigente. ¿Continuar?')) return;
+    try {
+      setProcesando(true); setError('');
+      await regenerarCierreMultiFinca(id);
+      await cargar();
+      setCierreDetalle(await obtenerCierreMultiFinca(id));
+    } catch (err) { setError(err.message); } finally { setProcesando(false); }
+  };
+
   const numero = (valor) => new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(Number(valor || 0));
   const evolucionAgrupada = agruparEvolucionMensual(datos?.evolucionMensual || []);
 
@@ -163,7 +178,7 @@ const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fecha
 
       <div className="consolidacion-dos-columnas">
         <section className="consolidacion-subpanel"><h3>Metas vigentes</h3>{metas.length ? metas.map((item) => <article className="meta-consolidacion-item" key={item._id}><div><strong>{item.nombre}</strong><span>{item.alcance === 'FINCA' ? item.finca?.nombre : 'Toda la organización'} · {new Date(item.fechaInicio).toLocaleDateString('es-CR')} a {new Date(item.fechaFin).toLocaleDateString('es-CR')}</span></div>{puedeConfigurar && <button className="boton-secundario compacto peligro" type="button" onClick={() => borrarMeta(item._id)}>Eliminar</button>}</article>) : <p className="reporte-vacio">Sin metas definidas.</p>}</section>
-        <section className="consolidacion-subpanel"><h3>Cierres históricos</h3>{cierres.length ? cierres.map((item) => <article className="meta-consolidacion-item" key={item._id}><div><strong>{item.nombre}</strong><span>{new Date(item.fechaInicio).toLocaleDateString('es-CR')} a {new Date(item.fechaFin).toLocaleDateString('es-CR')} · {item.fincas.length} finca(s)</span></div><div className="acciones-tabla"><span className="estado-badge activo">Cerrado</span><button type="button" onClick={() => verCierre(item._id)} disabled={procesando}>Ver</button></div></article>) : <p className="reporte-vacio">Sin períodos cerrados.</p>}</section>
+        <section className="consolidacion-subpanel"><h3>Cierres históricos</h3>{cierres.length ? cierres.map((item) => <article className="meta-consolidacion-item" key={item._id}><div><strong>{item.nombre}</strong><span>{fechaCivil(item.fechaInicio)} a {fechaCivil(item.fechaFin)} · {item.fincas.length} finca(s)</span></div><div className="acciones-tabla"><span className={`estado-badge ${item.versionCalculo === 'historico-v2' ? 'activo' : 'pendiente'}`}>{item.versionCalculo === 'historico-v2' ? 'Histórico v2' : 'Fórmula anterior'}</span><button type="button" onClick={() => verCierre(item._id)} disabled={procesando}>Ver</button>{puedeConfigurar && item.versionCalculo !== 'historico-v2' && <button type="button" onClick={() => regenerarCierre(item._id)} disabled={procesando}>Regenerar</button>}</div></article>) : <p className="reporte-vacio">Sin períodos cerrados.</p>}</section>
       </div>
 
       {cierreDetalle && (
@@ -173,7 +188,8 @@ const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fecha
               <div><p className="eyebrow">Cierre histórico</p><h2 id="titulo-cierre-historico">{cierreDetalle.nombre}</h2></div>
               <button className="boton-link" type="button" onClick={() => setCierreDetalle(null)}>Cerrar</button>
             </div>
-            <p>{new Date(cierreDetalle.fechaInicio).toLocaleDateString('es-CR')} a {new Date(cierreDetalle.fechaFin).toLocaleDateString('es-CR')} · {cierreDetalle.especie}</p>
+            <p>{fechaCivil(cierreDetalle.fechaInicio)} a {fechaCivil(cierreDetalle.fechaFin)} · {cierreDetalle.especie}</p>
+            {cierreDetalle.versionCalculo !== 'historico-v2' && <div className="alerta-formulario">Este cierre fue calculado con la fórmula anterior. Se conserva sin cambios hasta que un administrador elija regenerarlo.</div>}
             <div className="acciones-consolidacion">
               <button className="boton-secundario compacto" type="button" onClick={() => exportarCierre('xlsx')} disabled={procesando}>Descargar Excel</button>
               <button className="boton-secundario compacto" type="button" onClick={() => exportarCierre('pdf')} disabled={procesando}>Descargar PDF</button>
@@ -181,13 +197,13 @@ const GestionConsolidacionPremium = ({ fincas, seleccionadas, fechaInicio, fecha
             <div className="reportes-metricas">
               <article><span>Fincas</span><strong>{numero(cierreDetalle.datos?.consolidado?.fincas)}</strong></article>
               <article><span>Animales activos</span><strong>{numero(cierreDetalle.datos?.consolidado?.animalesActivos)}</strong></article>
-              <article><span>Ingresos</span><strong>{numero(cierreDetalle.datos?.consolidado?.ingresos)}</strong></article>
-              <article><span>Egresos</span><strong>{numero(cierreDetalle.datos?.consolidado?.egresos)}</strong></article>
-              <article><span>Balance</span><strong>{numero(cierreDetalle.datos?.consolidado?.balance)}</strong></article>
+              <article><span>Ingresos</span><strong><MontoMensual monedas={monedasCompatibles(cierreDetalle.datos?.consolidado)} campo="ingresos" /></strong></article>
+              <article><span>Egresos</span><strong><MontoMensual monedas={monedasCompatibles(cierreDetalle.datos?.consolidado)} campo="egresos" /></strong></article>
+              <article><span>Balance</span><strong><MontoMensual monedas={monedasCompatibles(cierreDetalle.datos?.consolidado)} campo="balance" /></strong></article>
             </div>
             <div className="tabla-scroll tabla-dinamica">
               <table><thead><tr><th>Finca</th><th>Activos</th><th>Peso promedio</th><th>Ingresos</th><th>Egresos</th><th>Balance</th></tr></thead>
-                <tbody>{(cierreDetalle.datos?.fincas || []).map((item) => <tr key={item.finca?._id || item.finca?.codigo}><td>{item.finca?.codigo} · {item.finca?.nombre}</td><td>{numero(item.inventario?.activos)}</td><td>{item.inventario?.pesoPromedio == null ? '--' : `${numero(item.inventario.pesoPromedio)} kg`}</td><td>{numero(item.finanzas?.ingresos)}</td><td>{numero(item.finanzas?.egresos)}</td><td>{numero(item.finanzas?.balance)}</td></tr>)}</tbody>
+                <tbody>{(cierreDetalle.datos?.fincas || []).map((item) => <tr key={item.finca?._id || item.finca?.codigo}><td>{item.finca?.codigo} · {item.finca?.nombre}</td><td>{numero(item.inventario?.activos)}</td><td>{item.inventario?.pesoPromedio == null ? '--' : `${numero(item.inventario.pesoPromedio)} kg`}</td><td><MontoMensual monedas={monedasCompatibles(item.finanzas)} campo="ingresos" /></td><td><MontoMensual monedas={monedasCompatibles(item.finanzas)} campo="egresos" /></td><td><MontoMensual monedas={monedasCompatibles(item.finanzas)} campo="balance" /></td></tr>)}</tbody>
               </table>
             </div>
           </section>

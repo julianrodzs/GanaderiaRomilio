@@ -1,5 +1,7 @@
 # Índices productivos de finca
 
+Revisión de código: **2026-10-21**. Evidencias y pendientes en [AUDIT_MODULO_REPORTES.md](../../AUDIT_MODULO_REPORTES.md). Describe implementación actual, no validación científica de las metas.
+
 Los índices se calculan bajo demanda para el período seleccionado. No se guardan en `Animal` y no se presentan como calificaciones individuales.
 
 ## Conceptos separados
@@ -36,7 +38,7 @@ GET /api/reportes/engorde?fechaInicio=&fechaFin=&especie=Todos|Bovino|Porcino
 
 `Animal.objetivoProductivo = ENGORDE` identifica los animales de engorde sin inferirlo por sexo ni categoría. `REPRODUCCION` reúne el antiguo objetivo `Cría` y `Reproducción`; la categoría describe únicamente edad y sexo.
 
-`Animal.etapaProductiva` registra la etapa porcina actual. `Pesaje.etapaProductiva` conserva la etapa en el momento del pesaje. Esto permite dividir intervalos que atraviesan cambios de etapa. Los datos antiguos sin etapa se apoyan en la etapa actual del animal; si tampoco existe, se reportan como `sinMetaProductiva` y no se normalizan.
+`Animal.etapaProductiva` registra la etapa porcina actual. `Pesaje.etapaProductiva` conserva la etapa en el momento del pesaje. Cada intervalo entre pesajes consecutivos usa la etapa del primero; si falta, toma la del segundo, la actual del animal o una categoría reconocida como etapa. No se subdivide el intervalo en la fecha exacta de un cambio de etapa. Si no existe etapa utilizable, se reporta como `sinMetaProductiva` y no se normaliza.
 
 No se asignan fases mediante rangos de peso arbitrarios.
 
@@ -65,6 +67,8 @@ Clasificación interna:
 ## ICRP
 
 El Índice de Cría Porcina usa únicamente camadas con destete cerrado. Una camada activa no se interpreta como mortalidad ni como un destete en cero.
+
+El helper considera cerrada una camada con `fechaDesteteReal` o estado Destetada/Vendida/Cerrada. La consulta selecciona por fecha de nacimiento; no representa necesariamente todos los destetes ejecutados en ese período. No excluye explícitamente una camada cancelada que conserve fecha de destete: su tratamiento necesita revisión. El resumen básico de camadas sí incluye abiertas y sus porcentajes no son equivalentes al ICRP.
 
 ```text
 30% cumplimiento de nacidos vivos por camada
@@ -115,7 +119,7 @@ Clasificación interna:
 
 ## Supervivencia y limitaciones
 
-Las muertes se asignan al período únicamente mediante `fechaMuerte`. Un animal con `estado = Muerto` sin fecha se reporta en `muertesSinFechaConfiable`, pero no se imputa silenciosamente usando `updatedAt`.
+En **IEE**, las muertes se asignan al período únicamente mediante `fechaMuerte`. Un animal con `estado = Muerto` sin fecha se reporta en `muertesSinFechaConfiable`, pero no se imputa silenciosamente usando `updatedAt`. Esto no describe el ICB: su controlador aún atribuye muertes por `updatedAt` (RP-05).
 
 La aplicación no conserva todavía el inicio histórico del objetivo Engorde. Para datos anteriores a este cambio se considera la información productiva actual y las fechas de entrada/salida disponibles.
 
@@ -131,3 +135,13 @@ El dashboard consulta `Finca.lineasProductivas` y presenta como máximo cuatro �
 - IEE-P para porcinos con objetivo `ENGORDE`.
 
 No se infiere el propósito a partir del sexo, categoría o cantidad de animales. Una finca mixta con ambos objetivos ve los cuatro; una finca especializada ve solo los aplicables.
+
+Esta selección corresponde a tarjetas según `Finca.lineasProductivas`; no implica que el cálculo de ICB filtre `Animal.objetivoProductivo`. Su denominador usa hembras actuales de ≥24 meses o con registro reproductivo. Los contadores generales de vacas del dashboard tampoco filtran especie (RP-02).
+
+## Límites auditados y relación con otros reportes
+
+- ICB usa partos como «nacidos», fecha de destete programada de RegistroReproductivo, gestaciones por FPP sin validar ciclo vigente y denominadores actuales. Con finca vacía devuelve cero/Deficiente. Son pendientes RP-03 a RP-06; no confundirlo con índices que devuelven null por insuficiencia.
+- El GMD de crecimiento por pesajes es una media de GMD individuales. Detalle de lote y consolidado de protocolos comparten cálculo por pertenencia y ponderación por animal-días; LE-13 está corregido en el árbol local auditado. El IEE de finca usa objetivo de engorde y período, no pertenencia al lote.
+- Peso equivalente bovino a 205 días: `PN + (PD − PN) × 205 / edad`, admitiendo 160–250 días. No incorpora ajuste por edad de madre, sexo ni grupo contemporáneo. Sin datos completos queda null. Los factores porcinos a 21 días no son una calificación clínica individual.
+- Índices normalizan fechas en UTC. Para eventos con hora real no representan automáticamente el día de Costa Rica (RP-15); distinguirlos de fechas civiles almacenadas a medianoche UTC.
+- El dashboard consulta APIs reales; no usa valores de ejemplo. Sus tarjetas de gastos/margen leen un contrato financiero antiguo y pueden mostrar cero (RP-01). Los estados de carga/error y actualización por cambio de alcance requieren revisión (RP-20).

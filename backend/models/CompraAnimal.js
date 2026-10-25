@@ -45,6 +45,7 @@ const compraAnimalSchema = new Schema(
         montoCalculado: { type: Number, default: 0, min: 0 },
         montoFinal: { type: Number, min: 0 },
         montoTotal: { type: Number, default: 0, min: 0 },
+        moneda: { type: String, enum: ['CRC'], default: 'CRC' },
         ajusteMonto: { type: Number, default: 0 },
         estado: {
             type: String,

@@ -1,0 +1,46 @@
+{"modulo":"Usuarios y seguridad","cobertura":["U01/02/03: DTO, invitaciones, cuentas existentes y último administrador","U04/05/06/07/08: JWT estricto, rate limit y recuperación de consumo único","U09/10/11: auditoría redactada y correo sin secretos en logs","U12/13/14: contexto offline y archivos por finca","U15/16/17: cargas opcionales, anonimización y cabeceras HTTP","Controles: roles, cuotas y cambio de organización"],"suites":["tests/usuarios-seguridad-remediacion.test.js","tests/multi-organizacion-usuario.test.js","tests/acceso-finca.test.js","tests/usuario-asignable-finca.test.js","tests/matriz-planes-seguridad.test.js","tests/offline-cron-seguridad.test.js"],"persistencia":"adaptadores locales; no lee .env"}
+✔ una membresía global puede cambiar a cualquier finca de su organización (1.4218ms)
+✔ una membresía limitada solo acepta fincas asignadas (0.3566ms)
+✔ la matriz HTTP permite y bloquea funciones según los cuatro planes (2.7751ms)
+✔ una suscripción suspendida o cancelada devuelve 403 para cualquier plan (0.6768ms)
+✔ la proyección de lotes elimina GMD y cumplimiento en Esencial (0.9608ms)
+✔ las reservas de cuota son únicas por organización y recurso (0.303ms)
+✔ la simulación de IA nunca está disponible en producción (0.2551ms)
+✔ una identidad puede tener una membresía independiente en cada organización (0.9223ms)
+✔ el JWT renovado fija organización y rol de la membresía seleccionada (1.0449ms)
+✔ el cron HTTP exige un bearer secreto y acepta la credencial correcta (1.7462ms)
+✔ el modelo Tarea conserva claves idempotentes y usa concurrencia optimista (0.3649ms)
+✔ los usuarios asignables se limitan a quienes tienen acceso a la finca activa (2.5222ms)
+✔ la validacion del responsable exige acceso a la finca activa (0.609ms)
+✔ U01 el DTO administrativo rechaza identidad, operadores y rutas Mongo (530.2631ms)
+✔ U01 cuentas existentes se conducen a invitación y no a membresía directa (0.7223ms)
+✔ U01 invitaciones son hasheadas, caducan, son únicas y verifican el correo (0.6841ms)
+✔ U02 la comprobación de estado solo se hace si el usuario existe (0.3265ms)
+✔ U03 todas las salidas de un administrador usan el bloqueo serializado (0.5043ms)
+✔ U03 dos degradaciones simultáneas conservan un administrador activo (70.5869ms)
+✔ U04 JWT exige HS256, issuer, audience, exp y duración absoluta (5.0441ms)
+✔ U04 cambiar de organización conserva authTime y vencimiento (1.3222ms)
+✔ U04 tokenVersion revoca cualquier token anterior (0.7245ms)
+✔ U04 política única rechaza claves cortas y comunes (2.1356ms)
+✔ U05 límites independientes bloquean 50 correos por IP y 50 IP por cuenta (1708.0977ms)
+✔ U06 login compara siempre bcrypt antes de revelar una cuenta inactiva (0.6819ms)
+✔ U01 invitaciones pendientes cuentan para el cupo del plan (0.3767ms)
+✔ U01 superadministradores se excluyen de lecturas y mutaciones tenant (0.3045ms)
+✔ U08 dos restablecimientos concurrentes consumen el token una sola vez (60.2222ms)
+✔ U09 el sanitizador redacta variantes anidadas y arreglos (2.6188ms)
+✔ U10 exportaciones GET y login quedan dentro de auditoría (0.8247ms)
+✔ U11 correo escapa HTML y nunca imprime el enlace secreto (0.5595ms)
+✔ U12 logout usa limpieza de todos los contextos del usuario (0.8818ms)
+✔ U13 cada acceso offline revalida exp y authTime (0.3904ms)
+✔ U14 archivos de dron exigen permiso y pertenencia de finca (0.2003ms)
+✔ U15 BandasPorcinas degrada cargas opcionales sin romper la pantalla (0.2383ms)
+✔ U16 conserva autoría mediante anonimización y registra consentimiento (0.3203ms)
+✔ U17 agrega cabeceras de seguridad, proxy confiable y HTTPS en producción (0.2083ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2541.8859

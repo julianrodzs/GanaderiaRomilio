@@ -84,7 +84,7 @@ const estadoInicial = {
   montoFinal: ''
 };
 
-const Ventas = ({ soloLectura = false }) => {
+const Ventas = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const [ventas, setVentas] = useState([]);
   const [animales, setAnimales] = useState([]);
   const [camadas, setCamadas] = useState([]);
@@ -705,7 +705,7 @@ const Ventas = ({ soloLectura = false }) => {
                     <button type="button" title="Ver detalle" onClick={() => setDetalle(venta)}>⊙</button>
                     {!soloLectura && venta.estado !== 'Anulada' && <button type="button" title="Editar" onClick={() => abrirEdicion(venta)}>✎</button>}
                     {!soloLectura && venta.estado !== 'Anulada' && <button type="button" title="Anular" onClick={() => anularVenta(venta)}>↺</button>}
-                    {!soloLectura && <button type="button" title="Eliminar" onClick={() => borrarVenta(venta)}>⌫</button>}
+                    {!soloLectura && rolUsuario === 'Administrador' && <button type="button" title="Eliminar" onClick={() => borrarVenta(venta)}>⌫</button>}
                   </div>
                 </td>
               </tr>

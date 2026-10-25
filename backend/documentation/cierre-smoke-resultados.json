@@ -1,0 +1,5799 @@
+{
+  "fecha": "2026-10-25T20:21:18.387Z",
+  "modo": "HTTP real + MongoDB replica set temporal, correo simulado",
+  "steps": [
+    {
+      "step": "1 Aprovisionar organización y aceptar invitación administrador",
+      "status": "PASS",
+      "details": {
+        "org": "6ade64cccb32bf050c36e3f7",
+        "finca": "6ade64cccb32bf050c36e3f9"
+      }
+    },
+    {
+      "step": "2 Login y alta de Encargado y Veterinario",
+      "status": "PASS",
+      "details": {
+        "roles": [
+          "Encargado",
+          "Veterinario"
+        ],
+        "temporal": true
+      }
+    },
+    {
+      "step": "3 Potrero de pastoreo y lote de engorde",
+      "status": "PASS",
+      "details": {
+        "potrero": "6ade64cdcb32bf050c36e473",
+        "lote": "6ade64cdcb32bf050c36e47f"
+      }
+    },
+    {
+      "step": "4 Dos bovinos, pertenencia al lote y rotación",
+      "status": "PASS",
+      "details": {
+        "hembra": "6ade64cdcb32bf050c36e4a0",
+        "macho": "6ade64cdcb32bf050c36e4be",
+        "lote": "6ade64cdcb32bf050c36e47f",
+        "potrero": "6ade64cdcb32bf050c36e473"
+      }
+    },
+    {
+      "step": "5 Pesajes del lote y suministro de alimentación",
+      "status": "PASS",
+      "details": {
+        "totalKg": 20
+      }
+    },
+    {
+      "step": "6 Tratamiento con retiro y advertencia de venta",
+      "status": "PASS",
+      "details": {
+        "status": 409,
+        "retiros": 1
+      }
+    },
+    {
+      "step": "7 Ciclo, parto, ternero y consumo de cupo",
+      "status": "PASS",
+      "details": {
+        "ternero": "6ade64cdcb32bf050c36e5fd",
+        "madre": "6ade64cdcb32bf050c36e4a0",
+        "antes": 2,
+        "despues": 3
+      }
+    },
+    {
+      "step": "8 Venta confirmada, salida del lote e ingreso CRC",
+      "status": "PASS",
+      "details": {
+        "venta": "6ade64cecb32bf050c36e624",
+        "estado": "Vendido",
+        "pertenencias": 0,
+        "ingreso": 900,
+        "moneda": "CRC"
+      }
+    },
+    {
+      "step": "9 Dashboard y reporte de resumen",
+      "status": "PASS",
+      "details": {
+        "animales": 3,
+        "activos": 2,
+        "partos": 1,
+        "ingresos": 900,
+        "moneda": "CRC"
+      }
+    },
+    {
+      "step": "X1 Traslado entre fincas con plugin de aislamiento",
+      "status": "PASS",
+      "details": {
+        "finca2": "6ade64cecb32bf050c36e6a6",
+        "animal": "6ade64cdcb32bf050c36e4a0"
+      }
+    },
+    {
+      "step": "X2 Transferencia, gasto compartido y anulaciones",
+      "status": "PASS",
+      "details": [
+        {
+          "route": "transferencias",
+          "movimientos": 4,
+          "neto": 0
+        },
+        {
+          "route": "gastos-compartidos",
+          "movimientos": 4,
+          "neto": 0
+        }
+      ]
+    },
+    {
+      "step": "X2R Anulación de grupos preexistentes sintéticos",
+      "status": "PASS",
+      "details": [
+        {
+          "kind": "TRANSFERENCIA_INTERNA",
+          "status": 200
+        },
+        {
+          "kind": "GASTO_COMPARTIDO",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "step": "X3 Compra y egreso automático",
+      "status": "PASS",
+      "details": {
+        "egreso": 600,
+        "moneda": "CRC"
+      }
+    },
+    {
+      "step": "X4 Importación Excel y confirmación transaccional",
+      "status": "PASS",
+      "details": {
+        "mensaje": "Importación estándar aplicada completamente.",
+        "modo": "solo_crear",
+        "resultado": {
+          "Potrero": {
+            "creados": 0,
+            "actualizados": 0,
+            "duplicados": 0,
+            "omitidos": 0,
+            "errores": []
+          },
+          "Animal": {
+            "creados": 1,
+            "actualizados": 0,
+            "duplicados": 0,
+            "omitidos": 0,
+            "errores": []
+          },
+          "MovimientoFinanciero": {
+            "creados": 0,
+            "actualizados": 0,
+            "duplicados": 0,
+            "omitidos": 0,
+            "errores": []
+          },
+          "Pesaje": {
+            "creados": 0,
+            "actualizados": 0,
+            "duplicados": 0,
+            "omitidos": 0,
+            "errores": []
+          }
+        },
+        "importacionId": "6ade64cfcb32bf050c36e8be",
+        "estado": "Aplicada",
+        "hojasDetectadas": [
+          {
+            "nombre": "INVENTARIO",
+            "reconocida": true,
+            "_id": "6ade64cfcb32bf050c36e8bf"
+          }
+        ],
+        "resumenDetectado": {
+          "Potrero": 0,
+          "Animal": 1,
+          "MovimientoFinanciero": 0,
+          "Pesaje": 0,
+          "filasInvalidas": 0
+        },
+        "advertencias": [
+          {
+            "hoja": "INSTRUCCIONES",
+            "mensaje": "El archivo no declara VERSION_PLANTILLA. Se validará con la versión actual.",
+            "_id": "6ade64cfcb32bf050c36e8c0"
+          }
+        ]
+      }
+    },
+    {
+      "step": "X5 Cron con organizaciones y fincas reales",
+      "status": "PASS",
+      "details": [
+        {
+          "route": "alertas",
+          "resultado": {
+            "ejecutado": true,
+            "organizacionesProcesadas": 1,
+            "notificacionesCreadas": 0,
+            "correosEnviados": 0,
+            "categoriasAnimalesActualizadas": 1,
+            "resultados": [
+              {
+                "organizacionId": "6ade64cccb32bf050c36e3f7",
+                "organizacion": "Empresa Audit Local",
+                "notificacionesCreadas": 0,
+                "correos": {
+                  "enviadas": 0,
+                  "alertasEnviadas": 0,
+                  "errores": []
+                },
+                "categoriasAnimales": {
+                  "revisados": 4,
+                  "actualizados": 1
+                }
+              }
+            ]
+          }
+        },
+        {
+          "route": "resumenes-email",
+          "resultado": {
+            "ejecutado": true,
+            "organizacionesProcesadas": 1,
+            "correosEnviados": 0,
+            "resultados": [
+              {
+                "organizacionId": "6ade64cccb32bf050c36e3f7",
+                "envios": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": "X6 Selector organizaciones, finca y revocación tokenVersion",
+      "status": "PASS",
+      "details": {
+        "cambioOrganizacion": true,
+        "conservaExpAuthTime": true,
+        "fincaAjena": 403,
+        "tokenRevocado": [
+          401,
+          401,
+          401
+        ]
+      }
+    }
+  ],
+  "requests": [
+    {
+      "method": "POST",
+      "url": "/api/admin/organizaciones",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/invitaciones/aceptar",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/invitaciones/aceptar",
+      "status": 400,
+      "body": {
+        "mensaje": "La invitación es inválida o ha expirado."
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/usuarios/login",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/usuarios",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/usuarios",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/potreros",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/lotes",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/animales",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "url": "/api/animales",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/animales",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "url": "/api/animales",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/lotes/6ade64cdcb32bf050c36e47f/animales",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/lotes/6ade64cdcb32bf050c36e47f/cambiar-potrero",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/lotes/6ade64cdcb32bf050c36e47f/pesajes",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "url": "/api/alimentacion/alimentos",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/alimentacion/suministros",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/tratamientos-sanitarios",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/ventas",
+      "status": 409,
+      "body": {
+        "alertaRetiro": true,
+        "mensaje": "1 animal mantiene un periodo de retiro de carne activo. Confirma conscientemente para continuar.",
+        "diasFaltantes": 30,
+        "medicamento": "Producto sintético",
+        "fechaFinRetiroCarne": "2026-11-24T20:07:09.764Z",
+        "retiros": [
+          {
+            "animalId": "6ade64cdcb32bf050c36e4be",
+            "animal": "CR-AUD-M01",
+            "medicamento": "Producto sintético",
+            "fechaFinRetiroCarne": "2026-11-24T20:07:09.764Z",
+            "diasFaltantes": 30
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "/api/plan/actual",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/reproduccion",
+      "status": 201
+    },
+    {
+      "method": "PUT",
+      "url": "/api/reproduccion/6ade64cdcb32bf050c36e5a4",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/reproduccion/6ade64cdcb32bf050c36e5a4/ternero",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "url": "/api/plan/actual",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/ventas",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "url": "/api/reportes/resumen",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "/api/animales",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "/api/reportes/multi-finca",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/animales",
+      "status": 400,
+      "body": {
+        "mensaje": "Fallo de evento provocado",
+        "error": "Fallo de evento provocado"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/fincas",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/fincas/traslados",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "url": "/api/animales",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "/api/animales",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/fincas/traslados",
+      "status": 500,
+      "body": {
+        "mensaje": "Fallo de evento traslado provocado"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/transferencias",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e705/anular",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "/api/finanzas/multi-finca",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/gastos-compartidos",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e73b/anular",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "/api/finanzas/multi-finca",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e766/anular",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e783/anular",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/transferencias",
+      "status": 500,
+      "body": {
+        "mensaje": "Fallo provocado en segunda partida"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/gastos-compartidos",
+      "status": 500,
+      "body": {
+        "mensaje": "Fallo provocado segunda finca"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/transferencias",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e7cd/anular",
+      "status": 500,
+      "body": {
+        "mensaje": "Fallo auditoría anulación provocado"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e7cd/anular",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e7cd/anular",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/gastos-compartidos",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e81e/anular",
+      "status": 500,
+      "body": {
+        "mensaje": "Fallo auditoría anulación provocado"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e81e/anular",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/finanzas/multi-finca/grupos/6ade64cecb32bf050c36e81e/anular",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/compras",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "url": "/api/finanzas",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/compras",
+      "status": 400,
+      "body": {
+        "mensaje": "Las compras de animales operan en CRC. Esta moneda no está soportada.",
+        "error": "Las compras de animales operan en CRC. Esta moneda no está soportada."
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/ventas",
+      "status": 400,
+      "body": {
+        "mensaje": "Las ventas de animales operan en CRC. Esta moneda no está soportada.",
+        "error": "Las ventas de animales operan en CRC. Esta moneda no está soportada."
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/importar/excel",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/importar/excel/confirmar",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "url": "/api/animales",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/cron/alertas",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/cron/resumenes-email",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "/api/admin/organizaciones",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "url": "/api/usuarios/cambiar-organizacion-activa",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "/api/animales",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "/api/animales",
+      "status": 403,
+      "body": {
+        "mensaje": "No autorizado",
+        "error": "La finca seleccionada no existe o está inactiva.",
+        "code": "FINCA_NOT_AVAILABLE"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/usuarios/cambiar-organizacion-activa",
+      "status": 200
+    },
+    {
+      "method": "PUT",
+      "url": "/api/usuarios/perfil",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "/api/usuarios/perfil",
+      "status": 401,
+      "body": {
+        "mensaje": "La sesión fue revocada. Inicia sesión nuevamente.",
+        "code": "SESSION_REVOKED"
+      }
+    },
+    {
+      "method": "GET",
+      "url": "/api/animales",
+      "status": 401,
+      "body": {
+        "mensaje": "La sesión fue revocada. Inicia sesión nuevamente.",
+        "code": "SESSION_REVOKED"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/usuarios/cambiar-organizacion-activa",
+      "status": 401,
+      "body": {
+        "mensaje": "La sesión fue revocada. Inicia sesión nuevamente.",
+        "code": "SESSION_REVOKED"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/usuarios/login",
+      "status": 200
+    }
+  ],
+  "checks": [
+    {
+      "id": "INDICES_65_MODELOS",
+      "status": "PASS",
+      "details": {
+        "modelos": 65,
+        "mongodb": "8.0.5"
+      }
+    },
+    {
+      "id": "MIGRACION_INDICE_SPARSE_EN_OTRA_BASE",
+      "status": "PASS",
+      "details": {
+        "indiceParcial": true,
+        "claveNulaOmitida": true,
+        "baseAislada": true
+      }
+    },
+    {
+      "id": "SCRIPT_INDICES_65_MODELOS_E_IDEMPOTENCIA",
+      "status": "PASS",
+      "details": {
+        "ejecuciones": [
+          {
+            "exit": 0,
+            "modelos": 65
+          },
+          {
+            "exit": 0,
+            "modelos": 65
+          }
+        ],
+        "produccion": true,
+        "baseAislada": true
+      }
+    },
+    {
+      "id": "ALTA_ANIMAL_ROLLBACK_EVENTO",
+      "status": "PASS",
+      "details": {
+        "status": 400,
+        "animalesPersistidos": 0
+      }
+    },
+    {
+      "id": "EVENTOS_IDEMPOTENCIA_Y_CLAVES_OMITIDAS",
+      "status": "PASS",
+      "details": {
+        "sinClave": 4,
+        "conClave": 1,
+        "deduplicado": true
+      }
+    },
+    {
+      "id": "TRASLADO_HISTORIAL_Y_ROLLBACK",
+      "status": "PASS",
+      "details": {
+        "bitacoraEnAmbasFincas": true,
+        "rollbackCompleto": true,
+        "status": 500
+      }
+    },
+    {
+      "id": "TRANSFERENCIA_ROLLBACK_SEGUNDA_PARTIDA",
+      "status": "PASS",
+      "details": {
+        "status": 500,
+        "partidasPersistidas": 0
+      }
+    },
+    {
+      "id": "GASTO_Y_ANULACIONES_ROLLBACK_E_IDEMPOTENCIA",
+      "status": "PASS",
+      "details": [
+        {
+          "route": "transferencias",
+          "rollbackCompleto": true,
+          "anulacionIdempotente": true,
+          "neto": 0
+        },
+        {
+          "route": "gastos-compartidos",
+          "rollbackCompleto": true,
+          "anulacionIdempotente": true,
+          "neto": 0
+        }
+      ]
+    },
+    {
+      "id": "COMPRAVENTAS_RECHAZAN_USD",
+      "status": "PASS",
+      "details": {
+        "compra": 400,
+        "venta": 400,
+        "persistenciaAlterada": false
+      }
+    }
+  ],
+  "indices": {
+    "Membresia": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "usuario": 1
+        },
+        "name": "usuario_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "usuario": 1
+        },
+        "name": "organizacionId_1_usuario_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "rol": 1,
+          "estado": 1
+        },
+        "name": "organizacionId_1_rol_1_estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "usuario": 1,
+          "estado": 1,
+          "esPrincipal": -1
+        },
+        "name": "usuario_1_estado_1_esPrincipal_-1",
+        "background": true
+      }
+    ],
+    "Organizacion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "slug": 1
+        },
+        "name": "slug_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1
+        },
+        "name": "estado_1",
+        "background": true
+      }
+    ],
+    "Usuario": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "correo": 1
+        },
+        "name": "correo_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "esSuperAdministrador": 1
+        },
+        "name": "esSuperAdministrador_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "rol": 1
+        },
+        "name": "rol_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1
+        },
+        "name": "estado_1",
+        "background": true
+      }
+    ],
+    "Finca": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "codigo": 1
+        },
+        "name": "organizacionId_1_codigo_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "estado": 1,
+          "nombre": 1
+        },
+        "name": "organizacionId_1_estado_1_nombre_1",
+        "background": true
+      }
+    ],
+    "Animal": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1
+        },
+        "name": "especie_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "identificadorFinca": 1
+        },
+        "name": "organizacionId_1_fincaId_1_identificadorFinca_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "diio": 1
+        },
+        "name": "organizacionId_1_diio_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "diio": {
+            "$type": "string"
+          }
+        }
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1
+        },
+        "name": "estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estadoSanitario": 1
+        },
+        "name": "estadoSanitario_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fechaFinRetiroCarne": 1
+        },
+        "name": "fechaFinRetiroCarne_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "sexo": 1
+        },
+        "name": "sexo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "potreroActual": 1
+        },
+        "name": "potreroActual_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "estado": 1
+        },
+        "name": "especie_1_estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "categoria": 1
+        },
+        "name": "especie_1_categoria_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "objetivoProductivo": 1,
+          "estado": 1
+        },
+        "name": "especie_1_objetivoProductivo_1_estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "camadaOrigen": 1,
+          "categoria": 1
+        },
+        "name": "camadaOrigen_1_categoria_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1,
+          "potreroActual": 1
+        },
+        "name": "estado_1_potreroActual_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "loteActual": 1,
+          "estado": 1
+        },
+        "name": "loteActual_1_estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "madre": 1,
+          "fechaNacimiento": -1
+        },
+        "name": "organizacionId_1_fincaId_1_madre_1_fechaNacimiento_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "padre": 1,
+          "fechaNacimiento": -1
+        },
+        "name": "organizacionId_1_fincaId_1_padre_1_fechaNacimiento_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "madreDiio": 1,
+          "fechaNacimiento": -1
+        },
+        "name": "organizacionId_1_fincaId_1_madreDiio_1_fechaNacimiento_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "padreDiio": 1,
+          "fechaNacimiento": -1
+        },
+        "name": "organizacionId_1_fincaId_1_padreDiio_1_fechaNacimiento_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "especie": 1,
+          "grupoRacial": 1
+        },
+        "name": "organizacionId_1_fincaId_1_especie_1_grupoRacial_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "claveImportacion": 1
+        },
+        "name": "organizacionId_1_fincaId_1_claveImportacion_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "claveImportacion": {
+            "$type": "string"
+          }
+        }
+      }
+    ],
+    "Camada": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "codigoCamada": 1
+        },
+        "name": "organizacionId_1_fincaId_1_codigoCamada_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "madre": 1,
+          "fechaNacimiento": -1
+        },
+        "name": "madre_1_fechaNacimiento_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "registroReproductivo": 1
+        },
+        "name": "registroReproductivo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1,
+          "destino": 1
+        },
+        "name": "estado_1_destino_1",
+        "background": true
+      }
+    ],
+    "VentaAnimal": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1,
+          "fechaVenta": -1
+        },
+        "name": "estado_1_fechaVenta_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "estado": 1,
+          "fechaVenta": -1
+        },
+        "name": "especie_1_estado_1_fechaVenta_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "comprador": 1
+        },
+        "name": "comprador_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animales.animal": 1
+        },
+        "name": "animales.animal_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "camadas.camada": 1
+        },
+        "name": "camadas.camada_1",
+        "background": true
+      }
+    ],
+    "Invitacion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "tokenHash": 1
+        },
+        "name": "tokenHash_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "expiraEn": 1
+        },
+        "name": "expiraEn_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1
+        },
+        "name": "estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "correo": 1,
+          "estado": 1
+        },
+        "name": "organizacionId_1_correo_1_estado_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "estado": "Pendiente"
+        }
+      }
+    ],
+    "UsoPlan": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "periodo": 1
+        },
+        "name": "organizacionId_1_periodo_1",
+        "background": true,
+        "unique": true
+      }
+    ],
+    "ReservaCuotaPlan": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "recurso": 1
+        },
+        "name": "organizacionId_1_recurso_1",
+        "background": true,
+        "unique": true
+      }
+    ],
+    "Auditoria": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "createdAt": -1
+        },
+        "name": "createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "usuario": 1,
+          "createdAt": -1
+        },
+        "name": "usuario_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "modulo": 1,
+          "createdAt": -1
+        },
+        "name": "modulo_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1,
+          "createdAt": -1
+        },
+        "name": "estado_1_createdAt_-1",
+        "background": true
+      }
+    ],
+    "EventoFacturacion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "proveedor": 1,
+          "eventoId": 1
+        },
+        "name": "proveedor_1_eventoId_1",
+        "background": true,
+        "unique": true
+      }
+    ],
+    "BloqueoSeguridad": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "clave": 1
+        },
+        "name": "clave_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "expiraEn": 1
+        },
+        "name": "expiraEn_1",
+        "background": true,
+        "expireAfterSeconds": 0
+      }
+    ],
+    "RateLimitSeguridad": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "clave": 1
+        },
+        "name": "clave_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "expiraEn": 1
+        },
+        "name": "expiraEn_1",
+        "background": true,
+        "expireAfterSeconds": 0
+      }
+    ],
+    "TrabajoProgramado": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "clave": 1
+        },
+        "name": "clave_1",
+        "background": true,
+        "unique": true
+      }
+    ],
+    "Notificacion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "destinatario": 1
+        },
+        "name": "destinatario_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "leida": 1
+        },
+        "name": "leida_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "destinatario": 1,
+          "createdAt": -1
+        },
+        "name": "destinatario_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "destinatario": 1,
+          "leida": 1,
+          "createdAt": -1
+        },
+        "name": "destinatario_1_leida_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "destinatario": 1,
+          "dedupKey": 1
+        },
+        "name": "organizacionId_1_destinatario_1_dedupKey_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "dedupKey": {
+            "$type": "string"
+          }
+        }
+      }
+    ],
+    "AlertaCorreo": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "clave": 1
+        },
+        "name": "organizacionId_1_clave_1",
+        "background": true,
+        "unique": true
+      }
+    ],
+    "Tarea": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "asignadoA": 1,
+          "estado": 1,
+          "fechaProgramada": 1
+        },
+        "name": "asignadoA_1_estado_1_fechaProgramada_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fechaProgramada": 1
+        },
+        "name": "fechaProgramada_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "prioridad": 1
+        },
+        "name": "prioridad_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "referenciaId": 1,
+          "moduloOrigen": 1,
+          "creadoAutomaticamente": 1
+        },
+        "name": "referenciaId_1_moduloOrigen_1_creadoAutomaticamente_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "lote": 1,
+          "estado": 1,
+          "fechaProgramada": 1
+        },
+        "name": "lote_1_estado_1_fechaProgramada_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "estado": 1,
+          "fechaProgramada": 1
+        },
+        "name": "especie_1_estado_1_fechaProgramada_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "operacionesIdempotentes.clave": 1
+        },
+        "name": "operacionesIdempotentes.clave_1",
+        "background": true
+      }
+    ],
+    "Potrero": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "tipoArea": 1
+        },
+        "name": "tipoArea_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "codigo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_codigo_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1
+        },
+        "name": "estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "tipoArea": 1,
+          "estado": 1
+        },
+        "name": "organizacionId_1_fincaId_1_tipoArea_1_estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "claveImportacion": 1
+        },
+        "name": "organizacionId_1_fincaId_1_claveImportacion_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "claveImportacion": {
+            "$type": "string"
+          }
+        }
+      }
+    ],
+    "Lote": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "codigo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_codigo_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "especie": 1,
+          "estado": 1
+        },
+        "name": "organizacionId_1_fincaId_1_especie_1_estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "proposito": 1,
+          "etapaOperativa": 1,
+          "estado": 1
+        },
+        "name": "organizacionId_1_fincaId_1_proposito_1_etapaOperativa_1_estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "ubicacionActual": 1,
+          "estado": 1
+        },
+        "name": "ubicacionActual_1_estado_1",
+        "background": true
+      }
+    ],
+    "ConfiguracionEmail": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "usuario": 1
+        },
+        "name": "usuario_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "usuario": 1
+        },
+        "name": "organizacionId_1_usuario_1",
+        "background": true,
+        "unique": true
+      }
+    ],
+    "MovimientoFinanciero": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "alcanceFinanciero": 1
+        },
+        "name": "alcanceFinanciero_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "grupoConsolidacion": 1
+        },
+        "name": "grupoConsolidacion_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "excluirConsolidacion": 1
+        },
+        "name": "excluirConsolidacion_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fecha": -1
+        },
+        "name": "fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "tipoMovimiento": 1,
+          "fecha": -1
+        },
+        "name": "tipoMovimiento_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "categoria": 1,
+          "fecha": -1
+        },
+        "name": "categoria_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "categoriaNormalizada": 1,
+          "fecha": -1
+        },
+        "name": "categoriaNormalizada_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "producto": 1,
+          "unidad": 1,
+          "fecha": -1
+        },
+        "name": "producto_1_unidad_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "producto": 1,
+          "unidadNormalizada": 1,
+          "fecha": -1
+        },
+        "name": "producto_1_unidadNormalizada_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "destinoUso": 1,
+          "fecha": -1
+        },
+        "name": "destinoUso_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "tipoMovimiento": 1,
+          "tipoTrabajo": 1,
+          "fecha": -1
+        },
+        "name": "tipoMovimiento_1_tipoTrabajo_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "tipoMovimiento": 1,
+          "tipoInversion": 1,
+          "fecha": -1
+        },
+        "name": "tipoMovimiento_1_tipoInversion_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "referenciaModelo": 1,
+          "referenciaId": 1
+        },
+        "name": "referenciaModelo_1_referenciaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "grupoConsolidacion": 1,
+          "fincaId": 1
+        },
+        "name": "organizacionId_1_grupoConsolidacion_1_fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "claveImportacion": 1
+        },
+        "name": "organizacionId_1_fincaId_1_claveImportacion_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "claveImportacion": {
+            "$type": "string"
+          }
+        }
+      }
+    ],
+    "CatalogoFinanciero": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "tipo": 1,
+          "nombreNormalizado": 1
+        },
+        "name": "organizacionId_1_tipo_1_nombreNormalizado_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "tipo": 1,
+          "activo": 1,
+          "nombre": 1
+        },
+        "name": "tipo_1_activo_1_nombre_1",
+        "background": true
+      }
+    ],
+    "ConfiguracionProductiva": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "clave": 1
+        },
+        "name": "organizacionId_1_clave_1",
+        "background": true,
+        "unique": true
+      }
+    ],
+    "ConteoDrone": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "potrero": 1,
+          "fechaVuelo": -1
+        },
+        "name": "potrero_1_fechaVuelo_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "claveOperacion": 1
+        },
+        "name": "organizacionId_1_claveOperacion_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "claveOperacion": {
+            "$type": "string"
+          }
+        }
+      }
+    ],
+    "ArchivoMultimedia": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animalId": 1
+        },
+        "name": "animalId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "uso": 1
+        },
+        "name": "uso_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "clave": 1
+        },
+        "name": "clave_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "activo": 1
+        },
+        "name": "activo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "uso": 1,
+          "activo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_uso_1_activo_1",
+        "background": true
+      }
+    ],
+    "CierreConsolidado": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "clave": 1
+        },
+        "name": "organizacionId_1_clave_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fechaFin": -1
+        },
+        "name": "organizacionId_1_fechaFin_-1",
+        "background": true
+      }
+    ],
+    "HistorialFincaAnimal": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "animal": 1,
+          "fecha": 1
+        },
+        "name": "organizacionId_1_animal_1_fecha_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaDestino": 1,
+          "fecha": -1
+        },
+        "name": "organizacionId_1_fincaDestino_1_fecha_-1",
+        "background": true
+      }
+    ],
+    "MetaConsolidacion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "alcance": 1,
+          "finca": 1,
+          "fechaInicio": 1,
+          "fechaFin": 1
+        },
+        "name": "organizacionId_1_alcance_1_finca_1_fechaInicio_1_fechaFin_1",
+        "background": true
+      }
+    ],
+    "TrasladoFinca": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fecha": -1
+        },
+        "name": "organizacionId_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaOrigen": 1,
+          "fincaDestino": 1,
+          "fecha": -1
+        },
+        "name": "organizacionId_1_fincaOrigen_1_fincaDestino_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "animales.animal": 1,
+          "fecha": -1
+        },
+        "name": "organizacionId_1_animales.animal_1_fecha_-1",
+        "background": true
+      }
+    ],
+    "RegistroReproductivo": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animal": 1,
+          "fechaMonta": -1
+        },
+        "name": "animal_1_fechaMonta_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "estado": 1
+        },
+        "name": "especie_1_estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1
+        },
+        "name": "estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fechaProximoCelo": 1
+        },
+        "name": "fechaProximoCelo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fechaPartoEstimada": 1
+        },
+        "name": "fechaPartoEstimada_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fechaPartoReal": 1
+        },
+        "name": "fechaPartoReal_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "fechaInseminacion": 1
+        },
+        "name": "especie_1_fechaInseminacion_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animal": 1,
+          "estadoCiclo": 1,
+          "activoParaAlertas": 1
+        },
+        "name": "animal_1_estadoCiclo_1_activoParaAlertas_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "campanaIATF": 1,
+          "animal": 1
+        },
+        "name": "campanaIATF_1_animal_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "bandaReproductivaPorcina": 1,
+          "animal": 1
+        },
+        "name": "bandaReproductivaPorcina_1_animal_1",
+        "background": true
+      }
+    ],
+    "AplicacionSanitaria": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1
+        },
+        "name": "especie_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fechaAplicacion": -1
+        },
+        "name": "fechaAplicacion_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animales": 1,
+          "fechaAplicacion": -1
+        },
+        "name": "animales_1_fechaAplicacion_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "naturaleza": 1,
+          "fechaAplicacion": -1
+        },
+        "name": "naturaleza_1_fechaAplicacion_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "tratamiento": 1,
+          "numeroAplicacion": 1
+        },
+        "name": "organizacionId_1_tratamiento_1_numeroAplicacion_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "tratamiento": {
+            "$type": "objectId"
+          },
+          "numeroAplicacion": {
+            "$type": "number"
+          }
+        }
+      },
+      {
+        "v": 2,
+        "key": {
+          "planSanitario": 1,
+          "fechaAplicacion": -1
+        },
+        "name": "planSanitario_1_fechaAplicacion_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "responsableUsuario": 1,
+          "fechaAplicacion": -1
+        },
+        "name": "responsableUsuario_1_fechaAplicacion_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "lote": 1,
+          "fechaAplicacion": -1
+        },
+        "name": "lote_1_fechaAplicacion_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "claveIdempotencia": 1
+        },
+        "name": "organizacionId_1_fincaId_1_claveIdempotencia_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "claveIdempotencia": {
+            "$type": "string"
+          }
+        }
+      },
+      {
+        "v": 2,
+        "key": {
+          "fechaFinRetiroCarne": 1
+        },
+        "name": "fechaFinRetiroCarne_1",
+        "background": true
+      }
+    ],
+    "TratamientoSanitario": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1
+        },
+        "name": "especie_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "estado": 1,
+          "proximaAplicacion": 1
+        },
+        "name": "especie_1_estado_1_proximaAplicacion_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animales": 1,
+          "fechaInicio": -1
+        },
+        "name": "animales_1_fechaInicio_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "producto": 1,
+          "fechaInicio": -1
+        },
+        "name": "producto_1_fechaInicio_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "lote": 1,
+          "fechaInicio": -1
+        },
+        "name": "lote_1_fechaInicio_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fechaFinRetiroCarne": 1
+        },
+        "name": "fechaFinRetiroCarne_1",
+        "background": true
+      }
+    ],
+    "EventoAnimal": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animal": 1,
+          "fecha": -1
+        },
+        "name": "animal_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animal": 1,
+          "moduloOrigen": 1,
+          "referenciaId": 1,
+          "tipoEvento": 1
+        },
+        "name": "animal_1_moduloOrigen_1_referenciaId_1_tipoEvento_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "claveIdempotencia": 1
+        },
+        "name": "organizacionId_1_fincaId_1_claveIdempotencia_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "claveIdempotencia": {
+            "$type": "string"
+          }
+        }
+      }
+    ],
+    "PertenenciaLote": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1,
+          "activo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1_activo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "animal": 1,
+          "fechaEntrada": -1
+        },
+        "name": "organizacionId_1_fincaId_1_animal_1_fechaEntrada_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "animal": 1
+        },
+        "name": "organizacionId_1_fincaId_1_animal_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "activo": true
+        }
+      }
+    ],
+    "Pesaje": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animal": 1,
+          "fecha": -1
+        },
+        "name": "animal_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "animal": 1,
+          "fecha": -1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_animal_1_fecha_-1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "claveImportacion": 1
+        },
+        "name": "organizacionId_1_fincaId_1_claveImportacion_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "claveImportacion": {
+            "$type": "string"
+          }
+        }
+      }
+    ],
+    "EventoCamada": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "camada": 1,
+          "fecha": -1
+        },
+        "name": "camada_1_fecha_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "camada": 1,
+          "moduloOrigen": 1,
+          "referenciaId": 1,
+          "tipoEvento": 1
+        },
+        "name": "camada_1_moduloOrigen_1_referenciaId_1_tipoEvento_1",
+        "background": true
+      }
+    ],
+    "BandaReproductivaPorcina": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "estado": 1,
+          "fechaInicio": -1
+        },
+        "name": "organizacionId_1_fincaId_1_estado_1_fechaInicio_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "participantes.animal": 1,
+          "estado": 1
+        },
+        "name": "organizacionId_1_fincaId_1_participantes.animal_1_estado_1",
+        "background": true
+      }
+    ],
+    "CampanaIATF": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "estado": 1,
+          "fechaHoraInicio": -1
+        },
+        "name": "organizacionId_1_fincaId_1_estado_1_fechaHoraInicio_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "participantes.animal": 1,
+          "estado": 1
+        },
+        "name": "participantes.animal_1_estado_1",
+        "background": true
+      }
+    ],
+    "CicloEngorde": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "estado": 1,
+          "fechaInicio": -1
+        },
+        "name": "organizacionId_1_fincaId_1_estado_1_fechaInicio_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "estado": "ACTIVO"
+        }
+      }
+    ],
+    "AsignacionPlanAlimentacion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "plan": 1,
+          "activo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_plan_1_activo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1,
+          "fechaInicio": -1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1_fechaInicio_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "activo": true
+        }
+      }
+    ],
+    "HistorialEtapaLote": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1,
+          "fechaInicio": -1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1_fechaInicio_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "fechaFin": null
+        }
+      }
+    ],
+    "EventoLote": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1,
+          "fecha": -1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1_fecha_-1",
+        "background": true
+      }
+    ],
+    "RotacionPotrero": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "loteRef": 1,
+          "fechaEntrada": -1
+        },
+        "name": "loteRef_1_fechaEntrada_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "loteRef": 1
+        },
+        "name": "organizacionId_1_fincaId_1_loteRef_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "loteRef": {
+            "$type": "objectId"
+          },
+          "estado": "Activa"
+        }
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "potrero": 1,
+          "estado": 1
+        },
+        "name": "una_rotacion_activa_por_potrero",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "estado": "Activa"
+        }
+      }
+    ],
+    "AsignacionRacionLote": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1,
+          "fechaInicio": -1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1_fechaInicio_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "racion": 1,
+          "activo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_racion_1_activo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "activo": true
+        }
+      }
+    ],
+    "SuministroAlimentacion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "lote": 1,
+          "fechaHora": -1
+        },
+        "name": "organizacionId_1_fincaId_1_lote_1_fechaHora_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "fechaHora": -1
+        },
+        "name": "organizacionId_1_fincaId_1_fechaHora_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "registradoPor": 1,
+          "fechaHora": -1
+        },
+        "name": "organizacionId_1_fincaId_1_registradoPor_1_fechaHora_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "detalles.alimento": 1,
+          "fechaHora": -1
+        },
+        "name": "detalles.alimento_1_fechaHora_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "claveIdempotencia": 1
+        },
+        "name": "organizacionId_1_fincaId_1_claveIdempotencia_1",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "claveIdempotencia": {
+            "$type": "string"
+          }
+        }
+      }
+    ],
+    "CompraAnimal": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1,
+          "fechaCompra": -1
+        },
+        "name": "estado_1_fechaCompra_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "estado": 1,
+          "fechaCompra": -1
+        },
+        "name": "especie_1_estado_1_fechaCompra_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "proveedor": 1
+        },
+        "name": "proveedor_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animales.animal": 1
+        },
+        "name": "animales.animal_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "loteAsignado": 1
+        },
+        "name": "loteAsignado_1",
+        "background": true
+      }
+    ],
+    "DiagnosticoGestacionIATF": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "campanaIATF": 1,
+          "animal": 1,
+          "fecha": -1
+        },
+        "name": "campanaIATF_1_animal_1_fecha_-1",
+        "background": true
+      }
+    ],
+    "EjecucionPasoIATF": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "campana": 1,
+          "fechaHoraProgramada": 1
+        },
+        "name": "organizacionId_1_fincaId_1_campana_1_fechaHoraProgramada_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "campana": 1,
+          "pasoPlantilla": 1
+        },
+        "name": "campana_1_pasoPlantilla_1",
+        "background": true,
+        "unique": true
+      }
+    ],
+    "PlanSanitario": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "archivado": 1
+        },
+        "name": "archivado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1,
+          "proximaAplicacion": 1
+        },
+        "name": "estado_1_proximaAplicacion_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "grupoGanado": 1
+        },
+        "name": "grupoGanado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "especie": 1,
+          "estado": 1
+        },
+        "name": "especie_1_estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "animales": 1
+        },
+        "name": "animales_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "lote": 1,
+          "estado": 1
+        },
+        "name": "lote_1_estado_1",
+        "background": true
+      }
+    ],
+    "RegistroSanitario": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      }
+    ],
+    "PlanAlimentacion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "especie": 1,
+          "proposito": 1,
+          "activo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_especie_1_proposito_1_activo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "nombre": 1
+        },
+        "name": "organizacionId_1_fincaId_1_nombre_1",
+        "background": true
+      }
+    ],
+    "Alimento": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "nombreNormalizado": 1
+        },
+        "name": "organizacionId_1_fincaId_1_nombreNormalizado_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "tipo": 1,
+          "activo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_tipo_1_activo_1",
+        "background": true
+      }
+    ],
+    "Racion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "especie": 1,
+          "proposito": 1,
+          "activo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_especie_1_proposito_1_activo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "planAlimentacion": 1,
+          "activo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_planAlimentacion_1_activo_1",
+        "background": true
+      }
+    ],
+    "CorteForraje": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "potrero": 1
+        },
+        "name": "potrero_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fechaCorte": 1
+        },
+        "name": "fechaCorte_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "forraje": 1
+        },
+        "name": "forraje_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "potrero": 1,
+          "fechaCorte": -1
+        },
+        "name": "organizacionId_1_fincaId_1_potrero_1_fechaCorte_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "forraje": 1,
+          "fechaCorte": -1
+        },
+        "name": "organizacionId_1_fincaId_1_forraje_1_fechaCorte_-1",
+        "background": true
+      }
+    ],
+    "HistorialCoberturaPotrero": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "potrero": 1
+        },
+        "name": "potrero_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "potrero": 1,
+          "fechaInicio": 1
+        },
+        "name": "organizacionId_1_fincaId_1_potrero_1_fechaInicio_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "potrero": 1,
+          "fechaInicio": 1,
+          "fechaFin": 1
+        },
+        "name": "organizacionId_1_fincaId_1_potrero_1_fechaInicio_1_fechaFin_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "potrero": 1,
+          "fechaFin": 1
+        },
+        "name": "una_cobertura_vigente_por_potrero",
+        "background": true,
+        "unique": true,
+        "partialFilterExpression": {
+          "fechaFin": null
+        }
+      }
+    ],
+    "CatalogoPasto": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "clave": 1
+        },
+        "name": "clave_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "categoria": 1
+        },
+        "name": "categoria_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "activo": 1
+        },
+        "name": "activo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "categoria": 1,
+          "activo": 1,
+          "orden": 1,
+          "nombre": 1
+        },
+        "name": "categoria_1_activo_1_orden_1_nombre_1",
+        "background": true
+      }
+    ],
+    "InsumoReproductivo": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "categoria": 1,
+          "activo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_categoria_1_activo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "nombre": 1,
+          "lote": 1
+        },
+        "name": "organizacionId_1_fincaId_1_nombre_1_lote_1",
+        "background": true
+      }
+    ],
+    "EventoCampanaIATF": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "campana": 1,
+          "fecha": -1
+        },
+        "name": "campana_1_fecha_-1",
+        "background": true
+      }
+    ],
+    "PlantillaProtocoloIATF": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "activo": 1,
+          "nombre": 1
+        },
+        "name": "organizacionId_1_fincaId_1_activo_1_nombre_1",
+        "background": true
+      }
+    ],
+    "PlantillaProtocoloEngorde": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "nombre": 1,
+          "version": -1
+        },
+        "name": "organizacionId_1_fincaId_1_nombre_1_version_-1",
+        "background": true
+      }
+    ],
+    "PlantillaProtocoloReproductivoPorcino": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "nombre": 1,
+          "version": -1
+        },
+        "name": "organizacionId_1_fincaId_1_nombre_1_version_-1",
+        "background": true
+      }
+    ],
+    "ImportacionExcel": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "hashArchivo": 1
+        },
+        "name": "hashArchivo_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "estado": 1
+        },
+        "name": "estado_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "usuario": 1
+        },
+        "name": "usuario_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "expiraEn": 1
+        },
+        "name": "expiraEn_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "hashArchivo": 1
+        },
+        "name": "organizacionId_1_fincaId_1_hashArchivo_1",
+        "background": true
+      }
+    ],
+    "BloqueoImportacion": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true,
+        "unique": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "expiraEn": 1
+        },
+        "name": "expiraEn_1",
+        "background": true,
+        "expireAfterSeconds": 0
+      }
+    ],
+    "Costo": [
+      {
+        "v": 2,
+        "key": {
+          "_id": 1
+        },
+        "name": "_id_"
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1
+        },
+        "name": "organizacionId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "fincaId": 1
+        },
+        "name": "fincaId_1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_createdAt_-1",
+        "background": true
+      },
+      {
+        "v": 2,
+        "key": {
+          "organizacionId": 1,
+          "fincaId": 1,
+          "createdAt": -1
+        },
+        "name": "organizacionId_1_fincaId_1_createdAt_-1",
+        "background": true
+      }
+    ]
+  },
+  "monedaSolicitada": "CRC",
+  "diagnosticoSinIndiceEventos": false,
+  "mongo": {
+    "port": 54935,
+    "dir": "C:\\Users\\julil\\AppData\\Local\\Temp\\ganaderia-cierre-7ZdcgA",
+    "replicaSet": "cierreAudit",
+    "dbName": "cierre_smoke"
+  },
+  "planAntesTernero": {
+    "plan": {
+      "codigo": "PREMIUM",
+      "nombre": "Premium",
+      "precioMensualUSD": 60,
+      "estado": "Activo",
+      "vigente": true,
+      "especiePlan": null,
+      "modoEspecies": "AMBAS",
+      "proveedorPago": null,
+      "fechaRenovacion": null,
+      "fechaExpiracion": null
+    },
+    "limites": {
+      "animales": 10000,
+      "usuarios": 50,
+      "fincas": 10,
+      "conteosDrone": null,
+      "conteosDroneBovinos": null,
+      "modoConteoDrone": "USO_INTENSIVO"
+    },
+    "uso": {
+      "animalesActuales": 2,
+      "animalesPorEspecie": {
+        "bovinos": 2,
+        "porcinos": 0,
+        "porcinosIndividuales": 0,
+        "criasPorcinasColectivas": 0,
+        "total": 2
+      },
+      "usuariosActuales": 3,
+      "fincasActuales": 1,
+      "conteosDroneMes": 0,
+      "emailsOperativosMes": 0,
+      "periodo": "2026-10"
+    },
+    "sobreLimite": {
+      "animales": false,
+      "usuarios": false,
+      "fincas": false,
+      "conteosDrone": false
+    },
+    "funcionalidades": {
+      "centroAlertas": true,
+      "emailsOperativos": true,
+      "reportesBasicos": true,
+      "analiticaProductiva": true,
+      "analiticaEconomica": true,
+      "ambosTiposAnimales": true,
+      "configuracionEmailAvanzada": true,
+      "reportesMultiFinca": true,
+      "auditoriaAvanzada": true,
+      "bancosForrajeros": true,
+      "lotes": true,
+      "planesAlimentacion": true,
+      "iatfReproductivo": true,
+      "protocolosEngorde": true,
+      "protocolosReproductivosPorcinos": true,
+      "fotosAnimales": true,
+      "operacionMultiFinca": true
+    },
+    "rolesPermitidos": [
+      "Administrador",
+      "Encargado",
+      "Trabajador",
+      "Veterinario",
+      "Contador",
+      "Consulta"
+    ],
+    "caracteristicasComerciales": {
+      "soportePrioritario": true
+    },
+    "fincasOperativas": [
+      {
+        "_id": "6ade64cccb32bf050c36e3f9",
+        "nombre": "Finca principal",
+        "codigo": "PRINCIPAL",
+        "estado": "Activa"
+      }
+    ],
+    "fincasSoloLectura": []
+  },
+  "herenciaTernero": {
+    "madre": "6ade64cdcb32bf050c36e4a0",
+    "madreDiio": "CR-AUD-H01",
+    "especie": "Bovino",
+    "raza": "Brahman",
+    "fincaId": "6ade64cccb32bf050c36e3f9"
+  },
+  "planDespuesTernero": {
+    "plan": {
+      "codigo": "PREMIUM",
+      "nombre": "Premium",
+      "precioMensualUSD": 60,
+      "estado": "Activo",
+      "vigente": true,
+      "especiePlan": null,
+      "modoEspecies": "AMBAS",
+      "proveedorPago": null,
+      "fechaRenovacion": null,
+      "fechaExpiracion": null
+    },
+    "limites": {
+      "animales": 10000,
+      "usuarios": 50,
+      "fincas": 10,
+      "conteosDrone": null,
+      "conteosDroneBovinos": null,
+      "modoConteoDrone": "USO_INTENSIVO"
+    },
+    "uso": {
+      "animalesActuales": 3,
+      "animalesPorEspecie": {
+        "bovinos": 3,
+        "porcinos": 0,
+        "porcinosIndividuales": 0,
+        "criasPorcinasColectivas": 0,
+        "total": 3
+      },
+      "usuariosActuales": 3,
+      "fincasActuales": 1,
+      "conteosDroneMes": 0,
+      "emailsOperativosMes": 0,
+      "periodo": "2026-10"
+    },
+    "sobreLimite": {
+      "animales": false,
+      "usuarios": false,
+      "fincas": false,
+      "conteosDrone": false
+    },
+    "funcionalidades": {
+      "centroAlertas": true,
+      "emailsOperativos": true,
+      "reportesBasicos": true,
+      "analiticaProductiva": true,
+      "analiticaEconomica": true,
+      "ambosTiposAnimales": true,
+      "configuracionEmailAvanzada": true,
+      "reportesMultiFinca": true,
+      "auditoriaAvanzada": true,
+      "bancosForrajeros": true,
+      "lotes": true,
+      "planesAlimentacion": true,
+      "iatfReproductivo": true,
+      "protocolosEngorde": true,
+      "protocolosReproductivosPorcinos": true,
+      "fotosAnimales": true,
+      "operacionMultiFinca": true
+    },
+    "rolesPermitidos": [
+      "Administrador",
+      "Encargado",
+      "Trabajador",
+      "Veterinario",
+      "Contador",
+      "Consulta"
+    ],
+    "caracteristicasComerciales": {
+      "soportePrioritario": true
+    },
+    "fincasOperativas": [
+      {
+        "_id": "6ade64cccb32bf050c36e3f9",
+        "nombre": "Finca principal",
+        "codigo": "PRINCIPAL",
+        "estado": "Activa"
+      }
+    ],
+    "fincasSoloLectura": []
+  },
+  "ventaVerificada": {
+    "estado": "Vendido",
+    "pertenencias": 0,
+    "movimientos": [
+      {
+        "monto": 900,
+        "moneda": "CRC"
+      }
+    ]
+  },
+  "dashboard": {
+    "resumen": {
+      "filtros": {
+        "fechaInicio": null,
+        "fechaFin": null,
+        "partosFechaInicio": null,
+        "partosFechaFin": null,
+        "diio": null,
+        "especie": null
+      },
+      "inventario": {
+        "totalAnimales": 3,
+        "porSexo": [
+          {
+            "sexo": "Macho",
+            "cantidad": 2
+          },
+          {
+            "sexo": "Hembra",
+            "cantidad": 1
+          }
+        ],
+        "porEstado": [
+          {
+            "estado": "Activo",
+            "cantidad": 2
+          },
+          {
+            "estado": "Vendido",
+            "cantidad": 1
+          }
+        ],
+        "pesoPromedio": 435,
+        "animalesConPeso": 2
+      },
+      "potreros": {
+        "totalPotreros": 1,
+        "porEstado": [
+          {
+            "estado": "Ocupado",
+            "cantidad": 1
+          }
+        ],
+        "rotacionesActivas": [
+          {
+            "_id": "6ade64cdcb32bf050c36e4fd",
+            "potrero": {
+              "_id": "6ade64cdcb32bf050c36e473",
+              "codigo": "P-01",
+              "nombre": "Pastoreo audit",
+              "tipoArea": "PASTOREO",
+              "area": 2,
+              "estado": "Ocupado",
+              "pastoPrincipal": null,
+              "pastosSecundarios": [],
+              "leguminosasAsociadas": [],
+              "porcentajesCobertura": [],
+              "organizacionId": "6ade64cccb32bf050c36e3f7",
+              "fincaId": "6ade64cccb32bf050c36e3f9",
+              "createdAt": "2026-10-25T20:21:33.385Z",
+              "updatedAt": "2026-10-25T20:21:33.609Z",
+              "__v": 0
+            },
+            "lote": "ENG-01",
+            "loteRef": "6ade64cdcb32bf050c36e47f",
+            "fechaEntrada": "2026-10-24T20:21:33.588Z",
+            "numeroAnimales": 2,
+            "estado": "Activa",
+            "organizacionId": "6ade64cccb32bf050c36e3f7",
+            "fincaId": "6ade64cccb32bf050c36e3f9",
+            "createdAt": "2026-10-25T20:21:33.606Z",
+            "updatedAt": "2026-10-25T20:21:33.606Z",
+            "__v": 0
+          }
+        ]
+      },
+      "sanidad": {
+        "porEstado": [],
+        "alertas": []
+      },
+      "finanzas": {
+        "porNaturaleza": [
+          {
+            "naturaleza": "Ingreso",
+            "moneda": "CRC",
+            "total": 900,
+            "cantidad": 1
+          }
+        ],
+        "porTipo": [
+          {
+            "tipoMovimiento": "Venta de animales",
+            "moneda": "CRC",
+            "total": 900,
+            "cantidad": 1
+          }
+        ],
+        "porCategoria": [],
+        "porMes": [
+          {
+            "anio": 2026,
+            "mes": 10,
+            "moneda": "CRC",
+            "total": 900,
+            "cantidad": 1
+          }
+        ],
+        "gastosPorMes": []
+      },
+      "drone": {
+        "totalConteos": 0,
+        "porEstado": []
+      },
+      "reproduccion": {
+        "partos": {
+          "anios": [
+            2026
+          ],
+          "resumen": {
+            "totalPartos": 1,
+            "vacasConPartos": 1,
+            "vacasCumplen": 1,
+            "vacasBajoObjetivo": 0,
+            "vacasRevisar": 0
+          },
+          "porVaca": [
+            {
+              "animalId": "6ade64cdcb32bf050c36e4a0",
+              "diio": "CR-AUD-H01",
+              "nombre": "",
+              "fechaNacimiento": "2023-07-13T20:21:33.424Z",
+              "totalPartos": 1,
+              "ultimoParto": "2026-10-25T20:14:21.897Z",
+              "partosPorAnio": {
+                "2026": 1
+              },
+              "edadMeses": 39,
+              "promedioAnual": 1,
+              "aniosCumplidos": 1,
+              "aniosSinParto": 0,
+              "aniosRevisar": 0,
+              "estado": "Cumple"
+            }
+          ]
+        }
+      }
+    },
+    "multi": {
+      "filtros": {
+        "fechaInicio": "2026-01-01T06:00:00.000Z",
+        "fechaFin": "2026-10-26T05:59:59.999Z",
+        "especie": "Todos"
+      },
+      "consolidado": {
+        "fincas": 1,
+        "animalesActivos": 2,
+        "bovinos": 2,
+        "porcinos": 0,
+        "animalesConPeso": 1,
+        "ingresos": 900,
+        "egresos": 0,
+        "transferenciasInternas": 0,
+        "gastosCompartidos": 0,
+        "partos": 1,
+        "destetes": 0,
+        "aplicaciones": 1,
+        "tratamientosActivos": 1,
+        "traslados": 0,
+        "pesoPromedio": 420,
+        "balance": 900,
+        "monedas": {
+          "CRC": {
+            "ingresos": 900,
+            "egresos": 0,
+            "balance": 900,
+            "transferenciasInternas": 0,
+            "gastosCompartidos": 0
+          }
+        }
+      },
+      "fincas": [
+        {
+          "finca": {
+            "_id": "6ade64cccb32bf050c36e3f9",
+            "codigo": "PRINCIPAL",
+            "nombre": "Finca principal"
+          },
+          "inventario": {
+            "activos": 2,
+            "bovinos": 2,
+            "porcinos": 0,
+            "animalesConPeso": 1,
+            "pesoTotal": 420,
+            "pesoPromedio": 420
+          },
+          "finanzas": {
+            "ingresos": 900,
+            "egresos": 0,
+            "balance": 900,
+            "transferenciasEntrantes": 0,
+            "transferenciasSalientes": 0,
+            "transferenciaInternaNeta": 0,
+            "gastosCompartidos": 0,
+            "monedas": {
+              "CRC": {
+                "ingresos": 900,
+                "egresos": 0,
+                "balance": 900,
+                "transferenciasEntrantes": 0,
+                "transferenciasSalientes": 0,
+                "gastosCompartidos": 0
+              }
+            }
+          },
+          "reproduccion": {
+            "partos": 1,
+            "destetes": 0,
+            "pesoDestetePromedio": null
+          },
+          "sanidad": {
+            "aplicaciones": 1,
+            "tratamientosActivos": 1
+          },
+          "traslados": {
+            "entradas": 0,
+            "salidas": 0
+          },
+          "participacion": {
+            "inventarioPct": 100,
+            "ingresosPct": 100,
+            "egresosPct": 0
+          }
+        }
+      ],
+      "evolucionMensual": [
+        {
+          "fincaId": "6ade64cccb32bf050c36e3f9",
+          "moneda": "CRC",
+          "anio": 2026,
+          "mes": 10,
+          "ingresos": 900,
+          "egresos": 0,
+          "balance": 900
+        }
+      ],
+      "metas": []
+    }
+  },
+  "finanzasMulti": [
+    {
+      "route": "transferencias",
+      "movimientos": 4,
+      "neto": 0
+    },
+    {
+      "route": "gastos-compartidos",
+      "movimientos": 4,
+      "neto": 0
+    }
+  ],
+  "anulacionesFixtures": [
+    {
+      "kind": "TRANSFERENCIA_INTERNA",
+      "status": 200
+    },
+    {
+      "kind": "GASTO_COMPARTIDO",
+      "status": 200
+    }
+  ],
+  "compraRespuesta": {
+    "_id": "6ade64cecb32bf050c36e874",
+    "especie": "Bovino",
+    "fechaCompra": "2026-10-25T20:21:34.755Z",
+    "proveedor": "Proveedor sintético",
+    "animales": [
+      {
+        "identificadorFinca": "CR-AUD-COMPRA",
+        "diio": "CR-AUD-COMPRA",
+        "sexo": "Macho",
+        "objetivoProductivo": "SIN_DEFINIR",
+        "fechaNacimiento": "2024-11-24T20:21:34.755Z",
+        "pesoCompraKg": 300,
+        "precioKg": 2,
+        "subtotal": 600,
+        "animal": {
+          "_id": "6ade64cecb32bf050c36e876",
+          "identificadorFinca": "CR-AUD-COMPRA",
+          "diio": "CR-AUD-COMPRA",
+          "especie": "Bovino",
+          "categoria": "Novillo",
+          "objetivoProductivo": "SIN_DEFINIR",
+          "sexo": "Macho",
+          "razaPrincipal": "Desconocida",
+          "razaSecundaria": null,
+          "grupoRacial": "Desconocido",
+          "gradoRacial": "Desconocido",
+          "variedadRacial": null,
+          "descripcionRacial": null,
+          "composicionRacial": null,
+          "fraccionRazaPrincipal": null,
+          "fraccionRazaSecundaria": null,
+          "origenGenealogico": "Externo",
+          "fechaNacimiento": "2024-11-24T20:21:34.755Z",
+          "pesoActual": 300,
+          "pesoCompra": 300,
+          "precioCompraPorKg": 2,
+          "montoCompra": 600,
+          "proveedorCompra": "Proveedor sintético",
+          "compraId": "6ade64cecb32bf050c36e874",
+          "fechaCompra": "2026-10-25T20:21:34.755Z",
+          "estado": "Activo",
+          "estadoSanitario": "Sano",
+          "fechaFinRetiroCarne": null,
+          "medicamentoEnRetiro": "",
+          "fotoPrincipal": null,
+          "organizacionId": "6ade64cccb32bf050c36e3f7",
+          "fincaId": "6ade64cccb32bf050c36e3f9",
+          "createdAt": "2026-10-25T20:21:34.786Z",
+          "updatedAt": "2026-10-25T20:21:34.786Z",
+          "__v": 0
+        }
+      }
+    ],
+    "totalAnimales": 1,
+    "pesoTotalKg": 300,
+    "montoCalculado": 600,
+    "montoTotal": 600,
+    "moneda": "CRC",
+    "ajusteMonto": 0,
+    "estado": "Confirmada",
+    "registradoPor": {
+      "_id": "6ade64cccb32bf050c36e3f5",
+      "nombre": "Admin",
+      "apellido": "",
+      "correo": "admin@example.test",
+      "rol": "Administrador"
+    },
+    "organizacionId": "6ade64cccb32bf050c36e3f7",
+    "fincaId": "6ade64cccb32bf050c36e3f9",
+    "createdAt": "2026-10-25T20:21:34.784Z",
+    "updatedAt": "2026-10-25T20:21:34.790Z",
+    "__v": 0
+  },
+  "importPreview": {
+    "versionPlantilla": "1",
+    "versionArchivo": null,
+    "valido": true,
+    "hojasDetectadas": [
+      {
+        "nombre": "INVENTARIO",
+        "reconocida": true,
+        "auxiliar": false
+      }
+    ],
+    "resumen": {
+      "Potrero": 0,
+      "Animal": 1,
+      "MovimientoFinanciero": 0,
+      "Pesaje": 0,
+      "filasInvalidas": 0
+    },
+    "muestras": {
+      "Potrero": [],
+      "Animal": [
+        {
+          "filaOrigen": 2,
+          "identificadorFinca": "CR-AUD-IMPORT",
+          "diio": "CR-AUD-IMPORT",
+          "especie": "Bovino",
+          "sexo": "Macho",
+          "categoria": "Ternero",
+          "camposProporcionados": [
+            "DIIO",
+            "ESPECIE",
+            "SEXO",
+            "CATEGORIA"
+          ],
+          "operacion": "crear",
+          "cambios": [],
+          "claveImportacion": "e126deb2f9ef424c047956ceb94314e86c10e3180da51f988190a061edc21771"
+        }
+      ],
+      "MovimientoFinanciero": [],
+      "Pesaje": []
+    },
+    "duplicados": [],
+    "errores": [],
+    "advertencias": [
+      {
+        "hoja": "INSTRUCCIONES",
+        "mensaje": "El archivo no declara VERSION_PLANTILLA. Se validará con la versión actual."
+      }
+    ],
+    "importacionId": "6ade64cfcb32bf050c36e8be",
+    "puedeConfirmar": true
+  }
+}

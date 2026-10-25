@@ -11,6 +11,7 @@ import {
 import FeatureGate from './FeatureGate';
 import InfoLunarFecha from './InfoLunarFecha';
 import TablaDinamica from './TablaDinamica';
+import { cargarOpcional } from '../utils/cargarOpcional';
 import { etiquetaUsuarioConRol, nombreUsuario } from '../utils/usuarios';
 
 const fechaTexto = (valor) => valor ? new Date(valor).toLocaleDateString('es-CR') : '--';
@@ -95,7 +96,10 @@ const DetalleBanco = ({ banco, onCerrar, onRegistrar, soloLectura }) => {
   const [tareas, setTareas] = useState([]);
   const [error, setError] = useState('');
   useEffect(() => {
-    Promise.all([obtenerCortesForraje(banco._id), obtenerTareas({ potrero: banco._id, moduloOrigen: 'Potreros' })])
+    Promise.all([
+      obtenerCortesForraje(banco._id),
+      cargarOpcional(() => obtenerTareas({ potrero: banco._id, moduloOrigen: 'Potreros' }), [])
+    ])
       .then(([cortesData, tareasData]) => { setCortes(cortesData); setTareas(tareasData); })
       .catch((err) => setError(err.message));
   }, [banco._id]);

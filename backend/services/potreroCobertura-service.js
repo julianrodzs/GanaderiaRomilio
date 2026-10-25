@@ -180,31 +180,29 @@ const obtenerCoberturaPotrero = async (potreroId) => {
 const guardarCobertura = async (potreroId, datos, opciones = {}) => {
     const fechaCambio = diaUTC(datos.fechaCambio || datos.fechaInicio || new Date());
     if (!fechaCambio) throw new Error('La fecha del cambio de cobertura es inválida.');
-    const potrero = await Potrero.findById(potreroId);
-    if (!potrero) return null;
-    const cobertura = await prepararCobertura(datos, potrero.tipoArea);
-
-    const vigente = await HistorialCoberturaPotrero.findOne({ potrero: potreroId, fechaFin: null }).sort({ fechaInicio: -1 });
-    if (opciones.soloInicial && vigente) {
-        const error = new Error('El potrero ya tiene una cobertura vigente. Utilice la opción de cambiar cobertura.');
-        error.codigo = 'COBERTURA_EXISTENTE';
-        throw error;
-    }
-    if (vigente && fechaCambio < diaUTC(vigente.fechaInicio)) {
-        throw new Error('La fecha del cambio debe ser posterior al inicio de la cobertura vigente.');
-    }
-
-    const sesion = await mongoose.startSession();
     let nuevoHistorial;
-    try {
-        await sesion.withTransaction(async () => {
+    const ejecutar = async (sesion) => {
+        const potrero = await Potrero.findById(potreroId).session(sesion || null);
+        if (!potrero) return null;
+        const cobertura = await prepararCobertura(datos, potrero.tipoArea);
+        const vigente = await HistorialCoberturaPotrero.findOne({ potrero: potreroId, fechaFin: null })
+            .sort({ fechaInicio: -1 })
+            .session(sesion || null);
+        if (opciones.soloInicial && vigente) {
+            const error = new Error('El potrero ya tiene una cobertura vigente. Utilice la opción de cambiar cobertura.');
+            error.codigo = 'COBERTURA_EXISTENTE';
+            throw error;
+        }
+        if (vigente && fechaCambio < diaUTC(vigente.fechaInicio)) {
+            throw new Error('La fecha del cambio debe ser posterior al inicio de la cobertura vigente.');
+        }
             if (vigente && fechaCambio.getTime() === diaUTC(vigente.fechaInicio).getTime()) {
                 Object.assign(vigente, cobertura);
-                await vigente.save({ session: sesion });
+                await vigente.save(sesion ? { session: sesion } : {});
                 nuevoHistorial = vigente;
             } else if (vigente) {
                 vigente.fechaFin = new Date(fechaCambio.getTime() - MS_DIA);
-                await vigente.save({ session: sesion });
+                await vigente.save(sesion ? { session: sesion } : {});
             }
             if (!nuevoHistorial) {
                 [nuevoHistorial] = await HistorialCoberturaPotrero.create([{
@@ -213,14 +211,24 @@ const guardarCobertura = async (potreroId, datos, opciones = {}) => {
                     fechaInicio: fechaCambio,
                     fechaFin: null,
                     registradoPor: opciones.usuarioId || null
-                }], { session: sesion });
+                }], sesion ? { session: sesion, ordered: true } : {});
             }
             Object.assign(potrero, cobertura);
-            await potrero.save({ session: sesion });
-        });
-    } finally {
-        await sesion.endSession();
+            await potrero.save(sesion ? { session: sesion } : {});
+        return nuevoHistorial;
+    };
+
+    if (opciones.session) {
+        await ejecutar(opciones.session);
+    } else {
+        const sesion = await mongoose.startSession();
+        try {
+            await sesion.withTransaction(() => ejecutar(sesion));
+        } finally {
+            await sesion.endSession();
+        }
     }
+    if (!nuevoHistorial) return null;
     return poblarCobertura(HistorialCoberturaPotrero.findById(nuevoHistorial._id)).lean();
 };
 

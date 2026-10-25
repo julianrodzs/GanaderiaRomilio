@@ -39,6 +39,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp}'],
         cleanupOutdatedCaches: true
       }
@@ -53,6 +54,19 @@ export default defineConfig({
     esbuildOptions: {
       loader: {
         '.js': 'jsx'
+      }
+    }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react')) return 'react-vendor';
+          const normalizado = id.replace(/\\/g, '/');
+          const pesado = normalizado.match(/\/src\/Components\/(Reportes|GestionConsolidacionPremium|IATF|ImportarExcel)\.js$/);
+          if (pesado) return `vista-${pesado[1].toLowerCase()}`;
+          return undefined;
+        }
       }
     }
   },

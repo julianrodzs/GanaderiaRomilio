@@ -1,0 +1,12 @@
+ARRANQUE_SIN_VARIABLES {"exit":1,"nota":"Entrypoint real con listen/conexión instrumentados: aborta antes de conectar o escuchar"}
+EMAIL_TEST_TO_PRODUCCION {"destino":[],"ignorado":true}
+CORREO_SIN_API_KEY {"rechazado":"El proveedor de correo no está configurado.","tokenEnLogs":false}
+IA_PRODUCCION {"simulacion":false}
+JWT_LONGITUD {"rechazaCorto":true,"rechaza32Repetidos":true,"validacionEnUso":true}
+CABECERAS_CORS_PROXY {"trustProxy":1,"ip":"203.0.113.7","headers":{"access-control-allow-credentials":"true","access-control-allow-origin":"https://app.example.test","content-security-policy":"default-src 'none'; frame-ancestors 'none'; base-uri 'none'","permissions-policy":"camera=(), microphone=(), geolocation=()","referrer-policy":"strict-origin-when-cross-origin","strict-transport-security":"max-age=31536000; includeSubDomains","x-content-type-options":"nosniff","x-frame-options":"DENY"},"sinForwardedProto":200,"forwardedHttp":400,"error500":{"mensaje":"Error interno del servidor."}}
+PWA_BUNDLE {"bundles":[{"file":"index-B-1bUDnm.js","bytes":21529},{"file":"index-CDxX_W8j.css","bytes":106552},{"file":"ListaUsuario-DWArEmZw.js","bytes":490189},{"file":"PlanSanitario-CKzuj2gF.js","bytes":43806},{"file":"react-vendor-DjU26bAs.js","bytes":185457},{"file":"vista-gestionconsolidacionpremium-B2HyCuvd.js","bytes":15581},{"file":"vista-iatf-D_SElIvQ.js","bytes":38172},{"file":"vista-importarexcel-CfFpX_qA.js","bytes":47450},{"file":"vista-reportes-CN9MZ1eM.js","bytes":129272},{"file":"workbox-window.prod.es5-BBnX5xw4.js","bytes":5748}],"skipWaiting":true,"clientsClaim":true,"cleanupOutdatedCaches":true,"navigationDenylist":true,"nota":"La denylist excluye API de navegación; la prueba de navegador verifica caché y actualización"}
+No se pudo iniciar el servidor: Configuración de producción inválida:
+- MONGODB_URI debe ser una URI de MongoDB explícita en producción.
+- JWT_SECRET debe tener al menos 32 caracteres y 16 caracteres distintos.
+- CRON_SECRET debe tener al menos 32 caracteres y 16 caracteres distintos.
+- FRONTEND_URL debe ser una URL HTTPS válida en producción.

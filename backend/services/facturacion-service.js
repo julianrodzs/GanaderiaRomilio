@@ -18,6 +18,24 @@ const variablePrecio = (codigo) => `STRIPE_PRICE_${codigo}`;
 const precioPlan = (codigo) => process.env[variablePrecio(codigo)] || '';
 const planPorPrecio = (precioId) => codigosPlan.find((codigo) => precioPlan(codigo) === precioId);
 
+const validarPrecioStripe = async (stripe, codigoPlan, precioId) => {
+    const price = await stripe.prices.retrieve(precioId);
+    const esperadoCentavos = Math.round(Number(planesConfig[codigoPlan].precioMensualUSD) * 100);
+    const valido = price.active === true
+        && price.type === 'recurring'
+        && price.currency === 'usd'
+        && price.recurring?.interval === 'month'
+        && Number(price.recurring?.interval_count || 1) === 1
+        && Number(price.unit_amount) === esperadoCentavos;
+    if (!valido) {
+        const error = new Error(`El precio Stripe de ${codigoPlan} no coincide con ${planesConfig[codigoPlan].precioMensualUSD} USD mensuales.`);
+        error.status = 503;
+        error.code = 'BILLING_PRICE_MISMATCH';
+        throw error;
+    }
+    return price;
+};
+
 const crearSesionCheckout = async ({ organizacion, usuario, codigoPlan }) => {
     if (!codigosPlan.includes(codigoPlan)) {
         const error = new Error('Plan solicitado no válido.'); error.status = 422; throw error;
@@ -34,6 +52,7 @@ const crearSesionCheckout = async ({ organizacion, usuario, codigoPlan }) => {
     }
     const frontend = process.env.FRONTEND_URL || 'http://localhost:5173';
     const stripe = obtenerStripe();
+    await validarPrecioStripe(stripe, codigoPlan, precio);
     return stripe.checkout.sessions.create({
         mode: 'subscription',
         client_reference_id: String(organizacion._id),
@@ -171,5 +190,6 @@ module.exports = {
     crearSesionCheckout,
     crearSesionPortal,
     estadoPlanStripe,
-    procesarWebhookStripe
+    procesarWebhookStripe,
+    validarPrecioStripe
 };

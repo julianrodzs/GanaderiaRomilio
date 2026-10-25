@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const path = require('path');
-const { DeleteObjectCommand, PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
+const { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
 
 const MIME_PERMITIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const EXTENSIONES = {
@@ -8,6 +8,7 @@ const EXTENSIONES = {
     'image/png': '.png',
     'image/webp': '.webp'
 };
+const USOS_PUBLICOS = new Set(['LOGO_ORGANIZACION', 'DASHBOARD_FINCA', 'POTREROS_FINCA']);
 
 const obtenerConfiguracionR2 = () => {
     const configuracion = {
@@ -15,16 +16,17 @@ const obtenerConfiguracionR2 = () => {
         accessKeyId: String(process.env.R2_ACCESS_KEY_ID || '').trim(),
         secretAccessKey: String(process.env.R2_SECRET_ACCESS_KEY || '').trim(),
         bucket: String(process.env.R2_BUCKET || '').trim(),
+        privateBucket: String(process.env.R2_PRIVATE_BUCKET || '').trim(),
         publicUrl: String(process.env.R2_PUBLIC_URL || '').trim().replace(/\/$/, ''),
         endpoint: String(process.env.R2_ENDPOINT || '').trim().replace(/\/$/, '')
     };
-    configuracion.disponible = Boolean(
+    const credencialesDisponibles = Boolean(
         configuracion.accountId
         && configuracion.accessKeyId
         && configuracion.secretAccessKey
-        && configuracion.bucket
-        && configuracion.publicUrl
     );
+    configuracion.disponible = credencialesDisponibles && Boolean(configuracion.bucket && configuracion.publicUrl);
+    configuracion.privadoDisponible = credencialesDisponibles && Boolean(configuracion.privateBucket);
     return configuracion;
 };
 
@@ -96,7 +98,8 @@ const obtenerCliente = (configuracion) => {
 const subirImagenR2 = async ({ archivo, organizacionId, fincaId, uso }) => {
     validarArchivoImagen(archivo);
     const configuracion = obtenerConfiguracionR2();
-    if (!configuracion.disponible) {
+    const esPublico = USOS_PUBLICOS.has(uso);
+    if (esPublico ? !configuracion.disponible : !configuracion.privadoDisponible) {
         const error = new Error('Cloudflare R2 todavía no está configurado. Se mantienen las imágenes predeterminadas.');
         error.status = 503;
         error.code = 'R2_NO_CONFIGURADO';
@@ -104,11 +107,11 @@ const subirImagenR2 = async ({ archivo, organizacionId, fincaId, uso }) => {
     }
     const clave = construirClave({ organizacionId, fincaId, uso, archivo });
     await obtenerCliente(configuracion).send(new PutObjectCommand({
-        Bucket: configuracion.bucket,
+        Bucket: esPublico ? configuracion.bucket : configuracion.privateBucket,
         Key: clave,
         Body: archivo.buffer,
         ContentType: archivo.mimetype,
-        CacheControl: 'public, max-age=31536000, immutable',
+        CacheControl: esPublico ? 'public, max-age=31536000, immutable' : 'private, no-store',
         Metadata: {
             organizacion: String(organizacionId),
             ...(fincaId ? { finca: String(fincaId) } : {}),
@@ -118,21 +121,34 @@ const subirImagenR2 = async ({ archivo, organizacionId, fincaId, uso }) => {
     return {
         proveedor: 'R2',
         clave,
-        url: construirUrlPublica(configuracion.publicUrl, clave)
+        visibilidad: esPublico ? 'PUBLICO' : 'PRIVADO',
+        url: esPublico ? construirUrlPublica(configuracion.publicUrl, clave) : ''
     };
 };
 
-const eliminarImagenR2 = async (clave) => {
+const obtenerImagenR2 = async (clave) => {
+    if (!clave) return null;
+    const configuracion = obtenerConfiguracionR2();
+    if (!configuracion.privadoDisponible) {
+        const error = new Error('Cloudflare R2 no está configurado para abrir el archivo.');
+        error.status = 503;
+        error.code = 'R2_NO_CONFIGURADO';
+        throw error;
+    }
+    return obtenerCliente(configuracion).send(new GetObjectCommand({ Bucket: configuracion.privateBucket, Key: clave }));
+};
+
+const eliminarImagenR2 = async (clave, { privado = false } = {}) => {
     if (!clave) return false;
     const configuracion = obtenerConfiguracionR2();
-    if (!configuracion.disponible) {
+    if (privado ? !configuracion.privadoDisponible : !configuracion.disponible) {
         const error = new Error('Cloudflare R2 no está configurado para eliminar el archivo.');
         error.status = 503;
         error.code = 'R2_NO_CONFIGURADO';
         throw error;
     }
     await obtenerCliente(configuracion).send(new DeleteObjectCommand({
-        Bucket: configuracion.bucket,
+        Bucket: privado ? configuracion.privateBucket : configuracion.bucket,
         Key: clave
     }));
     return true;
@@ -144,6 +160,7 @@ module.exports = {
     construirUrlPublica,
     eliminarImagenR2,
     obtenerConfiguracionR2,
+    obtenerImagenR2,
     subirImagenR2,
     validarArchivoImagen
 };

@@ -18,22 +18,40 @@ const OPERACIONES_CON_FILTRO = [
     'updateOne'
 ];
 
-const agregarContextoAActualizacion = (actualizacion, organizacionId, fincaId = null) => {
+const eliminarCampo = (objeto, campo) => {
+    if (objeto && Object.prototype.hasOwnProperty.call(objeto, campo)) delete objeto[campo];
+};
+
+const protegerTenantActualizacion = (actualizacion, organizacionId, fincaId = null, opciones = {}) => {
     if (!actualizacion || Array.isArray(actualizacion)) return;
+
+    const permitirOrganizacion = opciones.permitirOrganizacionExplicita === true;
+    const permitirFinca = opciones.permitirFincaExplicita === true;
+    ['$set', '$setOnInsert', '$unset'].forEach((operador) => {
+        if (!permitirOrganizacion) eliminarCampo(actualizacion[operador], 'organizacionId');
+        if (!permitirFinca) eliminarCampo(actualizacion[operador], 'fincaId');
+    });
+    if (!permitirOrganizacion) eliminarCampo(actualizacion, 'organizacionId');
+    if (!permitirFinca) eliminarCampo(actualizacion, 'fincaId');
 
     const usaOperadores = Object.keys(actualizacion).some((clave) => clave.startsWith('$'));
     if (usaOperadores) {
         actualizacion.$setOnInsert = {
             ...(actualizacion.$setOnInsert || {}),
-            organizacionId,
-            ...(fincaId ? { fincaId } : {})
+            ...(!permitirOrganizacion ? { organizacionId } : {}),
+            ...(fincaId && !permitirFinca ? { fincaId } : {})
         };
         return;
     }
 
-    actualizacion.organizacionId = organizacionId;
-    if (fincaId) actualizacion.fincaId = fincaId;
+    if (!permitirOrganizacion) actualizacion.organizacionId = organizacionId;
+    if (fincaId && !permitirFinca) actualizacion.fincaId = fincaId;
 };
+
+const filtroContexto = ({ organizacionId, fincaId, conFinca, omitirFinca }) => ({
+    organizacionId,
+    ...(conFinca && fincaId && !omitirFinca ? { fincaId } : {})
+});
 
 const aplicarAislamientoOrganizacion = (schema, opciones = {}) => {
     schema.add({
@@ -72,12 +90,13 @@ const aplicarAislamientoOrganizacion = (schema, opciones = {}) => {
                     : {})
             });
 
-            if (this.getOptions()?.upsert) {
+            if (['updateOne', 'updateMany', 'findOneAndUpdate', 'replaceOne', 'findOneAndReplace'].includes(operacion)) {
                 const actualizacion = this.getUpdate();
-                agregarContextoAActualizacion(
+                protegerTenantActualizacion(
                     actualizacion,
                     organizacionConsulta,
-                    opciones.finca ? obtenerFincaActual() : null
+                    opciones.finca ? obtenerFincaActual() : null,
+                    this.getOptions()
                 );
                 this.setUpdate(actualizacion);
             }
@@ -104,24 +123,63 @@ const aplicarAislamientoOrganizacion = (schema, opciones = {}) => {
     });
 
     schema.pre('validate', function asignarOrganizacion(next) {
-        if (!this.organizacionId) {
-            this.organizacionId = obtenerOrganizacionActual();
+        const organizacionId = obtenerOrganizacionActual();
+        const fincaId = obtenerFincaActual();
+        const opcionesGuardado = this.$__?.saveOptions || {};
+        if (organizacionId && this.$locals?.permitirOrganizacionExplicita !== true && opcionesGuardado.permitirOrganizacionExplicita !== true) {
+            this.organizacionId = organizacionId;
         }
-        if (opciones.finca && !this.fincaId) {
-            this.fincaId = obtenerFincaActual();
+        if (opciones.finca && fincaId && this.$locals?.permitirFincaExplicita !== true && opcionesGuardado.permitirFincaExplicita !== true) {
+            this.fincaId = fincaId;
         }
         next();
     });
 
-    schema.pre('insertMany', function asignarOrganizacionInsertMany(next, documentos) {
+    schema.pre('insertMany', function asignarOrganizacionInsertMany(next, documentos, opcionesInsert = {}) {
         const organizacionId = obtenerOrganizacionActual();
         const fincaId = obtenerFincaActual();
         if (organizacionId) {
             documentos.forEach((documento) => {
-                documento.organizacionId = organizacionId;
-                if (opciones.finca && fincaId && !documento.fincaId) documento.fincaId = fincaId;
+                if (opcionesInsert.permitirOrganizacionExplicita !== true) documento.organizacionId = organizacionId;
+                if (opciones.finca && fincaId && opcionesInsert.permitirFincaExplicita !== true) documento.fincaId = fincaId;
             });
         }
+        next();
+    });
+
+    schema.pre('bulkWrite', function aislarBulkWrite(next, operaciones = [], opcionesBulk = {}) {
+        if (opcionesBulk.omitirAislamientoOrganizacion) return next();
+        const organizacionId = obtenerOrganizacionActual() || ORGANIZACION_SIN_CONTEXTO;
+        const fincaId = obtenerFincaActual();
+        const contexto = filtroContexto({
+            organizacionId,
+            fincaId,
+            conFinca: opciones.finca,
+            omitirFinca: opcionesBulk.omitirAislamientoFinca
+        });
+
+        operaciones.forEach((operacion) => {
+            if (operacion.insertOne?.document) {
+                const documento = operacion.insertOne.document;
+                if (opcionesBulk.permitirOrganizacionExplicita !== true) documento.organizacionId = organizacionId;
+                if (opciones.finca && fincaId && opcionesBulk.permitirFincaExplicita !== true) documento.fincaId = fincaId;
+                return;
+            }
+            ['updateOne', 'updateMany'].forEach((tipo) => {
+                if (!operacion[tipo]) return;
+                operacion[tipo].filter = { ...(operacion[tipo].filter || {}), ...contexto };
+                protegerTenantActualizacion(operacion[tipo].update, organizacionId, fincaId, opcionesBulk);
+            });
+            if (operacion.replaceOne) {
+                operacion.replaceOne.filter = { ...(operacion.replaceOne.filter || {}), ...contexto };
+                const reemplazo = operacion.replaceOne.replacement || {};
+                if (opcionesBulk.permitirOrganizacionExplicita !== true) reemplazo.organizacionId = organizacionId;
+                if (opciones.finca && fincaId && opcionesBulk.permitirFincaExplicita !== true) reemplazo.fincaId = fincaId;
+            }
+            ['deleteOne', 'deleteMany'].forEach((tipo) => {
+                if (operacion[tipo]) operacion[tipo].filter = { ...(operacion[tipo].filter || {}), ...contexto };
+            });
+        });
         next();
     });
 

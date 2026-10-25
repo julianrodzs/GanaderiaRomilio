@@ -11,7 +11,7 @@ const buscarAnimalConFoto = ({ animalId, organizacionId, fincaId }) => Animal.fi
 const desactivarArchivo = async (archivo) => {
     if (!archivo?._id) return;
     try {
-        await eliminarImagenR2(archivo.clave);
+        await eliminarImagenR2(archivo.clave, { privado: true });
     } catch (error) {
         // La referencia se desactiva aunque R2 esté temporalmente indisponible; una limpieza posterior puede retirar el objeto.
     }
@@ -43,10 +43,12 @@ const subirFotoAnimal = async ({ animalId, archivo, organizacionId, fincaId, usu
             tamanoBytes: archivo.size,
             creadoPor: usuarioId
         });
+        nuevaFoto.url = `/api/archivos/r2/${nuevaFoto._id}`;
+        await nuevaFoto.save();
         animal.fotoPrincipal = nuevaFoto._id;
         await animal.save();
     } catch (error) {
-        await eliminarImagenR2(almacenamiento.clave).catch(() => {});
+        await eliminarImagenR2(almacenamiento.clave, { privado: true }).catch(() => {});
         throw error;
     }
 

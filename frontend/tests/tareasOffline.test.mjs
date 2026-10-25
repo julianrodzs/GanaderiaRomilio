@@ -11,15 +11,20 @@ test('las fechas civiles no retroceden un día en Costa Rica y los instantes sí
 });
 
 // Ejecuta el sincronizador real con adaptadores de red/IndexedDB; sin navegador ni envíos.
-const preparar = ({ conflicto = false, cambioContexto = false } = {}) => {
+const preparar = ({ conflicto = false, cambioContexto = false, sesionExpirada = false } = {}) => {
   const original = fs.readFileSync(new URL('../src/services/offlineSync.js', import.meta.url), 'utf8');
   const fuente = original.replace(/import[\s\S]*?from '\.\/[^']+';\s*/g, '').replace(/export const /g, 'const ')
     + '\nglobalThis.ejecutar = sincronizarCambiosOffline;';
   let cola = [{ id: 'op-1', idempotencyKey: 'op-1', clave: 'org:finca:usuario', tipo: 'completar-tarea', referenciaId: 'tarea', creadoEn: '2026-10-20T13:00:00Z', payload: { versionEsperada: 'version-1', observaciones: 'Hecho en corral' } }];
   const envios = [], cache = [];
+  let accesoRevocado = false;
+  if (sesionExpirada) cola.push({ ...cola[0], id: 'op-2', idempotencyKey: 'op-2' });
   const contexto = {
     navigator: { onLine: true },
-    obtenerContextoOffline: () => ({ clave: cambioContexto ? 'otra:finca:usuario' : 'org:finca:usuario' }),
+    obtenerContextoOffline: () => {
+      if (accesoRevocado) throw new Error('No hay contexto seguro');
+      return { clave: cambioContexto ? 'otra:finca:usuario' : 'org:finca:usuario' };
+    },
     obtenerCambiosPendientes: async () => cola,
     actualizarCambioPendiente: async (id, cambios) => { Object.assign(cola.find((item) => item.id === id), cambios); return cola[0]; },
     eliminarCambioPendiente: async (id) => { cola = cola.filter((item) => item.id !== id); },
@@ -27,6 +32,11 @@ const preparar = ({ conflicto = false, cambioContexto = false } = {}) => {
     registrarResultadoSincronizacion: async () => {},
     completarTarea: async (datos) => {
       envios.push(datos);
+      if (sesionExpirada) {
+        accesoRevocado = true;
+        cola = [];
+        throw Object.assign(new Error('Token revocado'), { status: 401 });
+      }
       if (conflicto) throw Object.assign(new Error('Cambió la tarea'), { status: 409 });
       return { _id: 'tarea', estado: 'Completada', fechaCompletada: datos.fechaEjecucionReal };
     }
@@ -60,4 +70,13 @@ test('no se envía una operación de la sesión anterior después de cambiar de 
   await escenario.ejecutar();
   assert.equal(escenario.envios.length, 0);
   assert.equal(escenario.pendientes().length, 1);
+});
+
+test('un 401 con sesión ya eliminada corta toda la cola sin rechazar la promesa', async () => {
+  const escenario = preparar({ sesionExpirada: true });
+  const resultado = await escenario.ejecutar();
+  assert.equal(resultado.sesionExpirada, true);
+  assert.equal(escenario.envios.length, 1);
+  assert.equal(escenario.cache.length, 0);
+  assert.equal(escenario.pendientes().length, 0);
 });

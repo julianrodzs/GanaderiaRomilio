@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { cargarOpcional } from '../utils/cargarOpcional';
 import {
   cancelarCampanaIATF,
   actualizarProtocoloIATF,
@@ -272,11 +273,11 @@ const IATF = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
     try {
       setError('');
       const usuariosPromise = permisos.crear
-        ? obtenerUsuariosAsignables('IATF').catch(() => [])
+        ? cargarOpcional(() => obtenerUsuariosAsignables('IATF'), [])
         : Promise.resolve([]);
       const puedeVerConsolidado = ['Administrador', 'Consulta'].includes(rolUsuario);
       const consolidadoPromise = tieneFeature('reportesMultiFinca') && puedeVerConsolidado
-        ? obtenerConsolidadoIATF().catch(() => null)
+        ? cargarOpcional(() => obtenerConsolidadoIATF(), null)
         : Promise.resolve(null);
       const [campanas, protocolos, insumos, lotes, animales, usuarios, consolidado] = await Promise.all([
         obtenerCampanasIATF(),
