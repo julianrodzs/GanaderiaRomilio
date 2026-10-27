@@ -693,10 +693,6 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
 
       <section className="dashboard-content">
         <article className="panel-mapa">
-          <div className="panel-title">
-            <h2>Vista de la finca</h2>
-            <span>Imagen principal</span>
-          </div>
           <ImagenPersonalizada className="dashboard-mapa-potreros" src={imagenDashboard} alt="Imagen principal de la finca" />
         </article>
 
