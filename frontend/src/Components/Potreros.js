@@ -20,6 +20,7 @@ import { fechaEnRango, obtenerRangoMesActual } from '../utils/fechas';
 import FeatureGate from './FeatureGate';
 import BancosForrajeros from './BancosForrajeros';
 import { useApariencia } from '../context/AparienciaContext';
+import ImagenPersonalizada from './ImagenPersonalizada';
 
 const formatearFecha = (fecha) => {
   if (!fecha) return '--';
@@ -290,7 +291,7 @@ const Potreros = ({ soloLectura = false, zonaHoraria = 'America/Costa_Rica' }) =
           <p className="eyebrow">Mapa de referencia</p>
           <h2>Rotacion de potreros</h2>
         </div>
-        <img src={imagenPotreros} alt="Mapa o imagen de potreros de la finca" onError={(evento) => { evento.currentTarget.onerror = null; evento.currentTarget.src = '/assests/mapa-potreros.png'; }} />
+        <ImagenPersonalizada className="imagen-potreros" src={imagenPotreros} alt="Mapa o imagen de potreros de la finca" />
       </article>
 
       <TablaDinamica

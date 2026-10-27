@@ -15,6 +15,7 @@ import Tareas from '../pages/Tareas';
 import CentroNotificaciones from '../pages/CentroNotificaciones';
 import MiPlan from '../pages/MiPlan';
 import { useApariencia } from '../context/AparienciaContext';
+import ImagenPersonalizada from './ImagenPersonalizada';
 import AdministracionSaas from '../pages/AdministracionSaas';
 import ConfiguracionCuenta from '../pages/ConfiguracionCuenta';
 import Ventas from './Ventas';
@@ -696,7 +697,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
             <h2>Vista de la finca</h2>
             <span>Imagen principal</span>
           </div>
-          <img className="dashboard-mapa-potreros" src={imagenDashboard} alt="Imagen principal de la finca" onError={(evento) => { evento.currentTarget.onerror = null; evento.currentTarget.src = '/assests/mapa-potreros.png'; }} />
+          <ImagenPersonalizada className="dashboard-mapa-potreros" src={imagenDashboard} alt="Imagen principal de la finca" />
         </article>
 
         <article className="panel-alerta">

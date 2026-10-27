@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { loginUsuario } from '../services/api';
+import MarcaProducto, { estiloAcceso } from './MarcaProducto';
 
 const IniciarSesion = ({ onLogin, onOlvideContrasena }) => {
   const [formulario, setFormulario] = useState({
@@ -31,10 +32,9 @@ const IniciarSesion = ({ onLogin, onOlvideContrasena }) => {
 
   return (
     <section className="auth-panel">
-      <div className="auth-copy">
-        <img className="login-logo" src="/assests/logo-romilio.png" alt="Logo Ganaderia Romilio" />
-        <p className="eyebrow">GanaderiaRomilio</p>
-        <h1>Gestion de finca clara desde el primer ingreso</h1>
+      <div className="auth-copy" style={estiloAcceso}>
+        <MarcaProducto />
+        <h1>CIR Ganadero</h1>
         <p>
           Accede al panel para revisar inventario, potreros, costos y actividad reciente
           de la hacienda.
@@ -56,7 +56,7 @@ const IniciarSesion = ({ onLogin, onOlvideContrasena }) => {
             type="email"
             value={formulario.correo}
             onChange={actualizarCampo}
-            placeholder="admin@ganaderiaromilio.com"
+            placeholder="usuario@correo.com"
             required
           />
         </label>

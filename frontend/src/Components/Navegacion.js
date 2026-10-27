@@ -4,6 +4,7 @@ import CampanaNotificaciones from './CampanaNotificaciones';
 import EstadoSincronizacion from './EstadoSincronizacion';
 import { usePlan } from '../context/PlanContext';
 import { useApariencia } from '../context/AparienciaContext';
+import ImagenPersonalizada from './ImagenPersonalizada';
 
 const Navegacion = ({
   vistaActiva = 'Dashboard',
@@ -66,7 +67,7 @@ const Navegacion = ({
   return (
     <header className="app-header">
       <div className="app-brand">
-        <img className="brand-logo" src={logo} alt="Logo de la organización" onError={(evento) => { evento.currentTarget.onerror = null; evento.currentTarget.src = '/assests/logo-romilio.png'; }} />
+        <ImagenPersonalizada className="brand-logo" src={logo} alt="Logo de la organización" vacio="CIR" />
         {organizaciones.length > 1 && (
           <label className="selector-finca-header selector-organizacion-header">
             <span>Organización</span>

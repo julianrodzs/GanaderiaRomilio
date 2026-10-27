@@ -1,7 +1,7 @@
 {
-  "short_name": "Romilio",
-  "name": "Ganaderia Romilio",
-  "description": "Gestion ganadera para Ganaderia Romilio",
+  "short_name": "CIR Ganadero",
+  "name": "CIR Ganadero",
+  "description": "Gestion de fincas bovinas y porcinas",
   "icons": [
     {
       "src": "favicon.ico",

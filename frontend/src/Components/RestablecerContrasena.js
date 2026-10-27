@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { restablecerPassword } from '../services/api';
+import MarcaProducto, { estiloAcceso } from './MarcaProducto';
 
 const RestablecerContrasena = ({ token, onVolver }) => {
   const [formulario, setFormulario] = useState({
@@ -45,9 +46,8 @@ const RestablecerContrasena = ({ token, onVolver }) => {
 
   return (
     <section className="auth-panel">
-      <div className="auth-copy">
-        <img className="login-logo" src="/assests/logo-romilio.png" alt="Logo Ganaderia Romilio" />
-        <p className="eyebrow">GanaderiaRomilio</p>
+      <div className="auth-copy" style={estiloAcceso}>
+        <MarcaProducto />
         <h1>Crea una nueva contraseña segura</h1>
         <p>Este enlace es temporal y queda invalidado después del primer uso.</p>
       </div>

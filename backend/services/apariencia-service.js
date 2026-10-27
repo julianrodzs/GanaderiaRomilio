@@ -4,9 +4,9 @@ const Organizacion = require('../models/Organizacion');
 const { obtenerConfiguracionR2, subirImagenR2 } = require('./almacenamientoR2-service');
 
 const IMAGENES_PREDETERMINADAS = Object.freeze({
-    logo: '/assests/logo-romilio.png',
-    dashboard: '/assests/mapa-potreros.png',
-    potreros: '/assests/mapa-potreros.png'
+    logo: '',
+    dashboard: '',
+    potreros: ''
 });
 
 const serializarImagen = (archivo, predeterminada) => ({

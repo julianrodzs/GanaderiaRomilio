@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import useArchivoProtegido from '../hooks/useArchivoProtegido';
+import FotoAnimal from './FotoAnimal';
 import {
   actualizarAnimal,
   actualizarEstadoSanitarioAnimal,
@@ -188,26 +188,6 @@ const NodoGenealogico = ({ nodo, titulo = 'Animal' }) => {
         </div>
       )}
     </article>
-  );
-};
-
-const FotoAnimal = ({ animal, detalle = false }) => {
-  const [imagenInvalida, setImagenInvalida] = useState(false);
-  const url = animal?.fotoPrincipal?.url;
-  const urlProtegida = useArchivoProtegido(url?.startsWith('/api/archivos/') ? url : '');
-  const imagen = url?.startsWith('/api/archivos/') ? urlProtegida : url;
-
-  useEffect(() => { setImagenInvalida(false); }, [url]);
-
-  const identificador = animal?.nombre || animal?.diio || animal?.identificadorFinca || 'Animal';
-  const inicial = identificador.trim().charAt(0).toUpperCase() || 'A';
-
-  return (
-    <div className={`foto-animal ${detalle ? 'foto-animal-detalle' : 'foto-animal-miniatura'}`}>
-      {imagen && !imagenInvalida
-        ? <img src={imagen} alt={`Fotografía de ${identificador}`} onError={() => setImagenInvalida(true)} />
-        : <span aria-label="Sin fotografía">{inicial}</span>}
-    </div>
   );
 };
 
@@ -962,6 +942,7 @@ const Animales = ({
         <TablaDinamica
           titulo={especie === 'Porcino' ? 'Porcinos' : 'Bovinos'}
           subtitulo="Inventario"
+          ordenInicial={{ campo: 'diio', direccion: 'asc' }}
           columnas={(especie === 'Porcino'
             ? [...(mostrarColumnaFotos ? [columnaFotoAnimal] : []), columnas[0], columnaCamadaOrigen, ...columnas.slice(1)]
             : [...(mostrarColumnaFotos ? [columnaFotoAnimal] : []), ...columnas])

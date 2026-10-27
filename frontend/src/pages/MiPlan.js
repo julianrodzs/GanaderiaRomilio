@@ -204,7 +204,7 @@ const MiPlan = () => {
     }
   };
 
-  if (cargando) return <section className="vista-tabla"><p>Cargando plan...</p></section>;
+  if (cargando && !plan) return <section className="vista-tabla"><p>Cargando plan...</p></section>;
   if (!plan) return <section className="vista-tabla"><p>{error || 'No se pudo cargar el plan.'}</p></section>;
 
   const esEsencial = plan.plan.codigo === 'ESENCIAL';

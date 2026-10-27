@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { aceptarInvitacionExistente, aceptarInvitacionNueva } from '../services/api';
+import MarcaProducto, { estiloAcceso } from './MarcaProducto';
 
 const AceptarInvitacion = ({ token, sesion, onVolver }) => {
   const [contrasena, setContrasena] = useState('');
@@ -26,7 +27,7 @@ const AceptarInvitacion = ({ token, sesion, onVolver }) => {
   };
 
   return <section className="auth-panel">
-    <div className="auth-copy"><img className="login-logo" src="/assests/logo-romilio.png" alt="Logo Ganaderia Romilio" /><p className="eyebrow">Invitación</p><h1>Acceso a una organización</h1><p>La invitación es personal, vence en 72 horas y solo puede utilizarse una vez.</p></div>
+    <div className="auth-copy" style={estiloAcceso}><MarcaProducto /><p className="eyebrow">Invitación</p><h1>Acceso a una organización</h1><p>La invitación es personal, vence en 72 horas y solo puede utilizarse una vez.</p></div>
     <form className="auth-card" onSubmit={aceptarNueva}>
       <h2>Aceptar invitación</h2>
       {mensaje && <div className="alerta-formulario">{mensaje}</div>}

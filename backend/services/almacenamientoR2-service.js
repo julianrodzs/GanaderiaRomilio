@@ -48,14 +48,15 @@ const validarArchivoImagen = (archivo) => {
     const esWebp = archivo.buffer.length >= 12
         && archivo.buffer.subarray(0, 4).toString('ascii') === 'RIFF'
         && archivo.buffer.subarray(8, 12).toString('ascii') === 'WEBP';
-    const firmaValida = (archivo.mimetype === 'image/jpeg' && esJpeg)
-        || (archivo.mimetype === 'image/png' && esPng)
-        || (archivo.mimetype === 'image/webp' && esWebp);
-    if (!firmaValida) {
-        const error = new Error('El contenido del archivo no coincide con un JPG, PNG o WebP válido.');
+    const tipoReal = esJpeg ? 'image/jpeg' : esPng ? 'image/png' : esWebp ? 'image/webp' : null;
+    if (!tipoReal) {
+        const error = new Error('El contenido del archivo no corresponde a una imagen JPG, PNG o WebP reconocible. Vuelve a exportar la imagen en uno de esos formatos.');
         error.status = 415;
+        error.code = 'IMAGEN_CONTENIDO_NO_VALIDO';
         throw error;
     }
+    // El navegador puede inferir el MIME de una extension que no coincide con los bytes.
+    archivo.mimetype = tipoReal;
     return archivo;
 };
 
@@ -100,7 +101,7 @@ const subirImagenR2 = async ({ archivo, organizacionId, fincaId, uso }) => {
     const configuracion = obtenerConfiguracionR2();
     const esPublico = USOS_PUBLICOS.has(uso);
     if (esPublico ? !configuracion.disponible : !configuracion.privadoDisponible) {
-        const error = new Error('Cloudflare R2 todavía no está configurado. Se mantienen las imágenes predeterminadas.');
+        const error = new Error('Cloudflare R2 todavía no está configurado para guardar esta imagen.');
         error.status = 503;
         error.code = 'R2_NO_CONFIGURADO';
         throw error;

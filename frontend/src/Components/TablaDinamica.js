@@ -54,11 +54,15 @@ const TablaDinamica = ({
   accionesExtra,
   mostrarAcciones = true,
   clavePaginacion = '',
+  ordenInicial,
   onDatosFiltrados
 }) => {
   const [busqueda, setBusqueda] = useState('');
   const [filtrosActivos, setFiltrosActivos] = useState({});
-  const [orden, setOrden] = useState({ campo: columnas[0]?.id, direccion: 'asc' });
+  const [orden, setOrden] = useState(() => ({
+    campo: ordenInicial?.campo || columnas[0]?.id,
+    direccion: ordenInicial?.direccion === 'desc' ? 'desc' : 'asc'
+  }));
 
   const datosFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();

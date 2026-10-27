@@ -1,20 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { obtenerApariencia } from '../services/api';
-
-const PREDETERMINADAS = {
-  logo: '/assests/logo-romilio.png',
-  dashboard: '/assests/mapa-potreros.png',
-  potreros: '/assests/mapa-potreros.png'
-};
+import { APARIENCIA_VACIA, normalizarApariencia } from '../utils/apariencia.mjs';
 
 const AparienciaContext = createContext(null);
 
 export const AparienciaProvider = ({ children, contextoId = 'actual' }) => {
   const claveCache = `ganaderiaApariencia:${contextoId}`;
   const [estado, setEstado] = useState({
-    logo: PREDETERMINADAS.logo,
-    dashboard: PREDETERMINADAS.dashboard,
-    potreros: PREDETERMINADAS.potreros,
+    ...APARIENCIA_VACIA,
     almacenamientoDisponible: false,
     cargando: true
   });
@@ -22,20 +15,19 @@ export const AparienciaProvider = ({ children, contextoId = 'actual' }) => {
   const recargarApariencia = useCallback(async () => {
     try {
       const datos = await obtenerApariencia();
-      const siguiente = {
-        logo: datos.organizacion?.logo?.url || PREDETERMINADAS.logo,
-        dashboard: datos.finca?.dashboard?.url || PREDETERMINADAS.dashboard,
-        potreros: datos.finca?.potreros?.url || PREDETERMINADAS.potreros,
-        almacenamientoDisponible: Boolean(datos.almacenamiento?.disponible),
-        cargando: false
-      };
+      const siguiente = normalizarApariencia({
+        logo: datos.organizacion?.logo?.url,
+        dashboard: datos.finca?.dashboard?.url,
+        potreros: datos.finca?.potreros?.url,
+        almacenamientoDisponible: Boolean(datos.almacenamiento?.disponible)
+      });
       localStorage.setItem(claveCache, JSON.stringify(siguiente));
       setEstado(siguiente);
       return siguiente;
     } catch (error) {
       let cache = null;
       try { cache = JSON.parse(localStorage.getItem(claveCache) || 'null'); } catch (_error) { cache = null; }
-      const siguiente = { ...PREDETERMINADAS, ...(cache || {}), cargando: false };
+      const siguiente = normalizarApariencia(cache);
       setEstado(siguiente);
       return siguiente;
     }
@@ -54,8 +46,8 @@ export const AparienciaProvider = ({ children, contextoId = 'actual' }) => {
 };
 
 export const useApariencia = () => useContext(AparienciaContext) || {
-  ...PREDETERMINADAS,
+  ...APARIENCIA_VACIA,
   almacenamientoDisponible: false,
   cargando: false,
-  recargarApariencia: async () => PREDETERMINADAS
+  recargarApariencia: async () => APARIENCIA_VACIA
 };

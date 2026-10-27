@@ -7,11 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'logo192.png', 'logo512.png', 'assests/logo-romilio.png'],
+      includeAssets: ['favicon.ico', 'logo192.png', 'logo512.png'],
       manifest: {
-        name: 'Ganaderia Romilio',
-        short_name: 'Romilio',
-        description: 'Gestion ganadera para Ganaderia Romilio',
+        name: 'CIR Ganadero',
+        short_name: 'CIR Ganadero',
+        description: 'Gestion de fincas bovinas y porcinas',
         start_url: '/',
         scope: '/',
         display: 'standalone',
@@ -41,6 +41,7 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp}'],
+        globIgnores: ['**/assests/logo-romilio.png', '**/assests/mapa-potreros.png'],
         cleanupOutdatedCaches: true
       }
     })

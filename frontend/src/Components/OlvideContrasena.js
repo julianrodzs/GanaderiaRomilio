@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { solicitarRecuperacionPassword } from '../services/api';
+import MarcaProducto, { estiloAcceso } from './MarcaProducto';
 
 const MENSAJE_CONFIRMACION = 'Si el correo existe, recibirás instrucciones para recuperar tu contraseña.';
 
@@ -28,9 +29,8 @@ const OlvideContrasena = ({ onVolver }) => {
 
   return (
     <section className="auth-panel">
-      <div className="auth-copy">
-        <img className="login-logo" src="/assests/logo-romilio.png" alt="Logo Ganaderia Romilio" />
-        <p className="eyebrow">GanaderiaRomilio</p>
+      <div className="auth-copy" style={estiloAcceso}>
+        <MarcaProducto />
         <h1>Recupera el acceso sin comprometer la cuenta</h1>
         <p>Te enviaremos un enlace temporal para crear una nueva contraseña.</p>
       </div>
