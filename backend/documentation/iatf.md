@@ -17,8 +17,8 @@ PlantillaProtocoloIATF
 1. Administrador o Veterinario crea un protocolo con pasos y tiempos configurables.
 2. Crea una campaña desde un lote bovino reproductivo activo o una selección manual.
 3. El sistema toma un snapshot del protocolo y de las hembras, genera el cronograma y una tarea por actividad de campaña.
-4. El inventario solo se descuenta al registrar la ejecución real. Una campaña programada no consume existencias.
-5. La IATF descuenta una pajuela por hembra realmente inseminada y crea o vincula su `RegistroReproductivo`.
+4. La campaña reserva explícitamente semen del banco de la finca; mueve unidades de la gaveta reproductiva a asignadas, sin consumirlas ni tomar de la comercial.
+5. La IATF consume las pajuelas realmente utilizadas de sus reservas y crea o vincula su `RegistroReproductivo`. Al finalizar o cancelar la campaña se devuelven todos los sobrantes al banco.
 6. Los diagnósticos son históricos: una reconfirmación no sobrescribe la observación anterior.
 
 Las plantillas de finca u organización se pueden editar y duplicar. Las plantillas de sistema no se editan desde una finca: primero se duplican para conservar el ejemplo original. Las campañas iniciadas siempre conservan el snapshot con el que fueron creadas.
@@ -29,7 +29,8 @@ Las plantillas de finca u organización se pueden editar y duplicar. Las plantil
 - `CampanaIATF`: snapshot, participantes, condición corporal, costos y estado.
 - `EjecucionPasoIATF`: fecha programada/real, animales, consumo y costo congelado.
 - `DiagnosticoGestacionIATF`: fecha, método y resultado por animal.
-- `InsumoReproductivo`: hormonas, dispositivos, semen y otros insumos físicos.
+- `InsumoReproductivo`: hormonas, dispositivos y otros insumos físicos; el SEMEN anterior se conserva solo como legado migrable.
+- `BancoSemen`, `LoteSemen`, `AsignacionSemenCampana` y `MovimientoSemen`: ficha por semental, entradas, reservas y trazabilidad. Consulte [la guía del banco y su migración](banco-semen.md).
 - `EventoCampanaIATF`: auditoría operativa de la campaña.
 
 Todos se aíslan por organización; los documentos operativos también se aíslan por finca. Las plantillas de alcance organización se comparten únicamente dentro del mismo tenant.
@@ -48,11 +49,12 @@ Categorías disponibles:
 
 - `HORMONA_REPRODUCTIVA`
 - `DISPOSITIVO_REPRODUCTIVO`
-- `SEMEN`
 - `INSUMO_REPRODUCTIVO`
 - `OTRO`
 
-Los dispositivos `REUTILIZABLE_CONTROLADO` pasan de disponible a en uso al insertarse y vuelven a disponible al retirarse. No se habilita reutilización por defecto. El consumo guarda cantidad, lote, vencimiento, costo unitario y moneda como snapshot. No crea otro egreso financiero porque la compra ya representa ese egreso.
+El semen se administra desde **Banco de semen**, no desde el formulario de hormonas. La campaña selecciona uno o varios toros asignados con saldo y moneda de costo; «código del toro» se presenta como DIIO.
+
+Los dispositivos `REUTILIZABLE_CONTROLADO` pasan de disponible a en uso al insertarse y vuelven a disponible al retirarse. No se habilita reutilización por defecto. El consumo guarda cantidad, lote, vencimiento, costo unitario y moneda como snapshot. Las existencias y el consumo no crean egresos automáticos: el gasto real se registra en Finanzas sin duplicarlo al registrar su existencia.
 
 ## Integración reproductiva
 

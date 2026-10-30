@@ -48,7 +48,10 @@
     "diagnostico:u01": "node scripts/diagnostico-u01.js",
     "migrate:auditoria-redactar:check": "node scripts/redactarAuditoriaSensible.js",
     "migrate:auditoria-redactar": "node scripts/redactarAuditoriaSensible.js --apply",
-    "indexes:sync": "node scripts/sincronizar-indices.js"
+    "indexes:sync": "node scripts/sincronizar-indices.js",
+    "migrate:banco-semen:check": "node scripts/migrar-banco-semen.js --dry-run",
+    "migrate:banco-semen": "node scripts/migrar-banco-semen.js --aplicar",
+    "test:banco-semen:integracion": "node documentation/banco-semen.integracion.cjs"
   },
   "keywords": [],
   "author": "",

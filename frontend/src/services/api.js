@@ -1,6 +1,6 @@
 import { obtenerContextoOffline } from './offlineStorage';
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:4000/api' : '');
-const crearClaveIdempotencia = () => globalThis.crypto?.randomUUID?.()
+export const crearClaveIdempotencia = () => globalThis.crypto?.randomUUID?.()
   || `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const obtenerSesion = () => {
@@ -911,6 +911,19 @@ export const eliminarRegistroReproductivo = (id) => {
 
 export const obtenerRegistrosReproductivosPorAnimal = (animalId) => request(`/reproduccion/animal/${animalId}`);
 export const obtenerSemenReproductivoDisponible = (fecha = '') => request(`/reproduccion/insumos/semen${fecha ? `?fecha=${encodeURIComponent(fecha)}` : ''}`);
+
+export const obtenerBancoSemen = (comercial = false) => request(comercial ? '/ventas/pajillas/existencias' : '/semen');
+export const obtenerFichaSemen = (id, comercial = false) => request(`${comercial ? '/ventas/pajillas/existencias' : '/semen'}/${id}`);
+export const registrarEntradaSemen = (datos) => request('/semen/entradas', { method: 'POST', body: JSON.stringify(datos) });
+export const trasladarSemen = (id, datos, comercial = false) => request(`${comercial ? '/ventas/pajillas/existencias' : '/semen'}/${id}/traslados`, { method: 'POST', body: JSON.stringify(datos) });
+export const ajustarSemen = (id, datos, comercial = false) => request(`${comercial ? '/ventas/pajillas/existencias' : '/semen'}/${id}/ajustes`, { method: 'POST', body: JSON.stringify(datos) });
+export const asignarSemenCampana = (id, datos) => request(`/iatf/campanas/${id}/semen`, { method: 'POST', body: JSON.stringify(datos) });
+export const devolverSemenCampana = (id) => request(`/iatf/campanas/${id}/semen/devolver`, { method: 'POST', body: '{}' });
+export const obtenerVentasPajillas = () => request('/ventas/pajillas');
+export const obtenerResumenPajillas = () => request('/ventas/pajillas/resumen');
+export const crearVentaPajillas = (datos) => request('/ventas/pajillas', { method: 'POST', body: JSON.stringify(datos) });
+export const anularVentaPajillas = (id, motivo) => request(`/ventas/pajillas/${id}/anular`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const anularInseminacionBanco = (id, motivo, participanteId) => request(participanteId ? `/iatf/campanas/${id}/inseminaciones/${participanteId}/anular` : `/reproduccion/${id}/inseminacion/anular`, { method: 'POST', body: JSON.stringify({ motivo }) });
 
 export const obtenerProtocolosIATF = (incluirInactivos = false) => request(`/iatf/protocolos${incluirInactivos ? '?incluirInactivos=true' : ''}`);
 export const crearProtocoloIATF = (datos) => request('/iatf/protocolos', { method: 'POST', body: JSON.stringify(datos) });

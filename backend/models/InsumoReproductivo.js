@@ -39,7 +39,8 @@ const insumoReproductivoSchema = new Schema({
     codigoToro: { type: String, trim: true },
     razaToro: { type: String, trim: true },
     activo: { type: Boolean, default: true },
-    creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' }
+    creadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
+    bancoSemenId: { type: Schema.Types.ObjectId, ref: 'BancoSemen' }
 }, { timestamps: true });
 
 insumoReproductivoSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });

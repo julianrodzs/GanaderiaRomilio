@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { anularInseminacionBanco } from '../services/api';
 import {
   actualizarRegistroReproductivo,
   cancelarCicloReproductivo,
@@ -110,6 +111,7 @@ const columnas = [
           <button type="button" onClick={() => registro.cerrarCiclo?.(registro)}>Cerrar</button>
           <button type="button" onClick={() => registro.marcarNoPrenada?.(registro)}>No preñada</button>
           <button type="button" onClick={() => registro.cancelarCiclo?.(registro)}>Cancelar</button>
+          {registro.bancoSemenId && !registro.campanaIATF && !registro.inseminacionAnulada && !registro.fechaPartoReal && !registro.gestacionConfirmada && <button type="button" onClick={() => registro.anularInseminacion?.(registro)}>Anular inseminacion</button>}
         </div>
       );
     }
@@ -625,6 +627,7 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
               reabrirCiclo,
               marcarNoPrenada,
               cancelarCiclo,
+              anularInseminacion: async (registro) => { const motivo = window.prompt('Motivo para anular la inseminacion'); if (!motivo?.trim()) return; try { await anularInseminacionBanco(registro._id, motivo); await cargarDatos(); } catch (e) { setError(e.message); } },
               soloLectura
             }))}
           cargando={cargando}

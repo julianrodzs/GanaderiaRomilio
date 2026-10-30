@@ -36,7 +36,8 @@ const BandasPorcinas = ({ modo = 'bandas', soloLectura = false, rolUsuario = 'Co
     try {
       setError('');
       const [p, b, a, u, semen] = await Promise.all([obtenerPlantillasPorcinas(), obtenerBandasPorcinas(), obtenerAnimales({ especie: 'Porcino' }), puedeCrearBanda ? cargarOpcional(() => obtenerUsuariosAsignables('BandasPorcinas'), []) : [], puedeCrearBanda ? cargarOpcional(() => obtenerSemenReproductivoDisponible(), []) : []]);
-      setPlantillas(p); setBandas(b); setAnimales(a.filter((item) => item.sexo === 'Hembra' && item.estado === 'Activo')); setUsuarios(u || []); setSemenDisponible(semen || []);
+      setPlantillas(p); setBandas(b); setAnimales(a.filter((item) => item.sexo === 'Hembra' && item.estado === 'Activo')); setUsuarios(u || []);
+      setSemenDisponible((semen || []).filter((s) => !s.especie || s.especie === 'Porcino').map((s) => ({ ...s, _id: `${s._id}|${s.moneda || ''}`, nombre: `${s.toro || s.nombre} · DIIO ${s.codigoToro || '--'} · ${s.moneda || ''}` })));
       setBanda((actual) => ({ ...actual, protocolo: actual.protocolo || p[0]?._id || '', responsable: actual.responsable || u?.[0]?._id || '' }));
     } catch (err) { setError(err.message); }
   };

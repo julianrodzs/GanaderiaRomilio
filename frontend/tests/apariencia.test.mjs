@@ -62,6 +62,18 @@ test('el acceso muestra CIR Ganadero sin logo de un cliente ni peticiones previa
   assert.equal(estiloAcceso, undefined);
 });
 
+test('el login enlaza la pagina comercial sin prometer registro ni enviar datos de acceso', () => {
+  const html = render(Login);
+  assert.match(html, /¿Aún no tienes cuenta\?/);
+  const enlace = html.match(/<a\b[^>]*class="auth-landing-link"[^>]*>[\s\S]*?<\/a>/)?.[0];
+  assert.ok(enlace);
+  assert.match(enlace, /href="https:\/\/cirganadero\.circonsulting\.net\/"/);
+  assert.match(enlace, /Conoce CIR Ganadero/);
+  assert.match(enlace, /referrerPolicy="no-referrer"/i);
+  assert.doesNotMatch(enlace, /target=|role="button"|Reg[ií]strate|Crear cuenta|[?&](?:token|correo|email)=/);
+  assert.ok(html.indexOf('Olvidé mi contraseña') < html.indexOf('auth-discover'));
+});
+
 test('logo y fondo del producto admiten URLs publicas R2 independientes de las fincas', () => {
   const publico = componentes({
     VITE_LOGO_PRODUCTO_URL: 'https://imagenes.example.test/producto/logo.webp',

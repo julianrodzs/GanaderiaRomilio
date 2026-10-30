@@ -1,0 +1,15 @@
+const { Router } = require('express');
+const { autorizarPermiso } = require('../middleware/auth');
+const { requireFeature } = require('../middleware/plan');
+const ctrl = require('../controllers/bancoSemen-controller');
+const router = Router();
+router.use(requireFeature('iatfReproductivo'));
+router.get('/', autorizarPermiso('ventas.ver'), ctrl.ventas);
+router.get('/resumen', autorizarPermiso('ventas.ver'), ctrl.resumen);
+router.get('/existencias', autorizarPermiso('ventas.ver'), ctrl.listar);
+router.get('/existencias/:id', autorizarPermiso('ventas.ver'), ctrl.detalle);
+router.post('/', autorizarPermiso('ventas.gestionar'), ctrl.vender);
+router.post('/existencias/:id/traslados', autorizarPermiso('ventas.gestionar'), ctrl.trasladar);
+router.post('/existencias/:id/ajustes', autorizarPermiso('ventas.gestionar'), ctrl.ajustar);
+router.post('/:id/anular', autorizarPermiso('ventas.gestionar'), ctrl.anular);
+module.exports = router;

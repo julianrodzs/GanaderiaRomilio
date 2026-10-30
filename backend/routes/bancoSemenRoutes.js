@@ -1,0 +1,12 @@
+const { Router } = require('express');
+const { autorizarPermiso } = require('../middleware/auth');
+const { requireFeature } = require('../middleware/plan');
+const ctrl = require('../controllers/bancoSemen-controller');
+const router = Router();
+router.use(requireFeature('iatfReproductivo'));
+router.get('/', autorizarPermiso('reproduccion.ver'), ctrl.listar);
+router.post('/entradas', autorizarPermiso('reproduccion.iatfConfigurar'), ctrl.entrada);
+router.get('/:id', autorizarPermiso('reproduccion.ver'), ctrl.detalle);
+router.post('/:id/traslados', autorizarPermiso('reproduccion.iatfConfigurar'), ctrl.trasladar);
+router.post('/:id/ajustes', autorizarPermiso('reproduccion.iatfConfigurar'), ctrl.ajustar);
+module.exports = router;

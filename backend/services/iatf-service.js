@@ -8,6 +8,9 @@ const EventoCampanaIATF = require('../models/EventoCampanaIATF');
 const Finca = require('../models/Finca');
 const { InsumoReproductivo } = require('../models/InsumoReproductivo');
 const { consumirSemen } = require('./semen-reproductivo-service');
+const { AsignacionSemenCampana } = require('../models/BancoSemen');
+const { listarAsignaciones, devolverSobrantes } = require('./bancoSemen-service');
+const { ejecutarEnTransaccion } = require('./mongo-transaccion-service');
 const Lote = require('../models/Lote');
 const PertenenciaLote = require('../models/PertenenciaLote');
 const { PlantillaProtocoloIATF } = require('../models/PlantillaProtocoloIATF');
@@ -344,7 +347,8 @@ const obtenerCampana = async (id) => {
         DiagnosticoGestacionIATF.find({ campanaIATF: id }).sort({ fecha: -1 }).populate('responsable', 'nombre apellido'),
         EventoCampanaIATF.find({ campana: id }).sort({ fecha: -1 }).limit(100)
     ]);
-    return { ...campana.toObject(), pasos, diagnosticos, eventos, metricas: calcularMetricasCampana(campana, diagnosticos, pasos) };
+    const asignacionesSemen = await listarAsignaciones(id);
+    return { ...campana.toObject(), pasos, diagnosticos, eventos, asignacionesSemen, metricas: calcularMetricasCampana(campana, diagnosticos, pasos, asignacionesSemen) };
 };
 
 const obtenerActividadPorTarea = async ({ tareaId, usuarioId, rolUsuario }) => {
@@ -362,7 +366,15 @@ const obtenerActividadPorTarea = async ({ tareaId, usuarioId, rolUsuario }) => {
     const filtroInsumos = ejecucion.pasoSnapshot.tipoAccion === 'IATF'
         ? { $or: [{ _id: { $in: idsPlanificados } }, { categoria: 'SEMEN' }], activo: true }
         : { _id: { $in: idsPlanificados }, activo: true };
-    const insumos = await InsumoReproductivo.find(filtroInsumos).sort({ categoria: 1, nombre: 1 });
+    const insumos = await InsumoReproductivo.find({ ...filtroInsumos, categoria: { $ne: 'SEMEN' } }).sort({ categoria: 1, nombre: 1 });
+    if (ejecucion.pasoSnapshot.tipoAccion === 'IATF') {
+        for (const a of await listarAsignaciones(campana._id)) {
+            const disponible = a.cantidadAsignada - a.cantidadUsada - a.cantidadDevuelta;
+            if (disponible <= 0 || !a.fichaSemenId) continue;
+            const f = a.fichaSemenId;
+            insumos.push({ _id: f._id, categoria: 'SEMEN', nombre: f.nombreSemental, toro: f.nombreSemental, codigoToro: f.diio, moneda: a.moneda, cantidadDisponible: disponible });
+        }
+    }
     return { tarea, ejecucion, campana, insumos };
 };
 
@@ -538,6 +550,10 @@ const registrarIATF = async ({ campanaId, datos, usuarioId, rolUsuario }) => {
                     semenId: item.semen,
                     cantidad: item.cantidadPajuelas ?? 1,
                     fechaInseminacion: fecha,
+                    campanaId: campana._id,
+                    moneda: item.moneda,
+                    especie: 'Bovino',
+                    usuarioId,
                     session
                 });
                 const semen = consumoSemen.insumo;
@@ -562,7 +578,8 @@ const registrarIATF = async ({ campanaId, datos, usuarioId, rolUsuario }) => {
                     tipoInseminacion: 'IATF',
                     campanaIATF: campana._id,
                     origenGestacion: 'IATF',
-                    semenUtilizado: semen._id,
+                    semenUtilizado: consumoSemen.bancoSemen ? undefined : semen._id,
+                    bancoSemenId: consumoSemen.bancoSemen ? semen._id : undefined,
                     semenSnapshot: consumoSemen.snapshot,
                     cantidadPajuelas: consumoSemen.cantidad,
                     fechaInseminacion: fecha,
@@ -577,10 +594,12 @@ const registrarIATF = async ({ campanaId, datos, usuarioId, rolUsuario }) => {
                 await ciclo.save({ session });
                 participante.estadoParticipacion = 'INSEMINADA';
                 participante.fechaInseminacion = fecha;
-                participante.semenUtilizado = semen._id;
+                participante.semenUtilizado = consumoSemen.bancoSemen ? undefined : semen._id;
+                participante.bancoSemenId = consumoSemen.bancoSemen ? semen._id : undefined;
                 participante.semenSnapshot = {
-                    nombre: semen.nombre, toro: item.toro || semen.toro, codigoToro: item.codigoToro || semen.codigoToro,
-                    raza: item.raza || semen.razaToro, lote: item.loteSemen || semen.lote, tipoSemen: item.tipoSemen || semen.tipoSemen,
+                    ...consumoSemen.snapshot,
+                    nombre: semen.nombre, toro: semen.toro, codigoToro: semen.codigoToro,
+                    raza: semen.razaToro, lote: semen.lote, tipoSemen: semen.tipoSemen,
                     costoUnitario: semen.costoUnitario, moneda: semen.moneda, cantidad: consumoSemen.cantidad,
                     diasGestacionConfigurados: diasGestacion
                 };
@@ -680,7 +699,7 @@ const registrarDiagnosticos = async ({ campanaId, datos, usuarioId }) => {
     }
 };
 
-const calcularMetricasCampana = (campana, diagnosticos = [], pasos = []) => {
+const calcularMetricasCampana = (campana, diagnosticos = [], pasos = [], asignaciones = []) => {
     const participantes = campana.participantes || [];
     const inseminadas = participantes.filter((p) => Boolean(p.fechaInseminacion)).length;
     const completaron = participantes.filter((p) => ['PROTOCOLO_COMPLETADO', 'INSEMINADA'].includes(p.estadoParticipacion)).length;
@@ -688,17 +707,22 @@ const calcularMetricasCampana = (campana, diagnosticos = [], pasos = []) => {
     const vacias = participantes.filter((p) => p.resultadoActual === 'VACIA').length;
     const dudosas = participantes.filter((p) => ['DUDOSA', 'REQUIERE_RECONFIRMACION'].includes(p.resultadoActual)).length;
     const costosPorMoneda = {};
+    const costosSemenPorMoneda = {}, costosProductosPorMoneda = {};
     const agregarCosto = (moneda, monto) => {
         const clave = moneda || 'CRC';
         costosPorMoneda[clave] = Number(costosPorMoneda[clave] || 0) + Number(monto || 0);
     };
     const costoProductos = pasos.reduce((total, paso) => total + (paso.productosRealmenteUtilizados || []).reduce((suma, p) => {
         agregarCosto(p.moneda, p.costoTotalSnapshot);
+        costosProductosPorMoneda[p.moneda || 'CRC'] = (costosProductosPorMoneda[p.moneda || 'CRC'] || 0) + Number(p.costoTotalSnapshot || 0);
         return suma + Number(p.costoTotalSnapshot || 0);
     }, 0), 0);
-    const costoSemen = participantes.reduce((total, p) => {
+    const costosSemenAsignados = asignaciones.filter((a) => a.cantidadUsada > 0);
+    const fuentesCosto = asignaciones.length ? [...costosSemenAsignados.map((a) => ({ semenSnapshot: { costoUnitario: a.costoUnitarioAplicado, cantidad: a.cantidadUsada, moneda: a.moneda } })), ...participantes.filter((p) => !p.bancoSemenId)] : participantes;
+    const costoSemen = fuentesCosto.reduce((total, p) => {
         const costo = Number(p.semenSnapshot?.costoUnitario || 0) * Number(p.semenSnapshot?.cantidad || 1);
         agregarCosto(p.semenSnapshot?.moneda, costo);
+        costosSemenPorMoneda[p.semenSnapshot?.moneda || 'CRC'] = (costosSemenPorMoneda[p.semenSnapshot?.moneda || 'CRC'] || 0) + costo;
         return total + costo;
     }, 0);
     const adicionales = campana.costosAdicionales || {};
@@ -747,8 +771,11 @@ const calcularMetricasCampana = (campana, diagnosticos = [], pasos = []) => {
         vacias,
         dudosas,
         pAI: inseminadas ? Number(((prenadas / inseminadas) * 100).toFixed(2)) : 0,
-        costoProductos,
-        costoSemen,
+        costoProductos: Object.keys(costosProductosPorMoneda).filter((m) => costosProductosPorMoneda[m] !== 0).length > 1 ? null : costoProductos,
+        costoSemen: Object.keys(costosSemenPorMoneda).filter((m) => costosSemenPorMoneda[m] !== 0).length > 1 ? null : costoSemen,
+        costosSemenPorMoneda,
+        costosProductosPorMoneda,
+        costoPorPrenezPorMoneda: Object.fromEntries(Object.entries(costosPorMoneda).map(([m, costo]) => [m, prenadas ? Math.round(costo / prenadas * 100) / 100 : null])),
         costoTotal,
         monedaCosto,
         costosPorMoneda,
@@ -759,7 +786,8 @@ const calcularMetricasCampana = (campana, diagnosticos = [], pasos = []) => {
 };
 
 const cambiarEstadoCampana = async ({ campanaId, estado, motivo, usuarioId }) => {
-    const campana = await CampanaIATF.findById(campanaId);
+    await ejecutarEnTransaccion(async (session) => {
+    const campana = await CampanaIATF.findById(campanaId).session(session);
     if (!campana) throw errorIatf('Campaña no encontrada.', 404);
     if (campana.estado === 'CANCELADA') throw errorIatf('La campaña ya está cancelada.', 409);
     if (estado === 'CANCELADA') {
@@ -769,10 +797,10 @@ const cambiarEstadoCampana = async ({ campanaId, estado, motivo, usuarioId }) =>
         campana.motivoCancelacion = motivo;
         campana.participantes.forEach((p) => { if (ESTADOS_PARTICIPACION_ACTIVOS.includes(p.estadoParticipacion)) p.estadoParticipacion = 'CANCELADA'; });
         await Promise.all([
-            Tarea.updateMany({ referenciaId: campana._id, moduloOrigen: 'Reproduccion', estado: { $in: ['Pendiente', 'En proceso'] } }, { $set: { estado: 'Cancelada', observaciones: motivo || 'Campaña IATF cancelada' } }),
+            Tarea.updateMany({ referenciaId: campana._id, moduloOrigen: 'Reproduccion', estado: { $in: ['Pendiente', 'En proceso'] } }, { $set: { estado: 'Cancelada', observaciones: motivo || 'Campaña IATF cancelada' } }, { session }),
             EjecucionPasoIATF.updateMany(
                 { campana: campana._id, estado: { $in: ['PENDIENTE', 'PARCIAL'] } },
-                { $set: { estado: 'CANCELADO' } }
+                { $set: { estado: 'CANCELADO' } }, { session }
             )
         ]);
         await Promise.all(afectados.map((animal) => upsertEventoAnimal({
@@ -780,14 +808,16 @@ const cambiarEstadoCampana = async ({ campanaId, estado, motivo, usuarioId }) =>
             titulo: 'Campaña IATF cancelada', descripcion: motivo || 'La campaña fue cancelada.',
             moduloOrigen: 'Reproduccion', referenciaId: campana._id, creadoPor: usuarioId,
             metadata: { campanaIATF: campana._id, estado: 'CANCELADA' }
-        })));
+        }, { session })));
     } else {
         campana.estado = 'FINALIZADA';
         campana.fechaFinalizacion = new Date();
     }
-    await campana.save();
-    await EventoCampanaIATF.create({ campana: campana._id, tipo: estado === 'CANCELADA' ? 'CANCELADA' : 'FINALIZADA', descripcion: motivo, usuario: usuarioId });
-    return obtenerCampana(campana._id);
+    await devolverSobrantes(campana._id, usuarioId, session);
+    await campana.save({ session });
+    await EventoCampanaIATF.create([{ campana: campana._id, tipo: estado === 'CANCELADA' ? 'CANCELADA' : 'FINALIZADA', descripcion: motivo, usuario: usuarioId }], { session, ordered: true });
+    });
+    return obtenerCampana(campanaId);
 };
 
 const retirarParticipante = async ({ campanaId, participanteId, motivo, usuarioId }) => {
@@ -843,17 +873,13 @@ const listarProtocolos = (incluirInactivos = false) => PlantillaProtocoloIATF.fi
         { alcance: 'FINCA', fincaId: obtenerFincaActual() }
     ]
 }).sort({ nombre: 1 });
-const listarInsumos = (incluirInactivos = false) => InsumoReproductivo.find(incluirInactivos ? {} : { activo: true }).sort({ categoria: 1, nombre: 1 });
+const listarInsumos = (incluirInactivos = false) => InsumoReproductivo.find({ categoria: { $ne: 'SEMEN' }, ...(incluirInactivos ? {} : { activo: true }) }).sort({ categoria: 1, nombre: 1 });
 const guardarInsumo = async ({ id, datos, usuarioId }) => {
     const limpios = limpiarDatosInsumo(datos);
     const existente = id ? await InsumoReproductivo.findById(id) : null;
     const categoria = limpios.categoria || existente?.categoria;
     if (categoria === 'SEMEN') {
-        ['cantidadDisponible', 'cantidadEnUso'].forEach((campo) => {
-            if (limpios[campo] !== undefined && (!Number.isInteger(Number(limpios[campo])) || Number(limpios[campo]) < 0)) {
-                throw errorIatf('Las existencias de semen deben registrarse como pajuelas enteras.', 422, 'SEMEN_QUANTITY_INVALID');
-            }
-        });
+        throw errorIatf('El semen se registra desde el Banco de semen.', 400, 'SEMEN_BANK_REQUIRED');
     }
     return id
         ? InsumoReproductivo.findByIdAndUpdate(id, limpios, { new: true, runValidators: true })
@@ -865,6 +891,7 @@ const consolidarMetricas = async ({ fincasAutorizadas = [] }) => {
     const campanas = await CampanaIATF.find(filtro).setOptions({ omitirAislamientoFinca: true }).lean();
     const ejecuciones = await EjecucionPasoIATF.find({ campana: { $in: campanas.map((item) => item._id) } })
         .setOptions({ omitirAislamientoFinca: true }).lean();
+    const asignaciones = await AsignacionSemenCampana.find({ campanaId: { $in: campanas.map((item) => item._id) } }).setOptions({ omitirAislamientoFinca: true }).lean();
     const ejecucionesPorCampana = new Map();
     ejecuciones.forEach((paso) => {
         const clave = idTexto(paso.campana);
@@ -872,7 +899,7 @@ const consolidarMetricas = async ({ fincasAutorizadas = [] }) => {
     });
     const porFinca = new Map();
     campanas.forEach((campana) => {
-        const metrica = calcularMetricasCampana(campana, [], ejecucionesPorCampana.get(idTexto(campana._id)) || []);
+        const metrica = calcularMetricasCampana(campana, [], ejecucionesPorCampana.get(idTexto(campana._id)) || [], asignaciones.filter((a) => idTexto(a.campanaId) === idTexto(campana._id)));
         const clave = idTexto(campana.fincaId);
         const actual = porFinca.get(clave) || { fincaId: clave, campanas: 0, inscritas: 0, inseminadas: 0, prenadas: 0, costosPorMoneda: {} };
         actual.campanas += 1;

@@ -15,6 +15,7 @@ const estadoInicial = {
   diasCeloPostDestetePorcino: 5,
   tipoRegistro: 'Inseminación/Monta',
   semenUtilizado: '',
+  monedaSemen: '',
   cantidadPajuelas: 1,
   destinoCrias: 'No definido',
   cantidadCriasEstimada: '',
@@ -81,7 +82,8 @@ const normalizarRegistro = (registro) => ({
   ...registro,
   animal: obtenerAnimalId(registro?.animal),
   asignadoA: registro?.asignadoA?._id || registro?.asignadoA || '',
-  semenUtilizado: registro?.semenUtilizado?._id || registro?.semenUtilizado || '',
+  semenUtilizado: registro?.bancoSemenId?._id || registro?.bancoSemenId || registro?.semenUtilizado?._id || registro?.semenUtilizado || '',
+  monedaSemen: registro?.semenSnapshot?.moneda || '',
   cantidadPajuelas: registro?.cantidadPajuelas || 1,
   fechaInseminacion: formatearFechaInput(registro?.fechaInseminacion || registro?.fechaMonta),
   fechaMonta: formatearFechaInput(registro?.fechaMonta),
@@ -267,18 +269,18 @@ const FormularioReproduccion = ({
           <div className="form-grid">
             <label>
               Lote de semen
-              <select name="semenUtilizado" value={formulario.semenUtilizado} onChange={actualizarCampo} required disabled={Boolean(registroInicial?.semenUtilizado)}>
+              <select name="semenUtilizado" value={formulario.semenUtilizado ? `${formulario.semenUtilizado}|${formulario.monedaSemen || ''}` : ''} onChange={(e) => { const [semenUtilizado, monedaSemen] = e.target.value.split('|'); setFormulario({ ...formulario, semenUtilizado, monedaSemen }); }} required disabled={Boolean(registroInicial?.semenUtilizado || registroInicial?.bancoSemenId)}>
                 <option value="">Seleccionar semen</option>
-                {semenDisponible.map((semen) => (
-                  <option key={semen._id} value={semen._id}>
-                    {semen.toro || semen.nombre} · {semen.lote || 'Sin lote'} · {semen.cantidadDisponible} pajuelas
+                {semenDisponible.filter((s) => !s.especie || s.especie === formulario.especie).map((semen) => (
+                  <option key={`${semen._id}|${semen.moneda || ''}`} value={`${semen._id}|${semen.moneda || ''}`}>
+                    {semen.toro || semen.nombre} · DIIO {semen.codigoToro || '--'} · {semen.moneda || ''} · {semen.cantidadDisponible} pajuelas
                   </option>
                 ))}
               </select>
             </label>
             <label>
               Pajuelas utilizadas
-              <input name="cantidadPajuelas" type="number" min="1" step="1" value={formulario.cantidadPajuelas} onChange={actualizarCampo} required disabled={Boolean(registroInicial?.semenUtilizado)} />
+              <input name="cantidadPajuelas" type="number" min="1" step="1" value={formulario.cantidadPajuelas} onChange={actualizarCampo} required disabled={Boolean(registroInicial?.semenUtilizado || registroInicial?.bancoSemenId)} />
             </label>
           </div>
         )}

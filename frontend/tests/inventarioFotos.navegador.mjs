@@ -60,6 +60,7 @@ try {
         import MarcaProducto from './src/Components/MarcaProducto.js';
         import { AparienciaProvider, useApariencia } from './src/context/AparienciaContext.js';
         import MiPlan from './src/pages/MiPlan.js';
+        import IniciarSesion from './src/Components/IniciarSesion.js';
         import { PlanProvider } from './src/context/PlanContext.js';
         localStorage.setItem('ganaderiaSesion', JSON.stringify({token:'fixture', fincaId:'finca-fixture'}));
         const animal = {diio:'100', nombre:'Luna', fotoPrincipal:{url:'/api/archivos/r2/foto-fixture'}};
@@ -79,9 +80,11 @@ try {
           const [vista, setVista] = React.useState('foto');
           window.mostrarApariencia = () => setVista('apariencia');
           window.mostrarMiPlan = () => setVista('plan');
+          window.mostrarLogin = () => setVista('login');
           window.actualizarFotos = () => setFilas(actuales => actuales.map(fila => ({...fila,foto:'/foto-nueva'})));
           if (vista === 'apariencia') return <AparienciaProvider contextoId="fixture"><VistaApariencia /></AparienciaProvider>;
           if (vista === 'plan') return <AparienciaProvider contextoId="fixture"><PlanProvider><MiPlan /></PlanProvider></AparienciaProvider>;
+          if (vista === 'login') return <main className="auth-page"><IniciarSesion onLogin={()=>{}} onOlvideContrasena={()=>{}} /></main>;
           return <><TablaDinamica titulo="Inventario" columnas={columnas} datos={filas}
           ordenInicial={{campo:'diio',direccion:'asc'}} mostrarAcciones={false} />
           <div className="modal-backdrop"><section className="modal-panel detalle-animal-panel">
@@ -322,6 +325,33 @@ try {
   assert.equal(subidas, solicitudesAntes);
   assert.deepEqual(errores, []);
   console.log('PASS: progreso visible, error junto a la imagen, foto anterior conservada, reintento y validacion sin enviar archivos invalidos.');
+  await evaluar('window.mostrarLogin()');
+  await hasta("Boolean(document.querySelector('.auth-landing-link'))");
+  assert.equal(await evaluar("document.querySelector('.auth-landing-link').href"), 'https://cirganadero.circonsulting.net/');
+  for (const [nombre, width, height] of [['escritorio',1440,1000], ['ipad',820,1180], ['movil',390,844]]) {
+    await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+    await evaluar("document.querySelector('.auth-landing-link').scrollIntoView({block:'center'});document.querySelector('.auth-link').focus()");
+    await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    const medidas = await evaluar(`(() => {
+      const a=document.querySelector('.auth-landing-link'),r=a.getBoundingClientRect(),p=a.closest('form').getBoundingClientRect();
+      return {ancho:document.documentElement.scrollWidth<=innerWidth,alto:r.height>=48,dentro:r.left>=p.left&&r.right<=p.right,visible:r.top>=0&&r.bottom<=innerHeight,foco:document.activeElement===a,outline:getComputedStyle(a).outlineStyle};
+    })()`);
+    assert.deepEqual(medidas, {ancho:true,alto:true,dentro:true,visible:true,foco:true,outline:'solid'});
+    const captura = await cdp('Page.captureScreenshot', {format:'png'});
+    writeFileSync(path.join(os.tmpdir(), `cir-login-${nombre}.png`), Buffer.from(captura.data, 'base64'));
+  }
+  await evaluar(`(() => {
+    window.enviosLogin=0;window.destinoLanding='';
+    document.querySelector('form').addEventListener('submit',()=>window.enviosLogin++);
+    document.querySelector('.auth-landing-link').addEventListener('click',e=>{e.preventDefault();window.destinoLanding=e.currentTarget.href;},{once:true});
+  })()`);
+  await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await hasta("window.destinoLanding==='https://cirganadero.circonsulting.net/'");
+  assert.equal(await evaluar('window.enviosLogin'), 0);
+  assert.deepEqual(errores, []);
+  console.log('PASS: enlace comercial del login en escritorio/iPad/movil, foco visible y activacion por teclado sin enviar credenciales.');
 } finally {
   if (socket?.readyState === WebSocket.OPEN) {
     try { await cdp('Browser.close'); } catch {}

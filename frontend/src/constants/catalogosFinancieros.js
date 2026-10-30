@@ -1,5 +1,5 @@
 export const catalogosFinancierosBase = {
-  tiposMovimiento: ['Compra', 'Compra de animales', 'Inversion', 'Planilla', 'Venta de animales'],
+  tiposMovimiento: ['Compra', 'Compra de animales', 'Inversion', 'Planilla', 'Venta de animales', 'Venta de pajillas'],
   naturalezas: ['Egreso', 'Ingreso'],
   categorias: [
     'Alimentación',
@@ -17,7 +17,8 @@ export const catalogosFinancierosBase = {
     'Porcinos',
     'Potreros',
     'Sanidad',
-    'Ventas'
+    'Ventas',
+    'Venta de Genética'
   ],
   unidades: ['L', 'KG', 'G', 'ML', 'UNIDAD', 'SACO', 'GALON', 'M', 'DOSIS'],
   tiposTrabajo: [

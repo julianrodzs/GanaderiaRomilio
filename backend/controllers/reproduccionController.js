@@ -18,7 +18,7 @@ const {
 } = require('../services/reproduccion-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 const { validarUsuarioAsignable } = require('../services/usuarioAsignable-service');
-const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota } = require('../services/plan-service');
+const { asegurarPuedeCrearAnimal, ejecutarConReservaCuota, tieneFeature } = require('../services/plan-service');
 const { validarObjetivoProductivoFinca } = require('../services/finca-service');
 const { prepararDatosRaciales } = require('../services/raza-service');
 const { calcularEdadMeses, validarYPrepararCategoriaAnimal } = require('../services/categoriaAnimal-service');
@@ -55,12 +55,15 @@ const poblarAnimal = (query) => query
 const esInseminacionConvencional = (datos = {}) => datos.tipoRegistro === 'Inseminación'
     && Boolean(datos.fechaInseminacion || datos.fechaMonta);
 
-const prepararInseminacionConvencional = async ({ datos, session }) => {
+const prepararInseminacionConvencional = async ({ datos, session, usuarioId }) => {
     const fechaInseminacion = datos.fechaInseminacion || datos.fechaMonta;
     const consumo = await consumirSemen({
         semenId: datos.semenUtilizado || datos.semen,
         cantidad: datos.cantidadPajuelas ?? 1,
         fechaInseminacion,
+        especie: datos.especie,
+        moneda: datos.monedaSemen,
+        usuarioId,
         session
     });
     return {
@@ -69,7 +72,8 @@ const prepararInseminacionConvencional = async ({ datos, session }) => {
         fechaMonta: fechaInseminacion,
         tipoInseminacion: 'IA_CONVENCIONAL',
         origenGestacion: 'IA_CONVENCIONAL',
-        semenUtilizado: consumo.insumo._id,
+        semenUtilizado: consumo.bancoSemen ? undefined : consumo.insumo._id,
+        bancoSemenId: consumo.bancoSemen ? consumo.insumo._id : undefined,
         semenSnapshot: consumo.snapshot,
         cantidadPajuelas: consumo.cantidad
     };
@@ -192,8 +196,9 @@ const resolverPadreNacimiento = async ({ registro, datos, madre }) => {
         || ['IATF', 'IA_CONVENCIONAL'].includes(registro.origenGestacion);
     const semen = registro.semenSnapshot || {};
     if (!padreRegistrado && !padreDiio && !padreExternoNombre && origenConSemen) {
+        if (semen.toroId) padreRegistrado = await Animal.findOne({ _id: semen.toroId, sexo: 'Macho', especie });
         const codigoToro = semen.codigoToro || null;
-        if (codigoToro) {
+        if (!padreRegistrado && codigoToro && semen.esExterno !== true) {
             padreRegistrado = await Animal.findOne({
                 sexo: 'Macho',
                 especie,
@@ -305,7 +310,7 @@ reproduccionCtrl.createRegistro = async (req, res) => {
 
         const crearRegistro = async (session = null) => {
             const data = esInseminacionConvencional(datos)
-                ? await prepararInseminacionConvencional({ datos, session })
+                ? await prepararInseminacionConvencional({ datos: { ...datos, especie: validacion.animal.especie || 'Bovino' }, session, usuarioId: req.usuario.id })
                 : datos;
             return crearNuevoCicloReproductivo({
                 data,
@@ -493,6 +498,9 @@ reproduccionCtrl.getRegistro = async (req, res) => {
 
 reproduccionCtrl.getSemenDisponible = async (req, res) => {
     try {
+        const { listarBanco } = require('../services/bancoSemen-service');
+        const fichas = await tieneFeature('iatfReproductivo', req.organizacionId) ? await listarBanco(req.query) : [];
+        const disponibles = fichas.flatMap((f) => ['CRC', 'USD'].filter((m) => f.saldos[m].reproductivo > 0).map((m) => ({ _id: f._id, nombre: f.nombreSemental, toro: f.nombreSemental, codigoToro: f.diio, razaToro: f.raza, especie: f.especie, moneda: m, cantidadDisponible: f.saldos[m].reproductivo, bancoSemen: true })));
         const fecha = req.query.fecha ? new Date(req.query.fecha) : new Date();
         if (Number.isNaN(fecha.getTime())) return res.status(422).json({ mensaje: 'La fecha indicada no es valida.' });
         const inicioDia = new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()));
@@ -506,7 +514,7 @@ reproduccionCtrl.getSemenDisponible = async (req, res) => {
                 { fechaVencimiento: { $gte: inicioDia } }
             ]
         }).sort({ fechaVencimiento: 1, nombre: 1 });
-        return res.json(semen);
+        return res.json([...disponibles, ...semen.filter((s) => !s.bancoSemenId)]);
     } catch (error) {
         return res.status(400).json({ mensaje: 'No se pudo consultar el semen disponible', error: error.message });
     }
@@ -563,15 +571,18 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
             datosActualizacion.especie = animalValidado.especie || 'Bovino';
         }
 
-        if (registroAnterior.semenUtilizado
+        const semenAnterior = registroAnterior.bancoSemenId || registroAnterior.semenUtilizado;
+        if (semenAnterior
             && datosActualizacion.semenUtilizado
-            && String(registroAnterior.semenUtilizado) !== String(datosActualizacion.semenUtilizado)) {
+            && String(semenAnterior) !== String(datosActualizacion.semenUtilizado)) {
             return res.status(409).json({ mensaje: 'El lote de semen consumido no puede sustituirse; registre una correccion trazable.' });
         }
-        const requiereConsumoSemen = esInseminacionConvencional(datosActualizacion) && !registroAnterior.semenUtilizado;
+        if (semenAnterior && datosActualizacion.cantidadPajuelas != null && Number(datosActualizacion.cantidadPajuelas) !== registroAnterior.cantidadPajuelas) return res.status(409).json({ mensaje: 'La cantidad utilizada requiere una anulacion trazable.' });
+        if (registroAnterior.bancoSemenId) delete datosActualizacion.semenUtilizado;
+        const requiereConsumoSemen = esInseminacionConvencional(datosActualizacion) && !semenAnterior;
         const actualizar = async (session = null) => {
             const datos = requiereConsumoSemen
-                ? await prepararInseminacionConvencional({ datos: datosActualizacion, session })
+                ? await prepararInseminacionConvencional({ datos: { ...datosActualizacion, especie: animalValidado?.especie || registroAnterior.especie || 'Bovino' }, session, usuarioId: req.usuario.id })
                 : datosActualizacion;
             return RegistroReproductivo.findByIdAndUpdate(req.params.id, datos, {
                 new: true,

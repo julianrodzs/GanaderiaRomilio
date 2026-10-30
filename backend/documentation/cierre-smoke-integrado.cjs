@@ -43,10 +43,10 @@ async function start(){
  for(const f of fs.readdirSync(path.join(__dirname,'../models')).filter(f=>f.endsWith('.js')))require('../models/'+f);
  const {verificarModelo,limpiarIndiceEventoObsoleto}=require('../scripts/sincronizar-indices');
  for(const M of Object.values(mongoose.models)){await M.init();await verificarModelo(M);out.indices[M.modelName]=await M.collection.indexes();}
- await comprobacion('INDICES_65_MODELOS',async()=>{
-  assert.equal(Object.keys(out.indices).length,65);
+ await comprobacion('INDICES_MODELOS_PRODUCTIVOS',async()=>{
+  assert.equal(Object.keys(out.indices).length,70);
   const version=await mongoose.connection.db.admin().command({buildInfo:1});
-  assert.match(version.version,/^8\./);return{modelos:65,mongodb:version.version};
+  assert.match(version.version,/^8\./);return{modelos:70,mongodb:version.version};
  });
  await comprobacion('MIGRACION_INDICE_SPARSE_EN_OTRA_BASE',async()=>{
   const dbMigracion=mongoose.connection.useDb('cierre_migracion_indices');
@@ -60,13 +60,13 @@ async function start(){
   assert.equal(indice.sparse,undefined);assert.deepEqual(indice.partialFilterExpression,{claveIdempotencia:{$type:'string'}});
   await dbMigracion.dropDatabase();return{indiceParcial:true,claveNulaOmitida:true,baseAislada:true};
  });
- await comprobacion('SCRIPT_INDICES_65_MODELOS_E_IDEMPOTENCIA',async()=>{
+ await comprobacion('SCRIPT_INDICES_MODELOS_E_IDEMPOTENCIA',async()=>{
   const env={...process.env,NODE_ENV:'production',MONGODB_URI:`mongodb://127.0.0.1:${port}/cierre_indices_cli?replicaSet=cierreAudit`,MONGODB_DB:'cierre_indices_cli',JWT_SECRET:'Cierre-Local-0123456789-abcdefghijklmnop',CRON_SECRET:'Cron-Local-0123456789-abcdefghijklmnop',FRONTEND_URL:'https://app.example.test'};
   const ejecuciones=[];
   for(let i=0;i<2;i++){
    const r=spawnSync(process.execPath,['--require',path.join(__dirname,'cierre-sin-dotenv.cjs'),path.join(__dirname,'../scripts/sincronizar-indices.js')],{env,windowsHide:true,encoding:'utf8',timeout:30000});
-   assert.equal(r.error,undefined);assert.equal(r.status,0,(r.stdout||'')+(r.stderr||''));assert.match(r.stdout,/65 modelos registrados/);
-   ejecuciones.push({exit:r.status,modelos:65});
+   assert.equal(r.error,undefined);assert.equal(r.status,0,(r.stdout||'')+(r.stderr||''));assert.match(r.stdout,/70 modelos registrados/);
+   ejecuciones.push({exit:r.status,modelos:70});
   }
   await client.db('cierre_indices_cli').dropDatabase();return{ejecuciones,produccion:true,baseAislada:true};
  });
@@ -285,7 +285,7 @@ async function main(){
   });
  }catch(e){record('INFRAESTRUCTURA','FAIL',{message:e.message,stack:e.stack});}
  finally{
-  fs.writeFileSync(path.join(__dirname,currency==='USD'?'cierre-smoke-moneda-usd-resultados.json':diagnostic?'cierre-smoke-diagnostico-resultados.json':'cierre-smoke-resultados.json'),JSON.stringify(out,null,2));
+  fs.writeFileSync(path.join(process.env.CIERRE_OUTPUT_DIR || __dirname,currency==='USD'?'cierre-smoke-moneda-usd-resultados.json':diagnostic?'cierre-smoke-diagnostico-resultados.json':'cierre-smoke-resultados.json'),JSON.stringify(out,null,2));
   if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}
   await delay(200);await mongoose.disconnect().catch(()=>{});await client?.close().catch(()=>{});
   if(mongod&&!mongod.killed)mongod.kill();global.fetch=nativeFetch;

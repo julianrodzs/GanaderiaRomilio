@@ -139,6 +139,8 @@ const registroReproductivoSchema = new Schema(
         tipoRegistro: { type: String, enum: ['Inseminación/Monta', 'Monta', 'Inseminación'], default: 'Inseminación/Monta' },
         tipoInseminacion: { type: String, enum: ['IATF', 'IA_CONVENCIONAL'] },
         semenUtilizado: { type: Schema.Types.ObjectId, ref: 'InsumoReproductivo' },
+        bancoSemenId: { type: Schema.Types.ObjectId, ref: 'BancoSemen' },
+        inseminacionAnulada: { type: Boolean, default: false },
         semenSnapshot: { type: Schema.Types.Mixed },
         cantidadPajuelas: {
             type: Number,

@@ -2,12 +2,14 @@
 
 La configuración fuente está en `backend/config/planes.js`. Los precios pueden cambiarse con variables de entorno y no deben duplicarse en controladores ni frontend.
 
-| Plan | USD/mes | Fincas | Usuarios activos | Animales activos | Dron/mes | Productiva | Económica | IATF | Emails |
+| Plan | USD/mes base | Fincas | Usuarios e invitaciones activas | Animales activos | Dron/mes | Productiva | Económica | IATF | Emails |
 | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |
-| Esencial | 6 | 1 | 3 | 210 bovinos o 500 porcinos | 15 si elige bovinos | No | No | No | No |
-| Gestión | 12 | 2 | 8 | 2.000 total | 60 | Sí | No | No | No |
-| Pro | 20 | 5 | 20 | 5.000 total | 150 | Sí | Sí | Sí | Sí |
-| Premium | 35 | 10 | 50 | 10.000 total | Uso intensivo medido | Sí | Sí | Sí | Sí |
+| Esencial | 10 | 1 | 3 | 210 bovinos o 500 porcinos | 15 si elige bovinos | No | No | No | No |
+| Gestión | 20 | 2 | 8 | 2.000 total | 60 | Sí | No | No | No |
+| Pro | 35 | 5 | 20 | 5.000 total | 150 | Sí | Sí | Sí | Sí |
+| Premium | 60 | 10 | 50 | 10.000 total | Uso intensivo medido | Sí | Sí | Sí | Sí |
+
+Estos precios base pueden sobrescribirse con `PLAN_PRECIO_*_USD`; no definen por sí solos impuestos, un medio de pago habilitado o una oferta aceptada. La integración Stripe en el código no certifica que la cuenta permita cobrar en producción. Los borradores y decisiones comerciales están en [documentacion/comercial](../../documentacion/comercial/README.md).
 
 Premium no tiene un límite comercial fijo de dron, pero cada conteo exitoso queda registrado en `UsoPlan`.
 

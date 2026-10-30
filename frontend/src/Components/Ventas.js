@@ -13,6 +13,8 @@ import { obtenerRangoMesActual } from '../utils/fechas';
 import SelectorEspecie from './SelectorEspecie';
 import { ContenidoPaginado } from './PaginacionTabla';
 import { obtenerCategoriaVisible } from '../utils/categoriasAnimales';
+import BancoSemen from './BancoSemen';
+import { usePlan } from '../context/PlanContext';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -84,7 +86,7 @@ const estadoInicial = {
   montoFinal: ''
 };
 
-const Ventas = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
+const VentasAnimales = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const [ventas, setVentas] = useState([]);
   const [animales, setAnimales] = useState([]);
   const [camadas, setCamadas] = useState([]);
@@ -792,4 +794,10 @@ const Ventas = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   );
 };
 
+const Ventas = (props) => {
+  const [tab, setTab] = useState('animales');
+  const { tieneFeature } = usePlan();
+  const puedePajillas = tieneFeature('iatfReproductivo');
+  return <><nav className="sanidad-tabs" aria-label="Tipo de venta"><button type="button" className={tab === 'animales' ? 'activo' : ''} onClick={() => setTab('animales')}>Animales</button>{puedePajillas && <button type="button" className={tab === 'pajillas' ? 'activo' : ''} onClick={() => setTab('pajillas')}>Pajillas</button>}</nav>{tab === 'pajillas' && puedePajillas ? <BancoSemen comercial permitirEdicion={!props.soloLectura && ['Administrador', 'Encargado'].includes(props.rolUsuario)} /> : <VentasAnimales {...props} />}</>;
+};
 export default Ventas;

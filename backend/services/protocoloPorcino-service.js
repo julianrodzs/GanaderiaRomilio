@@ -19,6 +19,7 @@ const { validarUsuarioAsignable } = require('./usuarioAsignable-service');
 const { calcularCronograma, calcularCumplimiento, idTexto, normalizarPasos, validarPasos } = require('./protocoloScheduler-service');
 const { obtenerFincaActual, obtenerOrganizacionActual } = require('../context/organizacion-context');
 const { consumirSemen, devolverSemen, validarCantidadPajuelas } = require('./semen-reproductivo-service');
+const { ejecutarEnTransaccion } = require('./mongo-transaccion-service');
 
 const errorProtocolo = (mensaje, status = 400, code = 'PROTOCOLO_PORCINO') => Object.assign(new Error(mensaje), { status, code });
 const seleccionar = (datos, campos) => Object.fromEntries(campos.filter((campo) => Object.hasOwn(datos || {}, campo)).map((campo) => [campo, datos[campo]]));
@@ -76,7 +77,7 @@ const versionarPlantilla = async ({ id, datos, usuarioId, organizacionId }) => {
 
 const obtenerRegistroActivo = (animal) => RegistroReproductivo.findOne({ animal, especie: 'Porcino', estadoCiclo: 'Activo' }).sort({ createdAt: -1 });
 
-const crearTareas = async (banda) => {
+const crearTareas = async (banda, session = null) => {
     for (const ejecucion of banda.ejecuciones) {
         const paso = banda.protocoloSnapshot.pasos.find((item) => idTexto(item._id) === idTexto(ejecucion.pasoId));
         if (!paso?.generaTarea || !ejecucion.fechaProgramada) continue;
@@ -91,12 +92,12 @@ const crearTareas = async (banda) => {
                 creadoAutomaticamente: true, especie: 'Porcino', categoriaAutomatica: 'BANDA_PORCINA',
                 claveAutomatica: `BANDA_PORCINA:${banda._id}:${paso._id}`
             } },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
+            { upsert: true, new: true, setDefaultsOnInsert: true, session }
         );
         ejecucion.tarea = tarea._id;
     }
-    await banda.save();
-    await ejecutarNotificacionSegura(() => notificarTareasOrigen({ referenciaId: banda._id, moduloOrigen: 'BandaReproductivaPorcina' }, banda.creadoPor));
+    await banda.save({ session });
+    if (!session) await ejecutarNotificacionSegura(() => notificarTareasOrigen({ referenciaId: banda._id, moduloOrigen: 'BandaReproductivaPorcina' }, banda.creadoPor));
 };
 
 const crearBanda = async ({ datos, usuarioId }) => {
@@ -167,9 +168,9 @@ const obtenerBanda = async (id) => {
     return { ...banda, metricas: await calcularMetricas(banda) };
 };
 
-const registrarAccionParticipante = async ({ banda, participante, paso, datos, usuarioId, semenConsumido = null }) => {
+const registrarAccionParticipante = async ({ banda, participante, paso, datos, usuarioId, semenConsumido = null, session = null }) => {
     const fecha = new Date(datos.fechaReal || Date.now());
-    let registro = participante.registroReproductivo ? await RegistroReproductivo.findById(participante.registroReproductivo) : await obtenerRegistroActivo(participante.animal);
+    let registro = participante.registroReproductivo ? await RegistroReproductivo.findById(participante.registroReproductivo).session(session) : await obtenerRegistroActivo(participante.animal).session(session);
     if (['SERVICIO', 'INSEMINACION'].includes(paso.tipoAccion)) {
         if (!registro) registro = new RegistroReproductivo({ animal: participante.animal, especie: 'Porcino', asignadoA: banda.responsable, bandaReproductivaPorcina: banda._id });
         registro.tipoRegistro = paso.tipoAccion === 'SERVICIO' ? 'Monta' : 'Inseminación'; registro.tipoInseminacion = paso.tipoAccion === 'INSEMINACION' ? 'IA_CONVENCIONAL' : undefined;
@@ -178,7 +179,8 @@ const registrarAccionParticipante = async ({ banda, participante, paso, datos, u
         else {
             registro.fechaInseminacion = fecha;
             registro.fechaMonta = undefined;
-            registro.semenUtilizado = semenConsumido.insumo._id;
+            registro.semenUtilizado = semenConsumido.bancoSemen ? undefined : semenConsumido.insumo._id;
+            registro.bancoSemenId = semenConsumido.bancoSemen ? semenConsumido.insumo._id : undefined;
             registro.cantidadPajuelas = semenConsumido.cantidadPorAnimal;
             registro.semenSnapshot = {
                 ...semenConsumido.snapshot,
@@ -186,7 +188,7 @@ const registrarAccionParticipante = async ({ banda, participante, paso, datos, u
             };
         }
         registro.observaciones = datos.observaciones;
-        await registro.save(); participante.registroReproductivo = registro._id; participante.estadoParticipacion = 'SERVIDA'; participante.fechasReales.set ? participante.fechasReales.set(paso.tipoAccion === 'SERVICIO' ? 'SERVICIO' : 'IA', fecha) : (participante.fechasReales[paso.tipoAccion === 'SERVICIO' ? 'SERVICIO' : 'IA'] = fecha);
+        await registro.save({ session }); participante.registroReproductivo = registro._id; participante.estadoParticipacion = 'SERVIDA'; participante.fechasReales.set ? participante.fechasReales.set(paso.tipoAccion === 'SERVICIO' ? 'SERVICIO' : 'IA', fecha) : (participante.fechasReales[paso.tipoAccion === 'SERVICIO' ? 'SERVICIO' : 'IA'] = fecha);
     }
     if (paso.tipoAccion === 'DESTETE') {
         if (registro) { registro.fechaDestete = fecha; await registro.save(); }
@@ -247,17 +249,22 @@ const registrarAccionParticipante = async ({ banda, participante, paso, datos, u
         const tipoEvento = paso.tipoAccion === 'PARTO' ? 'Parto'
             : ['DESTETE', 'DESTETE_CAMADA'].includes(paso.tipoAccion) ? 'Destete'
                 : paso.tipoAccion === 'DIAGNOSTICO_GESTACION' ? 'Diagnostico de gestacion' : 'Monta';
-        await upsertEventoAnimal({ animal: participante.animal, tipoEvento, fecha, titulo: paso.nombre, descripcion: datos.observaciones || `Actividad de la banda ${banda.nombre}.`, moduloOrigen: 'Reproduccion', referenciaId: banda._id, creadoPor: usuarioId, metadata: { bandaId: banda._id, pasoId: paso._id, tipoAccion: paso.tipoAccion, resultado: datos.resultado, semenId: semenConsumido?.insumo?._id, cantidadPajuelas: semenConsumido?.cantidadPorAnimal } });
+        await upsertEventoAnimal({ animal: participante.animal, tipoEvento, fecha, titulo: paso.nombre, descripcion: datos.observaciones || `Actividad de la banda ${banda.nombre}.`, moduloOrigen: 'Reproduccion', referenciaId: banda._id, creadoPor: usuarioId, metadata: { bandaId: banda._id, pasoId: paso._id, tipoAccion: paso.tipoAccion, resultado: datos.resultado, semenId: semenConsumido?.insumo?._id, cantidadPajuelas: semenConsumido?.cantidadPorAnimal } }, { session });
     }
 };
 
-const ejecutarPaso = async ({ bandaId, pasoId, datos = {}, usuarioId, rolUsuario }) => {
-    const banda = await BandaReproductivaPorcina.findById(bandaId);
+const ejecutarPaso = async ({ bandaId, pasoId, datos = {}, usuarioId, rolUsuario, session = null }) => {
+    const banda = await BandaReproductivaPorcina.findById(bandaId).session(session);
     if (!banda || banda.estado !== 'ACTIVA') throw errorProtocolo('La banda no está activa.', 409);
     const ejecucion = banda.ejecuciones.id(pasoId) || banda.ejecuciones.find((item) => idTexto(item.pasoId) === idTexto(pasoId));
     if (!ejecucion) throw errorProtocolo('Paso no encontrado.', 404);
     if (ejecucion.estado === 'REALIZADO') throw errorProtocolo('Esta actividad ya fue registrada.', 409, 'PASO_YA_REALIZADO');
     const paso = banda.protocoloSnapshot.pasos.find((item) => idTexto(item._id) === idTexto(ejecucion.pasoId));
+    if (paso.tipoAccion === 'INSEMINACION' && !session) {
+        await ejecutarEnTransaccion((sesion) => ejecutarPaso({ bandaId, pasoId, datos, usuarioId, rolUsuario, session: sesion }));
+        await ejecutarNotificacionSegura(() => notificarTareasOrigen({ referenciaId: banda._id, moduloOrigen: 'BandaReproductivaPorcina' }, banda.creadoPor));
+        return obtenerBanda(bandaId);
+    }
     const asignada = ejecucion.tarea && await Tarea.exists({ _id: ejecucion.tarea, asignadoA: usuarioId });
     if (!rolPuedeEjecutarPaso({ rolUsuario, tipoAccion: paso.tipoAccion, asignada })) {
         throw errorProtocolo(paso.tipoAccion === 'DIAGNOSTICO_GESTACION'
@@ -274,25 +281,39 @@ const ejecutarPaso = async ({ bandaId, pasoId, datos = {}, usuarioId, rolUsuario
         await crearAplicacionSanitaria({ ...datos.aplicacion, animales: participantes.map((item) => item.animal), fechaAplicacion: datos.fechaReal || new Date(), especie: 'Porcino', naturaleza: 'Aplicacion unica', responsableUsuario: usuarioId, motivo: datos.aplicacion.motivo || datos.observaciones }, usuarioId, { soloActivos: true });
     }
     let semenConsumido = null;
-    if (paso.tipoAccion === 'INSEMINACION') {
+    if (paso.tipoAccion === 'INSEMINACION' && !session) {
         const cantidadPorAnimal = validarCantidadPajuelas(datos.cantidadPajuelas ?? 1);
+        const [semenId, monedaSeleccionada] = String(datos.semenUtilizado || datos.semen || '').split('|');
         const consumo = await consumirSemen({
-            semenId: datos.semenUtilizado || datos.semen,
+            semenId,
+            moneda: datos.monedaSemen || monedaSeleccionada || undefined,
+            especie: 'Porcino',
+            usuarioId,
+            session,
             cantidad: cantidadPorAnimal * participantes.length,
             fechaInseminacion: datos.fechaReal || new Date()
         });
         semenConsumido = { ...consumo, cantidadPorAnimal };
     }
     try {
-        for (const participante of participantes) await registrarAccionParticipante({ banda, participante, paso, datos, usuarioId, semenConsumido });
+        for (const participante of participantes) {
+            let consumoIndividual = semenConsumido;
+            if (paso.tipoAccion === 'INSEMINACION' && session) {
+                const [semenId, monedaSeleccionada] = String(datos.semenUtilizado || datos.semen || '').split('|');
+                const cantidadPorAnimal = validarCantidadPajuelas(datos.cantidadPajuelas ?? 1);
+                const consumo = await consumirSemen({ semenId, cantidad: cantidadPorAnimal, moneda: datos.monedaSemen || monedaSeleccionada || undefined, especie: 'Porcino', fechaInseminacion: datos.fechaReal || new Date(), usuarioId, session });
+                consumoIndividual = { ...consumo, cantidadPorAnimal };
+            }
+            await registrarAccionParticipante({ banda, participante, paso, datos, usuarioId, semenConsumido: consumoIndividual, session });
+        }
     } catch (error) {
-        if (semenConsumido) {
+        if (semenConsumido && !session) {
             await devolverSemen({ semenId: semenConsumido.insumo._id, cantidad: semenConsumido.cantidad });
         }
         throw error;
     }
     ejecucion.fechaReal = datos.fechaReal || new Date(); ejecucion.participantes = [...(ejecucion.participantes || []), ...participantes.map((item) => item._id)]; ejecucion.estado = ejecucion.participantes.length < banda.participantes.filter((item) => item.estadoParticipacion !== 'RETIRADA').length ? 'PARCIAL' : 'REALIZADO'; ejecucion.resultado = seleccionar(datos, ['resultado', 'retornoCelo', 'observaciones']); ejecucion.realizadoPor = usuarioId;
-    if (ejecucion.tarea && ejecucion.estado === 'REALIZADO') await Tarea.updateOne({ _id: ejecucion.tarea }, { $set: { estado: 'Completada', fechaCompletada: ejecucion.fechaReal, observaciones: datos.observaciones } });
+    if (ejecucion.tarea && ejecucion.estado === 'REALIZADO') await Tarea.updateOne({ _id: ejecucion.tarea }, { $set: { estado: 'Completada', fechaCompletada: ejecucion.fechaReal, observaciones: datos.observaciones } }, { session });
     const eventoPorAccion = { DESTETE: 'DESTETE', SERVICIO: 'SERVICIO', INSEMINACION: 'IA', PARTO: 'PARTO_REAL', DESTETE_CAMADA: 'DESTETE_REAL' };
     const eventos = {};
     banda.ejecuciones.filter((item) => item.fechaReal).forEach((item) => {
@@ -304,9 +325,9 @@ const ejecutarPaso = async ({ bandaId, pasoId, datos = {}, usuarioId, rolUsuario
         const pendiente = banda.ejecuciones.find((item) => idTexto(item.pasoId) === idTexto(programado.pasoId));
         if (pendiente?.estado === 'PENDIENTE') { pendiente.fechaProgramada = programado.fechaProgramada; pendiente.ventanaInicio = programado.ventanaInicio; pendiente.ventanaFin = programado.ventanaFin; }
     });
-    await banda.save();
-    await crearTareas(banda);
-    return obtenerBanda(banda._id);
+    await banda.save({ session });
+    await crearTareas(banda, session);
+    return session ? banda : obtenerBanda(banda._id);
 };
 
 const reprogramar = async ({ bandaId, eventos = {}, usuarioId }) => {

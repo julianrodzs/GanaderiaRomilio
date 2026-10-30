@@ -71,9 +71,7 @@ const main = async () => {
     process.env.MONGODB_AUTO_INDEX = 'false';
     mongoose.set('autoIndex', false);
     const archivos = cargarModelos();
-    if (archivos.length !== 65) {
-        throw new Error(`Se esperaban 65 archivos de modelos y se encontraron ${archivos.length}.`);
-    }
+    if (!mongoose.models.EventoAnimal || !mongoose.models.BancoSemen || !mongoose.models.MovimientoSemen) throw new Error('No se cargaron todos los modelos criticos.');
     await conectarDB();
     await limpiarIndiceEventoObsoleto();
 

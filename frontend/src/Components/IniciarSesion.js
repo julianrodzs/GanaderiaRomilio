@@ -81,6 +81,18 @@ const IniciarSesion = ({ onLogin, onOlvideContrasena }) => {
           Olvidé mi contraseña
         </button>
 
+        <div className="auth-discover">
+          <p>¿Aún no tienes cuenta?</p>
+          <a
+            className="auth-landing-link"
+            href="https://cirganadero.circonsulting.net/"
+            referrerPolicy="no-referrer"
+          >
+            <span>Conoce CIR Ganadero</span>
+            <span className="auth-landing-arrow" aria-hidden="true">&rarr;</span>
+          </a>
+        </div>
+
       </form>
     </section>
   );

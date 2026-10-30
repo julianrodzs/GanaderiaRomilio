@@ -9,6 +9,7 @@ const CAMPOS_COMUNES = [
     'semenUtilizado',
     'semen',
     'cantidadPajuelas',
+    'monedaSemen',
     'destinoCrias',
     'cantidadCriasEstimada',
     'cantidadCrias',

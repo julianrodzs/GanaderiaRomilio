@@ -2,6 +2,10 @@
 
 Aplicacion web fullstack para administrar una finca ganadera orientada a cria, ahora preparada para manejar bovinos y porcinos sin duplicar el menu principal: inventario, reproduccion, camadas, sanidad, potreros, tareas, finanzas, compras, ventas, reportes, importacion Excel, conteo por drone y alertas por correo.
 
+## Documentación comercial y legal
+
+Los borradores de términos, privacidad, suscripciones, soporte y tratamiento de datos, junto con las plantillas y procedimientos internos, están en [documentacion/comercial](documentacion/comercial/README.md). Requieren completar los datos del operador, aprobar las condiciones y revisión jurídica antes de publicarse. Este paquete no habilita cobros ni implementa aceptación en la interfaz.
+
 ## Estado actual
 
 La aplicacion ya cuenta con:
@@ -18,6 +22,7 @@ La aplicacion ya cuenta con:
 - Potreros con area, estado, actividades recientes y rotaciones.
 - Reproduccion/Gestacion bovina con parto estimado, parto real, destete y proximo celo estimado.
 - IATF configurable para planes Pro/Premium: protocolos versionados, campañas, tareas, insumos, pajuelas, diagnósticos, P/AI y costos reales.
+- Banco de semen por finca para Pro/Premium, con gavetas reproductiva y comercial, reservas IATF, movimientos trazables y ventas de pajillas conectadas con Finanzas. Consulte [la guía y migración](backend/documentation/banco-semen.md).
 - Protocolos PRO de engorde bovino por lote: etapas versionadas, cronograma, pesajes reales, cambios de ración, aplicaciones sanitarias, criterios de avance y preparación de candidatos para el flujo existente de ventas.
 - Bandas reproductivas porcinas PRO: protocolos versionados, actividades grupales, servicios, diagnósticos, partos y destetes conectados con los ciclos reproductivos, camadas, tareas y bitácoras existentes.
 
@@ -27,11 +32,11 @@ Los protocolos no reemplazan los módulos operativos. `CicloEngorde` coordina un
 
 ## Apariencia y archivos en Cloudflare R2
 
-La identidad visual separa el logo de la organización de las imágenes de Dashboard y Potreros de cada finca. Sin R2 configurado, la aplicación mantiene `/assests/logo-romilio.png` y `/assests/mapa-potreros.png` como recursos predeterminados. Las imágenes se cambian desde **Configuración > Mi plan > Identidad visual**.
+La identidad visual separa el logo de la organización de las imágenes de Dashboard y Potreros de cada finca. Sin imágenes personalizadas se muestra un espacio sin imagen, no recursos locales de otra finca. Estas imágenes son públicas y se cambian desde **Mi plan > Imágenes de la organización y las fincas**; no deben contener información confidencial.
 
 Los planes PRO y PREMIUM también pueden cargar una fotografía principal por bovino o porcino desde el detalle del inventario. La foto se almacena como `ArchivoMultimedia`, no dentro del documento `Animal`; al bajar de plan permanece visible y puede eliminarse, pero su carga o reemplazo vuelve a requerir la capacidad `fotosAnimales`.
 
-Para habilitar las cargas configure en el backend `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` y `R2_PUBLIC_URL`. `R2_ENDPOINT` es opcional. El bucket debe exponer los objetos mediante el dominio indicado en `R2_PUBLIC_URL`; solo se aceptan JPG, PNG y WebP de hasta 8 MB.
+Para habilitar las cargas configure en el backend `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PRIVATE_BUCKET` y `R2_PUBLIC_URL`. `R2_ENDPOINT` es opcional. El bucket público sirve la apariencia mediante `R2_PUBLIC_URL`; el privado guarda las fotos de animales con acceso autenticado. Solo se aceptan JPG, PNG y WebP de hasta 8 MiB. Consulte [la guía de imágenes](backend/documentation/apariencia-imagenes-r2.md).
 
 Las tareas automáticas de estos orquestadores deben completarse desde su formulario de ejecución. La bandeja de tareas bloquea el cierre genérico para impedir que una actividad figure como realizada sin registrar el dato de dominio. Las fechas dependientes de un evento real, como un diagnóstico posterior a la inseminación, no se programan hasta que ese evento haya ocurrido.
 

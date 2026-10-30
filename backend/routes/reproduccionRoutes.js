@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const router = Router();
 const { autorizarPermiso } = require('../middleware/auth');
-const { requirePlanVigente } = require('../middleware/plan');
+const { requirePlanVigente, requireFeature } = require('../middleware/plan');
 const puedeVer = autorizarPermiso('reproduccion.ver');
 const puedeGestionar = autorizarPermiso('reproduccion.gestionar');
 const puedeEliminar = autorizarPermiso('reproduccion.eliminar');
@@ -28,6 +28,7 @@ router.route('/')
 
 router.get('/animal/:animalId', puedeVer, getRegistrosPorAnimal);
 router.get('/insumos/semen', puedeVer, getSemenDisponible);
+router.post('/:id/inseminacion/anular', puedeGestionar, requireFeature('iatfReproductivo'), require('../controllers/bancoSemen-controller').anularInseminacion);
 router.post('/:id/ternero', puedeGestionar, planVigente, registrarTerneroDesdeParto);
 router.patch('/:id/cerrar-ciclo', puedeGestionar, planVigente, cerrarCiclo);
 router.patch('/:id/reabrir-ciclo', puedeGestionar, planVigente, reabrirCiclo);

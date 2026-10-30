@@ -20,6 +20,7 @@ const participanteSchema = new Schema({
     },
     fechaInseminacion: { type: Date },
     semenUtilizado: { type: Schema.Types.ObjectId, ref: 'InsumoReproductivo' },
+    bancoSemenId: { type: Schema.Types.ObjectId, ref: 'BancoSemen' },
     semenSnapshot: { type: Schema.Types.Mixed },
     tecnicoInseminador: { type: Schema.Types.ObjectId, ref: 'Usuario' },
     registroReproductivo: { type: Schema.Types.ObjectId, ref: 'RegistroReproductivo' },
@@ -40,6 +41,8 @@ const campanaIATFSchema = new Schema({
     veterinario: { type: Schema.Types.ObjectId, ref: 'Usuario' },
     loteOrigen: { type: Schema.Types.ObjectId, ref: 'Lote' },
     participantes: { type: [participanteSchema], default: [] },
+    historialAnulacionesInseminacion: { type: [Schema.Types.Mixed], default: [] },
+    revisionSemen: { type: Number, default: 0 },
     estado: { type: String, enum: ['PROGRAMADA', 'EN_CURSO', 'DIAGNOSTICO', 'FINALIZADA', 'CANCELADA'], default: 'PROGRAMADA' },
     campanaAnterior: { type: Schema.Types.ObjectId, ref: 'CampanaIATF' },
     costosAdicionales: {

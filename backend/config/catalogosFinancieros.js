@@ -3,7 +3,8 @@ const TIPOS_MOVIMIENTO_FINANCIERO = [
     'Compra de animales',
     'Inversion',
     'Planilla',
-    'Venta de animales'
+    'Venta de animales',
+    'Venta de pajillas'
 ];
 
 const NATURALEZAS_FINANCIERAS = ['Egreso', 'Ingreso'];
@@ -24,7 +25,8 @@ const CATEGORIAS_FINANCIERAS = [
     'Porcinos',
     'Potreros',
     'Sanidad',
-    'Ventas'
+    'Ventas',
+    'Venta de Genética'
 ];
 
 const UNIDADES_FINANCIERAS = {

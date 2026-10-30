@@ -49,6 +49,9 @@ const sanitizarMovimientoManual = (payload = {}) => {
         throw crearErrorDto('Los datos del movimiento deben enviarse como un objeto.');
     }
     validarClavesSeguras(payload);
+    if (payload.tipoMovimiento === 'Venta de pajillas') {
+        throw crearErrorDto('Las ventas de pajillas se registran desde Ventas para conciliar existencias e ingreso.', 'FINANCIAL_ORIGIN_REQUIRED');
+    }
 
     const recibidos = Object.keys(payload);
     if (recibidos.some((campo) => CAMPOS_TENANT.has(campo))) {

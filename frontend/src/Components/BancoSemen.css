@@ -1,0 +1,26 @@
+.semen-panel { min-width: 0; padding: 16px 0; }
+.semen-panel .tabla-scroll { width: 100%; overflow-x: auto; }
+.semen-panel table { width: 100%; border-collapse: collapse; }
+.semen-panel th, .semen-panel td { padding: 12px; border-bottom: 1px solid #d7dfd9; text-align: left; vertical-align: top; }
+.semen-panel th { background: #edf1ee; color: #193d2a; }
+.semen-panel input, .semen-panel select, .semen-panel textarea { box-sizing: border-box; max-width: 100%; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid #aebeb3; background: #fff; color: #14291c; border-radius: 3px; font: inherit; }
+.semen-panel label { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.semen-panel .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.semen-form { padding: 16px 0; border-top: 1px solid #d7dfd9; }
+.semen-panel .form-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.semen-panel .acciones-tabla { display: flex; gap: 6px; flex-wrap: nowrap; }
+.semen-panel .acciones-tabla button { min-width: 36px; min-height: 36px; padding: 4px 8px; border: 1px solid #aebeb3; border-radius: 3px; background: #f7f9f7; color: #17442e; font: inherit; }
+.semen-panel button:disabled { opacity: .5; cursor: not-allowed; }
+.semen-panel input:focus-visible, .semen-panel select:focus-visible, .semen-panel button:focus-visible { outline: 2px solid #216649; outline-offset: 2px; }
+.semen-panel .semen-resumen { display: flex; flex-wrap: wrap; gap: 16px 28px; padding: 16px 0; margin: 0; }
+.semen-resumen dt { font-size: 13px; color: #42584b; }
+.semen-resumen dd { margin: 5px 0 0; font-size: 20px; font-weight: 700; }
+.semen-buscador { max-width: 460px; margin: 14px 0; }
+.semen-detalle, .semen-historial { margin-top: 24px; padding-top: 18px; border-top: 1px solid #bac9bf; }
+.semen-panel td input { min-width: 90px; max-width: 150px; }
+.semen-panel .alerta-formulario { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .semen-panel .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .semen-panel .panel-title { flex-wrap: wrap; gap: 12px; }
+  .semen-panel .form-actions button { flex: 1 1 140px; }
+}

@@ -84,10 +84,12 @@ app.use('/api/tratamientos-sanitarios', auth, require('./routes/tratamientoSanit
 app.use('/api/aplicaciones-sanitarias', auth, require('./routes/aplicacionSanitariaRoutes'));
 app.use('/api/reproduccion', auth, require('./routes/reproduccionRoutes'));
 app.use('/api/iatf', auth, require('./routes/iatfRoutes'));
+app.use('/api/semen', auth, require('./routes/bancoSemenRoutes'));
 app.use('/api/protocolos-engorde', auth, require('./routes/protocoloEngordeRoutes'));
 app.use('/api/protocolos-porcinos', auth, require('./routes/protocoloPorcinoRoutes'));
 app.use('/api/costos', auth, require('./routes/costo'));
 app.use('/api/finanzas', auth, require('./routes/finanza'));
+app.use('/api/ventas/pajillas', auth, require('./routes/ventaPajillaRoutes'));
 app.use('/api/ventas', auth, require('./routes/ventaAnimalRoutes'));
 app.use('/api/compras', auth, require('./routes/compraAnimalRoutes'));
 app.use('/api/rotaciones', auth, require('./routes/rotacion'));

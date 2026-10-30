@@ -1,4 +1,8 @@
 const { InsumoReproductivo } = require('../models/InsumoReproductivo');
+const mongoose = require('mongoose');
+const { BancoSemen } = require('../models/BancoSemen');
+const { consumirDelBanco } = require('./bancoSemen-service');
+const { ejecutarEnTransaccion } = require('./mongo-transaccion-service');
 
 const errorSemen = (mensaje, status = 422, code = 'SEMEN_INVALID') => Object.assign(
     new Error(mensaje),
@@ -19,10 +23,25 @@ const inicioDiaUtc = (fecha) => {
     return new Date(Date.UTC(valor.getUTCFullYear(), valor.getUTCMonth(), valor.getUTCDate()));
 };
 
-const consumirSemen = async ({ semenId, cantidad = 1, fechaInseminacion, session = null }) => {
+const consumirSemen = async ({ semenId, cantidad = 1, fechaInseminacion, session = null, campanaId, moneda, especie, usuarioId, eventoId }) => {
     if (!semenId) throw errorSemen('Selecciona el lote de semen utilizado.', 422, 'SEMEN_REQUIRED');
     const pajuelas = validarCantidadPajuelas(cantidad);
     const fechaUso = inicioDiaUtc(fechaInseminacion);
+    if (mongoose.isObjectIdOrHexString(semenId)) {
+        const ficha = await BancoSemen.findById(semenId).session(session);
+        if (ficha) {
+            const { asegurarPlanVigente, obtenerPlanActual } = require('./plan-service');
+            const plan = asegurarPlanVigente(await obtenerPlanActual());
+            if (!plan.configuracion.funcionalidades.iatfReproductivo) throw errorSemen('El banco de semen requiere Pro o Premium.', 403, 'PLAN_FEATURE_NOT_AVAILABLE');
+            const ejecutar = (sesion) => consumirDelBanco({ semenId, cantidad: pajuelas, campanaId, moneda, especie, usuarioId, eventoId, session: sesion });
+            return session ? ejecutar(session) : ejecutarEnTransaccion(ejecutar);
+        }
+        const legado = await InsumoReproductivo.findById(semenId).session(session);
+        if (legado?.bancoSemenId) {
+            return consumirSemen({ semenId: legado.bancoSemenId, cantidad, fechaInseminacion, session, campanaId, moneda, especie, usuarioId, eventoId });
+        }
+        if (campanaId) throw errorSemen('Asigna primero semen del banco a la campana.', 400, 'SEMEN_ASSIGNMENT_REQUIRED');
+    }
     const semen = await InsumoReproductivo.findOneAndUpdate(
         {
             _id: semenId,
