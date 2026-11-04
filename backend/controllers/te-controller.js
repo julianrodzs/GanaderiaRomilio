@@ -1,0 +1,42 @@
+const banco = require('../services/bancoEmbriones-service');
+const programa = require('../services/programaTE-service');
+const Colecta = require('../models/ProgramaTransferencia');
+const { CampanaTE, VentaEmbrion } = require('../models/ProgramaTE');
+const manejar = (fn, status = 200) => async (req, res) => { try { res.status(status).json(await fn(req)); } catch (e) { res.status(e.status || 400).json({ mensaje: e.message, code: e.code, disponible: e.disponible }); } };
+exports.colectas = manejar(() => Colecta.find({ versionProgramaTE: 2 }).populate('donanteId padreId', 'nombre diio raza').sort({ fechaColecta: -1 }).lean());
+exports.crearColecta = manejar((r) => programa.crearColecta(r.body, r.usuario.id), 201);
+exports.finalizarColecta = manejar((r) => programa.finalizarColecta(r.params.id, r.body, r.usuario.id));
+exports.ejecutarDonante = manejar((r) => programa.ejecutarDonante(r.params.id, r.params.pasoId, r.body, r.usuario.id));
+exports.banco = manejar(() => banco.listar());
+exports.detalle = manejar((r) => banco.detalle(r.params.id));
+exports.compra = manejar((r) => banco.entradaCompra(r.body, r.usuario.id), 201);
+exports.trasladar = manejar((r) => banco.trasladar(r.params.id, r.body, r.usuario.id));
+exports.merma = manejar((r) => banco.merma(r.params.id, r.body, r.usuario.id));
+exports.campanas = manejar(async () => {
+    const campanas = await CampanaTE.find({}).populate('receptoras.animal', 'nombre diio identificadorFinca').populate('responsable', 'nombre apellido').sort({ fechaInicio: -1 }).lean();
+    const membresias = await require('../models/Membresia').Membresia.find({ organizacionId: require('../context/organizacion-context').obtenerOrganizacionActual(), usuario: { $in: campanas.map((c) => c.responsable?._id).filter(Boolean) }, estado: 'Activo' }).select('usuario rol').lean();
+    const roles = new Map(membresias.map((m) => [String(m.usuario), m.rol]));
+    return campanas.map((c) => ({ ...c, responsable: c.responsable ? { ...c.responsable, rol: roles.get(String(c.responsable._id)) || 'Sin membresia activa' } : null }));
+});
+exports.crearCampana = manejar((r) => programa.crearCampana(r.body, r.usuario.id), 201);
+exports.ejecutarPaso = manejar((r) => programa.ejecutarPaso(r.params.id, r.params.pasoId, r.body, r.usuario.id));
+exports.evaluar = manejar((r) => programa.evaluarCL(r.params.id, r.params.animalId, r.body, r.usuario.id));
+exports.asignar = manejar((r) => programa.asignar(r.params.id, r.body, r.usuario.id));
+exports.transferir = manejar((r) => programa.transferir(r.params.id, r.params.animalId, r.body, r.usuario.id), 201);
+exports.cerrar = manejar((r) => programa.cerrar(r.params.id, r.body, r.usuario.id));
+exports.diagnosticar = manejar(async (r) => {
+    const c = await CampanaTE.findById(banco.id(r.params.id));
+    const receptora = c?.receptoras.find((a) => String(a.animal) === r.params.animalId);
+    if (!receptora?.registroId) throw banco.error('Receptora sin transferencia registrada.', 409);
+    return require('../services/servicioReproductivo-service').operarCiclo(String(receptora.registroId), 'diagnosticos', r.body, r.usuario.id);
+});
+exports.ventas = manejar(() => VentaEmbrion.find({}).populate('loteId', 'codigoLote').sort({ fecha: -1 }).lean());
+exports.vender = manejar((r) => banco.vender(r.body, r.usuario.id), 201);
+exports.anular = manejar((r) => banco.anularVenta(r.params.id, r.body, r.usuario.id));
+exports.indicadores = manejar((r) => require('../services/reporteTE-service').reporteTE(r.query));
+exports.consolidado = manejar(async (r) => {
+    const { Membresia } = require('../models/Membresia');
+    const membresia = await Membresia.findById(r.usuario.membresiaId);
+    const fincas = await require('../services/accesoFinca-service').resolverFincasParaReporte({ membresia, organizacionId: r.organizacionId, fincaIds: r.query.fincaIds });
+    return require('../services/reporteTE-service').reporteTE({ ...r.query, fincas });
+});

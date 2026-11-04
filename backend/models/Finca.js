@@ -16,7 +16,9 @@ const fincaSchema = new Schema(
         ubicacion: { type: String, trim: true },
         lineasProductivas: { type: [lineaProductivaSchema], default: [] },
         configuracionReproductiva: {
-            diasGestacionBovinaGeneral: { type: Number, min: 1, default: 283 }
+            diasGestacionBovinaGeneral: { type: Number, min: 1, default: 283 },
+            diasGestacionPorcinaGeneral: { type: Number, min: 100, max: 130, default: 114 },
+            toleranciaAtribucionDias: { type: Number, min: 0, max: 60, default: 21 }
         },
         imagenes: {
             dashboard: { type: Schema.Types.ObjectId, ref: 'ArchivoMultimedia', default: null },

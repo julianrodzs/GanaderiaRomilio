@@ -1,5 +1,5 @@
 export const catalogosFinancierosBase = {
-  tiposMovimiento: ['Compra', 'Compra de animales', 'Inversion', 'Planilla', 'Venta de animales', 'Venta de pajillas'],
+  tiposMovimiento: ['Compra', 'Compra de animales', 'Inversion', 'Planilla', 'Venta de animales', 'Venta de pajillas', 'Venta de embriones'],
   naturalezas: ['Egreso', 'Ingreso'],
   categorias: [
     'Alimentación',

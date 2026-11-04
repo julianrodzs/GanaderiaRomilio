@@ -1,0 +1,13 @@
+.metodo-badge { display: inline-block; padding: 5px 9px; border: 1px solid #b8c7bc; border-radius: 4px; background: #edf3ef; color: #153e2a; font-size: 13px; line-height: 1.4; white-space: normal; }
+.metodo-TRANSFERENCIA_EMBRIONES { background: #e7f1f4; color: #174758; border-color: #acc5ce; }
+.metodo-DESCONOCIDO { background: #fff3d7; color: #704d04; border-color: #d8c391; }
+.metodo-fieldset { border: 1px solid #becbc1; padding: 20px; margin: 20px 0; min-width: 0; }
+.metodo-fieldset legend { padding: 0 8px; font-weight: 700; }
+.metodo-check { display: flex !important; align-items: center; gap: 10px; margin: 20px 0; }
+.metodo-check input { width: 18px !important; height: 18px; min-height: 18px; margin: 0; padding: 0; }
+.metodo-modal { width: min(960px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; }
+.metodo-timeline { list-style: none; padding: 0 0 0 18px; border-left: 2px solid #a5bcac; margin: 24px 0; }
+.metodo-timeline li { display: grid; gap: 6px; padding: 0 0 22px; overflow-wrap: anywhere; }
+.metodo-timeline time { color: #506557; font-size: 13px; }
+.metodo-seguimiento { border-top: 1px solid #bfccc3; padding-top: 20px; margin-top: 20px; }
+@media (max-width: 600px) { .metodo-fieldset { padding: 12px; } .metodo-modal { padding: 18px; } }

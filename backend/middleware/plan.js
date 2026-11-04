@@ -51,7 +51,7 @@ const requireFeature = (feature, dependencias = {}) => async (req, res, next) =>
             req.planActual = actual;
             return next();
         }
-        return res.status(acceso.status).json(acceso.respuesta);
+        return res.status(acceso.status).json({ ...acceso.respuesta, ...(dependencias.codigoDenegado ? { code: dependencias.codigoDenegado } : {}) });
     } catch (error) {
         if (respuestaErrorPlan(error, res)) return;
         return res.status(500).json({ mensaje: 'No se pudo validar el plan', error: error.message });

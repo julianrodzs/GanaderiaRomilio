@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { obtenerDetalleMultiFinca, obtenerFincas, obtenerReporteMultiFinca } from '../services/api';
 import GestionConsolidacionPremium from './GestionConsolidacionPremium';
+import { obtenerConsolidadoMetodos, obtenerConsolidadoTE } from '../services/api';
+import { IndicadoresTE } from './ProgramaTEIntegral';
 
 const moneda = (valor) => new Intl.NumberFormat('es-CR', {
   style: 'currency', currency: 'CRC', maximumFractionDigits: 0
@@ -30,6 +32,18 @@ const ReporteMultiFinca = ({ fechaInicio, fechaFin, especie, puedeConfigurar = f
   const [fincas, setFincas] = useState([]);
   const [seleccionadas, setSeleccionadas] = useState([]);
   const [datos, setDatos] = useState(null);
+  const [metodos, setMetodos] = useState(null);
+  const [te, setTE] = useState(null);
+  useEffect(() => {
+    let activo = true; setTE(null);
+    if (seleccionadas.length && especie !== 'Porcino') obtenerConsolidadoTE({ fechaInicio, fechaFin, fincaIds: seleccionadas.join(',') }).then((r) => { if (activo) setTE(r); }).catch((e) => { if (activo) setError(e.message); });
+    return () => { activo = false; };
+  }, [fechaInicio, fechaFin, especie, seleccionadas.join(',')]);
+  useEffect(() => {
+    let activo = true; setMetodos(null);
+    if (seleccionadas.length) obtenerConsolidadoMetodos({ fechaInicio, fechaFin, especie: especie === 'Todos' ? '' : especie, fincaIds: seleccionadas.join(',') }).then((r) => { if (activo) setMetodos(r); }).catch((e) => { if (activo) setError(e.message); });
+    return () => { activo = false; };
+  }, [fechaInicio, fechaFin, especie, seleccionadas.join(',')]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
@@ -150,6 +164,8 @@ const ReporteMultiFinca = ({ fechaInicio, fechaFin, especie, puedeConfigurar = f
               ))}</tbody>
             </table>
           </div>
+          {metodos && <section className="reporte-panel"><h3>Métodos reproductivos · Fincas seleccionadas</h3><div className="tabla-scroll"><table><thead><tr><th>Método</th><th>Servicios</th><th>Preñeces atribuidas</th><th>Partos</th><th>Pérdidas</th></tr></thead><tbody>{metodos.porMetodo.map((m) => <tr key={m.metodo}><td>{m.nombre}</td><td>{numero(m.servicios)}</td><td>{numero(m.prenecesAtribuidas)}</td><td>{numero(m.partos)}</td><td>{numero(m.perdidas)}</td></tr>)}</tbody></table></div></section>}
+          {te && <section><h3>Transferencia de embriones · Fincas seleccionadas</h3><IndicadoresTE datos={te} /></section>}
           <GestionConsolidacionPremium
             fincas={fincas}
             seleccionadas={seleccionadas}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import FotoAnimal from './FotoAnimal';
+import { EtiquetaMetodo } from './MetodoReproductivo';
 import {
   actualizarAnimal,
   actualizarEstadoSanitarioAnimal,
@@ -1053,6 +1054,7 @@ const Animales = ({
                         )}
                       </div>
                       <h3>{evento.titulo}</h3>
+                      {evento.metadata?.metodo && <EtiquetaMetodo registro={{ metodo: evento.metadata.metodo }} />}
                       {evento.descripcion && <p>{evento.descripcion}</p>}
                     </div>
                   </article>
@@ -1157,9 +1159,11 @@ const Animales = ({
                 </article>
               )}
               <article>
-                <span>Madre</span>
-                <strong>{etiquetaAnimal(animalDetalle.madre) || animalDetalle.madreExternaNombre || animalDetalle.madreDiio || '--'}</strong>
+                <span>Madre genética</span>
+                <strong>{etiquetaAnimal(animalDetalle.madreGeneticaId || animalDetalle.madre) || animalDetalle.madreGeneticaExterna?.nombre || animalDetalle.madreExternaNombre || animalDetalle.madreDiio || '--'}</strong>
+                {animalDetalle.madreGeneticaExterna?.diio && <small>DIIO {animalDetalle.madreGeneticaExterna.diio}</small>}
               </article>
+              <article><span>Madre gestante (receptora)</span><strong>{etiquetaAnimal(animalDetalle.madreGestanteId || animalDetalle.madre) || '--'}</strong></article>
               <article>
                 <span>Padre</span>
                 <strong>{etiquetaAnimal(animalDetalle.padre) || animalDetalle.padreExternoNombre || animalDetalle.padreDiio || '--'}</strong>
@@ -1313,7 +1317,8 @@ const Animales = ({
                   <div className="genealogia-descendencia">
                     <h3>Crías registradas</h3>
                     <div className="detalle-animal-grid">
-                      <article><span>Total</span><strong>{descendenciaAnimal?.resumen?.totalCrias || 0}</strong></article>
+                        <article><span>Progenie genética</span><strong>{descendenciaAnimal?.resumen?.totalCrias || 0}</strong></article>
+                        {animalDetalle.sexo === 'Hembra' && <article><span>Crías gestadas</span><strong>{descendenciaAnimal?.totalCriasGestadas || 0}</strong></article>}
                       <article><span>Machos</span><strong>{descendenciaAnimal?.resumen?.machos || 0}</strong></article>
                       <article><span>Hembras</span><strong>{descendenciaAnimal?.resumen?.hembras || 0}</strong></article>
                       <article><span>Activos</span><strong>{descendenciaAnimal?.resumen?.activos || 0}</strong></article>
@@ -1325,6 +1330,16 @@ const Animales = ({
                       <article><span>Primera cría</span><strong>{formatearFecha(descendenciaAnimal?.resumen?.primeraCria)}</strong></article>
                       <article><span>Última cría</span><strong>{formatearFecha(descendenciaAnimal?.resumen?.ultimaCria)}</strong></article>
                     </div>
+                    {animalDetalle.sexo === 'Hembra' && <>
+                      <h3>Partos biológicos · Madre o receptora</h3>
+                      <ContenidoPaginado datos={descendenciaAnimal?.partosBiologicos || []} clavePaginacion={`animal-${animalDetalle._id}-partos`}>
+                        {(filas) => <div className="tabla-scroll"><table><thead><tr><th>Fecha de parto</th><th>Método reproductivo</th></tr></thead><tbody>{filas.map((r) => <tr key={r._id}><td>{formatearFecha(r.fechaPartoReal)}</td><td><EtiquetaMetodo registro={r} /></td></tr>)}</tbody></table></div>}
+                      </ContenidoPaginado>
+                      <h3>Progenie genética por TE · Donante</h3>
+                      <ContenidoPaginado datos={descendenciaAnimal?.progenieGeneticaTE || []} clavePaginacion={`animal-${animalDetalle._id}-donante`}>
+                        {(filas) => <div className="tabla-scroll"><table><thead><tr><th>DIIO</th><th>Nombre</th><th>Nacimiento</th><th>Método</th></tr></thead><tbody>{filas.map((c) => <tr key={c._id}><td><button className="tabla-link" type="button" onClick={() => abrirDetalleAnimal(c)}>{c.diio || c.identificadorFinca}</button></td><td>{c.nombre || '--'}</td><td>{formatearFecha(c.fechaNacimiento)}</td><td><EtiquetaMetodo registro={{ metodo: 'TRANSFERENCIA_EMBRIONES' }} /></td></tr>)}</tbody></table></div>}
+                      </ContenidoPaginado>
+                    </>}
                     {(descendenciaAnimal?.crias || []).length > 0 && (
                       <ContenidoPaginado datos={descendenciaAnimal.crias} clavePaginacion={`animal-${animalDetalle._id}-crias`}>
                         {(criasPagina) => (
@@ -1512,6 +1527,7 @@ const Animales = ({
                         )}
                       </div>
                       <h3>{evento.titulo}</h3>
+                      {evento.metadata?.metodo && <EtiquetaMetodo registro={{ metodo: evento.metadata.metodo }} />}
                       {evento.descripcion && <p>{evento.descripcion}</p>}
                       <span className="bitacora-autor">Registrado por {etiquetaAutorEvento(evento)}</span>
                       {(evento.referenciaId || evento.metadata) && (

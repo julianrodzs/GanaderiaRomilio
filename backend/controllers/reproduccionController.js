@@ -33,6 +33,8 @@ const { consumirSemen } = require('../services/semen-reproductivo-service');
 const { InsumoReproductivo } = require('../models/InsumoReproductivo');
 
 const reproduccionCtrl = {};
+const metodoService = require('../services/metodoReproductivo-service');
+const servicioService = require('../services/servicioReproductivo-service');
 
 const notificarRegistroReproductivo = (req, registro, animal, tipo, titulo, accion) => notificarAccionSegura({
     actor: req.usuario,
@@ -195,7 +197,14 @@ const resolverPadreNacimiento = async ({ registro, datos, madre }) => {
     const origenConSemen = ['IATF', 'IA_CONVENCIONAL'].includes(registro.tipoInseminacion)
         || ['IATF', 'IA_CONVENCIONAL'].includes(registro.origenGestacion);
     const semen = registro.semenSnapshot || {};
-    if (!padreRegistrado && !padreDiio && !padreExternoNombre && origenConSemen) {
+    const atribucion = registro.estadoAtribucion;
+    const servicio = registro.servicios?.find((s) => String(s._id) === String(registro.servicioAtribuidoId));
+    if (!padreRegistrado && !padreDiio && !padreExternoNombre && atribucion === 'CONFIRMADA' && servicio) {
+        if (servicio.toroId) padreRegistrado = await Animal.findOne({ _id: servicio.toroId, sexo: 'Macho', especie });
+        padreDiio = padreRegistrado?.diio || servicio.diioSemental;
+        padreExternoNombre = padreRegistrado ? undefined : servicio.sementalExternoNombre;
+    }
+    if (!padreRegistrado && !padreDiio && !padreExternoNombre && origenConSemen && (!atribucion || atribucion === 'CONFIRMADA')) {
         if (semen.toroId) padreRegistrado = await Animal.findOne({ _id: semen.toroId, sexo: 'Macho', especie });
         const codigoToro = semen.codigoToro || null;
         if (!padreRegistrado && codigoToro && semen.esExterno !== true) {
@@ -235,6 +244,7 @@ const obtenerFechaEventoReproductivo = (registro) => {
 
 const registrarEventoReproduccion = async (registro, usuarioId) => {
     if (!registro?.animal) return;
+    if (registro.metodo && (registro.servicios?.length || registro.historialDiagnosticos?.length || registro.resultado?.tipo)) return servicioService.registrarEventosMetodo(registro, usuarioId);
 
     completarFechasYEstado(registro);
     const tipoEvento = obtenerTipoEventoReproductivo(registro);
@@ -250,6 +260,8 @@ const registrarEventoReproduccion = async (registro, usuarioId) => {
         referenciaId: registro._id,
         creadoPor: usuarioId,
         metadata: {
+            metodo: registro.metodo || metodoService.metodoLegado(registro),
+            estadoAtribucion: registro.estadoAtribucion,
             fechaMonta: registro.fechaMonta,
             fechaPartoEstimada: registro.fechaPartoEstimada,
             fechaPartoReal: registro.fechaPartoReal,
@@ -306,6 +318,15 @@ reproduccionCtrl.createRegistro = async (req, res) => {
 
         if (!validacion.valido) {
             return res.status(validacion.status).json({ mensaje: validacion.mensaje });
+        }
+        if (datos.metodo) {
+            metodoService.validarMetodo(datos.metodo, validacion.animal.especie);
+            servicioService.seleccionar(datos, ['animal', 'asignadoA', 'especie', 'metodo', 'servicio', 'diagnostico', 'resultado', 'observaciones', 'cerrarCicloAnterior', 'claveIdempotencia']);
+            if (datos.servicio && datos.servicio.metodo !== datos.metodo) throw Object.assign(new Error('El metodo no coincide con el servicio.'), { status: 400 });
+            const nuevo = await servicioService.crearUnificado({ datos, animal: validacion.animal, usuarioId: req.usuario.id });
+            if (!nuevo.$locals.repetida) await sincronizarAutomatizacionReproductiva({ registro: nuevo, animal: validacion.animal, usuarioId: req.usuario.id });
+            if (!nuevo.$locals.repetida) await notificarRegistroReproductivo(req, nuevo, validacion.animal, 'CICLO_REPRODUCTIVO_CREADO', 'Ciclo reproductivo registrado', 'registró');
+            return res.status(201).json(await poblarAnimal(RegistroReproductivo.findById(nuevo._id)));
         }
 
         const crearRegistro = async (session = null) => {
@@ -382,13 +403,17 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             datos: req.body,
             madre
         });
+        const servicioAtribuido = registro.servicios?.find((s) => String(s._id) === String(registro.servicioAtribuidoId));
+        const transferencia = registro.metodo === 'TRANSFERENCIA_EMBRIONES' && registro.estadoAtribucion === 'CONFIRMADA' ? servicioAtribuido?.embrion : null;
+        const donante = transferencia?.donanteId ? await Animal.findById(transferencia.donanteId) : null;
+        const madreGenetica = transferencia ? donante : madre;
 
         let datosTernero = prepararDatosRaciales(prepararDatosGenealogia({
             identificadorFinca: identificador,
             diio: req.body.diio || undefined,
             nombre: req.body.nombre,
             sexo: req.body.sexo,
-            raza: req.body.raza || madre.descripcionRacial || madre.raza,
+            raza: req.body.raza || madreGenetica?.descripcionRacial || madreGenetica?.raza || transferencia?.donanteRaza,
             razaPrincipal: req.body.razaPrincipal,
             razaSecundaria: req.body.razaSecundaria,
             gradoRacial: req.body.gradoRacial,
@@ -396,9 +421,12 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             fraccionRazaPrincipal: req.body.fraccionRazaPrincipal,
             fraccionRazaSecundaria: req.body.fraccionRazaSecundaria,
             especie: madre.especie || 'Bovino',
-            madre: madre._id,
-            madreDiio: madre.diio || madre.identificadorFinca,
-            madreExternaNombre: null,
+            madre: madreGenetica?._id,
+            madreGeneticaId: madreGenetica?._id,
+            madreGestanteId: madre._id,
+            madreGeneticaExterna: transferencia && !donante ? { nombre: transferencia.donanteExternaNombre, diio: transferencia.donanteDiio, registro: transferencia.donanteRegistro, raza: transferencia.donanteRaza } : undefined,
+            madreDiio: madreGenetica?.diio || madreGenetica?.identificadorFinca,
+            madreExternaNombre: transferencia && !donante ? transferencia.donanteExternaNombre : null,
             padre: padreRegistrado?._id,
             padreDiio,
             padreExternoNombre,
@@ -428,8 +456,12 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             organizacionId: req.organizacionId,
             operacion: () => new Animal(datosTernero).save()
         });
-        if (!terneroGuardado.madre) {
+        if (!terneroGuardado.madreGestanteId) {
             throw new Error('No se pudo asociar la madre registrada al ternero.');
+        }
+        if (registro.resultado?.tipo === 'PARTO') {
+            registro.resultado.crias.addToSet(terneroGuardado._id);
+            await registro.save();
         }
 
         await sincronizarTareasBovinas({
@@ -448,6 +480,9 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             referenciaId: registro._id,
             creadoPor: req.usuario?.id,
             metadata: {
+                metodo: registro.metodo || metodoService.metodoLegado(registro),
+                madreGeneticaId: terneroGuardado.madreGeneticaId,
+                madreGestanteId: terneroGuardado.madreGestanteId,
                 madreDiio: terneroGuardado.madreDiio,
                 padreDiio: terneroGuardado.padreDiio,
                 pesoNacimiento: terneroGuardado.pesoNacimiento,
@@ -465,6 +500,7 @@ reproduccionCtrl.registrarTerneroDesdeParto = async (req, res) => {
             referenciaId: registro._id,
             creadoPor: req.usuario?.id,
             metadata: {
+                metodo: registro.metodo || metodoService.metodoLegado(registro),
                 ternero: terneroGuardado._id,
                 terneroDiio: terneroGuardado.diio || terneroGuardado.identificadorFinca,
                 fechaPartoReal: registro.fechaPartoReal
@@ -541,6 +577,26 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
         const registroAnterior = await RegistroReproductivo.findById(req.params.id).lean();
         if (!registroAnterior) {
             return res.status(404).json({ mensaje: 'Registro reproductivo no encontrado' });
+        }
+        if (registroAnterior.metodo) {
+            if (datosActualizacion.fechaPartoReal && !datosActualizacion.resultado) {
+                datosActualizacion.resultado = { tipo: 'PARTO', fecha: datosActualizacion.fechaPartoReal };
+                delete datosActualizacion.fechaPartoReal;
+            }
+            servicioService.seleccionar(datosActualizacion, ['animal', 'especie', 'asignadoA', 'observaciones', 'diagnostico', 'resultado']);
+            if (datosActualizacion.animal && String(datosActualizacion.animal) !== String(registroAnterior.animal)) return res.status(409).json({ mensaje: 'El animal de un ciclo con servicios no puede sustituirse.' });
+            if (datosActualizacion.asignadoA) await validarUsuarioAsignable(datosActualizacion.asignadoA, 'Reproduccion');
+            const cambios = {};
+            for (const k of ['asignadoA', 'observaciones']) if (datosActualizacion[k] !== undefined) cambios[k] = datosActualizacion[k];
+            const actualizado = await ejecutarEnTransaccion(async (session) => {
+                if (datosActualizacion.diagnostico) await servicioService.operarCiclo(req.params.id, 'diagnosticos', datosActualizacion.diagnostico, req.usuario.id, session);
+                if (datosActualizacion.resultado) await servicioService.operarCiclo(req.params.id, 'resultado', datosActualizacion.resultado, req.usuario.id, session);
+                const actual = await RegistroReproductivo.findById(req.params.id).session(session);
+                Object.assign(actual, cambios);
+                return actual.save({ session });
+            });
+            await sincronizarAutomatizacionReproductiva({ registro: actualizado, animal: await Animal.findById(actualizado.animal), usuarioId: req.usuario.id });
+            return res.json(await poblarAnimal(RegistroReproductivo.findById(req.params.id)));
         }
         let animalValidado = null;
         if (Object.prototype.hasOwnProperty.call(datosActualizacion, 'asignadoA')) {
@@ -643,6 +699,8 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
 
 reproduccionCtrl.deleteRegistro = async (req, res) => {
     try {
+        const anterior = await RegistroReproductivo.findById(req.params.id);
+        if (anterior?.metodo && (anterior.servicios?.length || anterior.historialDiagnosticos?.length || anterior.resultado?.tipo)) return res.status(409).json({ mensaje: 'El ciclo tiene evidencia reproductiva. Cancele o cierre el ciclo para conservar servicios, diagnosticos y resultado.' });
         const registro = await RegistroReproductivo.findByIdAndDelete(req.params.id);
 
         if (!registro) {

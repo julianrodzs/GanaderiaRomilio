@@ -44,7 +44,8 @@ const validarRelacionesTarea = async (datos, session) => {
     }
 };
 const esTareaEspecializada = (tarea) => ['Sanidad', 'IATF', 'BandaPorcina', 'BandaReproductivaPorcina', 'ProtocoloEngorde'].includes(tarea.moduloOrigen)
-    || ['IATF', 'BANDA_PORCINA', 'PROTOCOLO_ENGORDE'].includes(tarea.categoriaAutomatica);
+    || (tarea.categoriaAutomatica === 'Transferencia de embriones' && !String(tarea.claveAutomatica).includes(':sincronizacion:'))
+    || ['IATF', 'BANDA_PORCINA', 'PROTOCOLO_ENGORDE', 'TE_DONANTE', 'TETF'].includes(tarea.categoriaAutomatica);
 const esTareaVinculada = (tarea) => Boolean(tarea.creadoAutomaticamente || tarea.referenciaId || esTareaEspecializada(tarea));
 const validarTransicionTarea = (tarea, destino, gestor, reapertura = false) => {
     if (!ESTADOS_TAREA.includes(destino)) throw errorTarea('Estado de tarea inválido.');

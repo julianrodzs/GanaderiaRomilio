@@ -44,9 +44,9 @@ async function start(){
  const {verificarModelo,limpiarIndiceEventoObsoleto}=require('../scripts/sincronizar-indices');
  for(const M of Object.values(mongoose.models)){await M.init();await verificarModelo(M);out.indices[M.modelName]=await M.collection.indexes();}
  await comprobacion('INDICES_MODELOS_PRODUCTIVOS',async()=>{
-  assert.equal(Object.keys(out.indices).length,70);
+  assert.equal(Object.keys(out.indices).length,75);
   const version=await mongoose.connection.db.admin().command({buildInfo:1});
-  assert.match(version.version,/^8\./);return{modelos:70,mongodb:version.version};
+  assert.match(version.version,/^8\./);return{modelos:75,mongodb:version.version};
  });
  await comprobacion('MIGRACION_INDICE_SPARSE_EN_OTRA_BASE',async()=>{
   const dbMigracion=mongoose.connection.useDb('cierre_migracion_indices');
@@ -65,8 +65,8 @@ async function start(){
   const ejecuciones=[];
   for(let i=0;i<2;i++){
    const r=spawnSync(process.execPath,['--require',path.join(__dirname,'cierre-sin-dotenv.cjs'),path.join(__dirname,'../scripts/sincronizar-indices.js')],{env,windowsHide:true,encoding:'utf8',timeout:30000});
-   assert.equal(r.error,undefined);assert.equal(r.status,0,(r.stdout||'')+(r.stderr||''));assert.match(r.stdout,/70 modelos registrados/);
-   ejecuciones.push({exit:r.status,modelos:70});
+   assert.equal(r.error,undefined);assert.equal(r.status,0,(r.stdout||'')+(r.stderr||''));assert.match(r.stdout,/75 modelos registrados/);
+   ejecuciones.push({exit:r.status,modelos:75});
   }
   await client.db('cierre_indices_cli').dropDatabase();return{ejecuciones,produccion:true,baseAislada:true};
  });
@@ -285,6 +285,7 @@ async function main(){
   });
  }catch(e){record('INFRAESTRUCTURA','FAIL',{message:e.message,stack:e.stack});}
  finally{
+  fs.mkdirSync(process.env.CIERRE_OUTPUT_DIR || __dirname,{recursive:true});
   fs.writeFileSync(path.join(process.env.CIERRE_OUTPUT_DIR || __dirname,currency==='USD'?'cierre-smoke-moneda-usd-resultados.json':diagnostic?'cierre-smoke-diagnostico-resultados.json':'cierre-smoke-resultados.json'),JSON.stringify(out,null,2));
   if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}
   await delay(200);await mongoose.disconnect().catch(()=>{});await client?.close().catch(()=>{});

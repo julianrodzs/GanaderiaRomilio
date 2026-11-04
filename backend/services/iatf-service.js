@@ -578,6 +578,8 @@ const registrarIATF = async ({ campanaId, datos, usuarioId, rolUsuario }) => {
                     tipoInseminacion: 'IATF',
                     campanaIATF: campana._id,
                     origenGestacion: 'IATF',
+                    metodo: 'IATF',
+                    diasGestacionReferencia: diasGestacion,
                     semenUtilizado: consumoSemen.bancoSemen ? undefined : semen._id,
                     bancoSemenId: consumoSemen.bancoSemen ? semen._id : undefined,
                     semenSnapshot: consumoSemen.snapshot,
@@ -659,6 +661,7 @@ const registrarDiagnosticos = async ({ campanaId, datos, usuarioId }) => {
                     if (ciclo) {
                         ciclo.resultadoDiagnosticoGestacion = item.resultado;
                         ciclo.fechaUltimoDiagnosticoGestacion = diagnostico.fecha;
+                        ciclo.historialDiagnosticos.push({ fecha: diagnostico.fecha, resultado: item.resultado, metodo: item.metodo === 'ECOGRAFIA' ? 'ECOGRAFIA' : 'OTRO', registradoPor: usuarioId });
                         if (item.resultado === 'PREÑADA') {
                             const parto = await calcularFechaProbablePartoBovino({
                                 fechaServicio: participante.fechaInseminacion,
@@ -678,6 +681,8 @@ const registrarDiagnosticos = async ({ campanaId, datos, usuarioId }) => {
                             ciclo.motivoCierre = 'Diagnóstico VACIA registrado en campaña IATF.';
                         }
                         await ciclo.save({ session });
+                        participante.estadoAtribucion = ciclo.estadoAtribucion;
+                        participante.metodoGestacion = ciclo.metodo;
                     }
                 }
                 await upsertEventoAnimal({
@@ -703,7 +708,8 @@ const calcularMetricasCampana = (campana, diagnosticos = [], pasos = [], asignac
     const participantes = campana.participantes || [];
     const inseminadas = participantes.filter((p) => Boolean(p.fechaInseminacion)).length;
     const completaron = participantes.filter((p) => ['PROTOCOLO_COMPLETADO', 'INSEMINADA'].includes(p.estadoParticipacion)).length;
-    const prenadas = participantes.filter((p) => p.resultadoActual === 'PREÑADA').length;
+    const atribuible = (p) => !p.estadoAtribucion || p.estadoAtribucion === 'CONFIRMADA' && p.metodoGestacion === 'IATF';
+    const prenadas = participantes.filter((p) => p.resultadoActual === 'PREÑADA' && atribuible(p)).length;
     const vacias = participantes.filter((p) => p.resultadoActual === 'VACIA').length;
     const dudosas = participantes.filter((p) => ['DUDOSA', 'REQUIERE_RECONFIRMACION'].includes(p.resultadoActual)).length;
     const costosPorMoneda = {};
@@ -745,7 +751,7 @@ const calcularMetricasCampana = (campana, diagnosticos = [], pasos = [], asignac
     });
     const diagnosticosPorFecha = Object.values(porFecha).map((grupo) => {
         const unicos = [...grupo.porAnimal.values()];
-        const prenadasFecha = unicos.filter((item) => item.resultado === 'PREÑADA').length;
+        const prenadasFecha = unicos.filter((item) => item.resultado === 'PREÑADA' && !participantes.some((p) => idTexto(p.animal) === idTexto(item.animal) && !atribuible(p))).length;
         return {
             fecha: grupo.fecha,
             diagnosticadas: unicos.length,
@@ -758,7 +764,7 @@ const calcularMetricasCampana = (campana, diagnosticos = [], pasos = [], asignac
         const clave = p.semenSnapshot?.codigoToro || p.semenSnapshot?.toro || p.semenSnapshot?.nombre || 'Sin referencia';
         resultadosPorToro[clave] ||= { toro: clave, inseminadas: 0, prenadas: 0 };
         resultadosPorToro[clave].inseminadas += 1;
-        if (p.resultadoActual === 'PREÑADA') resultadosPorToro[clave].prenadas += 1;
+        if (p.resultadoActual === 'PREÑADA' && atribuible(p)) resultadosPorToro[clave].prenadas += 1;
     });
     Object.values(resultadosPorToro).forEach((grupo) => {
         grupo.pAIObservado = grupo.inseminadas ? Number(((grupo.prenadas / grupo.inseminadas) * 100).toFixed(2)) : 0;
@@ -946,6 +952,7 @@ module.exports = {
     ACCIONES_BITACORA,
     advertenciasParticipante,
     calcularCronograma,
+    consumirInsumos,
     calcularMetricasCampana,
     cambiarEstadoCampana,
     consolidarMetricas,

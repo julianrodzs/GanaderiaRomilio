@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Animal = require('../models/Animal');
 
-const CAMPOS_ANIMAL = 'diio identificadorFinca nombre sexo especie categoria objetivoProductivo raza razaPrincipal razaSecundaria grupoRacial gradoRacial descripcionRacial composicionRacial fraccionRazaPrincipal fraccionRazaSecundaria padre madre padreDiio madreDiio padreExternoNombre madreExternaNombre registroGenealogico observacionesGenealogicas origenGenealogico fechaNacimiento estado pesoActual';
+const CAMPOS_ANIMAL = 'diio identificadorFinca nombre sexo especie categoria objetivoProductivo raza razaPrincipal razaSecundaria grupoRacial gradoRacial descripcionRacial composicionRacial fraccionRazaPrincipal fraccionRazaSecundaria padre madre madreGeneticaId madreGestanteId madreGeneticaExterna padreDiio madreDiio padreExternoNombre madreExternaNombre registroGenealogico observacionesGenealogicas origenGenealogico fechaNacimiento estado pesoActual';
 const MAX_GENERACIONES_VALIDACION = 12;
 
 const normalizarId = (valor) => {
@@ -32,7 +32,7 @@ const obtenerAncestros = async (animalId, generaciones = 3, visitados = new Set(
     const animal = await obtenerAnimalBasico(animalId, opciones);
     if (!animal) return [];
 
-    const padres = [animal.padre, animal.madre].filter(Boolean);
+    const padres = [animal.padre, animal.madreGeneticaId || animal.madre].filter(Boolean);
     const ancestros = [];
 
     for (const padreId of padres) {
@@ -148,8 +148,8 @@ const crearNodoArbol = async (animalId, generaciones, visitados = new Set()) => 
         };
     }
 
-    if (animal.madre) {
-        nodo.madre = await crearNodoArbol(animal.madre, generaciones - 1, siguientesVisitados);
+    if (animal.madreGeneticaId || animal.madre) {
+        nodo.madre = await crearNodoArbol(animal.madreGeneticaId || animal.madre, generaciones - 1, siguientesVisitados);
     } else if (animal.madreExternaNombre || animal.madreDiio) {
         nodo.madre = {
             animal: {
@@ -177,13 +177,13 @@ const obtenerArbolGenealogico = async (animalId, generaciones = 3) => {
 
 const obtenerDescendencia = async (animalId) => {
     const hijos = await Animal.find({
-        $or: [{ padre: animalId }, { madre: animalId }]
+        $or: [{ padre: animalId }, { madreGeneticaId: animalId }, { madreGeneticaId: null, madre: animalId }]
     }).select(CAMPOS_ANIMAL).sort({ fechaNacimiento: -1 }).lean();
 
     const hijosIds = hijos.map((animal) => animal._id);
     const nietos = hijosIds.length
         ? await Animal.find({
-            $or: [{ padre: { $in: hijosIds } }, { madre: { $in: hijosIds } }]
+            $or: [{ padre: { $in: hijosIds } }, { madreGeneticaId: { $in: hijosIds } }, { madreGeneticaId: null, madre: { $in: hijosIds } }]
         }).select(CAMPOS_ANIMAL).sort({ fechaNacimiento: -1 }).lean()
         : [];
 
@@ -213,7 +213,7 @@ const obtenerCriasDirectas = async (animalId) => {
 
     const identificadores = [...new Set([animal.diio, animal.identificadorFinca].filter(Boolean))];
     const alternativas = animal.sexo === 'Hembra'
-        ? crearFiltroLegado('madre', 'madreDiio', animal._id, identificadores)
+        ? [{ madreGeneticaId: animal._id }, ...crearFiltroLegado('madre', 'madreDiio', animal._id, identificadores).map((f) => ({ $and: [{ madreGeneticaId: null }, f] }))]
         : animal.sexo === 'Macho'
             ? crearFiltroLegado('padre', 'padreDiio', animal._id, identificadores)
             : [
@@ -269,7 +269,9 @@ const obtenerMadresAsociadasToro = (crias) => {
 
 const obtenerResumenDescendencia = async (animalId) => {
     const { animal, crias } = await obtenerCriasDirectas(animalId);
+    const criasGestadas = animal.sexo === 'Hembra' ? await Animal.find({ $or: [{ madreGestanteId: animal._id }, { madreGestanteId: null, madre: animal._id }] }).select(CAMPOS_ANIMAL).lean() : [];
     const madres = animal.sexo === 'Macho' ? obtenerMadresAsociadasToro(crias) : [];
+    const partosBiologicos = animal.sexo === 'Hembra' ? await require('../models/RegistroReproductivo').RegistroReproductivo.find({ animal: animal._id, fechaPartoReal: { $ne: null } }).select('fechaPartoReal metodo origenGestacion tipoRegistro resultado').sort({ fechaPartoReal: -1 }).lean() : [];
     return {
         animal: {
             id: animal._id,
@@ -287,7 +289,12 @@ const obtenerResumenDescendencia = async (animalId) => {
             ultimaCria: obtenerFechaExtrema(crias, true)
         },
         madres,
-        crias
+        crias,
+        criasGestadas,
+        partosBiologicos,
+        progenieGeneticaTE: animal.sexo === 'Hembra' ? crias.filter((c) => c.madreGeneticaId && c.madreGestanteId && normalizarId(c.madreGeneticaId) !== normalizarId(c.madreGestanteId)) : [],
+        totalProgenieGenetica: crias.length,
+        totalCriasGestadas: criasGestadas.length
     };
 };
 

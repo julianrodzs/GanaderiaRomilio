@@ -61,7 +61,7 @@ const encontrarTerneroDelCiclo = async (registro, madre) => {
     if (!rango) return null;
 
     return Animal.findOne({
-        madre: madre._id,
+        $or: [{ madreGestanteId: madre._id }, { madreGestanteId: null, madre: madre._id }],
         especie: 'Bovino',
         fechaNacimiento: { $gte: rango.inicio, $lt: rango.fin }
     }).sort({ createdAt: 1 });

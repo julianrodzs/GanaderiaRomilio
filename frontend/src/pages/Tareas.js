@@ -119,7 +119,7 @@ const normalizarTarea = (tarea) => ({
 
 const slug = (valor = '') => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').toLowerCase();
 
-const Tareas = ({ usuario, tareaInicialId = '', onNavegarSanidad }) => {
+const Tareas = ({ usuario, tareaInicialId = '', onNavegarSanidad, onNavegarReproduccion }) => {
   const puedeGestionar = puedeGestionarModulo(usuario?.rol, 'Tareas');
   const puedeReabrir = (tarea) => tarea.estado === 'En proceso' || (puedeGestionar && ['Completada', 'Cancelada'].includes(tarea.estado) && !tarea.creadoAutomaticamente && !tarea.referenciaId);
   const puedeReprogramar = (tarea) => puedeGestionar && !esTareaEspecializada(tarea) && !['Completada', 'Cancelada'].includes(tarea.estado);
@@ -385,6 +385,11 @@ const Tareas = ({ usuario, tareaInicialId = '', onNavegarSanidad }) => {
   const completar = async (tarea) => {
     try {
       setGuardando(true);
+      if (['TE_DONANTE', 'TETF'].includes(tarea.categoriaAutomatica)) {
+        if (!navigator.onLine) throw new Error('La ejecución TE necesita conexión para validar existencias y trazabilidad.');
+        sessionStorage.setItem('ganaderiaAccionTE', JSON.stringify({ tipo: tarea.categoriaAutomatica === 'TE_DONANTE' ? 'colecta' : 'campana', referenciaId: tarea.referenciaId?._id || tarea.referenciaId }));
+        setDetalle(null); onNavegarReproduccion?.(); return;
+      }
       if (tarea.moduloOrigen === 'Sanidad' && ['Plan sanitario', 'Tratamiento sanitario'].includes(tarea.categoriaAutomatica)) {
         if (!navigator.onLine) throw new Error('La aplicación sanitaria debe confirmarse con conexión para mantener la trazabilidad clínica.');
         sessionStorage.setItem('ganaderiaAccionSanidad', JSON.stringify({

@@ -40,6 +40,7 @@ module.exports = {
         }
         const registro = await RegistroReproductivo.findById(participante?.registroReproductivo || req.params.id).session(session);
         if (!registro || registro.inseminacionAnulada || !registro.semenSnapshot?.consumoSemenId) throw banco.errorBanco('La inseminacion no permite anulacion automatica.');
+        if (registro.servicios?.filter((s) => !s.anulado).length > 1) throw banco.errorBanco('El ciclo tiene varios servicios; requiere revisar el consumo de cada servicio antes de anular.', 409);
         if (!campana && registro.campanaIATF) throw banco.errorBanco('Anula esta inseminacion desde su campana.');
         if (registro.fechaPartoReal || registro.gestacionConfirmada || registro.resultadoDiagnosticoGestacion || participante && participante.resultadoActual !== 'SIN_DIAGNOSTICO') throw banco.errorBanco('Hay resultados posteriores; se requiere una correccion revisada antes de anular.');
         if (registro.bandaReproductivaPorcina) {
@@ -59,6 +60,7 @@ module.exports = {
         }
         await banco.revertirConsumo({ eventoId: registro.semenSnapshot.consumoSemenId, motivo: req.body.motivo, usuarioId: req.usuario.id, session });
         registro.inseminacionAnulada = true; registro.estadoCiclo = 'Cancelado'; registro.activoParaAlertas = false; registro.motivoCierre = req.body.motivo;
+        for (const s of registro.servicios || []) s.anulado = true;
         await registro.save({ session });
         await Tarea.updateMany({ referenciaId: registro._id, estado: { $in: ['Pendiente', 'En proceso'] } }, { $set: { estado: 'Cancelada', observaciones: 'Inseminacion anulada' } }, { session });
         if (campana) {

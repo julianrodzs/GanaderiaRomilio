@@ -1,0 +1,25 @@
+.te-programa, .te-indicadores, .te-banco { display: grid; gap: 18px; padding: 18px 0; min-width: 0; }
+.te-programa > .sanidad-tabs { overflow-x: auto; white-space: nowrap; }
+.te-modal { width: min(1100px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.te-modal h2 { font-size: 24px; overflow-wrap: anywhere; }
+.te-fieldset { border: 1px solid #b9c9c0; padding: 16px; min-width: 0; }
+.te-fieldset legend { font-weight: 700; padding: 0 8px; }
+.te-paso { display: grid; grid-template-columns: 2fr 1.5fr 80px 2fr 110px 40px; gap: 10px; align-items: end; padding: 14px 0; border-bottom: 1px solid #d3ddd6; }
+.te-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.te-seleccion { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 260px; overflow: auto; }
+.te-check { display: flex !important; align-items: center; gap: 10px; margin: 10px 0; }
+.te-check input { width: 18px !important; min-height: 18px !important; padding: 0 !important; }
+.te-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.te-kpis article { border-bottom: 3px solid #397658; padding: 12px 0; display: grid; gap: 8px; }
+.te-kpis strong { font-size: 26px; color: #173c2a; }
+.te-detalle { border-top: 2px solid #a4bbad; padding: 20px 0; display: grid; gap: 16px; }
+.te-filtros { max-width: 600px; }
+.te-programa button:not(.boton-link):not(.boton-primario), .te-banco button:not(.boton-link):not(.boton-primario), .te-modal button:not(.boton-link):not(.boton-primario) { min-height: 36px; padding: 8px 12px; border: 1px solid #9aad9f; border-radius: 4px; background: #f4f8f5; color: #17402b; font: inherit; font-weight: 600; cursor: pointer; }
+.te-programa button:disabled, .te-banco button:disabled { opacity: .55; cursor: not-allowed; }
+.te-programa button:focus-visible, .te-banco button:focus-visible, .te-modal button:focus-visible { outline: 2px solid #245d49; outline-offset: 2px; }
+.te-programa > .sanidad-tabs button.activo { background: #103f28; color: #fff; }
+.te-programa td small, .te-banco td small { display: block; margin-top: 4px; color: #58685e; }
+.te-programa .tabla-scroll, .te-banco .tabla-scroll, .te-indicadores .tabla-scroll { width: 100%; overflow-x: auto; }
+.te-programa td, .te-banco td { overflow-wrap: anywhere; }
+@media(max-width: 900px) { .te-paso { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media(max-width: 600px) { .te-paso, .te-seleccion { grid-template-columns: minmax(0, 1fr); } .te-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .te-modal { padding: 16px; } }

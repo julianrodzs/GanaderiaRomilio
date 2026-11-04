@@ -1,0 +1,7 @@
+{
+  "MONTA_NATURAL": { "nombre": "Monta natural", "especies": ["Bovino", "Porcino"] },
+  "IA_CONVENCIONAL": { "nombre": "Inseminacion artificial convencional", "especies": ["Bovino", "Porcino"] },
+  "IATF": { "nombre": "Inseminacion a tiempo fijo (IATF)", "especies": ["Bovino"] },
+  "TRANSFERENCIA_EMBRIONES": { "nombre": "Transferencia de embriones", "especies": ["Bovino"] },
+  "DESCONOCIDO": { "nombre": "Desconocido", "especies": ["Bovino", "Porcino"] }
+}

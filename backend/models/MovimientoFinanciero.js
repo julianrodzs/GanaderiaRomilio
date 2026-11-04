@@ -7,7 +7,7 @@ const movimientoFinancieroSchema = new Schema(
         fecha: { type: Date, required: true },
         tipoMovimiento: {
             type: String,
-            enum: ['Planilla', 'Inversion', 'Compra', 'Venta de animales', 'Compra de animales', 'Transferencia interna', 'Venta de pajillas'],
+            enum: ['Planilla', 'Inversion', 'Compra', 'Venta de animales', 'Compra de animales', 'Transferencia interna', 'Venta de pajillas', 'Venta de embriones'],
             required: true,
             trim: true
         },

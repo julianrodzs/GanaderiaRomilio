@@ -51,7 +51,13 @@
     "indexes:sync": "node scripts/sincronizar-indices.js",
     "migrate:banco-semen:check": "node scripts/migrar-banco-semen.js --dry-run",
     "migrate:banco-semen": "node scripts/migrar-banco-semen.js --aplicar",
-    "test:banco-semen:integracion": "node documentation/banco-semen.integracion.cjs"
+    "test:banco-semen:integracion": "node documentation/banco-semen.integracion.cjs",
+    "migrate:metodo-reproductivo:check": "node scripts/migrar-metodo-reproductivo.js --dry-run",
+    "migrate:metodo-reproductivo": "node scripts/migrar-metodo-reproductivo.js --aplicar",
+    "test:metodo-reproductivo:integracion": "node documentation/metodo-reproductivo.integracion.cjs",
+    "migrate:reproduccion-te:check": "node scripts/migrar-reproduccion-y-te.js --dry-run",
+    "migrate:reproduccion-te": "node scripts/migrar-reproduccion-y-te.js --aplicar",
+    "test:te:integracion": "node documentation/programa-te.integracion.cjs"
   },
   "keywords": [],
   "author": "",

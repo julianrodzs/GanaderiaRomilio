@@ -25,6 +25,7 @@ import {
   obtenerVacasImproductivas
 } from '../services/api';
 import SelectorEspecie from './SelectorEspecie';
+import ReporteMetodosReproductivos from './ReporteMetodosReproductivos';
 import ReporteComprasAnimales from './ReporteComprasAnimales';
 import FeatureGate from './FeatureGate';
 import UpgradeMessage from './UpgradeMessage';
@@ -433,6 +434,7 @@ const Reportes = ({ usuario }) => {
       </div>
 
       <SelectorEspecie valor={especie} onChange={setEspecie} incluirTodos />
+      <ReporteMetodosReproductivos especie={especie} fechaInicio={filtros.fechaInicio} fechaFin={filtros.fechaFin} />
 
       <section className="reportes-filtros">
         <label>

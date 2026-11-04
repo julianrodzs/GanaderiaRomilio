@@ -23,6 +23,7 @@ La aplicacion ya cuenta con:
 - Reproduccion/Gestacion bovina con parto estimado, parto real, destete y proximo celo estimado.
 - IATF configurable para planes Pro/Premium: protocolos versionados, campañas, tareas, insumos, pajuelas, diagnósticos, P/AI y costos reales.
 - Banco de semen por finca para Pro/Premium, con gavetas reproductiva y comercial, reservas IATF, movimientos trazables y ventas de pajillas conectadas con Finanzas. Consulte [la guía y migración](backend/documentation/banco-semen.md).
+- Método reproductivo unificado, gestaciones con servicio desconocido y transferencia de embriones con madre genética y gestante separadas. Consulte [el mapa, los planes y la migración](backend/documentation/metodo-reproductivo.md).
 - Protocolos PRO de engorde bovino por lote: etapas versionadas, cronograma, pesajes reales, cambios de ración, aplicaciones sanitarias, criterios de avance y preparación de candidatos para el flujo existente de ventas.
 - Bandas reproductivas porcinas PRO: protocolos versionados, actividades grupales, servicios, diagnósticos, partos y destetes conectados con los ciclos reproductivos, camadas, tareas y bitácoras existentes.
 
@@ -849,6 +850,7 @@ node -e "require('./app'); console.log('backend ok')"
 - Modo offline: `backend/documentation/modo-offline.md`
 - Lotes y alimentacion: `backend/documentation/lotes-alimentacion.md`
 - IATF configurable: `backend/documentation/iatf.md`
+- Programa integral TE, banco de embriones, TETF y ventas: [mapa y verificacion](backend/documentation/programa-te-integral.md)
 - IA drone: `ia-service/README.md`
 - Despliegue Vercel: `DEPLOY_VERCEL.md`
 - Despliegue Render: `DEPLOY_RENDER.md`

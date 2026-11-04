@@ -60,6 +60,10 @@ const {
 router.use(puedeVer);
 
 router.get('/resumen', getResumenReportes);
+router.get('/reproduccion/partos-metodo', require('../controllers/metodoReproductivo-controller').partos);
+router.get('/reproduccion/metodos', requireFeature('analiticaProductiva', { codigoDenegado: 'PLAN_UPGRADE_REQUIRED' }), require('../controllers/metodoReproductivo-controller').indicadores);
+router.get('/multi-finca/te', reportesMultiFinca, require('../controllers/te-controller').consolidado);
+router.get('/multi-finca/metodos-reproductivos', reportesMultiFinca, (req, res, next) => { req.consolidadoMetodos = true; next(); }, require('../controllers/metodoReproductivo-controller').indicadores);
 router.get('/multi-finca', reportesMultiFinca, getReporteMultiFinca);
 router.get('/multi-finca/exportar', reportesMultiFinca, exportarReporte);
 router.get('/multi-finca/detalle', reportesMultiFinca, getDetalleMetrica);

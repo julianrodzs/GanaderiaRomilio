@@ -23,7 +23,7 @@ const until = async (expression) => { for (let i = 0; i < 80; i++) { if (await e
 const click = (text) => evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(text)})?.click()`);
 const field = (label, value) => evaluate(`(() => {const label=Array.from(document.querySelectorAll('label')).find(l=>l.firstChild?.textContent?.trim()===${JSON.stringify(label)});const e=label?.querySelector('input,select,textarea');if(!e)throw Error('Campo no encontrado');const proto=e.tagName==='SELECT'?HTMLSelectElement.prototype:e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input',{bubbles:true}));})()`);
 try {
-  const bundle = await build({ stdin: { contents: `import React from 'react';import{createRoot}from'react-dom/client';import Banco from './src/Components/BancoSemen.js';localStorage.setItem('ganaderiaSesion',JSON.stringify({token:'fixture',fincaId:'finca-fixture'}));function App(){const[c,setC]=React.useState(false);return <main style={{maxWidth:1280,margin:'auto',padding:16}}><button onClick={()=>setC(!c)}>{c?'Modo reproductivo':'Modo comercial'}</button><Banco key={String(c)} comercial={c} permitirEdicion /></main>};createRoot(document.getElementById('root')).render(<App/>);`, resolveDir: root, loader: 'jsx' }, bundle: true, write: false, outfile: path.join(root, 'fixture.js'), format: 'esm', loader: { '.js': 'jsx' }, define: { 'import.meta.env': JSON.stringify({ DEV: false, VITE_API_URL: '/api' }) } });
+  const bundle = await build({ stdin: { contents: `import React from 'react';import{createRoot}from'react-dom/client';import Banco from './src/Components/BancoSemen.js';import{FormularioMetodoReproductivo}from'./src/Components/MetodoReproductivo.js';import ProgramaTE from './src/Components/ProgramaTEIntegral.js';import{crearRegistroReproductivo}from'./src/services/api.js';localStorage.setItem('ganaderiaSesion',JSON.stringify({token:'fixture',fincaId:'finca-fixture'}));function App(){const[c,setC]=React.useState(false);return <main style={{maxWidth:1280,margin:'auto',padding:16}}><button onClick={()=>setC(!c)}>{c?'Modo reproductivo':'Modo comercial'}</button><Banco key={String(c)} comercial={c} permitirEdicion /></main>};const root=createRoot(document.getElementById('root'));root.render(<App/>);window.mostrarTE=()=>root.render(<main style={{maxWidth:1280,margin:'auto',padding:16}}><ProgramaTE animales={[{_id:'donante',nombre:'Donante',diio:'D-1',especie:'Bovino',sexo:'Hembra',estado:'Activo'},{_id:'toro',nombre:'Toro',diio:'T-1',especie:'Bovino',sexo:'Macho',estado:'Activo'}]} usuarios={[{_id:'usuario',nombre:'Ana',rol:'Veterinario'}]}/></main>);window.mostrarMetodo=(especie)=>root.render(<main style={{maxWidth:1280,margin:'auto',padding:16}}><FormularioMetodoReproductivo key={especie+Date.now()} especie={especie} animales={['receptora','donante'].map((id,i)=>({_id:id,nombre:i?'Donante':'Receptora',diio:'100'+i,especie,sexo:'Hembra',estado:'Activo'}))} usuariosAsignables={[{_id:'usuario',nombre:'Ana',apellido:'Prueba',rol:'Veterinario'}]} onGuardar={d=>crearRegistroReproductivo(d)} onCancelar={()=>{}}/></main>);`, resolveDir: root, loader: 'jsx' }, bundle: true, write: false, outfile: path.join(root, 'fixture.js'), format: 'esm', loader: { '.js': 'jsx' }, define: { 'import.meta.env': JSON.stringify({ DEV: false, VITE_API_URL: '/api' }) } });
   server = http.createServer(async (req, res) => {
     if (req.url.startsWith('/api/')) {
       const chunks = []; for await (const c of req) chunks.push(c);
@@ -31,6 +31,9 @@ try {
       requests.push({ url: req.url, method: req.method, body });
       res.setHeader('Content-Type', 'application/json');
       if (req.method === 'POST' && req.url === '/api/ventas/pajillas' && failSale) { res.statusCode = 500; return res.end(JSON.stringify({ mensaje: 'Fallo de venta simulado' })); }
+      if (req.url.startsWith('/api/te/indicadores')) return res.end(JSON.stringify({ transferidos: 1, prenadas: 1, embrionesViables: 6, costosProduccion: { CRC: 60000, USD: 600 }, costoPorEmbrionViable: { CRC: 10000, USD: 100 }, porConservacion: [{ nombre: 'CONGELADO', transferidos: 1, prenadas: 1, tasaPrenez: 100 }] }));
+      if (req.method === 'GET' && req.url === '/api/te/banco') return res.end(JSON.stringify(fichas.map((f,i) => ({ ...f, codigoLote: 'TE-'+i, donanteExterna:{nombre:'Donante',diio:'D-1'}, padreExterno:{nombre:'Toro',diio:'T-1'}, estadoConservacion:'CONGELADO', totalTransferidos:0, totalVendidos:0, totalMermas:0 }))));
+      if (req.method === 'GET' && (req.url.startsWith('/api/te/') || req.url.startsWith('/api/iatf/insumos') || req.url.startsWith('/api/reproduccion/insumos/semen'))) return res.end('[]');
       if (req.method === 'POST') return res.end(JSON.stringify({ ficha: fichas[0] }));
       if (req.url === '/api/semen' || req.url === '/api/ventas/pajillas/existencias') return res.end(JSON.stringify(fichas));
       if (req.url === '/api/ventas/pajillas') return res.end('[]');
@@ -78,7 +81,47 @@ try {
   assert.equal(ventas.length, 2); assert.equal(ventas[0].body.claveIdempotencia, ventas[1].body.claveIdempotencia); assert.equal(ventas[1].body.moneda, 'USD');
   await cdp('Page.captureScreenshot', { format: 'png' }).then((r) => writeFileSync(path.join(os.tmpdir(), 'cir-banco-movil.png'), Buffer.from(r.data, 'base64')));
   assert.equal(errors.length, 0, JSON.stringify(errors));
+  await evaluate("window.mostrarMetodo('Bovino')");
+  await until("document.querySelector('select[name=metodo]')");
+  await field('Método reproductivo', 'TRANSFERENCIA_EMBRIONES');
+  await field('Receptora', 'receptora'); await field('Responsable del seguimiento', 'usuario');
+  await field('Fecha del servicio', '2026-01-08'); await field('Donante de la finca', 'donante');
+  assert.ok(await evaluate("Array.from(document.querySelectorAll('option')).some(o=>o.textContent.includes('Ana')&&o.textContent.includes('Veterinario'))"));
+  for (const [width,height,n] of [[1440,1000,'escritorio'],[820,1180,'ipad'],[390,844,'movil']]) {
+    await cdp('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:width===390});
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+    await cdp('Page.captureScreenshot', {format:'png',captureBeyondViewport:true}).then(r=>writeFileSync(path.join(os.tmpdir(),`cir-metodo-${n}.png`),Buffer.from(r.data,'base64')));
+  }
+  await click('Guardar registro'); await wait(200);
+  const te = requests.find(r=>r.url==='/api/reproduccion'&&r.method==='POST');
+  assert.ok(te); assert.equal(te.body.metodo,'TRANSFERENCIA_EMBRIONES'); assert.equal(te.body.servicio.embrion.donanteId,'donante'); assert.equal(te.body.servicio.embrion.origenEmbrion,'IN_VIVO');
+  await evaluate("window.mostrarMetodo('Porcino')"); await until("document.querySelector('select[name=metodo]')");
+  assert.ok(await evaluate("!Array.from(document.querySelector('select[name=metodo]').options).some(o=>['IATF','TRANSFERENCIA_EMBRIONES'].includes(o.value))"));
+  await field('Método reproductivo','DESCONOCIDO'); await field('Hembra','receptora'); await field('Responsable del seguimiento','usuario');
+  await evaluate("document.querySelector('.metodo-check input').click()"); await until("document.querySelector('input[name=fecha]')");
+  await click('Guardar registro'); await wait(150);
+  const desconocido = requests.filter(r=>r.url==='/api/reproduccion'&&r.method==='POST').at(-1);
+  assert.equal(desconocido.body.metodo,'DESCONOCIDO'); assert.ok(!desconocido.body.servicio); assert.ok(desconocido.body.diagnostico); assert.equal(errors.length,0,JSON.stringify(errors));
+  await evaluate("window.mostrarTE()"); await until("document.body.textContent.includes('Donantes y producción')");
+  await click('Nueva colecta / FIV'); await until("document.querySelector('[role=dialog]')");
+  await field('Nombre','FIV navegador'); await field('Donante de la finca','donante'); await field('Padre de la finca','toro');
+  await field('Estructuras recuperadas','8'); await field('Embriones degenerados','2');
+  await field('Código de lote','UI-TE-1'); await field('Cantidad reproductiva','4'); await field('Cantidad comercial','2'); await field('Costo USD','600');
+  for (const [width,height,n] of [[1440,1000,'escritorio'],[820,1180,'ipad'],[390,844,'movil']]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width===390});
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+    await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:true}).then(r=>writeFileSync(path.join(os.tmpdir(),`cir-te-${n}.png`),Buffer.from(r.data,'base64')));
+  }
+  await click('Guardar'); await until("!document.querySelector('[role=dialog]')");
+  const colectaUI = requests.find(r=>r.url==='/api/te/colectas'&&r.method==='POST');
+  assert.ok(colectaUI); assert.equal(colectaUI.body.embrionesViables,6); assert.equal(colectaUI.body.lotes[0].cantidadComercial,2);
+  await click('Banco de embriones'); await until("document.querySelectorAll('tbody tr').length===10");
+  assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+  await click('Indicadores y costos'); await until("document.body.textContent.includes('CONGELADO')");
+  assert.equal(errors.length,0,JSON.stringify(errors));
+  console.log('PASS: colecta TE 4/2, formularios escritorio/iPad/movil, banco paginado e indicadores sin errores JS.');
   console.log('PASS: banco y ventas, paginacion, entrada dividida, reintento idempotente, escritorio/iPad/movil sin desborde ni errores JS.');
+  console.log('PASS: TE con donante/receptora, responsables con rol, formulario adaptable, especie porcina restringida y gestacion sin servicio sin monta ficticia.');
 } finally {
   for (const p of pending.values()) { clearTimeout(p.timer); p.reject(Error('Cierre de prueba')); }
   socket?.close(); if (browser && !browser.killed) { browser.kill(); await new Promise((r) => browser.once('exit', r)); }

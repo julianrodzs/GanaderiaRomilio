@@ -54,6 +54,10 @@ const animalSchema = new Schema(
         padreDiio: { type: String, trim: true },
         padre: { type: Schema.Types.ObjectId, ref: 'Animal' },
         madre: { type: Schema.Types.ObjectId, ref: 'Animal' },
+        madreGeneticaId: { type: Schema.Types.ObjectId, ref: 'Animal' },
+        madreGestanteId: { type: Schema.Types.ObjectId, ref: 'Animal' },
+        madreGeneticaExterna: { nombre: String, diio: String, registro: String, raza: String },
+        revisionReproductiva: { type: Number, default: 0 },
         origenGenealogico: {
             type: String,
             enum: ['Interno', 'Externo', 'Desconocido'],
@@ -109,6 +113,12 @@ const animalSchema = new Schema(
 );
 
 animalSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+animalSchema.pre('validate', function () {
+    if (this.isNew && this.madre && !this.madreGeneticaId && !this.madreGeneticaExterna?.nombre) this.madreGeneticaId = this.madre;
+    if (this.isNew && this.madre && !this.madreGestanteId) this.madreGestanteId = this.madre;
+});
+animalSchema.index({ organizacionId: 1, fincaId: 1, madreGeneticaId: 1 });
+animalSchema.index({ organizacionId: 1, fincaId: 1, madreGestanteId: 1 });
 animalSchema.index({ organizacionId: 1, fincaId: 1, identificadorFinca: 1 }, { unique: true });
 animalSchema.index(
     { organizacionId: 1, diio: 1 },

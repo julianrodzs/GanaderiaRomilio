@@ -120,6 +120,20 @@ export const obtenerArchivoProtegido = async (ruta) => {
 };
 
 export const obtenerPlanActual = () => request('/plan/actual');
+export const operarMetodoReproductivo = (id, accion, datos) => request(`/reproduccion/${id}/${accion}`, { method: 'POST', body: JSON.stringify(datos) });
+export const obtenerPartosMetodo = (filtros = {}) => request(`/reportes/reproduccion/partos-metodo${construirQuery(filtros)}`);
+export const obtenerIndicadoresMetodo = (filtros = {}) => request(`/reportes/reproduccion/metodos${construirQuery(filtros)}`);
+export const obtenerProgramasTE = () => request('/reproduccion/programa-te/colectas');
+export const obtenerTE = (ruta, filtros = {}) => request(`/te/${ruta}${construirQuery(filtros)}`);
+export const operarTE = (ruta, datos) => request(`/te/${ruta}`, { method: 'POST', body: JSON.stringify(datos) });
+export const obtenerBancoEmbrionesComercial = () => request('/ventas/embriones/existencias');
+export const obtenerVentasEmbriones = () => request('/ventas/embriones');
+export const venderEmbriones = (datos) => request('/ventas/embriones', { method: 'POST', body: JSON.stringify(datos) });
+export const anularVentaEmbriones = (id, motivo) => request(`/ventas/embriones/${id}/anular`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const obtenerConsolidadoTE = (filtros) => request(`/reportes/multi-finca/te${construirQuery(filtros)}`);
+export const crearProgramaTE = (datos) => request('/reproduccion/programa-te/colectas', { method: 'POST', body: JSON.stringify(datos) });
+export const operarProgramaTE = (id, accion, datos) => request(`/reproduccion/programa-te/colectas/${id}/${accion}`, { method: 'POST', body: JSON.stringify(datos) });
+export const obtenerConsolidadoMetodos = (filtros = {}) => request(`/reportes/multi-finca/metodos-reproductivos${construirQuery(filtros)}`);
 export const actualizarFincasOperativasPlan = (fincaIds) => request('/plan/fincas-operativas', {
   method: 'PUT',
   body: JSON.stringify({ fincaIds })

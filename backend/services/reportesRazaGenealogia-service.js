@@ -116,7 +116,7 @@ const construirReporteDescendencia = ({ animales = [], registros = [], fechaInic
     const criasPorPadre = new Map();
 
     bovinos.filter((cria) => fechaEnPeriodo(cria.fechaNacimiento, fechaInicio, fechaFin)).forEach((cria) => {
-        const madre = resolverProgenitor(cria, 'madre', 'madreDiio', mapas);
+        const madre = resolverProgenitor({ ...cria, madre: cria.madreGeneticaId || cria.madre }, 'madre', 'madreDiio', mapas);
         const padre = resolverProgenitor(cria, 'padre', 'padreDiio', mapas);
         if (madre) {
             const clave = String(madre._id);
@@ -159,6 +159,8 @@ const construirReporteDescendencia = ({ animales = [], registros = [], fechaInic
             diio: animal.diio || animal.identificadorFinca,
             nombre: animal.nombre,
             partosRegistrados: partos.length,
+            progenieGenetica: crias.length,
+            criasGestadas: bovinos.filter((c) => String(c.madreGestanteId || c.madre || '') === id && fechaEnPeriodo(c.fechaNacimiento, fechaInicio, fechaFin)).length,
             criasRegistradas: resumen.total,
             criasVivas: resumen.vivas,
             machos: resumen.machos,

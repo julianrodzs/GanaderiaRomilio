@@ -71,10 +71,10 @@ const resumirBovinos = (animales = []) => {
         edadDesteteDias: diasEntre(animal.fechaNacimiento, animal.fechaDestete),
         pesoNacimiento: numeroPositivo(animal.pesoNacimiento),
         pesoDestete: numeroPositivo(animal.pesoDestete),
-        madre: animal.madre ? {
-            animalId: animal.madre._id,
-            identificador: identificadorAnimal(animal.madre),
-            nombre: animal.madre.nombre
+        madre: (animal.madreGestanteId || animal.madre) ? {
+            animalId: (animal.madreGestanteId || animal.madre)._id,
+            identificador: identificadorAnimal(animal.madreGestanteId || animal.madre),
+            nombre: (animal.madreGestanteId || animal.madre).nombre
         } : null
     }));
     const conPeso = detalle.filter((item) => item.pesoDestete !== null);
@@ -276,8 +276,9 @@ const obtenerReportePesoDestete = async ({ fechaInicio, fechaFin, especie = 'Tod
     const [animales, camadas] = await Promise.all([
         incluirBovinos
             ? Animal.find(filtroBovinos)
-                .select('identificadorFinca diio nombre sexo fechaNacimiento fechaDestete pesoNacimiento pesoDestete madre')
+                .select('identificadorFinca diio nombre sexo fechaNacimiento fechaDestete pesoNacimiento pesoDestete madre madreGestanteId')
                 .populate('madre', 'identificadorFinca diio nombre')
+                .populate('madreGestanteId', 'identificadorFinca diio nombre')
                 .sort({ fechaDestete: -1 })
                 .lean()
             : [],

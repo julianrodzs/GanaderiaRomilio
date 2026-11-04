@@ -19,6 +19,12 @@ const prepararDatosFinca = (datos = {}, parcial = false) => {
             throw error;
         }
         resultado.configuracionReproductiva = { diasGestacionBovinaGeneral: diasGestacion };
+        for (const [campo, min, max] of [['diasGestacionPorcinaGeneral', 100, 130], ['toleranciaAtribucionDias', 0, 60]]) {
+            const valor = datos.configuracionReproductiva[campo];
+            if (valor === undefined) continue;
+            if (!Number.isInteger(Number(valor)) || Number(valor) < min || Number(valor) > max) throw Object.assign(new Error(`${campo} debe estar entre ${min} y ${max}.`), { status: 400 });
+            resultado.configuracionReproductiva[campo] = Number(valor);
+        }
     }
     if (datos.lineasProductivas !== undefined) resultado.lineasProductivas = validarLineasProductivas(datos.lineasProductivas);
     if (!parcial && (!resultado.nombre || !resultado.codigo)) {

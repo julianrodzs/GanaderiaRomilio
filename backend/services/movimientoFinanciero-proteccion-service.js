@@ -1,5 +1,5 @@
 const REFERENCIAS_AUTOMATICAS = new Set([
-    'CompraAnimal', 'VentaAnimal', 'TransferenciaInterna', 'GastoCompartido', 'VentaPajilla'
+    'CompraAnimal', 'VentaAnimal', 'TransferenciaInterna', 'GastoCompartido', 'VentaPajilla', 'VentaEmbrion'
 ]);
 
 const esMovimientoFinancieroAutomatico = (movimiento = {}) => (
@@ -13,6 +13,7 @@ const describirOrigenMovimiento = (movimiento = {}) => {
     if (movimiento.referenciaModelo === 'CompraAnimal') return 'Compra de animales';
     if (movimiento.referenciaModelo === 'VentaAnimal') return 'Venta de animales';
     if (movimiento.referenciaModelo === 'VentaPajilla') return 'Venta de pajillas';
+    if (movimiento.referenciaModelo === 'VentaEmbrion') return 'Venta de embriones';
     if (movimiento.alcanceFinanciero === 'TRANSFERENCIA_INTERNA') return 'Transferencia multi-finca';
     if (movimiento.alcanceFinanciero === 'GASTO_COMPARTIDO') return 'Gasto compartido multi-finca';
     return 'Registro manual';

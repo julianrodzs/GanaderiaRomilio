@@ -14,6 +14,7 @@ import SelectorEspecie from './SelectorEspecie';
 import { ContenidoPaginado } from './PaginacionTabla';
 import { obtenerCategoriaVisible } from '../utils/categoriasAnimales';
 import BancoSemen from './BancoSemen';
+import { BancoEmbriones } from './ProgramaTEIntegral';
 import { usePlan } from '../context/PlanContext';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
@@ -798,6 +799,7 @@ const Ventas = (props) => {
   const [tab, setTab] = useState('animales');
   const { tieneFeature } = usePlan();
   const puedePajillas = tieneFeature('iatfReproductivo');
-  return <><nav className="sanidad-tabs" aria-label="Tipo de venta"><button type="button" className={tab === 'animales' ? 'activo' : ''} onClick={() => setTab('animales')}>Animales</button>{puedePajillas && <button type="button" className={tab === 'pajillas' ? 'activo' : ''} onClick={() => setTab('pajillas')}>Pajillas</button>}</nav>{tab === 'pajillas' && puedePajillas ? <BancoSemen comercial permitirEdicion={!props.soloLectura && ['Administrador', 'Encargado'].includes(props.rolUsuario)} /> : <VentasAnimales {...props} />}</>;
+  const puedeEmbriones = tieneFeature('programaTransferencia');
+  return <><nav className="sanidad-tabs" aria-label="Tipo de venta"><button type="button" className={tab === 'animales' ? 'activo' : ''} onClick={() => setTab('animales')}>Animales</button>{puedePajillas && <button type="button" className={tab === 'pajillas' ? 'activo' : ''} onClick={() => setTab('pajillas')}>Genética · Pajillas</button>}{puedeEmbriones && <button type="button" className={tab === 'embriones' ? 'activo' : ''} onClick={() => setTab('embriones')}>Genética · Embriones</button>}</nav>{tab === 'embriones' && puedeEmbriones ? <BancoEmbriones comercial permitirEdicion={!props.soloLectura && ['Administrador', 'Encargado'].includes(props.rolUsuario)} /> : tab === 'pajillas' && puedePajillas ? <BancoSemen comercial permitirEdicion={!props.soloLectura && ['Administrador', 'Encargado'].includes(props.rolUsuario)} /> : <VentasAnimales {...props} />}</>;
 };
 export default Ventas;

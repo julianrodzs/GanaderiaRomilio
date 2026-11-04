@@ -224,6 +224,8 @@ animalCtrl.getAnimales = async (req, res) => {
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo especie')
             .populate('madre', 'diio identificadorFinca nombre sexo especie')
+            .populate('madreGeneticaId', 'diio identificadorFinca nombre sexo especie')
+            .populate('madreGestanteId', 'diio identificadorFinca nombre sexo especie')
             .populate('fotoPrincipal', 'url nombreOriginal mimeType tamanoBytes')
             .sort({ createdAt: -1 })
             .lean();
@@ -309,6 +311,8 @@ animalCtrl.getAnimal = async (req, res) => {
             .populate('camadaOrigen', 'codigoCamada fechaNacimiento destino criasParaFinca criasParaEngorde criasParaVenta')
             .populate('padre', 'diio identificadorFinca nombre sexo')
             .populate('madre', 'diio identificadorFinca nombre sexo')
+            .populate('madreGeneticaId', 'diio identificadorFinca nombre sexo')
+            .populate('madreGestanteId', 'diio identificadorFinca nombre sexo')
             .populate('fotoPrincipal', 'url nombreOriginal mimeType tamanoBytes')
             .lean();
 
@@ -422,6 +426,11 @@ animalCtrl.updateAnimal = async (req, res) => {
             && (especieFinal !== animalAnterior.especie || String(objetivoFinal || '') !== String(animalAnterior.objetivoProductivo || ''))) {
             const loteActual = await Lote.findById(animalAnterior.loteActual);
             if (loteActual) validarAnimalParaLote({ ...animalAnterior, ...datos, especie: especieFinal, objetivoProductivo: objetivoFinal, estado: estadoFinal }, loteActual);
+        }
+        if (Object.hasOwn(datos, 'madre') && String(datos.madre || '') !== String(animalAnterior.madre || '')) {
+            if (animalAnterior.madreGestanteId && String(animalAnterior.madreGestanteId) !== String(animalAnterior.madreGeneticaId || animalAnterior.madre || '')) return res.status(409).json({ mensaje: 'La genealogia de transferencia requiere corregir el servicio de origen; no sustituya la receptora.' });
+            datos.madreGeneticaId = datos.madre || null;
+            datos.madreGestanteId = datos.madre || null;
         }
         await validarRelacionGenealogica(req.params.id, datos.padre, datos.madre);
 

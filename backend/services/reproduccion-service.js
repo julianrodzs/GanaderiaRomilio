@@ -297,6 +297,7 @@ const marcarCicloNoPrenada = (cicloId, motivo, usuarioId) => cambiarEstadoCiclo(
 });
 
 const crearNuevoCicloReproductivo = async ({ data, animal, usuarioId, cerrarCicloAnterior = false, session = null }) => {
+    if (session) await require('../models/Animal').updateOne({ _id: animal._id }, { $inc: { revisionReproductiva: 1 } }, { session });
     let cicloActivo = await obtenerCicloActivoPorAnimal(animal._id, null, session);
 
     if (await conciliarCicloVacioActivo({ ciclo: cicloActivo, usuarioId, session })) {

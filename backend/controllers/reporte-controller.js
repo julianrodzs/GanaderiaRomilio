@@ -952,7 +952,7 @@ const obtenerDestetesBajos = (vaca, terneros, pesoDesteteMin, fechaInicio, fecha
     const posiblesMadres = [vaca.diio, vaca.identificadorFinca].filter(Boolean);
 
     return terneros.filter((ternero) => {
-        if (String(ternero.madre || '') !== String(vaca._id) && !posiblesMadres.includes(ternero.madreDiio)) return false;
+        if (ternero.madreGestanteId ? String(ternero.madreGestanteId) !== String(vaca._id) : String(ternero.madre || '') !== String(vaca._id) && !posiblesMadres.includes(ternero.madreDiio)) return false;
         if (!ternero.pesoDestete || ternero.pesoDestete >= pesoDesteteMin) return false;
         if (fechaInicio || fechaFin) {
             return estaFechaEnPeriodo(ternero.fechaDestete || ternero.updatedAt, fechaInicio, fechaFin);

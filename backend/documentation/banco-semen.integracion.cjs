@@ -153,7 +153,7 @@ async function main() {
         assert.equal(final.asignadoCampanas, 3); assert.equal(final.totalUsadasIATF, 0);
         const repetida = await request('POST', `/iatf/campanas/${c._id}/inseminaciones`, { inseminaciones: [{ participanteId: String(c.participantes[0]._id), semen: ficha._id, moneda: 'USD' }] });
         const cicloId = repetida.participantes[0].registroReproductivo;
-        await scope(async () => { const { RegistroReproductivo } = require('../models/RegistroReproductivo'); const ciclo = await RegistroReproductivo.findById(cicloId); ciclo.fechaPartoReal = new Date(); await ciclo.save(); });
+        await scope(async () => { const { RegistroReproductivo } = require('../models/RegistroReproductivo'); const ciclo = await RegistroReproductivo.findById(cicloId); ciclo.fechaPartoReal = new Date(new Date(ciclo.fechaInseminacion).getTime() + (ciclo.diasGestacionReferencia || 283) * 86400000); await ciclo.save(); });
         const nacimiento = await request('POST', `/reproduccion/${cicloId}/ternero`, { diio: 'CRIA-IATF', sexo: 'Macho', pesoNacimiento: 30 }, 201);
         const cria = nacimiento.ternero || nacimiento;
         assert.equal(String(cria.padre?._id || cria.padre), String(toro));

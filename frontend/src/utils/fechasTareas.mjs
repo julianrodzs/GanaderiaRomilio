@@ -16,4 +16,5 @@ export const diasHastaFechaTarea = (fecha, ahora = new Date(), zona = obtenerZon
   return clave ? (Date.parse(clave) - Date.parse(formatearFechaISOEnZona(ahora, zona))) / 86400000 : null;
 };
 export const esTareaEspecializada = (tarea = {}) => ['Sanidad', 'IATF', 'BandaPorcina', 'BandaReproductivaPorcina', 'ProtocoloEngorde'].includes(tarea.moduloOrigen)
-  || ['IATF', 'BANDA_PORCINA', 'PROTOCOLO_ENGORDE'].includes(tarea.categoriaAutomatica);
+  || (tarea.categoriaAutomatica === 'Transferencia de embriones' && !String(tarea.claveAutomatica).includes(':sincronizacion:'))
+  || ['IATF', 'BANDA_PORCINA', 'PROTOCOLO_ENGORDE', 'TE_DONANTE', 'TETF'].includes(tarea.categoriaAutomatica);

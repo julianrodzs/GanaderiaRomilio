@@ -19,11 +19,13 @@ import {
 import { fechaEnRango, obtenerRangoReproduccion } from '../utils/fechas';
 import FormularioCamada from './FormularioCamada';
 import FormularioReproduccion from './FormularioReproduccion';
+import { FormularioMetodoReproductivo, HistorialMetodo, EtiquetaMetodo, metodoDeRegistro } from './MetodoReproductivo';
 import SelectorEspecie from './SelectorEspecie';
 import { etiquetaUsuarioConRol } from '../utils/usuarios';
 import TablaDinamica from './TablaDinamica';
 import FeatureGate from './FeatureGate';
 import IATF from './IATF';
+import ProgramaTransferencia from './ProgramaTEIntegral';
 import BandasPorcinas from './BandasPorcinas';
 import { cargarOpcional } from '../utils/cargarOpcional';
 
@@ -58,6 +60,8 @@ const estadoTerneroInicial = {
 };
 
 const columnas = [
+  { id: 'metodo', label: 'Método reproductivo', accessor: metodoDeRegistro, render: (r) => <EtiquetaMetodo registro={r} /> },
+  { id: 'historialMetodo', label: 'Seguimiento', render: (r) => <button type="button" className="boton-link" onClick={() => r.abrirHistorialMetodo?.(r)}>Ver historial</button> },
   { id: 'diio', label: 'DIIO', accessor: (registro) => obtenerAnimal(registro).diio || obtenerAnimal(registro).identificadorFinca },
   { id: 'nombre', label: 'Nombre', accessor: (registro) => obtenerAnimal(registro).nombre },
   { id: 'responsable', label: 'Responsable', accessor: (registro) => etiquetaUsuarioConRol(registro.asignadoA) },
@@ -146,6 +150,8 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const [errorFormulario, setErrorFormulario] = useState('');
   const [modoFormulario, setModoFormulario] = useState(false);
   const [registroSeleccionado, setRegistroSeleccionado] = useState(null);
+  const [historialMetodo, setHistorialMetodo] = useState(null);
+  const [sinServicio, setSinServicio] = useState(false);
   const [registroTernero, setRegistroTernero] = useState(null);
   const [registroCamada, setRegistroCamada] = useState(null);
   const [formularioTernero, setFormularioTernero] = useState(estadoTerneroInicial);
@@ -158,6 +164,9 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const [conflictoCiclo, setConflictoCiclo] = useState(null);
   const [errorCamada, setErrorCamada] = useState('');
   const [vistaReproduccion, setVistaReproduccion] = useState('general');
+  useEffect(() => {
+    if (sessionStorage.getItem('ganaderiaAccionTE')) { setEspecie('Bovino'); setVistaReproduccion('te'); }
+  }, []);
   const etiquetaId = 'DIIO';
 
   const cambiarEspecie = (valor) => {
@@ -344,10 +353,12 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
 
   const abrirFormularioTernero = (registro) => {
     const madre = obtenerAnimal(registro);
+    const servicio = registro.servicios?.find((s) => s._id === registro.servicioAtribuidoId);
+    const donante = servicio?.embrion?.donanteId ? animales.find((a) => a._id === servicio.embrion.donanteId) : null;
     setRegistroTernero(registro);
     setFormularioTernero({
       ...estadoTerneroInicial,
-      raza: madre.raza || ''
+      raza: registro.metodo === 'TRANSFERENCIA_EMBRIONES' ? donante?.raza || servicio?.embrion?.donanteRaza || '' : madre.raza || ''
     });
     setErrorFormulario('');
   };
@@ -425,9 +436,11 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   };
 
   if (modoFormulario) {
+    const FormularioActual = !registroSeleccionado || registroSeleccionado.metodo ? FormularioMetodoReproductivo : FormularioReproduccion;
     return (
       <>
-        <FormularioReproduccion
+        <FormularioActual
+          sinServicio={sinServicio}
           animales={animales}
           registroInicial={registroSeleccionado}
           modo={registroSeleccionado ? 'editar' : 'crear'}
@@ -481,9 +494,11 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
       {especie === 'Porcino' && <button type="button" className={vistaReproduccion === 'bandas' ? 'activo' : ''} onClick={() => setVistaReproduccion('bandas')}>Bandas</button>}
       {especie === 'Porcino' && <button type="button" className={vistaReproduccion === 'protocolos' ? 'activo' : ''} onClick={() => setVistaReproduccion('protocolos')}>Protocolos</button>}
       {especie === 'Bovino' && <button type="button" className={vistaReproduccion === 'iatf' ? 'activo' : ''} onClick={() => setVistaReproduccion('iatf')}>IATF</button>}
+      {especie === 'Bovino' && <button type="button" className={vistaReproduccion === 'te' ? 'activo' : ''} onClick={() => setVistaReproduccion('te')}>Programa TE</button>}
     </nav>
   );
 
+if (vistaReproduccion === 'te') return <>{tabsReproduccion}<FeatureGate feature="programaTransferencia" titulo="Programa de transferencia de embriones" pregunta="Colectas, FIV, embriones y receptoras." etiqueta="Reproducción avanzada"><ProgramaTransferencia animales={animales} usuarios={usuariosAsignables} puedeDiagnosticar={['Administrador', 'Veterinario'].includes(rolUsuario)} soloLectura={soloLectura} /></FeatureGate></>;
   if (vistaReproduccion === 'iatf') {
     return (
       <>
@@ -570,6 +585,7 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
       </section>
 
       <section className="reproduccion-tabla-panel">
+        {!soloLectura && <div className="modal-actions"><button type="button" onClick={() => { abrirNuevoRegistro(); setSinServicio(true); }}>Registrar gestación sin servicio conocido</button></div>}
         {resumenPorcino && (
           <section className="resumen-porcino-panel">
             <div>
@@ -621,6 +637,7 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
           })}
           datos={registrosFiltrados.map((registro) => ({
               ...registro,
+              abrirHistorialMetodo: setHistorialMetodo,
               abrirTernero: abrirFormularioTernero,
               abrirCamada: abrirFormularioCamada,
               cerrarCiclo,
@@ -634,13 +651,14 @@ const Reproduccion = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
           error={error}
           filtros={filtros}
           textoAgregar="Nuevo registro"
-          onAgregar={soloLectura ? undefined : abrirNuevoRegistro}
+          onAgregar={soloLectura ? undefined : () => { setSinServicio(false); abrirNuevoRegistro(); }}
           onEditar={soloLectura ? undefined : abrirEdicionRegistro}
           onEliminar={soloLectura || rolUsuario !== 'Administrador' ? undefined : borrarRegistro}
           mostrarAcciones={!soloLectura}
         />
       </section>
 
+      {historialMetodo && <HistorialMetodo registro={historialMetodo} animales={animales} usuarios={usuariosAsignables} semenDisponible={semenDisponible} soloLectura={soloLectura} onCerrar={() => setHistorialMetodo(null)} onActualizar={cargarDatos} />}
       {registroTernero && (
         <div className="modal-backdrop">
           <section className="modal-panel usuario-form-modal">

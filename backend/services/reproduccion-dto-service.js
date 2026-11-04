@@ -5,6 +5,10 @@ const CAMPOS_COMUNES = [
     'diasDestetePorcino',
     'diasCeloPostDestetePorcino',
     'tipoRegistro',
+    'metodo',
+    'servicio',
+    'diagnostico',
+    'resultado',
     'tipoInseminacion',
     'semenUtilizado',
     'semen',
@@ -22,7 +26,7 @@ const CAMPOS_COMUNES = [
     'observaciones'
 ];
 
-const CAMPOS_CREACION = new Set([...CAMPOS_COMUNES, 'cerrarCicloAnterior']);
+const CAMPOS_CREACION = new Set([...CAMPOS_COMUNES, 'cerrarCicloAnterior', 'claveIdempotencia']);
 const CAMPOS_ACTUALIZACION = new Set(CAMPOS_COMUNES);
 
 const errorDto = (mensaje, code = 'REPRODUCCION_DTO_INVALIDO') => Object.assign(

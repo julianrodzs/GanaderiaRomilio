@@ -188,6 +188,13 @@ const registrarAccionParticipante = async ({ banda, participante, paso, datos, u
             };
         }
         registro.observaciones = datos.observaciones;
+        registro.metodo = paso.tipoAccion === 'SERVICIO' ? 'MONTA_NATURAL' : 'IA_CONVENCIONAL';
+        const claveServicio = `banda:${banda._id}:${paso._id}:${participante._id}`;
+        if (!registro.servicios.some((s) => s.claveIdempotencia === claveServicio)) registro.servicios.push({
+            metodo: registro.metodo, fechaServicio: fecha, responsable: banda.responsable, claveIdempotencia: claveServicio,
+            fichaSemenId: registro.bancoSemenId, toroId: registro.semenSnapshot?.toroId,
+            sementalExternoNombre: registro.semenSnapshot?.esExterno ? registro.semenSnapshot?.toro : undefined, diioSemental: registro.semenSnapshot?.codigoToro
+        });
         await registro.save({ session }); participante.registroReproductivo = registro._id; participante.estadoParticipacion = 'SERVIDA'; participante.fechasReales.set ? participante.fechasReales.set(paso.tipoAccion === 'SERVICIO' ? 'SERVICIO' : 'IA', fecha) : (participante.fechasReales[paso.tipoAccion === 'SERVICIO' ? 'SERVICIO' : 'IA'] = fecha);
     }
     if (paso.tipoAccion === 'DESTETE') {

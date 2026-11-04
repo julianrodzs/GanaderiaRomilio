@@ -25,6 +25,8 @@ const participanteSchema = new Schema({
     tecnicoInseminador: { type: Schema.Types.ObjectId, ref: 'Usuario' },
     registroReproductivo: { type: Schema.Types.ObjectId, ref: 'RegistroReproductivo' },
     resultadoActual: { type: String, enum: ['SIN_DIAGNOSTICO', 'PREÑADA', 'VACIA', 'DUDOSA', 'REQUIERE_RECONFIRMACION'], default: 'SIN_DIAGNOSTICO' },
+    estadoAtribucion: String,
+    metodoGestacion: String,
     retornoCeloObservado: { type: Boolean, default: false },
     advertencias: { type: [String], default: [] },
     observaciones: { type: String, trim: true }

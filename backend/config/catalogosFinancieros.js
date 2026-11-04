@@ -4,7 +4,8 @@ const TIPOS_MOVIMIENTO_FINANCIERO = [
     'Inversion',
     'Planilla',
     'Venta de animales',
-    'Venta de pajillas'
+    'Venta de pajillas',
+    'Venta de embriones'
 ];
 
 const NATURALEZAS_FINANCIERAS = ['Egreso', 'Ingreso'];

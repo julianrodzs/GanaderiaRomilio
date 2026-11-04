@@ -2,10 +2,41 @@ const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 const reproduccionPorcinaConfig = require('../config/reproduccionPorcinaConfig');
 const reproduccionBovinaConfig = require('../config/reproduccionBovinaConfig');
+const { catalogo, prepararMetodoCiclo } = require('../services/metodoReproductivo-service');
+
+const embrionSchema = new Schema({
+    receptoraId: { type: Schema.Types.ObjectId, ref: 'Animal' },
+    donanteId: { type: Schema.Types.ObjectId, ref: 'Animal' },
+    donanteExternaNombre: String, donanteDiio: String, donanteRegistro: String, donanteRaza: String,
+    loteEmbrionId: { type: Schema.Types.ObjectId, ref: 'LoteEmbrion' }, campanaTE: { type: Schema.Types.ObjectId, ref: 'CampanaTE' },
+    costosUnitarios: { CRC: Number, USD: Number },
+    origenEmbrion: { type: String, enum: ['IN_VIVO', 'FIV'] },
+    estadoEmbrion: { type: String, enum: ['FRESCO', 'CONGELADO', 'VITRIFICADO'] },
+    grado: String, estadio: String, codigoEmbrion: String, proveedor: String,
+    edadDias: { type: Number, min: 0, max: 30, default: 7 },
+    costo: { type: Number, min: 0 }, moneda: { type: String, enum: ['CRC', 'USD'] }
+}, { _id: false });
+const servicioSchema = new Schema({
+    metodo: { type: String, enum: Object.keys(catalogo), required: true },
+    submodalidad: { type: String, enum: ['CONTROLADA', 'LIBRE'] },
+    fechaServicio: Date, fechaServicioDesde: Date, fechaServicioHasta: Date,
+    toroId: { type: Schema.Types.ObjectId, ref: 'Animal' },
+    sementalExternoNombre: String, diioSemental: String,
+    fichaSemenId: { type: Schema.Types.ObjectId, ref: 'BancoSemen' },
+    insumoLegadoId: { type: Schema.Types.ObjectId, ref: 'InsumoReproductivo' },
+    semenSnapshot: Schema.Types.Mixed,
+    cantidadPajuelas: { type: Number, min: 1 },
+    campanaId: { type: Schema.Types.ObjectId, ref: 'CampanaIATF' },
+    cicloOrigenId: { type: Schema.Types.ObjectId, ref: 'RegistroReproductivo' },
+    responsable: { type: Schema.Types.ObjectId, ref: 'Usuario' },
+    embrion: embrionSchema, anulado: { type: Boolean, default: false },
+    claveIdempotencia: String
+});
 
 const ESTADOS_REPRODUCTIVOS = [
     'Vacía',
     'Inseminada pendiente diagnóstico',
+    'Servicio pendiente diagnóstico',
     'Gestante',
     'Próxima a parto',
     'Parida',
@@ -101,7 +132,10 @@ const calcularEstadoReproductivo = ({
     fechaPartoEstimada,
     fechaPartoReal,
     fechaProximoCelo,
-    fechaDestete
+    fechaDestete,
+    metodo,
+    gestacionConfirmada,
+    servicios
 }) => {
     const diasParaParto = diasHasta(fechaPartoEstimada);
     const diasParaDestete = diasHasta(fechaDestete);
@@ -118,6 +152,9 @@ const calcularEstadoReproductivo = ({
         return 'Parida';
     }
 
+    if (metodo && gestacionConfirmada !== true) {
+        return servicios?.length ? (['IATF', 'IA_CONVENCIONAL'].includes(servicios.at(-1).metodo) ? 'Inseminada pendiente diagnóstico' : 'Servicio pendiente diagnóstico') : 'Vacía';
+    }
     if (fechaPartoEstimada && diasParaParto <= 15) {
         return 'Próxima a parto';
     }
@@ -138,6 +175,21 @@ const registroReproductivoSchema = new Schema(
         diasCeloPostDestetePorcino: { type: Number, min: 1, default: 5 },
         tipoRegistro: { type: String, enum: ['Inseminación/Monta', 'Monta', 'Inseminación'], default: 'Inseminación/Monta' },
         tipoInseminacion: { type: String, enum: ['IATF', 'IA_CONVENCIONAL'] },
+        metodo: { type: String, enum: Object.keys(catalogo) },
+        versionMetodo: Number,
+        claveRegistro: String,
+        servicios: [servicioSchema],
+        servicioAtribuidoId: Schema.Types.ObjectId,
+        serviciosCandidatos: [Schema.Types.ObjectId],
+        estadoAtribucion: { type: String, enum: ['CONFIRMADA', 'PROBABLE', 'INCIERTA', 'SIN_SERVICIO'] },
+        atribucionConfirmadaPorUsuario: { type: Boolean, default: false },
+        diasGestacionReferencia: { type: Number, min: 90, max: 310 },
+        toleranciaAtribucionDias: { type: Number, min: 0, max: 60, default: 21 },
+        resultado: {
+            tipo: { type: String, enum: ['PARTO', 'PERDIDA_GESTACIONAL', 'ABORTO', 'REABSORCION', 'OTRO'] },
+            fecha: Date, observaciones: String,
+            crias: [{ type: Schema.Types.ObjectId, ref: 'Animal' }]
+        },
         semenUtilizado: { type: Schema.Types.ObjectId, ref: 'InsumoReproductivo' },
         bancoSemenId: { type: Schema.Types.ObjectId, ref: 'BancoSemen' },
         inseminacionAnulada: { type: Boolean, default: false },
@@ -151,13 +203,16 @@ const registroReproductivoSchema = new Schema(
         bandaReproductivaPorcina: { type: Schema.Types.ObjectId, ref: 'BandaReproductivaPorcina' },
         historialDiagnosticos: [{
             fecha: { type: Date, required: true },
-            resultado: { type: String, enum: ['PREÑADA', 'VACIA', 'DUDOSA', 'REQUIERE_RECONFIRMACION'], required: true },
+            resultado: { type: String, enum: ['PENDIENTE', 'PREÑADA', 'VACIA', 'DUDOSA', 'REQUIERE_RECONFIRMACION'], required: true },
             observaciones: { type: String, trim: true },
-            registradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' }
+            registradoPor: { type: Schema.Types.ObjectId, ref: 'Usuario' },
+            metodo: { type: String, enum: ['PALPACION', 'ECOGRAFIA', 'LABORATORIO', 'OTRO'] },
+            diasGestacionEstimados: { type: Number, min: 0, max: 310 },
+            fechaProbableParto: Date, claveIdempotencia: String
         }],
         origenGestacion: {
             type: String,
-            enum: ['IATF', 'MONTA_NATURAL', 'IA_CONVENCIONAL', 'INDETERMINADO']
+            enum: ['IATF', 'MONTA_NATURAL', 'IA_CONVENCIONAL', 'TRANSFERENCIA_EMBRIONES', 'INDETERMINADO']
         },
         gestacionConfirmada: { type: Boolean, default: false },
         resultadoDiagnosticoGestacion: {
@@ -211,6 +266,11 @@ const registroReproductivoSchema = new Schema(
 
 const completarFechasYEstado = (datos, opciones = {}) => {
     const especie = datos.especie || 'Bovino';
+    if (['PERDIDA_GESTACIONAL', 'ABORTO', 'REABSORCION'].includes(datos.resultado?.tipo)) {
+        datos.estadoCiclo = 'Cancelado'; datos.activoParaAlertas = false;
+        datos.gestacionConfirmada = false; datos.fechaPartoEstimada = undefined; datos.estado = 'Vacía';
+        return;
+    }
 
     if (datos.estadoCiclo && datos.estadoCiclo !== 'Activo') {
         datos.activoParaAlertas = false;
@@ -234,7 +294,7 @@ const completarFechasYEstado = (datos, opciones = {}) => {
 
         if (datos.fechaInseminacion) {
             datos.fechaRevisionCelo = sumarDias(datos.fechaInseminacion, reproduccionPorcinaConfig.diasRevisionCeloPostInseminacion);
-            datos.fechaPartoEstimada = sumarDias(datos.fechaInseminacion, reproduccionPorcinaConfig.diasGestacion);
+            datos.fechaPartoEstimada = sumarDias(datos.fechaInseminacion, datos.metodo ? datos.diasGestacionReferencia || 114 : reproduccionPorcinaConfig.diasGestacion);
         }
 
         if (datos.fechaPartoEstimada) {
@@ -298,14 +358,19 @@ const completarFechasYEstado = (datos, opciones = {}) => {
 };
 
 registroReproductivoSchema.pre('save', function calcularAntesDeGuardar(next) {
+    if (this.isNew || this.metodo || this.servicios?.length) prepararMetodoCiclo(this);
+    if (this.metodo) this.versionMetodo = 1;
     completarFechasYEstado(this);
+    if (this.metodo && !this.fechaPartoReal && !this.gestacionConfirmada && this.estadoCiclo === 'Activo') {
+        this.estado = this.servicios?.length ? (['IATF', 'IA_CONVENCIONAL'].includes(this.servicios.at(-1).metodo) ? 'Inseminada pendiente diagnóstico' : 'Servicio pendiente diagnóstico') : 'Vacía';
+    }
     next();
 });
 
 registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesDeActualizar(next) {
     const update = this.getUpdate();
     const datosUpdate = update.$set || update;
-    const actual = await this.model.findOne(this.getQuery()).lean();
+    const actual = await this.model.findOne(this.getQuery()).session(this.getOptions().session || null).lean();
     const datos = {
         ...(actual || {}),
         ...datosUpdate
@@ -351,6 +416,7 @@ registroReproductivoSchema.pre('findOneAndUpdate', async function calcularAntesD
 
 registroReproductivoSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
 registroReproductivoSchema.index({ animal: 1, fechaMonta: -1 });
+registroReproductivoSchema.index({ organizacionId: 1, fincaId: 1, claveRegistro: 1 }, { unique: true, partialFilterExpression: { claveRegistro: { $type: 'string' } } });
 registroReproductivoSchema.index({ especie: 1, estado: 1 });
 registroReproductivoSchema.index({ estado: 1 });
 registroReproductivoSchema.index({ fechaProximoCelo: 1 });

@@ -591,7 +591,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Tareas usuario={usuario} tareaInicialId={tareaInicialId} onNavegarSanidad={() => setVistaActiva('Sanidad')} />
+        <Tareas usuario={usuario} tareaInicialId={tareaInicialId} onNavegarSanidad={() => setVistaActiva('Sanidad')} onNavegarReproduccion={() => setVistaActiva('Reproduccion')} />
       </main>
     );
   }

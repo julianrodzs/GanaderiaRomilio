@@ -64,7 +64,7 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes('node_modules/react')) return 'react-vendor';
           const normalizado = id.replace(/\\/g, '/');
-          const pesado = normalizado.match(/\/src\/Components\/(Reportes|GestionConsolidacionPremium|IATF|ImportarExcel)\.js$/);
+          const pesado = normalizado.match(/\/src\/Components\/(Reportes|GestionConsolidacionPremium|IATF|ImportarExcel|ProgramaTransferencia|ProgramaTEIntegral|MetodoReproductivo)\.js$/);
           if (pesado) return `vista-${pesado[1].toLowerCase()}`;
           return undefined;
         }
