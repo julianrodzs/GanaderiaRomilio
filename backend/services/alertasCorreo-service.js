@@ -4,6 +4,7 @@ const { ejecutarConOrganizacion } = require('../context/organizacion-context');
 const { sincronizarCategoriasAnimales } = require('./categoriaAnimal-service');
 const Organizacion = require('../models/Organizacion');
 const { Tarea } = require('../models/Tarea');
+const Usuario = require('../models/Usuario');
 const { crearNotificacion } = require('./notificacion-service');
 const { enviarCorreoResend } = require('./correoElectronico-service');
 const { Membresia } = require('../models/Membresia');
@@ -51,7 +52,7 @@ const obtenerTareasParaRecordatorio = () => Tarea.find({
         { fechaLimite: { $exists: true, $ne: null } },
         { fechaProgramada: { $exists: true, $ne: null } }
     ]
-}).populate('asignadoA', 'nombre apellido correo rol estado').lean();
+}).populate({ path: 'asignadoA', model: Usuario, select: 'nombre apellido correo rol estado' }).lean();
 
 const crearNotificacionesOperativas = async (tareas, zonaHoraria = 'America/Costa_Rica') => {
     let creadas = 0;
@@ -173,7 +174,7 @@ const crearHtml = (titulo, alertas, nombreOrganizacion, zonaHoraria) => `
 const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zonaHoraria = 'America/Costa_Rica') => {
     if (process.env.EMAIL_ALERTS_ENABLED === 'false') return { enviadas: 0, grupos: 0, desactivado: true };
     const membresias = await Membresia.find({ organizacionId: obtenerOrganizacionActual(), estado: 'Activo', rol: 'Administrador' })
-        .populate({ path: 'usuario', match: { estado: 'Activo' }, select: '_id correo' });
+        .populate({ path: 'usuario', model: Usuario, match: { estado: 'Activo' }, select: '_id correo' });
     let enviadas = 0;
     let alertasEnviadas = 0;
     const errores = [];

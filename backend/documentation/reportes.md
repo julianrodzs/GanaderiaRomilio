@@ -2237,7 +2237,7 @@ ListaUsuario.js calcula KPIs en cliente con seis peticiones básicas y hasta cua
 
 Las tarjetas financieras aún leen la estructura anterior a monedas (RP-01). Contadores de vacas no filtran especie y alertas de parto usan estado calculado con 15 días, no ventana explícita de próximos 30 (RP-02).
 
-Reportes.js usa 22 posiciones en Promise.all, varias resueltas localmente cuando no aplica especie/feature, y luego consulta lotes. Su ruta financiera destinos-resumen requiere reportes.ver: Consulta y Contador están autorizados. Un fallo HTTP sí afecta la carga conjunta; no debe confundirse con un permiso inexistente.
+Reportes.js consulta solo las secciones abiertas y visibles. Cada consulta central tiene firma de filtros, plan, usuario/finca/organizacion y revision de refresco; reutiliza su resultado al reabrir sin cambios. La cola central admite hasta cuatro peticiones simultaneas, omite consultas pendientes de secciones cerradas y no permite que respuestas antiguas sustituyan datos de filtros nuevos. Los errores se presentan por reporte sin bloquear los demas. Los componentes con consultas propias se montan al visitar su seccion y sus props se conservan congeladas mientras esta oculta. La ruta financiera destinos-resumen requiere reportes.ver: Consulta y Contador estan autorizados.
 
 Hay paginación de productos; muchos otros conjuntos y el reporte de lotes siguen siendo pesados (RP-16). No se ha certificado carga real de 5.000 animales.
 
@@ -2282,3 +2282,43 @@ Pendientes de negocio:
 - Completar reglas para impuestos/fletes y trazabilidad de datos antiguos. Los ajustes de monto final en compras/ventas ya se implementan; F07 no debe figurar como pendiente sin evidencia nueva.
 - Definir si planillas se registran por empleado, por corte, por tarea o por periodo completo.
 - Definir depreciacion real para inversiones en maquinaria, infraestructura o equipo.
+
+## Presentacion por secciones - 2026-11-04
+
+La vista conserva los reportes y sus contratos de datos, organizados en seis secciones plegables:
+
+1. Inventario y Movimiento de Hato.
+2. Reproduccion, Gestacion y Genetica.
+3. Produccion, Pesajes, Engorde y Potreros.
+4. Sanidad y Periodos de Retiro.
+5. Comercializacion: Compras y Ventas.
+6. Finanzas, Caja y Rentabilidad.
+
+El economico por camada esta en Finanzas; la reproduccion y las actividades por camada permanecen en Reproduccion. El consolidado multi-finca mantiene sus comparativos y cierres historicos bajo Finanzas. Esta reorganizacion no agrega reportes inexistentes ni cambia formulas, monedas, permisos o reglas de especie.
+
+- Acceso rapido por seccion, Todas las secciones, Expandir todas y Contraer todas.
+- Inventario abierto inicialmente. Preferencias versionadas en sessionStorage, separadas por organizacion, finca y usuario. Los filtros de fecha permanecen en Reportes; plegar no desmonta los componentes ya visitados ni reinicia su paginacion.
+- Contadores de subreportes habilitados por plan y especie, no cantidades de filas ni resultados encontrados. Los resúmenes y mensajes de upgrade no duplican el conteo.
+- Los bloqueos mantienen el titulo y plan requerido. El historial basico de partos por metodo sigue disponible en todos los planes; indicadores desde Gestion.
+- Cabeceras con aria-expanded/aria-controls, contenido cerrado inert, navegacion por teclado, animacion con alternativa de movimiento reducido.
+- Todas las tablas bajo reportes-page tienen contenedor desplazable, fondo blanco, borde suave, radio de 12px, ancho minimo de 720px y celdas con padding 12px 16px. El scroll es interno, no de la pagina.
+- Atribuciones con badges Confirmada, Probable, Incierta (requiere revision) y Sin servicio registrado; no se cambian los enums guardados.
+- Nombres con tildes desde shared/metodos-reproductivos.json y copias generadas sincronizadas. Indicadores con columnas numericas alineadas, chip IA total y nota metodologica legible.
+
+Archivos principales: frontend/src/Components/Reportes.js, ReportesPorSecciones.js, ReporteMetodosReproductivos.js y Reportes.css; utilidades seccionesReportes.mjs y etiquetasReportes.mjs.
+
+Verificacion local: backend npm test 382/382; frontend npm test 53/53; regresion focalizada de reportes/exportaciones 24/24 (PDF valido y XLSX con monedas separadas); build de produccion correcto. Prueba de navegador aislado tests/reportes.navegador.mjs: seis secciones, filtros/pagina conservados, restauracion tras recargar, cuatro planes y capturas de escritorio 1440px, iPad 820px y movil 390px sin errores JS ni desborde. Capturas generadas en TEMP como cir-reportes-*.png. No se consultan bases de clientes ni se requieren migraciones.
+
+## Carga independiente y lectura de metodos - 2026-11-05
+
+- GET /api/reportes/resumen acepta seccion=inventario|reproduccion|produccion|sanidad|finanzas. Ejecuta solamente las consultas de esa seccion y devuelve esos bloques; sin seccion conserva el contrato completo para los consumidores anteriores. Un valor desconocido devuelve 400. Se conservan middleware de plan/especie y aislamiento multitenant.
+- Inventario incluye inventario y conteos de dron; Produccion incluye potreros; Reproduccion incluye partos bovinos habilitados por plan. Comercializacion usa sus endpoints especificos y no solicita un resumen global.
+- Cambiar una pagina de productos consulta solamente su detalle; los totales, categorias, combustible y proveedores no dependen de la pagina. Cambiar fechas con una seccion oculta no dispara sus consultas. Las ya iniciadas pueden finalizar; sus respuestas solo corresponden a su firma original.
+- Al reabrir una seccion se actualizan las consultas cuyos filtros cambiaron. Expandir todas carga todas las secciones; contraer todas no inicia reportes nuevos. La memoria es local a la vista, no una cache persistente con datos de otros clientes.
+- Mayor separacion visual: fondo de seccion contrastado, reportes blancos a todo el ancho con bordes superior/inferior y separador reforzado entre historial e indicadores de metodos, sin cambiar filas ni exportables.
+- Indicadores por metodo ahora muestra Partos registrados (fecha real) junto a Servicios (fecha de servicio). Una monta o IA declarada en un registro antiguo no crea un servicio ficticio ni permite calcular una tasa de preñez sin denominador.
+- partosSinServicio informa los partos con metodo conocido sin servicio activo. La UI advierte esa cobertura. Los partos provenientes de servicios de un periodo anterior no trasladan ese servicio al periodo del parto.
+- El filtro de metodo se aplica tambien al endpoint de indicadores. Porcinos conserva MONTA_NATURAL, IA_CONVENCIONAL y DESCONOCIDO; IATF y TRANSFERENCIA_EMBRIONES siguen restringidos a bovinos en el catalogo, los formularios y las validaciones existentes.
+- No se crean servicios historicos, no se inventan fechas ni se ejecutan migraciones. El cambio de presentacion no convierte los partos declarados en atribuciones confirmadas.
+
+Verificacion de este ajuste: backend npm test 407/407; frontend npm test 60/60; build de produccion correcto. El navegador aislado verifica peticiones por seccion, cambios de fecha con otras secciones ocultas, reutilizacion al reabrir, paginacion remota que consulta solo productos/por-producto, restauracion de todas cerradas sin peticiones de reportes, cuatro planes y escritorio/iPad/movil sin errores JS ni desborde. Las pruebas usan datos sinteticos, sin MongoDB de clientes ni envios reales.

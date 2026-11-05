@@ -7,14 +7,14 @@
     ]
   },
   "IA_CONVENCIONAL": {
-    "nombre": "Inseminacion artificial convencional",
+    "nombre": "Inseminación artificial convencional",
     "especies": [
       "Bovino",
       "Porcino"
     ]
   },
   "IATF": {
-    "nombre": "Inseminacion a tiempo fijo (IATF)",
+    "nombre": "Inseminación a tiempo fijo (IATF)",
     "especies": [
       "Bovino"
     ]

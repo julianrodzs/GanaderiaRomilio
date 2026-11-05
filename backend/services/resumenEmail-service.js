@@ -6,6 +6,7 @@ const { Membresia } = require('../models/Membresia');
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const Organizacion = require('../models/Organizacion');
 const { Tarea } = require('../models/Tarea');
+const Usuario = require('../models/Usuario');
 const { ejecutarConOrganizacion } = require('../context/organizacion-context');
 const { enviarCorreoResend } = require('./correoElectronico-service');
 const { incrementarEmailsOperativos } = require('./plan-service');
@@ -112,7 +113,7 @@ const crearContenido = ({ usuario, organizacion, resumen, frecuencia }) => {
 
 const procesarResumenesOrganizacion = async (organizacion, ahora = new Date()) => {
     const configuraciones = await ConfiguracionEmail.find({ frecuencia: { $ne: 'Desactivado' } })
-        .populate({ path: 'usuario', match: { estado: 'Activo' }, select: 'nombre correo estado' });
+        .populate({ path: 'usuario', model: Usuario, match: { estado: 'Activo' }, select: 'nombre correo estado' });
     const resultados = [];
     for (const configuracion of configuraciones) {
         if (!configuracion.usuario) continue;

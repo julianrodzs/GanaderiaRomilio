@@ -13,6 +13,7 @@ const main = async () => {
         process.exit(0);
     } catch (error) {
         console.error('Fallo el trabajo programado de alertas:', error.message);
+        if (error.resultado) console.error(JSON.stringify(error.resultado, null, 2));
         await mongoose.disconnect().catch(() => {});
         process.exit(1);
     }

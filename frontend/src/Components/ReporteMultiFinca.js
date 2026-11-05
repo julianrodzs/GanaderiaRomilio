@@ -3,6 +3,7 @@ import { obtenerDetalleMultiFinca, obtenerFincas, obtenerReporteMultiFinca } fro
 import GestionConsolidacionPremium from './GestionConsolidacionPremium';
 import { obtenerConsolidadoMetodos, obtenerConsolidadoTE } from '../services/api';
 import { IndicadoresTE } from './ProgramaTEIntegral';
+import { EtiquetaMetodo } from './MetodoReproductivo';
 
 const moneda = (valor) => new Intl.NumberFormat('es-CR', {
   style: 'currency', currency: 'CRC', maximumFractionDigits: 0
@@ -164,7 +165,7 @@ const ReporteMultiFinca = ({ fechaInicio, fechaFin, especie, puedeConfigurar = f
               ))}</tbody>
             </table>
           </div>
-          {metodos && <section className="reporte-panel"><h3>Métodos reproductivos · Fincas seleccionadas</h3><div className="tabla-scroll"><table><thead><tr><th>Método</th><th>Servicios</th><th>Preñeces atribuidas</th><th>Partos</th><th>Pérdidas</th></tr></thead><tbody>{metodos.porMetodo.map((m) => <tr key={m.metodo}><td>{m.nombre}</td><td>{numero(m.servicios)}</td><td>{numero(m.prenecesAtribuidas)}</td><td>{numero(m.partos)}</td><td>{numero(m.perdidas)}</td></tr>)}</tbody></table></div></section>}
+          {metodos && <section className="reporte-panel"><h3>Métodos reproductivos · Fincas seleccionadas</h3><div className="tabla-scroll"><table><thead><tr><th>Método</th><th className="reporte-numero">Servicios</th><th className="reporte-numero">Preñeces atribuidas</th><th className="reporte-numero">Partos</th><th className="reporte-numero">Pérdidas</th></tr></thead><tbody>{metodos.porMetodo.map((m) => <tr key={m.metodo}><td><EtiquetaMetodo registro={m} /></td><td className="reporte-numero">{numero(m.servicios)}</td><td className="reporte-numero">{numero(m.prenecesAtribuidas)}</td><td className="reporte-numero">{numero(m.partos)}</td><td className="reporte-numero">{numero(m.perdidas)}</td></tr>)}</tbody></table></div></section>}
           {te && <section><h3>Transferencia de embriones · Fincas seleccionadas</h3><IndicadoresTE datos={te} /></section>}
           <GestionConsolidacionPremium
             fincas={fincas}

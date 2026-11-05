@@ -1,0 +1,65 @@
+.reportes-page { min-width: 0; }
+.reportes-page > .panel-title, .reporte-metodos > .panel-title { flex-wrap: wrap; gap: 16px; }
+.reportes-page .reporte-panel { grid-template-columns: minmax(0, 1fr); }
+.reportes-page .reporte-panel > *, .reporte-metodos .panel-title > * { min-width: 0; max-width: 100%; }
+.reportes-organizados { display: grid; gap: 18px; min-width: 0; }
+.reportes-navegacion { display: grid; gap: 12px; padding: 14px 0; border-block: 1px solid #dce5df; }
+.reportes-accesos, .reportes-acciones-secciones { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.reportes-accesos button, .reportes-acciones-secciones button { min-height: 40px; padding: 9px 13px; border: 1px solid #b8c9bd; border-radius: 8px; background: #fff; color: #214b35; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.reportes-accesos button[aria-pressed=true] { background: #123f2c; border-color: #123f2c; color: #fff; }
+.reportes-accesos button:hover, .reportes-acciones-secciones button:hover { box-shadow: inset 0 0 0 1px #58816a; }
+.reportes-organizados button:focus-visible { outline: 2px solid #17634c; outline-offset: 3px; }
+.reportes-seccion { min-width: 0; border-bottom: 1px solid #d9e4dc; }
+.reportes-seccion[hidden] { display: none; }
+.reportes-seccion-titulo { margin: 0; }
+.reportes-seccion-cabecera { display: grid; grid-template-columns: minmax(0, 1fr) auto 20px; gap: 16px; align-items: center; width: 100%; padding: 20px; border: 1px solid #d7e2da; border-radius: 8px; background: #f3f7f4; color: #183b29; text-align: left; cursor: pointer; }
+.reportes-seccion-textos { display: grid; gap: 7px; min-width: 0; font-size: 19px; font-weight: 700; }
+.reportes-seccion-textos small { color: #53675b; font-size: 13px; font-weight: 400; line-height: 1.5; }
+.reportes-seccion-conteo { display: grid; gap: 5px; color: #285b40; font-size: 13px; font-weight: 600; text-align: right; }
+.reportes-seccion-conteo small { color: #6d6544; font-weight: 400; }
+.reportes-chevron { font-size: 20px; transition: transform .2s ease; }
+.reportes-chevron.abierto { transform: rotate(90deg); }
+.reportes-seccion-cuerpo { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows .22s ease, visibility .22s; }
+.reportes-seccion-cuerpo.abierto { grid-template-rows: 1fr; visibility: visible; }
+.reportes-seccion-recorte { min-height: 0; overflow: hidden; }
+.reportes-seccion-contenido { display: grid; gap: 24px; padding: 20px 16px; min-width: 0; background: #e8eeea; }
+.reportes-seccion-contenido > *, .reportes-page .reporte-panel, .reportes-page .reportes-metricas { min-width: 0; }
+.reportes-page .reportes-seccion-contenido > .reporte-panel { border: 0; border-top: 3px solid #799987; border-bottom: 1px solid #b4c4ba; border-radius: 0; padding: 22px 20px; margin: 0; background: #fff; }
+.reportes-page .reportes-seccion-contenido > .reportes-metricas { margin: 0; }
+.reportes-page .reporte-metodos-indicadores { display: grid; gap: 16px; min-width: 0; padding-top: 24px; margin-top: 16px; border-top: 3px solid #a2b7aa; }
+.reporte-metodos-indicadores h3, .reporte-metodos-indicadores p { margin: 0; }
+.reporte-cobertura-metodos { padding: 12px 16px; border-left: 3px solid #a97621; background: #fff6e2; color: #684b1b; font-size: 13px; line-height: 1.6; }
+.reportes-page .tabla-scroll { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.reportes-page .tabla-scroll table { width: 100%; min-width: 720px; border-collapse: collapse; border-spacing: 0; }
+.reportes-page .tabla-scroll th { padding: 12px 16px; background: #f8faf7; color: #334155; font-size: 13px; font-weight: 700; text-align: left; white-space: nowrap; border-bottom: 1px solid #e2e8f0; }
+.reportes-page .tabla-scroll td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; line-height: 1.5; }
+.reportes-page .tabla-scroll tbody tr:hover { background: #f8fafc; }
+.reportes-page .tabla-scroll tr:last-child td { border-bottom: 0; }
+.reportes-page .tabla-scroll .reporte-numero { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.reporte-metodos-filtro { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 600; }
+.reporte-metodos .metodo-badge { white-space: nowrap; }
+.reporte-metodos-filtro select { min-height: 40px; max-width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #233d30; font: inherit; }
+.atribucion-badge { display: inline-block; border-radius: 6px; padding: 5px 9px; font-size: 13px; font-weight: 600; border: 1px solid transparent; }
+.atribucion-confirmada { background: #e6f4e9; color: #215c37; border-color: #b7d9c0; }
+.atribucion-probable { background: #e5f1f8; color: #24576c; border-color: #bad5e3; }
+.atribucion-incierta { background: #fff4d7; color: #795319; border-color: #ead29b; }
+.atribucion-sin-servicio { background: #f1f3f4; color: #4b5861; border-color: #d8dfe2; }
+.reporte-metodos-resumen { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.reporte-ia-chip { display: inline-flex; gap: 8px; padding: 8px 12px; border: 1px solid #bfd6c9; border-radius: 8px; background: #edf6f0; color: #214e37; font-size: 14px; }
+.reporte-metodos-nota { color: #52635a; font-size: 13px; line-height: 1.6; }
+.reportes-page .paginacion-tabla { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+@media(max-width: 700px) {
+  .reportes-seccion-contenido { padding: 14px 8px; gap: 18px; }
+  .reportes-page .reportes-seccion-contenido > .reporte-panel { padding: 18px 12px; }
+  .reportes-seccion-cabecera { grid-template-columns: minmax(0, 1fr) 18px; gap: 12px; padding: 16px; }
+  .reportes-seccion-textos { font-size: 17px; overflow-wrap: anywhere; }
+  .reportes-seccion-conteo { grid-column: 1; grid-row: 2; text-align: left; display: flex; flex-wrap: wrap; gap: 8px; }
+  .reportes-chevron { grid-column: 2; grid-row: 1; }
+  .reportes-accesos { flex-wrap: nowrap; overflow-x: auto; padding: 3px; }
+  .reportes-accesos button { flex-shrink: 0; }
+  .reportes-page .reportes-filtros label { min-width: 0; flex: 1 1 140px; }
+  .reportes-page .reportes-filtros input { min-width: 0; width: 100%; }
+  .reporte-metodos-filtro { width: 100%; }
+  .reporte-metodos-filtro select { width: 100%; }
+}
+@media(prefers-reduced-motion: reduce) { .reportes-seccion-cuerpo, .reportes-chevron { transition: none; } }

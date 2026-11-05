@@ -38,6 +38,7 @@ exports.partos = async (req, res) => {
 };
 exports.indicadores = async (req, res) => {
     try {
+        if (req.query.metodo && !catalogo[req.query.metodo]) return res.status(400).json({ mensaje: 'Metodo invalido.' });
         const dentro = rango(req.query);
         const filtro = req.query.especie ? { especie: req.query.especie } : {};
         if (req.consolidadoMetodos) {
@@ -56,7 +57,7 @@ exports.indicadores = async (req, res) => {
             if (anterior && new Date(r.fechaPartoReal) > new Date(anterior)) intervalosPorCiclo.set(String(r._id), (new Date(r.fechaPartoReal) - new Date(anterior)) / 86400000);
             anterioresPorAnimal.set(clave, r.fechaPartoReal);
         }
-        const porMetodo = Object.entries(catalogo).map(([metodo, c]) => {
+        const porMetodo = Object.entries(catalogo).filter(([metodo, c]) => (!req.query.metodo || metodo === req.query.metodo) && (!req.query.especie || c.especies.includes(req.query.especie))).map(([metodo, c]) => {
             const servicios = registros.flatMap((r) => (r.servicios || []).filter((s) => !s.anulado && (!s.cicloOrigenId || String(s.cicloOrigenId) === String(r._id)) && s.metodo === metodo && dentro(s.fechaServicio || s.fechaServicioDesde)).map((s) => ({ r, s })));
             const confirmados = servicios.filter(({ s }) => concepcionesPorServicio.has(String(s._id)));
             const perdidas = registros.filter((r) => metodoLegado(r) === metodo && ['ABORTO', 'REABSORCION', 'PERDIDA_GESTACIONAL'].includes(r.resultado?.tipo) && dentro(r.resultado.fecha)).length;
@@ -64,9 +65,10 @@ exports.indicadores = async (req, res) => {
             const intervalos = partos.map((r) => intervalosPorCiclo.get(String(r._id))).filter((v) => v != null);
             return { metodo, nombre: c.nombre, servicios: servicios.length, prenecesAtribuidas: confirmados.length, tasaPrenez: servicios.length ? confirmados.length / servicios.length * 100 : null,
                 serviciosPorConcepcion: confirmados.length ? servicios.length / confirmados.length : null, partos: partos.length, perdidas,
+                partosSinServicio: metodo === 'DESCONOCIDO' ? 0 : partos.filter((r) => !(r.servicios || []).some((s) => !s.anulado)).length,
                 intervaloEntrePartosDias: intervalos.length ? intervalos.reduce((a, b) => a + b, 0) / intervalos.length : null };
         });
         res.json({ porMetodo, iaTotal: porMetodo.filter((m) => ['IATF', 'IA_CONVENCIONAL'].includes(m.metodo)).reduce((n, m) => n + m.servicios, 0),
-            criterio: 'Cohorte de servicios del periodo. Preneces atribuidas confirmadas; las atribuciones inciertas no se acreditan a un metodo. Sin denominador se muestra sin datos.' });
+            criterio: 'Partos por fecha real; servicios por fecha de servicio. Las preñeces requieren atribución confirmada. Un método declarado sin servicio no constituye un servicio registrado.' });
     } catch (e) { res.status(e.status || 400).json({ mensaje: e.message }); }
 };

@@ -2354,15 +2354,22 @@ reporteCtrl.getReporteComprasAnimales = async (req, res) => {
 reporteCtrl.getResumenReportes = async (req, res) => {
     try {
         const { fechaInicio, fechaFin, partosFechaInicio, partosFechaFin, diio, especie } = req.query;
+        const camposPorSeccion = { inventario: ['inventario', 'drone'], reproduccion: ['reproduccion'], produccion: ['potreros'], sanidad: ['sanidad'], finanzas: ['finanzas'] };
+        const seccion = req.query.seccion;
+        if (seccion !== undefined && (typeof seccion !== 'string' || !Object.hasOwn(camposPorSeccion, seccion))) {
+            return res.status(400).json({ mensaje: 'Seccion de reportes invalida.' });
+        }
+        const necesita = (bloque) => !seccion || camposPorSeccion[seccion].includes(bloque);
+        const consultar = (bloque, ejecutar, vacio = []) => necesita(bloque) ? ejecutar() : Promise.resolve(vacio);
         const filtroFinanzas = crearFiltroFechas('fecha', fechaInicio, fechaFin);
         const filtroDrone = crearFiltroFechas('fechaVuelo', fechaInicio, fechaFin);
         const especieInventarioGanado = especie === 'Porcino' ? 'Porcino' : 'Bovino';
         const filtroAnimales = crearFiltroEspecieAnimal(especieInventarioGanado);
         const incluyeBovinos = especie !== 'Porcino';
-        const idsEspecie = incluyeBovinos ? await obtenerIdsAnimalesPorEspecie('Bovino') : [];
+        const idsEspecie = necesita('reproduccion') && incluyeBovinos ? await obtenerIdsAnimalesPorEspecie('Bovino') : [];
         const filtroReproduccion = idsEspecie ? { animal: { $in: idsEspecie } } : {};
         const filtroSanidad = crearFiltroEspecieAnimal(especie);
-        const incluyeAnaliticaProductiva = await tieneFeature('analiticaProductiva', req.organizacionId);
+        const incluyeAnaliticaProductiva = necesita('reproduccion') && await tieneFeature('analiticaProductiva', req.organizacionId);
 
         const [
             totalAnimales,
@@ -2383,10 +2390,10 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             conteosDronePorEstado,
             reportePartos
         ] = await Promise.all([
-            Animal.countDocuments(filtroAnimales),
-            agruparPorCampo(Animal, 'sexo', filtroAnimales),
-            agruparPorCampo(Animal, 'estado', filtroAnimales),
-            Animal.aggregate([
+            consultar('inventario', () => Animal.countDocuments(filtroAnimales), 0),
+            consultar('inventario', () => agruparPorCampo(Animal, 'sexo', filtroAnimales)),
+            consultar('inventario', () => agruparPorCampo(Animal, 'estado', filtroAnimales)),
+            consultar('inventario', () => Animal.aggregate([
                 { $match: { ...filtroAnimales, pesoActual: { $gt: 0 } } },
                 {
                     $group: {
@@ -2395,18 +2402,18 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                         cantidad: { $sum: 1 }
                     }
                 }
-            ]),
-            Potrero.countDocuments(),
-            agruparPorCampo(Potrero, 'estado'),
-            agruparPorCampo(PlanSanitario, 'estado', filtroSanidad),
-            PlanSanitario.find({ ...filtroSanidad, estado: { $in: ['Próximo', 'Vencido'] } })
+            ])),
+            consultar('potreros', () => Potrero.countDocuments(), 0),
+            consultar('potreros', () => agruparPorCampo(Potrero, 'estado')),
+            consultar('sanidad', () => agruparPorCampo(PlanSanitario, 'estado', filtroSanidad)),
+            consultar('sanidad', () => PlanSanitario.find({ ...filtroSanidad, estado: { $in: ['Próximo', 'Vencido'] } })
                 .sort({ proximaAplicacion: 1 })
-                .limit(8),
-            RotacionPotrero.find({ estado: 'Activa' })
+                .limit(8)),
+            consultar('potreros', () => RotacionPotrero.find({ estado: 'Activa' })
                 .populate('potrero')
                 .sort({ fechaEntrada: -1 })
-                .limit(8),
-            MovimientoFinanciero.aggregate([
+                .limit(8)),
+            consultar('finanzas', () => MovimientoFinanciero.aggregate([
                 { $match: filtroFinanzas },
                 {
                     $group: {
@@ -2419,8 +2426,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                     }
                 },
                 { $sort: { total: -1 } }
-            ]),
-            MovimientoFinanciero.aggregate([
+            ])),
+            consultar('finanzas', () => MovimientoFinanciero.aggregate([
                 { $match: filtroFinanzas },
                 {
                     $group: {
@@ -2433,8 +2440,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                     }
                 },
                 { $sort: { total: -1 } }
-            ]),
-            MovimientoFinanciero.aggregate([
+            ])),
+            consultar('finanzas', () => MovimientoFinanciero.aggregate([
                 { $match: { ...filtroFinanzas, naturaleza: 'Egreso' } },
                 {
                     $group: {
@@ -2448,8 +2455,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                 },
                 { $sort: { total: -1 } },
                 { $limit: 8 }
-            ]),
-            MovimientoFinanciero.aggregate([
+            ])),
+            consultar('finanzas', () => MovimientoFinanciero.aggregate([
                 { $match: filtroFinanzas },
                 {
                     $group: {
@@ -2463,8 +2470,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                     }
                 },
                 { $sort: { '_id.anio': 1, '_id.mes': 1 } }
-            ]),
-            MovimientoFinanciero.aggregate([
+            ])),
+            consultar('finanzas', () => MovimientoFinanciero.aggregate([
                 { $match: { ...filtroFinanzas, naturaleza: 'Egreso' } },
                 {
                     $group: {
@@ -2478,9 +2485,9 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                     }
                 },
                 { $sort: { '_id.anio': 1, '_id.mes': 1 } }
-            ]),
-            ConteoDrone.countDocuments(filtroDrone),
-            agruparPorCampo(ConteoDrone, 'estado', filtroDrone),
+            ])),
+            consultar('drone', () => ConteoDrone.countDocuments(filtroDrone), 0),
+            consultar('drone', () => agruparPorCampo(ConteoDrone, 'estado', filtroDrone)),
             incluyeAnaliticaProductiva && incluyeBovinos
                 ? crearReportePartos({
                     fechaInicio: partosFechaInicio || fechaInicio,
@@ -2498,7 +2505,7 @@ reporteCtrl.getResumenReportes = async (req, res) => {
                 })
         ]);
 
-        res.json({
+        const datos = {
             filtros: {
                 fechaInicio: fechaInicio || null,
                 fechaFin: fechaFin || null,
@@ -2564,7 +2571,8 @@ reporteCtrl.getResumenReportes = async (req, res) => {
             reproduccion: {
                 partos: reportePartos
             }
-        });
+        };
+        res.json(seccion ? { filtros: datos.filtros, ...Object.fromEntries(camposPorSeccion[seccion].map((campo) => [campo, datos[campo]])) } : datos);
     } catch (error) {
         res.status(error.status || 500).json({ mensaje: 'Error al obtener reportes', error: error.message });
     }

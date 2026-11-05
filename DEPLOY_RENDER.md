@@ -49,7 +49,7 @@ Valores esperados:
 - `EMAIL_FROM`: remitente de correos. Para pruebas puede ser `Ganaderia Romilio <onboarding@resend.dev>`.
 - `EMAIL_ADMIN`: compatibilidad legada; las alertas SaaS se envian solo a administradores activos de la organizacion.
 - `CRON_MODE`: usar `external` en el Web Service cuando exista un Cron Job independiente.
-- `CRON_SECRET`: secreto largo para invocar el endpoint HTTP de cron. No es necesario para el Cron Job CLI de Render, pero conviene configurarlo.
+- `CRON_SECRET`: secreto largo para invocar el endpoint HTTP de cron. Tambien es obligatorio en el CLI en produccion, porque comparte la validacion central de configuracion.
 - `CRON_LOCK_MS`: duracion maxima del bloqueo distribuido; por defecto 30 minutos.
 - `STRIPE_SECRET_KEY`: clave privada del entorno Stripe correspondiente.
 - `STRIPE_WEBHOOK_SECRET`: secreto de firma entregado por Stripe para el endpoint del backend.
@@ -77,11 +77,17 @@ Configuracion:
 
 `0 12 * * *` corresponde a las 06:00 de Costa Rica. Render interpreta el horario en UTC.
 
+El Cron Job necesita sus propias variables: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `CRON_SECRET`, `FRONTEND_URL` (HTTPS), `RESEND_API_KEY`, `EMAIL_FROM` y `EMAIL_ALERTS_ENABLED=true`. Copiar los valores del backend mediante variables del servicio o un Environment Group; si se usa `MONGODB_DB` o `DB_NAME`, conservar tambien la misma base. No publicar secretos en logs ni en Git.
+
+Los servicios de alertas y resumenes cargan explicitamente el modelo `Usuario`, incluso al ejecutarse sin la API. Si falla una organizacion o un destinatario, se conservan los resultados parciales, `TrabajoProgramado` queda en `Error`, se libera el bloqueo y el CLI termina con codigo 1 para que Render no lo muestre como exitoso. Un resultado sin correos pendientes o una ejecucion omitida por otro trabajo en curso no es un fallo. Antes de reintentar, revisar los detalles: las organizaciones que si se procesaron pueden haber creado notificaciones o enviado correos.
+
 En el Web Service establecer:
 
 ```env
 CRON_MODE=external
 ```
+
+Cambiar a `external` solamente despues de verificar la ejecucion externa. Este modo desactiva tanto las alertas internas como los resumenes Premium internos; si se ofrecen resumenes, tambien deben tener su ejecucion externa configurada (ver seccion siguiente).
 
 La ejecucion usa un bloqueo distribuido en MongoDB. Si Render reintenta o dos servicios disparan el trabajo al mismo tiempo, solamente uno procesa alertas y correos.
 

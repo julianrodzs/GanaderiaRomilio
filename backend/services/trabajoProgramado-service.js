@@ -55,6 +55,15 @@ const finalizarTrabajo = (clave, tokenBloqueo, cambios) => TrabajoProgramado.fin
     { new: true }
 );
 
+const exigirResultadosSinErrores = (resultados, resumen) => {
+    const organizacionesConError = resultados.filter((item) => item.error || item.correos?.errores?.length).length;
+    if (!organizacionesConError) return;
+    const error = new Error(`El trabajo fallo en ${organizacionesConError} de ${resultados.length} organizaciones. Revisar resultados.`);
+    error.code = 'JOB_PARTIAL_FAILURE';
+    error.resultado = { ejecutado: true, ...resumen, organizacionesConError, resultados };
+    throw error;
+};
+
 const ejecutarAlertasProgramadas = async ({ origen = 'manual' } = {}) => {
     const tokenBloqueo = await adquirirBloqueo(CLAVE_ALERTAS, origen);
     if (!tokenBloqueo) {
@@ -69,6 +78,7 @@ const ejecutarAlertasProgramadas = async ({ origen = 'manual' } = {}) => {
             correosEnviados: resultados.reduce((total, item) => total + Number(item.correos?.enviadas || 0), 0),
             categoriasAnimalesActualizadas: resultados.reduce((total, item) => total + Number(item.categoriasAnimales?.actualizados || 0), 0)
         };
+        exigirResultadosSinErrores(resultados, resumen);
         await finalizarTrabajo(CLAVE_ALERTAS, tokenBloqueo, {
             estado: 'Completado',
             ultimoResultado: resumen,
@@ -79,7 +89,7 @@ const ejecutarAlertasProgramadas = async ({ origen = 'manual' } = {}) => {
         await finalizarTrabajo(CLAVE_ALERTAS, tokenBloqueo, {
             estado: 'Error',
             ultimoError: error.message,
-            ultimoResultado: null
+            ultimoResultado: error.resultado || null
         });
         throw error;
     }
@@ -94,10 +104,11 @@ const ejecutarResumenesEmailProgramados = async ({ origen = 'manual' } = {}) => 
             organizacionesProcesadas: resultados.length,
             correosEnviados: resultados.reduce((total, item) => total + item.envios.filter((envio) => envio.enviado).length, 0)
         };
+        exigirResultadosSinErrores(resultados, resumen);
         await finalizarTrabajo(CLAVE_RESUMENES, tokenBloqueo, { estado: 'Completado', ultimoResultado: resumen, ultimoError: '' });
         return { ejecutado: true, ...resumen, resultados };
     } catch (error) {
-        await finalizarTrabajo(CLAVE_RESUMENES, tokenBloqueo, { estado: 'Error', ultimoError: error.message, ultimoResultado: null });
+        await finalizarTrabajo(CLAVE_RESUMENES, tokenBloqueo, { estado: 'Error', ultimoError: error.message, ultimoResultado: error.resultado || null });
         throw error;
     }
 };
