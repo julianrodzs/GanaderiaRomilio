@@ -13,10 +13,10 @@ import Reportes from './Reportes';
 import Usuarios from '../pages/Usuarios';
 import Tareas from '../pages/Tareas';
 import CentroNotificaciones from '../pages/CentroNotificaciones';
-import MiPlan from '../pages/MiPlan';
+const MiPlan = lazy(() => import('../pages/MiPlan'));
 import { useApariencia } from '../context/AparienciaContext';
 import ImagenPersonalizada from './ImagenPersonalizada';
-import AdministracionSaas from '../pages/AdministracionSaas';
+const AdministracionSaas = lazy(() => import('../pages/AdministracionSaas'));
 import ConfiguracionCuenta from '../pages/ConfiguracionCuenta';
 import Ventas from './Ventas';
 import { puedeAccederModulo, puedeGestionarModulo, puedeRealizarAccion } from '../constants/permisosRoles';
@@ -420,7 +420,9 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <AdministracionSaas onCerrar={() => setVistaActiva('Usuarios')} />
+        <Suspense fallback={<p role="status">Cargando administración de clientes...</p>}>
+          <AdministracionSaas onCerrar={() => setVistaActiva('Usuarios')} />
+        </Suspense>
       </main>
     );
   }
@@ -582,7 +584,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <MiPlan />
+        <Suspense fallback={<p role="status">Cargando suscripción...</p>}><MiPlan /></Suspense>
       </main>
     );
   }

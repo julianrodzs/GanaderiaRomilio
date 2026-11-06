@@ -1,0 +1,41 @@
+.suscripcion-badge { display: inline-block; padding: 5px 9px; border: 1px solid #a9bdb0; border-radius: 4px; font-size: 12px; font-weight: 700; background: #edf4ee; color: #173d27; }
+.suscripcion-POR_VENCER, .suscripcion-EN_GRACIA { background: #fff1cc; color: #694600; border-color: #cda743; }
+.suscripcion-VENCIDA, .suscripcion-SUSPENDIDA, .suscripcion-CANCELADA { background: #fce8e7; color: #8d2424; border-color: #d69e99; }
+.suscripcion-PRUEBA { background: #e4effa; color: #234e6b; border-color: #9eb9cc; }
+.suscripcion-PENDIENTE { background: #f1f2f3; color: #3e4842; }
+.suscripcion-filtros, .suscripcion-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+.suscripcion-filtros { grid-template-columns: repeat(2, minmax(160px, 260px)); padding: 16px; background: #edf1ee; border: 1px solid #c4cec7; }
+.suscripcion-filtros label, .suscripcion-form-grid label, .suscripcion-anulacion label { display: grid; gap: 8px; font-weight: 600; font-size: 13px; min-width: 0; }
+.suscripcion-filtros select, .suscripcion-form-grid input, .suscripcion-form-grid select, .suscripcion-form-grid textarea, .suscripcion-anulacion textarea { box-sizing: border-box; min-width: 0; width: 100%; padding: 11px 12px; border: 1px solid #a9b8ae; background: #fff; border-radius: 4px; color: #152c20; font: inherit; }
+.suscripcion-form-grid textarea, .suscripcion-anulacion textarea { min-height: 82px; resize: vertical; }
+.suscripcion-ancho { grid-column: 1 / -1; }
+.suscripcion-dialogo { box-sizing: border-box; width: min(920px, calc(100% - 32px)); max-height: 90vh; padding: 24px; border: 1px solid #9eada4; border-radius: 8px; background: #fff; color: #152c20; overflow-y: auto; }
+.suscripcion-dialogo::backdrop { background: rgb(15 35 24 / 50%); }
+.suscripcion-dialogo > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; border-bottom: 1px solid #d0dad3; padding-bottom: 16px; }
+.suscripcion-dialogo h2 { margin: 0; font-size: 21px; overflow-wrap: anywhere; }
+.suscripcion-dialogo .form-actions { margin-top: 22px; display: flex; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.suscripcion-dialogo button:not([class]) { padding: 10px 14px; border: 1px solid #9aaa9f; border-radius: 4px; background: #f4f6f4; color: #193b27; font: inherit; cursor: pointer; }
+.suscripcion-historial { margin-top: 18px; }
+.suscripcion-historial table { width: 100%; min-width: 700px; border-collapse: collapse; }
+.suscripcion-historial th, .suscripcion-historial td { padding: 12px 14px; border-bottom: 1px solid #dce3de; text-align: left; vertical-align: middle; }
+.suscripcion-historial th { background: #edf1ee; font-size: 13px; }
+.suscripcion-historial small { display: block; margin-top: 5px; color: #465a4d; }
+.suscripcion-numero { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.suscripcion-paginacion { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; padding: 16px 0; }
+.suscripcion-paginacion button { width: 38px; height: 36px; background: #edf1ee; border: 1px solid #819789; border-radius: 4px; color: #193f29; }
+.suscripcion-paginacion button:disabled { opacity: .45; }
+.suscripcion-preview, .suscripcion-banner { background: #fff2cf; color: #644500; border: 1px solid #cfb15f; padding: 14px 18px; line-height: 1.5; }
+.suscripcion-banner { margin: 12px 20px; }
+.suscripcion-acciones { display: flex; flex-wrap: wrap; gap: 8px; max-width: 270px; }
+.suscripcion-anulacion { margin-top: 20px; padding-top: 16px; border-top: 2px solid #d7a59d; }
+.saas-admin .saas-resumen { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.saas-admin .saas-resumen strong { font-size: 25px; overflow-wrap: anywhere; }
+.facturacion-plan .facturacion-contacto { margin: 18px 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.facturacion-contacto a, .facturacion-planes a { display: inline-flex; justify-content: center; align-items: center; box-sizing: border-box; padding: 12px 16px; line-height: 1.4; max-width: 100%; text-align: center; text-decoration: none; }
+@media (max-width: 650px) {
+  .suscripcion-form-grid, .suscripcion-filtros { grid-template-columns: minmax(0, 1fr); }
+  .saas-admin .saas-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .suscripcion-dialogo { padding: 18px; }
+  .suscripcion-dialogo h2 { font-size: 19px; }
+  .suscripcion-paginacion { justify-content: flex-start; }
+}

@@ -1,92 +1,110 @@
-# PROMPT PARA CODEX: RESUMEN EJECUTIVO PREMIUM POR CORREO Y UNIFICACIÓN EN EL CRON MATUTINO
+# PROMPT PARA CODEX: GESTIÓN DE SUSCRIPCIONES MANUALES (SINPE / TRANSFERENCIA), RENOVACIONES Y ADAPTACIÓN DE MI PLAN
 
 ## 🎯 OBJETIVO
-Transformar el servicio de resúmenes por correo del **Plan PREMIUM** (`backend/services/resumenEmail-service.js` y vistas/preferencias asociadas) de un correo básico de conteos a un **Resumen Ejecutivo de Gestión Ganadera** que aporte valor real de supervisión al productor, e integrarlo como **Fase 3 aislada** dentro del comando `npm run job:alertas` para que se ejecute en el único Cron Job diario de Render sin requerir un segundo servicio pagado.
+Completar el ciclo de vida comercial de suscripciones manuales sobre el flujo de alta asistida ya existente en `frontend/src/pages/AdministracionSaas.js` y backend, permitiendo administrar pagos por **SINPE Móvil / Transferencia IBAN**, períodos cubiertos, fechas de renovación, vencimientos, períodos de gracia y cambios de plan posteriores sin depender de Stripe, manteniendo la integración de Stripe intacta como opción futura.
 
 ---
 
-## ⚙️ 1. MEJORAS DE CONTENIDO Y LÓGICA DE NEGOCIO EN `resumenEmail-service.js`
+## 🏗️ 1. MODELO DE DATOS Y ESTADO DE SUSCRIPCIÓN
 
-### A. Encabezado y Ventana Temporal Explícita
-- Calcular y mostrar explícitamente en el encabezado del correo el **rango exacto de fechas** evaluado según la zona horaria de la organización (`America/Costa_Rica` por defecto):
-  - Ejemplo Diario: *"Corte diario: 4 de noviembre de 2026 (últimas 24 h)"*.
-  - Ejemplo Semanal: *"Corte semanal: 29 de octubre al 4 de noviembre de 2026 (últimos 7 días)"*.
+### A. Ampliar los metadatos de suscripción en `Organizacion`
+Asegurar que `Organizacion` contenga y gestione de forma consistente:
+- `modoFacturacion`: Enum `['MANUAL', 'STRIPE']` (default: `'MANUAL'` cuando se crea desde `AdministracionSaas` o cuando Stripe no interviene).
+- `estadoSuscripcion`: Enum `['PRUEBA', 'ACTIVA', 'POR_VENCER', 'EN_GRACIA', 'VENCIDA', 'SUSPENDIDA', 'CANCELADA']` (manteniendo compatibilidad con los estados actuales que ya valida el middleware de acceso).
+- `fechaInicioPeriodoActual`: Date.
+- `fechaFinPeriodoActual` / `fechaProximoVencimiento`: Date (obligatoria en cuentas `MANUAL` en prueba o activas).
+- `diasGracia`: Number (default: `5` días después de `fechaProximoVencimiento` antes de bloquear escrituras o marcar `VENCIDA`).
+- `notasFacturacion`: String opcional (ej. teléfono SINPE, cédula jurídica o acuerdo comercial).
 
-### B. Bloque 1: Inventario ("Foto Actual + Movimiento del Período")
-1. **Ocultar especies sin actividad:** Si una especie (`Porcino` o `Bovino`) tiene `0` animales activos **y** `0` movimientos en el período, no imprimir una fila inútil en cero (salvo que ambas estén en cero, en cuyo caso se muestra "Sin animales activos registrados").
-2. **Flujo del período por especie activa:**
-   - Total de animales activos al corte y variación neta del período (`+X` / `-Y` / `0`).
-   - **Altas del período:** Nacimientos, Compras y Traslados recibidos entre fincas.
-   - **Bajas del período:** Ventas, Muertes y Traslados enviados.
-3. **Estado productivo rápido:** Cantidad de hembras con gestación confirmada activa y cantidad de animales en lotes de engorde activos.
-
-### C. Bloque 2: Finanzas (Formato Monetario, Top Rubros y Permisos)
-1. **Control estricto de rol:** Mantener la validación en el momento del envío de que solo usuarios con rol `Administrador` o `Contador` reciben este bloque (aunque tengan el check activado en preferencias).
-2. **Separación estricta `CRC` y `USD`:**
-   - Formatear todas las cifras con formato monetario legible (`₡1.450.000` para `CRC` y `$2,300.00` para `USD`).
-   - Mostrar `CRC` siempre; mostrar `USD` únicamente si hubo movimientos en `USD` en el período (no llenar de ceros en dólares si la finca solo operó en colones).
-   - Mantener la exclusión de movimientos marcados para quedar fuera de consolidación (`excluirConsolidacion` / transferencias internas anuladas).
-3. **Desglose de valor ejecutivo:**
-   - **Ingresos del período**, **Egresos del período** y **Flujo Neto de Caja del Período** *(con nota aclaratoria: "Flujo de caja operativo del período; no equivale a utilidad contable")*.
-   - **Top 3 categorías de Ingresos** y **Top 3 categorías de Egresos** del período con su monto y porcentaje del total.
-
-### D. Bloque 3: Tareas (Corregir el "Punto Ciego del Dueño")
-1. **Alcance según rol del destinatario:**
-   - Si el destinatario es `Administrador` o `Encargado`: calcular y mostrar el **estado global de las tareas de sus fincas autorizadas**, separado de sus tareas personales:
-     - **En curso / pendientes totales:** `X` (aclarando explícitamente cuántas de ellas están **vencidas**: *"X pendientes en total, incluyendo Y vencidas"*).
-     - **Completadas en el período:** `Z`.
-   - Si el destinatario tiene otro rol operativo: mostrar sus tareas asignadas en esas fincas.
-2. **Detalle accionable (Top 5 tareas urgentes):**
-   - Listar hasta las **5 tareas más urgentes** (primero las vencidas y luego las que vencen hoy/mañana), mostrando:
-     - Estado (`🔴 Vencida` / `🟡 Para hoy`), Título de la tarea, Finca, Animal/DIIO o Lote asociado, Fecha límite y **Nombre del responsable asignado**.
-
-### E. Bloque 4: Radar Operativo de los Próximos 7 Días (Prevención en Campo)
-Incluir una sección de alerta preventiva para los próximos 7 días en las fincas autorizadas del usuario:
-1. **Próximos partos estimados (próximos 7 días):** Cantidad de hembras y hasta 5 identificadores (`DIIO` / nombre).
-2. **Periodo de Retiro de Carne vigente hoy:** Cantidad de animales que hoy tienen restricción sanitaria activa (`fechaFinRetiroCarne >= hoy`) y están bloqueados para venta comercial.
-3. **Eventos de campañas IATF / TE programados (próximos 7 días):** Cantidad de tareas reproductivas programadas en la semana.
-
-### F. Tabla Comparativa por Finca (Diferencial Multi-Finca Premium)
-Cuando el destinatario tenga acceso a **2 o más fincas activas**:
-- Además de los totales consolidados, renderizar una **tabla resumen comparativa por finca**:
-  - Columnas: `Finca` | `Animales Activos (Δ período)` | `Flujo Neto CRC` *(solo si tiene rol Administrador/Contador)* | `Tareas Vencidas` | `Partos Próx. 7d`.
+### B. Nuevo modelo `PagoSuscripcion` (Historial inmutable de cobros SaaS)
+- `organizacionId`: ObjectId ref `Organizacion` (indexado).
+- `plan`: Enum `['ESENCIAL', 'GESTION', 'PRO', 'PREMIUM']`.
+- `metodoPago`: Enum `['SINPE_MOVIL', 'TRANSFERENCIA_IBAN', 'EFECTIVO', 'TARJETA_MANUAL', 'STRIPE', 'OTRO']`.
+- `moneda`: Enum `['CRC', 'USD']` (sin mezclar monedas).
+- `monto`: Number (> 0).
+- `referenciaComprobante`: String (ej. número de comprobante SINPE o transferencia).
+- `mesesCubiertos`: Number (entero >= 1, o días personalizados).
+- `periodoCubiertoInicio`: Date.
+- `periodoCubiertoFin`: Date.
+- `fechaPago`: Date (default: now).
+- `registradoPor`: ObjectId ref `Usuario` (SuperAdmin).
+- `notas`: String opcional.
+- `estado`: Enum `['REGISTRADO', 'ANULADO']` (default: `'REGISTRADO'`).
+- `motivoAnulacion`, `fechaAnulacion`: opcionales.
 
 ---
 
-## 🎨 2. DISEÑO HTML EJECUTIVO, TEXTO PLANO Y CTA
+## ⚙️ 2. SERVICIOS Y ENDPOINTS DE ADMINISTRACIÓN SAAS (`AdministracionSaas`)
 
-1. **Plantilla HTML (`html`):**
-   - Diseño limpio con estilos inline compatible con Gmail, Outlook y Apple Mail (móvil y escritorio).
-   - Cabecera con identidad **CIR Ganadero** (verde bosque `#0F2E1E`, acento esmeralda `#348655` y crema `#FAF9F5`).
-   - Tarjetas visuales bien espaciadas (`padding`, bordes suaves, badges de estado para tareas vencidas y flujo neto).
-   - **Botón principal de llamada a la acción (CTA):** Al final del correo, incluir un botón estilizado **`Ir al Panel de CIR Ganadero →`** que apunte a `FRONTEND_URL` (validado sin doble barra).
-2. **Versión Texto Plano (`text`):**
-   - Reemplazar el `JSON.stringify` / datos serializados crudos por un resumen en texto plano limpio, bien redactado con viñetas y montos formateados, legible en cualquier cliente de correo básico.
+Todas las operaciones que modifiquen `Organizacion` y `PagoSuscripcion` deben correr en transacción (`ejecutarEnTransaccion`) y registrar auditoría administrativa.
+
+1. **Alta asistida con vigencia inicial (`POST /api/admin/organizaciones` o ruta actual):**
+   - Si se crea en estado `Prueba`, fijar `fechaProximoVencimiento` a `hoy + diasPrueba` (ej. 15 días por defecto, configurable en el formulario).
+   - Si se crea en estado `Activo` con un pago inicial opcional en el mismo formulario, crear el primer `PagoSuscripcion` y fijar `fechaProximoVencimiento` según los meses cubiertos (o `hoy + 1 mes` por defecto).
+
+2. **Registrar Pago y Renovar Suscripción (`POST /api/admin/organizaciones/:id/pagos`):**
+   - Entrada: `{ metodoPago, moneda, monto, referenciaComprobante, mesesCubiertos, planOpcional, fechaFinPersonalizada, notas }`.
+   - **Regla de cálculo de período:**
+     - Si la organización aún no ha vencido (`fechaProximoVencimiento > hoy`) y no estaba en `Prueba`, el nuevo período inicia en `fechaProximoVencimiento` actual y suma `mesesCubiertos` (para no quitarle días ya pagados al cliente).
+     - Si ya estaba vencida o estaba en `Prueba`, el nuevo período inicia en `hoy` y suma `mesesCubiertos`.
+   - Actualiza `estadoSuscripcion` a `'ACTIVA'`, actualiza `fechaInicioPeriodoActual` y `fechaProximoVencimiento` (y cambia `plan` si se indicó un cambio de plan en la misma renovación).
+   - Crea el documento `PagoSuscripcion`.
+
+3. **Anular un Pago Manual (`POST /api/admin/organizaciones/:id/pagos/:pagoId/anular`):**
+   - Marca el pago como `'ANULADO'` con motivo obligatorio (sin borrar el registro) y recalcula `fechaProximoVencimiento` con base en el último pago válido anterior (o restaura la fecha previa guardada).
+
+4. **Cambiar Plan o Estado Manualmente (`PATCH /api/admin/organizaciones/:id/suscripcion`):**
+   - Permite cambiar de plan (`ESENCIAL`, `GESTION`, `PRO`, `PREMIUM`), ajustar `fechaProximoVencimiento`, extender días de prueba o suspender/reactivar manualmente.
+   - **Validación en Downgrade:** Si se baja a un plan inferior, verificar primero si la organización supera los límites actuales del plan destino (cantidad de fincas activas, usuarios activos + invitaciones, especies o cupo de animales). Si los supera, devolver `409 Conflict` detallando qué límite excede para que el administrador lo resuelva antes, sin corromper datos existentes.
+
+5. **Listado y Resumen de Cartera SaaS (`GET /api/admin/organizaciones`):**
+   - Enriquecer el listado con: `modoFacturacion`, `estadoSuscripcion`, `fechaProximoVencimiento`, `diasParaVencer` (positivo si falta, negativo si ya venció), último pago registrado y contadores superiores de cartera:
+     - **Activas al día**
+     - **En prueba**
+     - **Por vencer (≤ 7 días)**
+     - **En gracia / Vencidas**
+     - **Ingresos registrados del mes (`CRC` y `USD` por separado)**.
 
 ---
 
-## ⏱️ 3. UNIFICACIÓN EN EL CRON MATUTINO (`npm run job:alertas`)
+## ⏱️ 3. VERIFICACIÓN DIARIA DE VENCIMIENTOS EN EL CRON MATUTINO (`job:alertas`)
 
-1. **Un solo Cron Job en producción para las 3 fases:**
-   - Actualizar el runner de `npm run job:alertas` para que ejecute en secuencia pero con **aislamiento total de errores (`try / catch` independiente por fase)**:
-     - **Fase 1:** Sincronización de categorías de animales.
-     - **Fase 2:** Alertas operativas por correo.
-     - **Fase 3:** Resúmenes Ejecutivos Premium (`resumenEmail-service`).
-   - Mantener también el script individual `npm run job:resumenes-email` funcional para ejecuciones manuales o pruebas aisladas.
-2. **Comportamiento de horario e idempotencia en modo Cron Diario (6:00 AM CR):**
-   - Si el resumen se invoca desde el job diario programado (o cuando se pase una opción `{ modoEjecucion: 'cron_diario' }` / `CRON_RESUMEN_IGNORE_HOUR=true`), procesar todos los usuarios Premium con resumen `diario` activo (y los de resumen `semanal` cuyo `diaSemana` coincida con el día actual en la zona horaria de la organización), **sin descartarlos porque su `horaPreferida` sea posterior a las 06:00 AM**, garantizando que en un esquema de 1 corrida diaria a las 6:00 AM todos reciban su resumen puntual y una sola vez por período (usando la clave de período enviado para idempotencia).
-   - Si corre en modo horario continuo, conservar el respeto a `horaPreferida`.
+Integrar dentro del runner del cron matutino una verificación ligera y aislada de suscripciones manuales:
+1. Detectar organizaciones con `modoFacturacion: 'MANUAL'`:
+   - Si faltan `<= 5` días para `fechaProximoVencimiento` (o vence hoy): marcar indicador visual / estado `'POR_VENCER'` y enviar aviso de próximo vencimiento al administrador de la organización y resumen al `EMAIL_ADMIN` (con idempotencia por ciclo para no repetir el mismo correo todos los días).
+   - Si `hoy > fechaProximoVencimiento` pero dentro de `diasGracia`: pasar a `'EN_GRACIA'` (la organización aún puede operar pero ve un banner claro de renovación pendiente).
+   - Si `hoy > fechaProximoVencimiento + diasGracia`: pasar a `'VENCIDA'` (aplicando la política actual de suscripción inactiva/vencida sin borrar ningún dato de la finca).
 
 ---
 
-## 🧪 4. PRUEBAS AUTOMATIZADAS (MONGODB REAL)
+## 🖥️ 4. INTERFAZ DE USUARIO (FRONTEND)
 
-Actualizar y ampliar las pruebas de resúmenes y cron:
-1. **Inventario con movimiento y filtro de especie:** Una finca solo bovina con 1 nacimiento y 1 venta muestra el movimiento neto y **no** imprime la fila de porcinos en cero.
-2. **Supervisión de tareas del Administrador:** Un `Administrador` con `0` tareas asignadas a su propio usuario pero con `3` tareas asignadas a su `Encargado` (1 vencida) ve en el resumen las `3` tareas de la finca y el detalle de la tarea vencida con el nombre del encargado.
-3. **Permiso financiero estricto:** Un usuario Premium con rol `Veterinario` o `Encargado` que tenga activado el check de finanzas **no** recibe el bloque financiero ni la columna de flujo neto en la tabla por finca; un `Administrador` o `Contador` sí recibe los montos formateados y el Top de categorías.
-4. **Tabla comparativa multi-finca:** Con 2 fincas activas, el correo incluye el desglose comparativo por finca; con 1 sola finca, no muestra tabla redundante.
-5. **Radar de 7 días:** Incluye conteo de próximos partos y animales en retiro de carne activo.
-6. **HTML y Texto Plano:** Verificar que el HTML incluya el botón a `FRONTEND_URL` y que la versión `text` sea texto humano legible (sin JSON serializado crudo).
-7. **Idempotencia y ejecución en `job:alertas`:** Ejecutar `job:alertas` corre las 3 fases de forma aislada y una segunda ejecución el mismo día no reenvía el resumen ya despachado.
-8. Ejecutar `npm test` y `npm run build` confirmando `PASS` con salida `0`.
+### A. En `frontend/src/pages/AdministracionSaas.js` (Panel SuperAdmin)
+1. **Tarjetas de Semáforo de Cartera arriba:** Total Activas, En Prueba, Por Vencer (≤ 7 días), En Gracia/Vencidas, y total recaudado del mes en `CRC` y `USD`.
+2. **Filtros rápidos en la tabla de organizaciones:** Filtrar por estado (`Todas`, `Por vencer`, `Vencidas`, `En prueba`, `Activas`) y por plan.
+3. **Columna de Vigencia en cada organización:** Mostrar badge de estado con color, fecha de próximo vencimiento y días restantes o días de atraso.
+4. **Acciones por organización (Modales limpios):**
+   - **`[ + Registrar Pago / Renovar ]`:** Modal rápido para elegir método (`SINPE Móvil`, `Transferencia IBAN`, etc.), moneda (`CRC` / `USD`), monto, comprobante, meses (`1 mes`, `3 meses`, `6 meses`, `12 meses`) y vista previa de la nueva fecha de vencimiento.
+   - **`[ Cambiar Plan / Vigencia ]`:** Modal para hacer upgrade/downgrade de plan, extender prueba o suspender/reactivar.
+   - **`[ Historial de Pagos ]`:** Ver todos los pagos de esa organización con opción de anular con motivo si hubo error de digitación.
+
+### B. En `frontend/src/pages/MiPlan.js` (Vista del Cliente Ganadero)
+Adaptar `MiPlan.js` según `modoFacturacion` (y disponibilidad de Stripe):
+1. Si la organización usa `modoFacturacion: 'MANUAL'` (o Stripe no está habilitado):
+   - Mostrar claramente su **Plan Actual**, **Estado de Suscripción** (`Activa`, `En período de prueba`, `Próxima a vencer`, `En período de gracia` o `Vencida`) y la **Fecha de próximo vencimiento** en formato legible.
+   - Al seleccionar otro plan en las tarjetas comparativas o al tocar renovar, en lugar de intentar abrir un checkout de Stripe, mostrar un botón claro: **`Solicitar cambio o renovación por WhatsApp / SINPE`** (abriendo WhatsApp prellenado con el nombre de la organización, el plan actual y el plan o renovación solicitada, usando una variable `VITE_WHATSAPP_SOPORTE` o contacto configurado).
+   - Mostrar una tabla limpia de **"Mis Pagos Registrados"** (Fecha, Plan, Método `SINPE / Transferencia`, Comprobante, Monto y Período cubierto) para transparencia total con el productor.
+2. Si `modoFacturacion === 'STRIPE'` y Stripe está configurado, mantener el flujo actual de Stripe Checkout y Portal sin romper ninguna prueba existente.
+
+---
+
+## 🧪 5. PRUEBAS AUTOMATIZADAS (MONGODB REAL)
+
+Agregar pruebas unitarias y de integración que verifiquen:
+1. **Renovación acumulativa justa:** Si una organización vence dentro de 5 días y se registra un pago de 1 mes por `SINPE_MOVIL`, la nueva fecha de vencimiento suma 1 mes a partir de la fecha de vencimiento vigente (no pierde los 5 días).
+2. **Renovación desde vencida o en prueba:** Si estaba vencida hace 10 días y paga 1 mes, la nueva vigencia inicia desde `hoy + 1 mes` y pasa a estado `ACTIVA`.
+3. **Anulación de pago:** Anular un pago revierte la fecha de vencimiento al estado previo y conserva el registro como `ANULADO`.
+4. **Protección en Downgrade:** Intentar bajar a `ESENCIAL` una organización que tiene 2 fincas activas o 2 especies devuelve `409` con detalle claro de los límites excedidos.
+5. **Transición automática en Cron:** El job evalúa correctamente el paso a `POR_VENCER`, `EN_GRACIA` y `VENCIDA` según las fechas.
+6. **Compatibilidad con Stripe:** Las pruebas existentes de `facturacion-service` y validación de precios de Stripe (`CL-08`) siguen pasando al 100%.
+7. Ejecutar `npm test` en backend y `npm run build` en frontend con salida `0`.

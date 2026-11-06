@@ -47,7 +47,7 @@ Valores esperados:
 - `JWT_SECRET`: clave larga y privada para firmar tokens.
 - `RESEND_API_KEY`: API key creada en Resend.
 - `EMAIL_FROM`: remitente de correos. Para pruebas puede ser `Ganaderia Romilio <onboarding@resend.dev>`.
-- `EMAIL_ADMIN`: compatibilidad legada; las alertas SaaS se envian solo a administradores activos de la organizacion.
+- `EMAIL_ADMIN`: correo del operador para el resumen de cartera manual. Las alertas de campo siguen limitadas a administradores activos de cada organizacion.
 - `CRON_MODE`: usar `external` en el Web Service cuando exista un Cron Job independiente.
 - `CRON_SECRET`: secreto largo para invocar el endpoint HTTP de cron. Tambien es obligatorio en el CLI en produccion, porque comparte la validacion central de configuracion.
 - `CRON_LOCK_MS`: vigencia renovable del bloqueo distribuido; por defecto 30 minutos, con heartbeat durante la ejecucion.
@@ -105,6 +105,8 @@ Authorization: Bearer TU_CRON_SECRET
 El endpoint no usa credenciales de usuario. Requiere exclusivamente `CRON_SECRET`. No configurar simultaneamente el Cron Job CLI, el cron HTTP y `CRON_MODE=internal`, aunque el bloqueo evita ejecuciones concurrentes.
 
 ## Resúmenes Premium por correo
+
+El job incluye la revision comercial de suscripciones manuales antes de las tres fases de mantenimiento. No requiere otro Cron Job. Para preparar indices de pagos, configurar WhatsApp y revisar fechas antiguas, seguir `backend/documentation/suscripciones-manuales.md`.
 
 El mismo Render Cron Job ejecuta categorias, alertas operativas y resumenes ejecutivos como tres fases aisladas. Mantener Command `npm run job:alertas` y Schedule `0 12 * * *` (06:00 Costa Rica). No hace falta contratar otro cron ni cambiarlo a horario. Si quedo una variable antigua `CRON_INCLUDE_SUMMARIES=false`, eliminarla o cambiarla a `true`. No se modifica Render desde el repositorio.
 

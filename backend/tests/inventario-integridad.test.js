@@ -138,6 +138,8 @@ test('dos ventas concurrentes no pueden consumir la ultima cria colectiva dos ve
 });
 
 test('dos altas concurrentes compitiendo por el ultimo cupo aprueban exactamente una', async (t) => {
+    t.mock.method(require('../models/Organizacion'), 'findById', () => ({ select() { return this; },
+        lean: async () => ({ estado: 'Activa', plan: { codigo: 'PREMIUM', estado: 'Activo' } }) }));
     const originales = {
         reservaFind: ReservaCuotaPlan.findOneAndUpdate,
         reservaUpdate: ReservaCuotaPlan.updateOne,

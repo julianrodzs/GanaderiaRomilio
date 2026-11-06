@@ -7,6 +7,7 @@ require('../models/Organizacion');
 const Usuario = require('../models/Usuario');
 const { resolverFincaActiva } = require('../services/accesoFinca-service');
 const { obtenerPoliticaFincasOperativas } = require('../services/plan-service');
+const { resolverSuscripcion } = require('../services/suscripcion-estado-service');
 
 const base64UrlDecode = (valor) => {
     const base64 = valor.replace(/-/g, '+').replace(/_/g, '/');
@@ -137,7 +138,7 @@ const auth = async (req, res, next) => {
 
         const membresia = await Membresia.findOne(filtroMembresia)
             .sort({ esPrincipal: -1, createdAt: 1 })
-            .populate('organizacionId', 'nombre slug estado zonaHoraria fincaPrincipal plan');
+            .populate('organizacionId', 'nombre slug estado zonaHoraria fincaPrincipal plan modoFacturacion estadoSuscripcion fechaProximoVencimiento fechaFinPeriodoActual diasGracia');
 
         if (!membresia) {
             return res.status(403).json({
@@ -179,12 +180,17 @@ const auth = async (req, res, next) => {
         req.fincaId = finca._id.toString();
         req.fincaPrincipalId = organizacion.fincaPrincipal?.toString() || null;
         req.planSuscripcion = organizacion.plan || {};
-        req.planVigente = ['Activo', 'Prueba'].includes(organizacion.plan?.estado || 'Activo');
+        req.planVigente = resolverSuscripcion(organizacion).permiteOperar;
 
         const politicaFincas = await obtenerPoliticaFincasOperativas(req.organizacionId);
         const fincaSoloLectura = politicaFincas.soloLectura.some((item) => String(item._id) === req.fincaId);
         req.fincaSoloLecturaPlan = fincaSoloLectura;
         const esMutacion = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+        const ruta = req.originalUrl?.split('?')[0];
+        const permiteGestionarAcceso = ['/api/usuarios/perfil', '/api/usuarios/cambiar-organizacion-activa', '/api/facturacion/checkout', '/api/facturacion/portal'].includes(ruta);
+        if (!req.planVigente && esMutacion && !permiteGestionarAcceso) {
+            return res.status(403).json({ code: 'PLAN_SUBSCRIPTION_INACTIVE', mensaje: 'La suscripción está vencida o suspendida. Solicita la renovación desde Mi plan.' });
+        }
         const cambiaSeleccionOperativa = req.originalUrl?.split('?')[0] === '/api/plan/fincas-operativas';
         if (fincaSoloLectura && esMutacion && !cambiaSeleccionOperativa) {
             return res.status(403).json({

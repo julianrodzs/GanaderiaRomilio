@@ -1,4 +1,6 @@
 const Organizacion = require('../models/Organizacion');
+const { resolverSuscripcion } = require('../services/suscripcion-estado-service');
+const { listarPagos } = require('../services/suscripcionManual-service');
 const {
     catalogoFacturacion,
     crearSesionCheckout,
@@ -10,6 +12,8 @@ const obtenerEstadoFacturacion = async (req, res) => {
     try {
         const organizacion = await Organizacion.findById(req.organizacionId).lean();
         res.json({
+            organizacion: { id: organizacion._id, nombre: organizacion.nombre },
+            suscripcion: resolverSuscripcion(organizacion),
             plan: {
                 codigo: organizacion.plan?.codigo,
                 estado: organizacion.plan?.estado,
@@ -24,6 +28,11 @@ const obtenerEstadoFacturacion = async (req, res) => {
     } catch (error) {
         res.status(500).json({ mensaje: 'No se pudo consultar la facturación.', error: error.message });
     }
+};
+
+const misPagos = async (req, res) => {
+    try { res.json(await listarPagos(req.organizacionId, req.query)); }
+    catch (error) { res.status(error.status || 500).json({ mensaje: error.message }); }
 };
 
 const iniciarCheckout = async (req, res) => {
@@ -63,4 +72,4 @@ const webhookStripe = async (req, res) => {
     }
 };
 
-module.exports = { abrirPortal, iniciarCheckout, obtenerEstadoFacturacion, webhookStripe };
+module.exports = { abrirPortal, iniciarCheckout, obtenerEstadoFacturacion, webhookStripe, misPagos };

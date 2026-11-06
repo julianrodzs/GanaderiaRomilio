@@ -3,6 +3,7 @@ const { medirCron } = require('./metricasCron-service');
 const { procesarCategoriasTodasOrganizaciones } = require('./categoriasProgramadas-service');
 const { procesarAlertasTodasOrganizaciones } = require('./alertasCorreo-service');
 const { procesarResumenesTodasOrganizaciones } = require('./resumenEmail-service');
+const { procesarSuscripcionesManuales } = require('./suscripcionesProgramadas-service');
 
 const CLAVE_ALERTAS = 'alertas-operativas';
 const CLAVE_RESUMENES = 'resumenes-email-premium';
@@ -56,7 +57,7 @@ const ejecutarConBloqueo = async (clave, origen, ejecutar) => {
         try { await lease.comprobar(); } catch (error) { fallo = fallo || error; }
         if (resultado) {
             resultado.metricas = medicion.terminar();
-            for (const fase of [resultado.categorias, resultado.alertas, resultado.resumenes]) {
+            for (const fase of [resultado.suscripciones, resultado.categorias, resultado.alertas, resultado.resumenes]) {
                 for (const campo of ['rss', 'heapUsed', 'heapTotal']) resultado.metricas.memoriaMb.pico[campo] = Math.max(resultado.metricas.memoriaMb.pico[campo], fase?.memoriaMb?.pico[campo] || 0);
             }
             if (fallo) resultado.status = 'Error';
@@ -78,6 +79,7 @@ const ejecutarResumenesEmailProgramados = ({ origen = 'manual', modoEjecucion = 
 
 const ejecutarAlertasProgramadas = ({ origen = 'manual', modoEjecucion = 'cron_diario', incluirResumenes = process.env.CRON_INCLUDE_SUMMARIES !== 'false' } = {}) => ejecutarConBloqueo(CLAVE_ALERTAS, origen, async (opciones) => {
     // Cada fase termina antes de comenzar la siguiente; sus errores no abortan las restantes.
+    const suscripciones = await ejecutarFase(procesarSuscripcionesManuales, opciones, (filas) => ({ organizacionesProcesadas: filas.filter((r) => r.organizacionId).length, enviadas: total(filas, 'enviadas') }));
     const categorias = await ejecutarFase(procesarCategoriasTodasOrganizaciones, opciones, resumenCategorias);
     const alertas = await ejecutarFase(procesarAlertasTodasOrganizaciones, opciones, resumenAlertas);
     const resumenes = incluirResumenes ? await ejecutarFase(async () => {
@@ -93,12 +95,16 @@ const ejecutarAlertasProgramadas = ({ origen = 'manual', modoEjecucion = 'cron_d
         const clave = String(r.organizacionId);
         porOrganizacion.set(clave, { ...(porOrganizacion.get(clave) || { organizacionId: r.organizacionId }), resumenesEmail: r });
     }
+    for (const r of suscripciones.resultados.filter((r) => r.organizacionId)) {
+        const clave = String(r.organizacionId);
+        porOrganizacion.set(clave, { ...(porOrganizacion.get(clave) || { organizacionId: r.organizacionId }), suscripcion: r });
+    }
     const resultados = [...porOrganizacion.values()];
-    const fases = [categorias, alertas, resumenes];
-    return { ejecutado: true, status: fases.some((f) => f.status === 'Error') ? 'Error' : 'Completado', categorias, alertas, resumenes,
+    const fases = [suscripciones, categorias, alertas, resumenes];
+    return { ejecutado: true, status: fases.some((f) => f.status === 'Error') ? 'Error' : 'Completado', suscripciones, categorias, alertas, resumenes,
         organizacionesProcesadas: resultados.length,
-        organizacionesConError: resultados.filter((r) => erroresResultado(r).length || r.categoriasAnimales?.errores?.length || erroresResultado(r.resumenesEmail || {}).length).length,
-        notificacionesCreadas: alertas.notificacionesCreadas, correosEnviados: alertas.enviadas + Number(resumenes.enviadas || 0),
+        organizacionesConError: resultados.filter((r) => erroresResultado(r).length || r.categoriasAnimales?.errores?.length || erroresResultado(r.resumenesEmail || {}).length || erroresResultado(r.suscripcion || {}).length).length,
+        notificacionesCreadas: alertas.notificacionesCreadas, correosEnviados: alertas.enviadas + Number(resumenes.enviadas || 0) + suscripciones.enviadas,
         categoriasAnimalesActualizadas: categorias.actualizados, resultados };
 });
 

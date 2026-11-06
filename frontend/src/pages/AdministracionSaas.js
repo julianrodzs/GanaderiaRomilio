@@ -4,6 +4,9 @@ import {
   crearOrganizacionSaas,
   obtenerOrganizacionesSaas
 } from '../services/api';
+import { obtenerCarteraSaas } from '../services/api';
+import { CamposPagoSuscripcion, EstadoSuscripcion, GestionSuscripcionSaas, pagoInicialVacio } from '../Components/SuscripcionesSaas';
+import { fechaSuscripcion, montoSuscripcion } from '../utils/suscripciones.mjs';
 import { ContenidoPaginado } from '../Components/PaginacionTabla';
 import { etiquetaObjetivoProductivo, OBJETIVOS_LINEA_PRODUCTIVA } from '../constants/objetivosProductivos';
 
@@ -24,6 +27,7 @@ const crearEstadoInicial = () => ({
     estado: 'Prueba',
     referenciaExterna: ''
   },
+  suscripcion: { diasPrueba: 15, diasGracia: 5, notasFacturacion: '' },
   finca: {
     nombre: '',
     codigo: 'PRINCIPAL',
@@ -62,12 +66,15 @@ const AdministracionSaas = ({ onCerrar }) => {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [resultado, setResultado] = useState(null);
+  const [cartera, setCartera] = useState(null), [filtroEstado, setFiltroEstado] = useState('Todas'), [filtroPlan, setFiltroPlan] = useState('Todos');
+  const [modal, setModal] = useState(null), [registrarInicial, setRegistrarInicial] = useState(false), [pagoAlta, setPagoAlta] = useState(pagoInicialVacio);
 
   const cargar = async () => {
     try {
       setCargando(true);
       setError('');
-      setOrganizaciones(await obtenerOrganizacionesSaas());
+      const [clientes, resumen] = await Promise.all([obtenerOrganizacionesSaas(), obtenerCarteraSaas()]);
+      setOrganizaciones(clientes); setCartera(resumen);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -160,10 +167,12 @@ const AdministracionSaas = ({ onCerrar }) => {
       setGuardando(true);
       setError('');
       setResultado(null);
-      const respuesta = await crearOrganizacionSaas(formulario);
+      const respuesta = await crearOrganizacionSaas({ ...formulario,
+        pagoInicial: registrarInicial && formulario.plan.estado === 'Activo' ? { ...pagoAlta, monto: Number(pagoAlta.monto), fechaFinPersonalizada: pagoAlta.fechaFinPersonalizada || undefined } : null });
       setResultado(respuesta);
       setFormulario(crearEstadoInicial());
       setMostrarFormulario(false);
+      setRegistrarInicial(false); setPagoAlta(pagoInicialVacio());
       await cargar();
     } catch (err) {
       setError(err.message);
@@ -171,6 +180,16 @@ const AdministracionSaas = ({ onCerrar }) => {
       setGuardando(false);
     }
   };
+
+  const filtradas = organizaciones.filter((o) => {
+    if (filtroPlan !== 'Todos' && o.plan?.codigo !== filtroPlan) return false;
+    const s = o.suscripcion || {};
+    if (filtroEstado === 'Por vencer') return s.diasParaVencer !== null && s.diasParaVencer >= 0 && s.diasParaVencer <= 7 && s.permiteOperar;
+    if (filtroEstado === 'Vencidas') return ['EN_GRACIA', 'VENCIDA'].includes(s.estadoSuscripcion);
+    if (filtroEstado === 'En prueba') return s.estadoSuscripcion === 'PRUEBA';
+    if (filtroEstado === 'Activas') return ['ACTIVA', 'POR_VENCER'].includes(s.estadoSuscripcion) && o.estado === 'Activa';
+    return true;
+  });
 
   const alternarEstado = async (organizacion) => {
     const estado = organizacion.estado === 'Activa' ? 'Suspendida' : 'Activa';
@@ -202,9 +221,12 @@ const AdministracionSaas = ({ onCerrar }) => {
       </div>
 
       <div className="saas-resumen" aria-label="Resumen de clientes">
-        <article><span>Clientes</span><strong>{estadisticas.clientes}</strong></article>
-        <article><span>Organizaciones activas</span><strong>{estadisticas.activos}</strong></article>
-        <article><span>En prueba</span><strong>{estadisticas.prueba}</strong></article>
+        <article><span>Activas al día</span><strong>{cartera?.activas ?? estadisticas.activos}</strong></article>
+        <article><span>En prueba</span><strong>{cartera?.prueba ?? estadisticas.prueba}</strong></article>
+        <article><span>Por vencer · ≤ 7 días</span><strong>{cartera?.porVencer ?? 0}</strong></article>
+        <article><span>En gracia / vencidas</span><strong>{cartera?.vencidas ?? 0}</strong></article>
+        <article><span>Recaudado del mes · CRC</span><strong>{montoSuscripcion(cartera?.ingresos?.CRC || 0)}</strong></article>
+        <article><span>Recaudado del mes · USD</span><strong>{montoSuscripcion(cartera?.ingresos?.USD || 0, 'USD')}</strong></article>
       </div>
 
       {error && <div className="alerta-formulario">{error}</div>}
@@ -245,7 +267,11 @@ const AdministracionSaas = ({ onCerrar }) => {
                 <label>Especie<select value={formulario.plan.especiePlan} onChange={(e) => cambiarEspecieEsencial(e.target.value)}><option value="Bovino">Bovino</option><option value="Porcino">Porcino</option></select></label>
               )}
               <label>Referencia comercial<input value={formulario.plan.referenciaExterna} onChange={(e) => actualizarSeccion('plan', 'referenciaExterna', e.target.value)} placeholder="Contrato o suscripción" /></label>
+              {formulario.plan.estado === 'Prueba' && <label>Días de prueba<input type="number" min="1" max="365" value={formulario.suscripcion.diasPrueba} onChange={(e) => actualizarSeccion('suscripcion', 'diasPrueba', Number(e.target.value))} required /></label>}
+              <label>Días de gracia<input type="number" min="0" max="60" value={formulario.suscripcion.diasGracia} onChange={(e) => actualizarSeccion('suscripcion', 'diasGracia', Number(e.target.value))} required /></label>
+              <label className="saas-campo-amplio">Notas de facturación<input value={formulario.suscripcion.notasFacturacion} onChange={(e) => actualizarSeccion('suscripcion', 'notasFacturacion', e.target.value)} maxLength={2000} /></label>
             </div>
+            {formulario.plan.estado === 'Activo' && <><label className="checkbox-line"><input type="checkbox" checked={registrarInicial} onChange={(e) => setRegistrarInicial(e.target.checked)} />Registrar pago inicial</label>{registrarInicial && <CamposPagoSuscripcion datos={pagoAlta} onChange={setPagoAlta} />}</>}
           </fieldset>
 
           <fieldset>
@@ -293,13 +319,14 @@ const AdministracionSaas = ({ onCerrar }) => {
         <div><p className="eyebrow">Suscripciones</p><h3>Organizaciones</h3></div>
         <button className="boton-secundario compacto" type="button" onClick={cargar} disabled={cargando}>Actualizar</button>
       </div>
+      <div className="suscripcion-filtros"><label>Estado<select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>{['Todas', 'Activas', 'En prueba', 'Por vencer', 'Vencidas'].map((v) => <option key={v}>{v}</option>)}</select></label><label>Plan<select value={filtroPlan} onChange={(e) => setFiltroPlan(e.target.value)}><option>Todos</option>{PLANES.map((v) => <option key={v} value={v}>{etiquetaPlan(v)}</option>)}</select></label></div>
 
       {cargando ? <div className="estado-importacion">Cargando clientes...</div> : (
-        <ContenidoPaginado datos={organizaciones} clavePaginacion="saas-organizaciones">
+        <ContenidoPaginado datos={filtradas} clavePaginacion={`saas-organizaciones:${filtroEstado}:${filtroPlan}`}>
           {(organizacionesPagina) => (
             <div className="tabla-scroll tabla-dinamica">
               <table className="saas-tabla">
-                <thead><tr><th>Organización</th><th>Plan</th><th>Finca principal</th><th>Usuarios</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <thead><tr><th>Organización</th><th>Plan</th><th>Finca principal</th><th>Usuarios</th><th>Vigencia</th><th>Acciones</th></tr></thead>
                 <tbody>
                   {organizacionesPagina.map((item) => (
                     <tr key={item._id}>
@@ -307,17 +334,18 @@ const AdministracionSaas = ({ onCerrar }) => {
                       <td>{etiquetaPlan(item.plan?.codigo)}<small>{item.plan?.estado || '--'}</small></td>
                       <td>{item.fincaPrincipal?.nombre || '--'}<small>{item.fincasActivas || 0} finca(s)</small></td>
                       <td>{item.usuariosActivos || 0}</td>
-                      <td><span className={`saas-estado saas-estado-${item.estado?.toLowerCase()}`}>{item.estado}</span></td>
-                      <td><div className="acciones-tabla"><button type="button" title={item.estado === 'Activa' ? 'Suspender organización' : 'Reactivar organización'} onClick={() => alternarEstado(item)}>{item.estado === 'Activa' ? '⏸' : '▶'}</button></div></td>
+                      <td><EstadoSuscripcion suscripcion={item.suscripcion} /><small>{fechaSuscripcion(item.suscripcion?.fechaProximoVencimiento)}</small><small>{item.suscripcion?.diasParaVencer === null ? 'Requiere revisión' : item.suscripcion?.diasParaVencer < 0 ? `${Math.abs(item.suscripcion.diasParaVencer)} días de atraso` : `${item.suscripcion?.diasParaVencer} días restantes`}</small><small>{item.suscripcion?.modoFacturacion} · {item.estado}</small></td>
+                      <td><div className="suscripcion-acciones">{item.suscripcion?.modoFacturacion === 'MANUAL' && <><button type="button" className="boton-secundario compacto" onClick={() => setModal({ organizacion: item, tipo: 'pago' })}>+ Registrar pago</button><button type="button" className="boton-secundario compacto" onClick={() => setModal({ organizacion: item, tipo: 'ajuste' })}>Plan / vigencia</button></>}<button type="button" className="boton-link" onClick={() => setModal({ organizacion: item, tipo: 'historial' })}>Historial de pagos</button><button type="button" className="boton-link" onClick={() => alternarEstado(item)}>{item.estado === 'Activa' ? 'Suspender organización' : 'Reactivar organización'}</button></div></td>
                     </tr>
                   ))}
-                  {organizaciones.length === 0 && <tr><td colSpan="6">Todavía no hay organizaciones.</td></tr>}
+                  {filtradas.length === 0 && <tr><td colSpan="6">No hay organizaciones para estos filtros.</td></tr>}
                 </tbody>
               </table>
             </div>
           )}
         </ContenidoPaginado>
       )}
+      {modal && <GestionSuscripcionSaas {...modal} onCerrar={() => setModal(null)} alActualizar={cargar} />}
     </section>
   );
 };

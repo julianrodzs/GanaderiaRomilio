@@ -10,6 +10,7 @@ const ReservaCuotaPlan = require('../models/ReservaCuotaPlan');
 const { randomUUID } = require('crypto');
 const { obtenerOrganizacionActual } = require('../context/organizacion-context');
 const { PLAN_MINIMO_POR_FEATURE, obtenerPlanConfig } = require('../config/planes');
+const { resolverSuscripcion } = require('./suscripcion-estado-service');
 
 const ESTADOS_PLAN_VIGENTES = Object.freeze(['Activo', 'Prueba']);
 
@@ -116,6 +117,16 @@ const reservarCuotaPlan = async ({ organizacionId, recurso, cantidad = 1, actual
         }, 409);
     }
 
+    try {
+        const reciente = asegurarPlanVigente(await obtenerPlanActual(id));
+        if (permiso?.codigo && (permiso.codigo !== reciente.codigo || (permiso.especiePlan || null) !== (reciente.especiePlan || null))) {
+            throw crearErrorPlan('PLAN_CHANGED', 'El plan cambió durante la operación. Actualiza e inténtalo de nuevo.', {}, 409);
+        }
+    } catch (error) {
+        await liberarReservaCuotaPlan({ token, recurso, organizacionId: id });
+        throw error;
+    }
+
     const consumoActual = await obtenerConsumoActualReserva({ recurso, organizacionId: id, permiso, actual });
     if (Number(consumoActual || 0) + solicitada > Number(limite)) {
         await liberarReservaCuotaPlan({ token, recurso, organizacionId: id });
@@ -152,13 +163,15 @@ const ejecutarConReservaCuota = async ({ permiso, recurso, organizacionId, canti
 
 const obtenerPlanActual = async (organizacionId) => {
     const id = resolverOrganizacionId(organizacionId);
-    const organizacion = await Organizacion.findById(id).select('nombre slug estado plan fincaPrincipal').lean();
+    const organizacion = await Organizacion.findById(id).select('nombre slug estado plan fincaPrincipal zonaHoraria modoFacturacion estadoSuscripcion fechaInicioPeriodoActual fechaFinPeriodoActual fechaProximoVencimiento diasGracia').lean();
     if (!organizacion) throw crearErrorPlan('PLAN_ORGANIZATION_NOT_FOUND', 'Organización no encontrada.', {}, 404);
 
     const codigo = organizacion.plan?.codigo || 'ESENCIAL';
     const configuracion = obtenerPlanConfig(codigo);
     const estado = organizacion.plan?.estado || 'Activo';
     const vigencia = evaluarVigenciaPlan({ estadoOrganizacion: organizacion.estado, estadoPlan: estado });
+    const suscripcion = resolverSuscripcion(organizacion);
+    vigencia.vigente = vigencia.vigente && suscripcion.permiteOperar;
     return {
         organizacion,
         codigo: configuracion.codigo,
@@ -166,6 +179,7 @@ const obtenerPlanActual = async (organizacionId) => {
         estado,
         vigente: vigencia.vigente,
         vigencia,
+        suscripcion,
         configuracion
     };
 };
@@ -278,25 +292,28 @@ const asegurarPuedeUsarEspecie = async (especie, organizacionId) => {
     return resultado;
 };
 
-const contarCriasColectivasVivas = async () => {
-    const camadas = await Camada.find({ estado: { $ne: 'Cancelada' } })
+const contarCriasColectivasVivas = async ({ session } = {}) => {
+    const consultaCamadas = Camada.find({ estado: { $ne: 'Cancelada' } })
         .setOptions({ omitirAislamientoFinca: true })
         .select('_id nacidosVivos muertosPreDestete')
         .lean();
+    if (session) consultaCamadas.session(session);
+    const camadas = await consultaCamadas;
     if (!camadas.length) return 0;
     const ids = camadas.map((camada) => camada._id);
-    const [individualizadas, vendidas] = await Promise.all([
-        Animal.aggregate([
+    const individualizadasConsulta = Animal.aggregate([
             { $match: { camadaOrigen: { $in: ids } } },
             { $group: { _id: '$camadaOrigen', cantidad: { $sum: 1 } } }
-        ]).option({ omitirAislamientoFinca: true }),
-        VentaAnimal.aggregate([
+        ]).option({ omitirAislamientoFinca: true });
+    const vendidasConsulta = VentaAnimal.aggregate([
             { $match: { estado: { $ne: 'Anulada' }, 'camadas.camada': { $in: ids } } },
             { $unwind: '$camadas' },
             { $match: { 'camadas.camada': { $in: ids } } },
             { $group: { _id: '$camadas.camada', cantidad: { $sum: '$camadas.cantidad' } } }
-        ]).option({ omitirAislamientoFinca: true })
-    ]);
+        ]).option({ omitirAislamientoFinca: true });
+    if (session) { individualizadasConsulta.session(session); vendidasConsulta.session(session); }
+    const individualizadas = await individualizadasConsulta;
+    const vendidas = await vendidasConsulta;
     const porIndividualizadas = new Map(individualizadas.map((item) => [String(item._id), Number(item.cantidad || 0)]));
     const porVendidas = new Map(vendidas.map((item) => [String(item._id), Number(item.cantidad || 0)]));
     return camadas.reduce((total, camada) => total + Math.max(

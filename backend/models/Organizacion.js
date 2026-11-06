@@ -17,6 +17,17 @@ const organizacionSchema = new Schema(
             logo: { type: Schema.Types.ObjectId, ref: 'ArchivoMultimedia', default: null }
         },
         fincaPrincipal: { type: Schema.Types.ObjectId, ref: 'Finca', default: null },
+        modoFacturacion: { type: String, enum: ['MANUAL', 'STRIPE'], default: 'MANUAL' },
+        estadoSuscripcion: { type: String, enum: ['PRUEBA', 'ACTIVA', 'POR_VENCER', 'EN_GRACIA', 'VENCIDA', 'SUSPENDIDA', 'CANCELADA'] },
+        fechaInicioPeriodoActual: Date,
+        fechaFinPeriodoActual: Date,
+        fechaProximoVencimiento: Date,
+        diasGracia: { type: Number, min: 0, max: 60, default: 5 },
+        notasFacturacion: { type: String, trim: true, maxlength: 2000 },
+        revisionSuscripcion: { type: Number, default: 0 },
+        ultimoPagoSuscripcion: { type: Schema.Types.ObjectId, ref: 'PagoSuscripcion', default: null },
+        avisoVencimientoCiclo: { type: String, default: '' },
+        avisoCarteraCiclo: { type: String, default: '' },
         plan: {
             codigo: {
                 type: String,
@@ -47,5 +58,25 @@ const organizacionSchema = new Schema(
     },
     { timestamps: true }
 );
+
+organizacionSchema.pre('validate', function prepararVigenciaNueva(next) {
+    const { modoFacturacion, establecerPeriodo, sumarMeses, DIA } = require('../services/suscripcion-estado-service');
+    if (this.isNew && modoFacturacion(this) === 'MANUAL' && !this.fechaProximoVencimiento) {
+        const estadoAnterior = this.plan.estado;
+        const inicio = this.fechaInicioPeriodoActual || new Date();
+        const fin = this.fechaFinPeriodoActual || (this.plan.estado === 'Prueba' ? new Date(+inicio + 15 * DIA) : sumarMeses(inicio, 1, this.zonaHoraria));
+        establecerPeriodo(this, inicio, fin, this.plan.estado === 'Prueba' ? 'Prueba' : 'Activo');
+        if (['Suspendido', 'Cancelado'].includes(estadoAnterior)) {
+            this.plan.estado = estadoAnterior;
+            this.estadoSuscripcion = estadoAnterior === 'Suspendido' ? 'SUSPENDIDA' : 'CANCELADA';
+        }
+    }
+    if (this.fechaProximoVencimiento && this.fechaInicioPeriodoActual && this.fechaProximoVencimiento <= this.fechaInicioPeriodoActual) {
+        this.invalidate('fechaProximoVencimiento', 'El vencimiento debe ser posterior al inicio del período.');
+    }
+    if (this.isModified('fechaProximoVencimiento')) this.fechaFinPeriodoActual = this.fechaProximoVencimiento;
+    next();
+});
+organizacionSchema.index({ modoFacturacion: 1, fechaProximoVencimiento: 1 });
 
 module.exports = model('Organizacion', organizacionSchema);

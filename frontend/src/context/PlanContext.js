@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { obtenerPlanActual } from '../services/api';
+import '../Components/SuscripcionesSaas.css';
 
 const PlanContext = createContext(null);
 
@@ -67,7 +68,10 @@ export const PlanProvider = ({ children }) => {
     };
   }, [estado, recargarPlan]);
 
-  return <PlanContext.Provider value={valor}>{children}</PlanContext.Provider>;
+  const suscripcion = estado.plan?.suscripcion;
+  const aviso = suscripcion?.estadoSuscripcion === 'EN_GRACIA' ? 'Renovación pendiente: la suscripción está en período de gracia. Coordina el pago desde Mi plan.'
+    : suscripcion?.estadoSuscripcion === 'VENCIDA' ? 'La suscripción venció. Los datos se conservan; solicita la renovación desde Mi plan para volver a registrar cambios.' : '';
+  return <PlanContext.Provider value={valor}>{aviso && <div role="status" className="suscripcion-banner">{aviso}</div>}{children}</PlanContext.Provider>;
 };
 
 export const usePlan = () => useContext(PlanContext) || {

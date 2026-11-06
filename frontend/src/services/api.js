@@ -418,6 +418,12 @@ export const obtenerAuditorias = (filtros = {}) => {
 export const obtenerAuditoria = (id) => request(`/auditoria/${id}`);
 
 export const obtenerOrganizacionesSaas = () => request('/admin/organizaciones');
+export const obtenerCarteraSaas = () => request('/admin/organizaciones/cartera/resumen');
+export const registrarPagoSaas = (id, datos) => request(`/admin/organizaciones/${id}/pagos`, { method: 'POST', body: JSON.stringify(datos) });
+export const actualizarSuscripcionSaas = (id, datos) => request(`/admin/organizaciones/${id}/suscripcion`, { method: 'PATCH', body: JSON.stringify(datos) });
+export const anularPagoSaas = (id, pagoId, motivo) => request(`/admin/organizaciones/${id}/pagos/${pagoId}/anular`, { method: 'POST', body: JSON.stringify({ motivo }) });
+export const obtenerPagosSaas = (id, pagina = 1) => request(`/admin/organizaciones/${id}/pagos?pagina=${pagina}&limite=10`);
+export const obtenerMisPagos = (pagina = 1) => request(`/facturacion/pagos?pagina=${pagina}&limite=10`);
 
 export const crearOrganizacionSaas = (datos) => request('/admin/organizaciones', {
   method: 'POST',

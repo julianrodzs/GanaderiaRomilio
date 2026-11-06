@@ -2,6 +2,7 @@ const Stripe = require('stripe');
 const EventoFacturacion = require('../models/EventoFacturacion');
 const Organizacion = require('../models/Organizacion');
 const { planesConfig } = require('../config/planes');
+const { modoFacturacion } = require('./suscripcion-estado-service');
 
 const codigosPlan = Object.keys(planesConfig);
 const obtenerStripe = () => {
@@ -37,6 +38,7 @@ const validarPrecioStripe = async (stripe, codigoPlan, precioId) => {
 };
 
 const crearSesionCheckout = async ({ organizacion, usuario, codigoPlan }) => {
+    if (modoFacturacion(organizacion) !== 'STRIPE') throw Object.assign(new Error('Esta cuenta utiliza renovación asistida. Contacta al soporte comercial.'), { status: 409, code: 'BILLING_MANUAL_ACCOUNT' });
     if (!codigosPlan.includes(codigoPlan)) {
         const error = new Error('Plan solicitado no válido.'); error.status = 422; throw error;
     }
@@ -67,6 +69,7 @@ const crearSesionCheckout = async ({ organizacion, usuario, codigoPlan }) => {
 };
 
 const crearSesionPortal = async (organizacion) => {
+    if (modoFacturacion(organizacion) !== 'STRIPE') throw Object.assign(new Error('Esta cuenta utiliza renovación asistida.'), { status: 409 });
     if (!organizacion.plan?.clientePagoId) {
         const error = new Error('La organización todavía no tiene una suscripción administrable.'); error.status = 409; throw error;
     }
@@ -132,6 +135,10 @@ const aplicarEvento = async (evento) => {
     } else {
         return { ignorado: true, organizacionId: organizacion._id, motivo: 'Evento sin efecto configurado.' };
     }
+    organizacion.modoFacturacion = 'STRIPE';
+    organizacion.estadoSuscripcion = ({ Activo: 'ACTIVA', Prueba: 'PRUEBA', Suspendido: 'SUSPENDIDA', Cancelado: 'CANCELADA' })[organizacion.plan.estado];
+    organizacion.fechaProximoVencimiento = organizacion.plan.fechaRenovacion || organizacion.plan.fechaExpiracion;
+    organizacion.fechaFinPeriodoActual = organizacion.fechaProximoVencimiento;
     await organizacion.save();
     return { ignorado: false, organizacionId: organizacion._id, estado: organizacion.plan.estado, codigo: organizacion.plan.codigo };
 };

@@ -20,6 +20,7 @@ const presentarPlan = (estado) => ({
         fechaRenovacion: estado.actual.organizacion?.plan?.fechaRenovacion || null,
         fechaExpiracion: estado.actual.organizacion?.plan?.fechaExpiracion || null
     },
+    suscripcion: estado.actual.suscripcion,
     limites: estado.limites,
     uso: estado.uso,
     sobreLimite: estado.sobreLimite,

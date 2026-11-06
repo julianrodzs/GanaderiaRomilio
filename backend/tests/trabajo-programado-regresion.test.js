@@ -20,11 +20,15 @@ for (const servicio of ['alertasCorreo-service', 'resumenEmail-service', 'trabaj
     });
 }
 
-const prepararTrabajo = (t, { alertas = [], categorias = [], resumenes = [], bloqueado = false, fallo, falloCategorias } = {}) => {
+const prepararTrabajo = (t, { alertas = [], categorias = [], resumenes = [], bloqueado = false, fallo, falloCategorias, falloSuscripciones } = {}) => {
     const TrabajoProgramado = require('../models/TrabajoProgramado');
     const alertasServicio = require('../services/alertasCorreo-service');
     const resumenesServicio = require('../services/resumenEmail-service');
     const categoriasServicio = require('../services/categoriasProgramadas-service');
+    t.mock.method(require('../services/suscripcionesProgramadas-service'), 'procesarSuscripcionesManuales', async () => {
+        if (falloSuscripciones) throw falloSuscripciones;
+        return [];
+    });
     const escrituras = [];
     t.mock.method(TrabajoProgramado, 'findOneAndUpdate', async (filtro, cambio) => {
         escrituras.push({ filtro, cambio });
@@ -149,6 +153,15 @@ test('duracion y memoria se registran independientemente por fase', async (t) =>
         assert.ok(fase.duracionMs >= 0);
         for (const campo of ['rss', 'heapUsed', 'heapTotal']) assert.ok(fase.memoriaMb.pico[campo] >= fase.memoriaMb.inicio[campo]);
     }
+});
+
+test('un fallo de suscripciones no impide categorias, alertas ni resumenes Premium', async (t) => {
+    const { trabajos } = prepararTrabajo(t, { falloSuscripciones: new Error('Fallo de cartera') });
+    await assert.rejects(trabajos.ejecutarAlertasProgramadas(), (e) => {
+        assert.equal(e.resultado.suscripciones.status, 'Error');
+        for (const fase of ['categorias', 'alertas', 'resumenes']) assert.equal(e.resultado[fase].status, 'Completado');
+        return true;
+    });
 });
 
 test('el fallo exclusivo del resumen cuenta la organizacion afectada y conserva categorias/alertas', async (t) => {

@@ -1,6 +1,8 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const mongoose = require('mongoose');
+const { ejecutarEnTransaccion } = require('./mongo-transaccion-service');
+const { establecerPeriodo, sumarMeses, DIA } = require('./suscripcion-estado-service');
+const { registrarPagoEnTransaccion, auditar, entero, dto } = require('./suscripcionManual-service');
 const {
     CATEGORIAS_FINANCIERAS,
     DESTINOS_USO_FINANCIERO
@@ -62,6 +64,7 @@ const validarDatosAprovisionamiento = (entrada = {}) => {
     const codigoPlan = normalizarTexto(entrada.plan?.codigo || 'ESENCIAL').toUpperCase();
     const especiePlan = entrada.plan?.especiePlan || null;
     const estadoPlan = entrada.plan?.estado || 'Prueba';
+    const suscripcion = dto(entrada.suscripcion || {}, ['diasPrueba', 'diasGracia', 'notasFacturacion']);
     const nombreOrganizacion = normalizarTexto(organizacionEntrada.nombre);
     const slug = normalizarSlug(organizacionEntrada.slug || nombreOrganizacion);
     const correo = normalizarCorreo(administradorEntrada.correo);
@@ -88,6 +91,12 @@ const validarDatosAprovisionamiento = (entrada = {}) => {
     }
 
     return {
+        suscripcion: {
+            diasPrueba: entero(suscripcion.diasPrueba, 15, 1, 365),
+            diasGracia: entero(suscripcion.diasGracia, 5, 0, 60),
+            notasFacturacion: String(suscripcion.notasFacturacion || '').trim().slice(0, 2000)
+        },
+        pagoInicial: entrada.pagoInicial || null,
         organizacion: {
             nombre: nombreOrganizacion,
             razonSocial: normalizarTexto(organizacionEntrada.razonSocial),
@@ -136,11 +145,9 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
     const datos = validarDatosAprovisionamiento(entrada);
     const tokenInvitacion = crearTokenRecuperacion();
     const tokenHash = crypto.createHash('sha256').update(tokenInvitacion).digest('hex');
-    const session = await mongoose.startSession();
     let resultado;
 
-    try {
-        await session.withTransaction(async () => {
+        await ejecutarEnTransaccion(async (session) => {
             const organizacionDuplicada = await Organizacion.exists({ slug: datos.organizacion.slug }).session(session);
             if (organizacionDuplicada) {
                 throw new ErrorAprovisionamiento('Ya existe una organización con ese identificador.', 409, 'ORGANIZATION_SLUG_EXISTS');
@@ -167,6 +174,9 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
 
             const [organizacion] = await Organizacion.create([{
                 ...datos.organizacion,
+                modoFacturacion: 'MANUAL',
+                diasGracia: datos.suscripcion.diasGracia,
+                notasFacturacion: datos.suscripcion.notasFacturacion,
                 estado: 'Activa',
                 plan: {
                     ...datos.plan,
@@ -177,6 +187,11 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
                     fechaAprovisionamiento: new Date()
                 }
             }], { session, ordered: true });
+
+            const inicio = new Date();
+            establecerPeriodo(organizacion, inicio, datos.plan.estado === 'Prueba'
+                ? new Date(+inicio + datos.suscripcion.diasPrueba * DIA) : sumarMeses(inicio, 1, organizacion.zonaHoraria), datos.plan.estado);
+            await organizacion.save({ session });
 
             const [finca] = await Finca.create([{
                 organizacionId: organizacion._id,
@@ -204,6 +219,16 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
             }], { session, ordered: true });
             await crearCatalogosIniciales(organizacion._id, session);
 
+            if (datos.pagoInicial) {
+                if (datos.plan.estado !== 'Activo') throw new ErrorAprovisionamiento('El pago inicial requiere un plan Activo.');
+                const { ejecutarConOrganizacion } = require('../context/organizacion-context');
+                await ejecutarConOrganizacion(organizacion._id, () => registrarPagoEnTransaccion(
+                    organizacion, datos.pagoInicial, creadoPor, session, inicio, { pagoInicial: true }
+                ));
+            }
+            await auditar(organizacion, creadoPor, 'Alta asistida con vigencia', null,
+                { plan: organizacion.plan.codigo, vencimiento: organizacion.fechaProximoVencimiento }, session);
+
             let invitacionFormal = null;
             if (!usuarioExistente) {
                 [invitacionFormal] = await Invitacion.create([{
@@ -226,9 +251,6 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
 
             resultado = { organizacion, finca, usuario, membresia, usuarioExistente, invitacionFormal };
         });
-    } finally {
-        await session.endSession();
-    }
 
     let invitacion = { enviado: false, modo: 'cuenta-existente' };
     if (!resultado.usuarioExistente) {

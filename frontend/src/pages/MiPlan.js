@@ -14,6 +14,7 @@ import {
 import { etiquetaObjetivoProductivo, OBJETIVOS_LINEA_PRODUCTIVA } from '../constants/objetivosProductivos';
 import FacturacionPlan from '../Components/FacturacionPlan';
 import ConfiguracionApariencia from '../Components/ConfiguracionApariencia';
+import { EstadoSuscripcion } from '../Components/SuscripcionesSaas';
 
 const especiesProductivas = ['Bovino', 'Porcino'];
 const objetivosProductivos = OBJETIVOS_LINEA_PRODUCTIVA;
@@ -214,7 +215,7 @@ const MiPlan = () => {
       <p className="eyebrow">Suscripción</p>
       <div className="mi-plan-header">
         <div><h1>Mi plan</h1><p>{plan.plan.nombre} · ${plan.plan.precioMensualUSD} USD al mes</p></div>
-        <span className={`estado-badge ${plan.plan.vigente ? 'activo' : 'estado-Aplicado'}`}>{plan.plan.estado}</span>
+        {plan.suscripcion ? <EstadoSuscripcion suscripcion={plan.suscripcion} /> : <span className={`estado-badge ${plan.plan.vigente ? 'activo' : 'estado-Aplicado'}`}>{plan.plan.estado}</span>}
       </div>
       <FacturacionPlan codigoActual={plan.plan.codigo} />
       <ConfiguracionApariencia />

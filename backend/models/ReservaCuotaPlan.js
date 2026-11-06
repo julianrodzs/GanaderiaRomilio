@@ -9,6 +9,7 @@ const reservaSchema = new Schema({
 
 const reservaCuotaPlanSchema = new Schema({
     recurso: { type: String, enum: ['animales', 'usuarios', 'fincas'], required: true },
+        revisionPlan: { type: Number, default: 0 },
     reservas: { type: [reservaSchema], default: [] }
 }, { timestamps: true });
 

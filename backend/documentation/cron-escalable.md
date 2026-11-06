@@ -2,6 +2,8 @@
 
 ## Alcance - 2026-11-05
 
+Ampliacion comercial: el mismo job ejecuta ahora `suscripciones` antes de categorias/alertas/resumenes, con aislamiento de errores y metricas. Mantiene el horario de las 06:00 CR. Ver `suscripciones-manuales.md` para pagos, gracia, recordatorios de vencimiento y EMAIL_ADMIN. No se agrega otro servicio cron.
+
 Se mantiene `npm run job:alertas` y `POST /api/cron/alertas`. Ejecutan categorias, alertas y resumenes Premium como fases secuenciales independientes. Un error de finca/organizacion no corta las siguientes; un fallo global de categorias tampoco impide intentar alertas y resumenes. Si queda cualquier error no recuperado, se completa el resto del trabajo y el CLI devuelve 1; HTTP devuelve 500. Se conserva el resultado parcial en `TrabajoProgramado.ultimoResultado` y en los logs del CLI.
 
 La perdida del bloqueo es una excepcion de seguridad: las fases se intentan, pero su comprobacion falla antes de iniciar nuevas escrituras o envios. No se continua trabajando sin propiedad del lock.
