@@ -266,9 +266,11 @@ async function main(){
   });
   await step('X5','Cron con organizaciones y fincas reales',async()=>{
    // Simula una categoría desactualizada por el paso del tiempo, solo en el animal sintético.
-   await require('../models/Animal').collection.updateOne({_id:new mongoose.Types.ObjectId(hembra),organizacionId:new mongoose.Types.ObjectId(org)},{$set:{categoria:'Ternera'}});
+   await require('../models/Animal').collection.updateOne({_id:new mongoose.Types.ObjectId(hembra),organizacionId:new mongoose.Types.ObjectId(org)},{$set:{categoria:'Ternera'},$unset:{fechaProximoCambioCategoria:1}});
    process.env.CRON_SECRET='cron-local-sintetico';const output=[];
-   for(const route of ['alertas','resumenes-email']){const r=await request('POST','/api/cron/'+route,{}, {headers:{Authorization:'Bearer '+process.env.CRON_SECRET}});assert.equal(r.status,200,JSON.stringify(r));output.push({route,resultado:r.data});}return output;
+   for(const route of ['alertas','resumenes-email']){const r=await request('POST','/api/cron/'+route,{}, {headers:{Authorization:'Bearer '+process.env.CRON_SECRET}});assert.equal(r.status,200,JSON.stringify(r));
+    if(route==='alertas'){assert.equal(r.data.categorias.status,'Completado');assert.equal(r.data.alertas.status,'Completado');assert.ok(r.data.categorias.actualizados>=1);assert.ok(r.data.categorias.memoriaMb.pico.rss>0);}
+    output.push({route,resultado:r.data});}return output;
   });
   await step('X6','Selector organizaciones, finca y revocación tokenVersion',async()=>{
    const originalToken=token;token=platformToken;

@@ -17,6 +17,13 @@ test('calcula la edad en meses sin adelantar el mes incompleto', () => {
     assert.equal(calcularEdadMeses('2024-09-28', referencia), 24);
 });
 
+test('la fecha del siguiente umbral respeta fin de mes, bisiestos y categorias finales oficiales', () => {
+    const { fechaProximoCambioCategoria } = require('../services/categoriaAnimal-service');
+    assert.equal(fechaProximoCambioCategoria({ sexo: 'Hembra', especie: 'Bovino', fechaNacimiento: '2024-02-29' }, new Date('2025-02-28')).toISOString(), '2025-03-01T00:00:00.000Z');
+    assert.equal(fechaProximoCambioCategoria({ sexo: 'Macho', especie: 'Porcino', fechaNacimiento: '2026-01-31' }, new Date('2026-04-30')).toISOString(), '2026-05-01T00:00:00.000Z');
+    assert.equal(fechaProximoCambioCategoria({ sexo: 'Hembra', especie: 'Porcino', fechaNacimiento: '2025-01-01' }, referencia), null);
+});
+
 test('clasifica bovinos por edad y sexo', () => {
     assert.equal(obtenerCategoriaBovinaPorEdad({ sexo: 'Hembra', fechaNacimiento: '2026-01-01' }, referencia), 'Ternera');
     assert.equal(obtenerCategoriaBovinaPorEdad({ sexo: 'Hembra', fechaNacimiento: '2025-01-01' }, referencia), 'Novilla');

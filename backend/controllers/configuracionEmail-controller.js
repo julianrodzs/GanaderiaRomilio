@@ -19,7 +19,8 @@ const presentar = (configuracion, usuarioId, rol) => {
     const datos = typeof base.toObject === 'function' ? base.toObject() : { ...base };
     return {
         ...datos,
-        modulos: normalizarModulosResumen(datos.modulos, rol)
+        modulos: normalizarModulosResumen(datos.modulos, rol),
+        modoEjecucion: (process.env.CRON_MODE || 'internal').toLowerCase() === 'internal' && process.env.CRON_RESUMEN_IGNORE_HOUR !== 'true' ? 'continuo' : 'cron_diario'
     };
 };
 
@@ -49,7 +50,8 @@ const actualizarConfiguracion = async (req, res) => {
         const modulos = normalizarModulosResumen({
             resumenGanadero: req.body.modulos?.resumenGanadero === true,
             finanzas: req.body.modulos?.finanzas === true,
-            tareasPendientes: req.body.modulos?.tareasPendientes === true
+            tareasPendientes: req.body.modulos?.tareasPendientes === true,
+            radarOperativo: req.body.modulos?.radarOperativo !== false
         }, req.usuario.rol);
         if (frecuencia !== 'Desactivado' && !Object.values(modulos).some(Boolean)) {
             return res.status(422).json({ mensaje: 'Selecciona al menos un módulo para el resumen.' });

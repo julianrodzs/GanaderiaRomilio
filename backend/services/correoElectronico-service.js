@@ -44,7 +44,7 @@ const obtenerDestinatariosAdministradores = async (organizacionId = obtenerOrgan
     return [];
 };
 
-const enviarCorreoResend = async ({ to, subject, html, text, from }) => {
+const enviarCorreoResend = async ({ to, subject, html, text, from, claveIdempotencia }) => {
     const destinatarios = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
 
     if (destinatarios.length === 0) {
@@ -80,7 +80,8 @@ const enviarCorreoResend = async ({ to, subject, html, text, from }) => {
         signal: AbortSignal.timeout(30000),
         headers: {
             Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            ...(claveIdempotencia ? { 'Idempotency-Key': claveIdempotencia } : {})
         },
         body: JSON.stringify(mensaje)
     });

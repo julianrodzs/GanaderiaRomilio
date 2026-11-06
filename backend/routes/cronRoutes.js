@@ -9,7 +9,8 @@ router.post('/alertas', autorizarCron, async (req, res) => {
         const resultado = await ejecutarAlertasProgramadas({ origen: 'cron-http' });
         res.status(resultado.omitido ? 202 : 200).json(resultado);
     } catch (error) {
-        res.status(500).json({ mensaje: 'No se pudo ejecutar el trabajo de alertas', error: error.message });
+        res.status(500).json({ mensaje: 'No se pudo ejecutar el trabajo de alertas', error: error.message,
+            ...(error.resultado ? { resultado: error.resultado } : {}) });
     }
 });
 
@@ -18,7 +19,8 @@ router.post('/resumenes-email', autorizarCron, async (req, res) => {
         const resultado = await ejecutarResumenesEmailProgramados({ origen: 'cron-http' });
         res.status(resultado.omitido ? 202 : 200).json(resultado);
     } catch (error) {
-        res.status(500).json({ mensaje: 'No se pudo ejecutar el trabajo de resúmenes.', error: error.message });
+        res.status(500).json({ mensaje: 'No se pudo ejecutar el trabajo de resúmenes.', error: error.message,
+            ...(error.resultado ? { resultado: error.resultado } : {}) });
     }
 });
 

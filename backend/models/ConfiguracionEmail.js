@@ -9,7 +9,8 @@ const configuracionEmailSchema = new Schema({
     modulos: {
         resumenGanadero: { type: Boolean, default: true },
         finanzas: { type: Boolean, default: true },
-        tareasPendientes: { type: Boolean, default: true }
+        tareasPendientes: { type: Boolean, default: true },
+        radarOperativo: { type: Boolean, default: true }
     },
     ultimoEnvio: { type: Date, default: null },
     ultimoPeriodo: { type: String, default: '', trim: true }

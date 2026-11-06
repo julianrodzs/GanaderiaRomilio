@@ -49,6 +49,7 @@
     "migrate:auditoria-redactar:check": "node scripts/redactarAuditoriaSensible.js",
     "migrate:auditoria-redactar": "node scripts/redactarAuditoriaSensible.js --apply",
     "indexes:sync": "node scripts/sincronizar-indices.js",
+    "indexes:categorias": "node scripts/crearIndiceCategorias.js",
     "migrate:banco-semen:check": "node scripts/migrar-banco-semen.js --dry-run",
     "migrate:banco-semen": "node scripts/migrar-banco-semen.js --aplicar",
     "test:banco-semen:integracion": "node documentation/banco-semen.integracion.cjs",

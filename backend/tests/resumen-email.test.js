@@ -12,6 +12,7 @@ const {
     recopilarResumen
 } = require('../services/resumenEmail-service');
 const { normalizarModulosResumen } = require('../services/permisosResumenEmail-service');
+const { ejecutarConOrganizacion } = require('../context/organizacion-context');
 
 test('el resumen diario respeta hora local y se envía una sola vez por período', () => {
     const antes = new Date('2026-10-05T11:59:00Z');
@@ -35,6 +36,22 @@ test('el resumen semanal solo vence el día configurado y usa una clave semanal 
     );
 });
 
+test('el override explicito de cron omite hora, pero conserva dia semanal y periodo', () => {
+    const anterior = process.env.CRON_RESUMEN_IGNORE_HOUR;
+    process.env.CRON_RESUMEN_IGNORE_HOUR = 'true';
+    try {
+        const fecha = new Date('2026-11-05T12:00:00Z');
+        const cfg = { frecuencia: 'Semanal', horaPreferida: '23:59', diaSemana: 4 };
+        const decision = debeEnviarResumen(cfg, fecha, 'America/Costa_Rica');
+        assert.equal(decision.enviar, true);
+        assert.equal(debeEnviarResumen({ ...cfg, diaSemana: 1 }, fecha, 'America/Costa_Rica').enviar, false);
+        assert.equal(debeEnviarResumen({ ...cfg, ultimoPeriodo: decision.periodo }, fecha, 'America/Costa_Rica').enviar, false);
+    } finally {
+        if (anterior === undefined) delete process.env.CRON_RESUMEN_IGNORE_HOUR;
+        else process.env.CRON_RESUMEN_IGNORE_HOUR = anterior;
+    }
+});
+
 test('la preferencia de correo es única por usuario dentro de cada organización', () => {
     const indice = ConfiguracionEmail.schema.indexes().find(([campos]) => campos.organizacionId === 1 && campos.usuario === 1);
     assert.ok(indice);
@@ -49,7 +66,7 @@ test('el contenido financiero del correo depende del permiso vigente del destina
     assert.equal(normalizarModulosResumen(solicitados, 'Consulta').finanzas, false);
 });
 
-test('el resumen aplica la lista explícita de fincas autorizadas a todos sus módulos', async () => {
+test('el resumen financiero aplica la lista explícita de fincas autorizadas', async () => {
     const fincaId = new Types.ObjectId();
     const otroId = new Types.ObjectId();
     const filtros = [];
@@ -73,13 +90,14 @@ test('el resumen aplica la lista explícita de fincas autorizadas a todos sus m�
     };
 
     try {
-        await recopilarResumen({
+        await ejecutarConOrganizacion(new Types.ObjectId(), () => recopilarResumen({
             usuarioId: new Types.ObjectId(),
             frecuencia: 'Diario',
-            modulos: { resumenGanadero: true, finanzas: true, tareasPendientes: true },
+            rol: 'Contador',
+            modulos: { resumenGanadero: false, finanzas: true, tareasPendientes: false, radarOperativo: false },
             fincaIds: [fincaId, fincaId, 'invalida'],
             ahora: new Date('2026-10-14T12:00:00Z')
-        });
+        }));
     } finally {
         Animal.aggregate = originales.animales;
         MovimientoFinanciero.aggregate = originales.finanzas;
@@ -87,7 +105,7 @@ test('el resumen aplica la lista explícita de fincas autorizadas a todos sus m�
     }
 
     assert.equal(normalizarFincaIds([fincaId, fincaId, 'invalida']).length, 1);
-    assert.ok(filtros.length >= 4);
+    assert.equal(filtros.length, 1);
     filtros.forEach((filtro) => {
         const ids = filtro.fincaId?.$in || [];
         assert.deepEqual(ids.map(String), [String(fincaId)]);

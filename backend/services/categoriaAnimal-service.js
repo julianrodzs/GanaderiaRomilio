@@ -32,6 +32,7 @@ const CATEGORIAS_POR_ESPECIE = {
 };
 
 const obtenerCategoriaAnimal = (animal, fechaReferencia = new Date()) => {
+    if (animal.estado && animal.estado !== 'Activo') return animal.categoria || null;
     if ((animal.especie || 'Bovino') === 'Porcino') return obtenerCategoriaPorcinaPorEdad(animal, fechaReferencia);
     return obtenerCategoriaBovinaPorEdad(animal, fechaReferencia);
 };
@@ -40,7 +41,9 @@ const validarYPrepararCategoriaAnimal = (datos, animalAnterior = {}, fechaRefere
     const animal = {
         especie: datos.especie ?? animalAnterior.especie ?? 'Bovino',
         sexo: datos.sexo ?? animalAnterior.sexo,
-        fechaNacimiento: datos.fechaNacimiento !== undefined ? datos.fechaNacimiento : animalAnterior.fechaNacimiento
+        fechaNacimiento: datos.fechaNacimiento !== undefined ? datos.fechaNacimiento : animalAnterior.fechaNacimiento,
+        estado: datos.estado ?? animalAnterior.estado,
+        categoria: animalAnterior.categoria || datos.categoria
     };
     const calculada = obtenerCategoriaAnimal(animal, fechaReferencia);
     const recibida = datos.categoria;
@@ -60,26 +63,76 @@ const validarYPrepararCategoriaAnimal = (datos, animalAnterior = {}, fechaRefere
     return datos;
 };
 
-const sincronizarCategoriasAnimales = async (fechaReferencia = new Date()) => {
-    const Animal = require('../models/Animal');
-    const animales = await Animal.find({ fechaNacimiento: { $ne: null } })
-        .select('_id especie sexo fechaNacimiento categoria')
-        .lean();
-    const operaciones = animales.reduce((acumuladas, animal) => {
-        const categoria = obtenerCategoriaAnimal(animal, fechaReferencia);
-        if (categoria && categoria !== animal.categoria) {
-            acumuladas.push({
-                updateOne: {
-                    filter: { _id: animal._id },
-                    update: { $set: { categoria } }
-                }
-            });
-        }
-        return acumuladas;
-    }, []);
+const fechaProximoCambioCategoria = (animal, fechaReferencia = new Date()) => {
+    if (animal.estado && animal.estado !== 'Activo') return null;
+    if (!animal.fechaNacimiento || !['Hembra', 'Macho'].includes(animal.sexo)) return null;
+    const nacimiento = new Date(animal.fechaNacimiento);
+    if (Number.isNaN(+nacimiento)) return null;
+    const edad = calcularEdadMeses(nacimiento, fechaReferencia);
+    if (edad === null) return nacimiento > fechaReferencia ? new Date(Date.UTC(nacimiento.getUTCFullYear(), nacimiento.getUTCMonth(), nacimiento.getUTCDate())) : null;
+    const umbral = ((animal.especie || 'Bovino') === 'Porcino' ? [3, 7] : [12, 24]).find((meses) => edad < meses);
+    return umbral == null ? null : new Date(Date.UTC(nacimiento.getUTCFullYear(), nacimiento.getUTCMonth() + umbral, nacimiento.getUTCDate()));
+};
 
-    if (operaciones.length) await Animal.bulkWrite(operaciones);
-    return { revisados: animales.length, actualizados: operaciones.length };
+const filtroCategoriasElegibles = (fechaReferencia) => ({
+    estado: 'Activo', fechaNacimiento: { $ne: null },
+    $or: [{ fechaProximoCambioCategoria: { $lte: fechaReferencia } }, { fechaProximoCambioCategoria: { $exists: false } }]
+});
+
+const sincronizarCategoriasAnimales = async (fechaReferencia = new Date(), { comprobarBloqueo = async () => {}, alProgreso = () => {} } = {}) => {
+    const Animal = require('../models/Animal');
+    const resumen = { escaneados: 0, revisados: 0, actualizados: 0, sellados: 0, lotes: 0 };
+    let buffer = [];
+    const guardar = async () => {
+        await comprobarBloqueo();
+        for (const cambiaCategoria of [true, false]) {
+            const operaciones = buffer.filter((item) => item.cambiaCategoria === cambiaCategoria).map((item) => item.operacion);
+            if (!operaciones.length) continue;
+            await comprobarBloqueo();
+            const contar = (resultado) => {
+                const modificados = Number(resultado?.modifiedCount || 0);
+                resumen.sellados += modificados;
+                if (cambiaCategoria) resumen.actualizados += modificados;
+            };
+            try { contar(await Animal.bulkWrite(operaciones, { ordered: false, agendaCategoriaPreparada: true })); }
+            catch (error) { contar(error.result); throw error; }
+        }
+        resumen.lotes++;
+        buffer = [];
+        alProgreso();
+    };
+    await comprobarBloqueo();
+    const cursor = Animal.find(filtroCategoriasElegibles(fechaReferencia))
+        .select('_id organizacionId fincaId especie sexo categoria fechaNacimiento estado fechaProximoCambioCategoria')
+        .lean().cursor({ batchSize: 250 });
+    try {
+        for await (const animal of cursor) {
+            await comprobarBloqueo();
+            resumen.escaneados++; resumen.revisados++;
+            const categoria = obtenerCategoriaAnimal(animal, fechaReferencia);
+            const proxima = fechaProximoCambioCategoria(animal, fechaReferencia);
+            const cambios = {};
+            const cambiaCategoria = Boolean(categoria && categoria !== animal.categoria);
+            if (cambiaCategoria) cambios.categoria = categoria;
+            if (!Object.hasOwn(animal, 'fechaProximoCambioCategoria') || Number(animal.fechaProximoCambioCategoria) !== Number(proxima)) cambios.fechaProximoCambioCategoria = proxima;
+            if (Object.keys(cambios).length) buffer.push({ cambiaCategoria, operacion: { updateOne: {
+                // Comparacion optimista: no pisar una venta o una correccion mientras se recorre el cursor.
+                filter: { _id: animal._id, fincaId: animal.fincaId, estado: 'Activo', fechaNacimiento: animal.fechaNacimiento,
+                    sexo: animal.sexo, especie: Object.hasOwn(animal, 'especie') ? animal.especie : { $exists: false },
+                    categoria: Object.hasOwn(animal, 'categoria') ? animal.categoria : { $exists: false },
+                    fechaProximoCambioCategoria: Object.hasOwn(animal, 'fechaProximoCambioCategoria') ? animal.fechaProximoCambioCategoria : { $exists: false } },
+                update: { $set: cambios }
+            } } });
+            if (buffer.length >= 250) await guardar();
+        }
+        if (buffer.length) await guardar();
+        return resumen;
+    } catch (error) {
+        error.resultadoCategorias = { ...resumen };
+        throw error;
+    } finally {
+        await cursor.close();
+    }
 };
 
 module.exports = {
@@ -89,5 +142,7 @@ module.exports = {
     obtenerCategoriaAnimal,
     validarYPrepararCategoriaAnimal,
     sincronizarCategoriasAnimales,
+    fechaProximoCambioCategoria,
+    filtroCategoriasElegibles,
     CATEGORIAS_POR_ESPECIE
 };

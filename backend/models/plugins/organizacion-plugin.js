@@ -84,9 +84,10 @@ const aplicarAislamientoOrganizacion = (schema, opciones = {}) => {
 
             this.setQuery({
                 ...this.getFilter(),
-                organizacionId: organizacionConsulta,
+                // QueryCursor castea antes de los pre-find: el contexto agregado aqui debe llegar tipado.
+                organizacionId: new Types.ObjectId(organizacionConsulta),
                 ...(opciones.finca && obtenerFincaActual() && !this.getOptions()?.omitirAislamientoFinca
-                    ? { fincaId: obtenerFincaActual() }
+                    ? { fincaId: new Types.ObjectId(obtenerFincaActual()) }
                     : {})
             });
 

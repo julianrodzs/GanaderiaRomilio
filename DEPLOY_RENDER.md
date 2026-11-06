@@ -50,7 +50,9 @@ Valores esperados:
 - `EMAIL_ADMIN`: compatibilidad legada; las alertas SaaS se envian solo a administradores activos de la organizacion.
 - `CRON_MODE`: usar `external` en el Web Service cuando exista un Cron Job independiente.
 - `CRON_SECRET`: secreto largo para invocar el endpoint HTTP de cron. Tambien es obligatorio en el CLI en produccion, porque comparte la validacion central de configuracion.
-- `CRON_LOCK_MS`: duracion maxima del bloqueo distribuido; por defecto 30 minutos.
+- `CRON_LOCK_MS`: vigencia renovable del bloqueo distribuido; por defecto 30 minutos, con heartbeat durante la ejecucion.
+- `CRON_INCLUDE_SUMMARIES`: opcional, activado por defecto. `false` desactiva solo la fase de resumenes Premium de `job:alertas`. No activa preferencias de usuarios que las tienen desactivadas.
+- `CRON_RESUMEN_IGNORE_HOUR`: opcional. `true` permite ignorar la hora preferida tambien en ejecuciones standalone; el job diario ya lo hace mediante `modoEjecucion: 'cron_diario'`.
 - `STRIPE_SECRET_KEY`: clave privada del entorno Stripe correspondiente.
 - `STRIPE_WEBHOOK_SECRET`: secreto de firma entregado por Stripe para el endpoint del backend.
 - `STRIPE_PRICE_*`: identificadores `price_...` de cada suscripción mensual.
@@ -87,9 +89,11 @@ En el Web Service establecer:
 CRON_MODE=external
 ```
 
-Cambiar a `external` solamente despues de verificar la ejecucion externa. Este modo desactiva tanto las alertas internas como los resumenes Premium internos; si se ofrecen resumenes, tambien deben tener su ejecucion externa configurada (ver seccion siguiente).
+Cambiar a `external` solamente despues de verificar la ejecucion externa. Este modo desactiva alertas y resumenes internos. El unico job diario `job:alertas` incluye ahora los resumenes Premium como tercera fase.
 
 La ejecucion usa un bloqueo distribuido en MongoDB. Si Render reintenta o dos servicios disparan el trabajo al mismo tiempo, solamente uno procesa alertas y correos.
+
+Categorias y alertas son fases independientes en el mismo comando. Categorias usa cursor y buffers de 250, solo animales activos con cambio vencido o sin agenda; los vendidos/muertos quedan congelados. Los leases se renuevan y cada fase informa errores, duracion y memoria. Antes de activar esta version en produccion crear/verificar el nuevo indice aditivo desde backend con `npm run indexes:categorias`, usando las variables de la base objetivo. Los animales legados se preparan automaticamente en la primera corrida, sin migracion manual. Detalles y pruebas: [cron-escalable.md](backend/documentation/cron-escalable.md).
 
 Como alternativa, cualquier monitor o servicio de cron HTTP puede ejecutar:
 
@@ -102,14 +106,18 @@ El endpoint no usa credenciales de usuario. Requiere exclusivamente `CRON_SECRET
 
 ## Resúmenes Premium por correo
 
-Crear un segundo Render Cron Job con la misma base de código:
+El mismo Render Cron Job ejecuta categorias, alertas operativas y resumenes ejecutivos como tres fases aisladas. Mantener Command `npm run job:alertas` y Schedule `0 12 * * *` (06:00 Costa Rica). No hace falta contratar otro cron ni cambiarlo a horario. Si quedo una variable antigua `CRON_INCLUDE_SUMMARIES=false`, eliminarla o cambiarla a `true`. No se modifica Render desde el repositorio.
+
+En esta corrida diaria se ignora `horaPreferida`, pero se respetan la frecuencia activada, el dia semanal en la zona de la organizacion y `ultimoPeriodo`. No se activan destinatarios automaticamente. Backend y Cron Job requieren el mismo commit y `FRONTEND_URL` HTTPS valido, las credenciales de MongoDB/Resend y el remitente verificado. Las preferencias estan en Cuenta > Configuracion > Notificaciones y resumen; el horario preferido solo se ofrece para programacion interna continua.
+
+Se conserva el comando standalone para diagnostico manual o como alternativa de programacion continua (no combinar con el job diario de resumenes):
 
 - Root Directory: `backend`
 - Build Command: `npm install`
 - Command: `npm run job:resumenes-email`
 - Schedule: `0 * * * *`
 
-El job revisa cada hora la zona horaria, frecuencia y hora preferida de cada usuario Premium. `ultimoPeriodo` evita enviar dos veces el mismo resumen aunque Render reintente la ejecución. Como alternativa puede invocarse `POST /api/cron/resumenes-email` con `Authorization: Bearer TU_CRON_SECRET`.
+El standalone respeta zona horaria, frecuencia y hora preferida, salvo `CRON_RESUMEN_IGNORE_HOUR=true`. `ultimoPeriodo` evita reenvios del mismo periodo tras un envio persistido. Como alternativa puede invocarse `POST /api/cron/resumenes-email` con `Authorization: Bearer TU_CRON_SECRET`. No probar con destinatarios reales sin revisar preferencias. Ver `backend/documentation/resumen-ejecutivo-premium.md` para contenido, permisos y limites de idempotencia.
 
 ## Facturación Stripe
 

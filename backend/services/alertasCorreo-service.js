@@ -1,7 +1,6 @@
 const { notificarTareaAsignada, ejecutarNotificacionSegura } = require('./tarea-notificacion-service');
 const AlertaCorreo = require('../models/AlertaCorreo');
 const { ejecutarConOrganizacion } = require('../context/organizacion-context');
-const { sincronizarCategoriasAnimales } = require('./categoriaAnimal-service');
 const Organizacion = require('../models/Organizacion');
 const { Tarea } = require('../models/Tarea');
 const Usuario = require('../models/Usuario');
@@ -54,9 +53,10 @@ const obtenerTareasParaRecordatorio = () => Tarea.find({
     ]
 }).populate({ path: 'asignadoA', model: Usuario, select: 'nombre apellido correo rol estado' }).lean();
 
-const crearNotificacionesOperativas = async (tareas, zonaHoraria = 'America/Costa_Rica') => {
+const crearNotificacionesOperativas = async (tareas, zonaHoraria = 'America/Costa_Rica', comprobarBloqueo = async () => {}) => {
     let creadas = 0;
     for (const tarea of tareas) {
+        await comprobarBloqueo();
         if (!tarea.fincaId || !tarea.asignadoA?._id || tarea.asignadoA.estado === 'Inactivo') continue;
         // Reconciliar asignaciones pendientes sin crear duplicados, incluso fuera de la ventana de 7 días.
         const asignacion = await ejecutarNotificacionSegura(() => notificarTareaAsignada(tarea, tarea.creadoPor));
@@ -171,7 +171,7 @@ const crearHtml = (titulo, alertas, nombreOrganizacion, zonaHoraria) => `
     `).join('')}</ul>
 `;
 
-const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zonaHoraria = 'America/Costa_Rica') => {
+const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zonaHoraria = 'America/Costa_Rica', comprobarBloqueo = async () => {}) => {
     if (process.env.EMAIL_ALERTS_ENABLED === 'false') return { enviadas: 0, grupos: 0, desactivado: true };
     const membresias = await Membresia.find({ organizacionId: obtenerOrganizacionActual(), estado: 'Activo', rol: 'Administrador' })
         .populate({ path: 'usuario', model: Usuario, match: { estado: 'Activo' }, select: '_id correo' });
@@ -189,6 +189,7 @@ const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zon
                 if (decision.enviar) pendientes.push({ ...alerta, ...decision });
             }
             for (const [asunto, grupo] of Object.entries(agruparPorAsunto(pendientes))) {
+                await comprobarBloqueo();
                 const resultado = await enviarCorreoResend({
                     to: process.env.NODE_ENV !== 'production' && process.env.EMAIL_TEST_TO
                         ? process.env.EMAIL_TEST_TO
@@ -201,15 +202,18 @@ const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zon
                 enviadas += 1;
                 for (const alerta of grupo) { await registrarEnvio(alerta); alertasEnviadas += 1; }
             }
-        } catch (error) { errores.push({ usuarioId: membresia.usuario._id, mensaje: error.message }); }
+        } catch (error) {
+            if (error.code === 'JOB_LOCK_LOST') throw error;
+            errores.push({ usuarioId: membresia.usuario._id, mensaje: error.message });
+        }
     }
     return { enviadas, alertasEnviadas, errores };
 };
 
-const procesarAlertasTareas = async ({ nombreOrganizacion, zonaHoraria = 'America/Costa_Rica' } = {}) => {
+const procesarAlertasTareas = async ({ nombreOrganizacion, zonaHoraria = 'America/Costa_Rica', comprobarBloqueo = async () => {} } = {}) => {
     if (!await tieneFeature('centroAlertas')) return { notificacionesCreadas: 0, correos: { enviadas: 0, desactivadoPorPlan: true } };
     const tareas = await obtenerTareasParaRecordatorio();
-    const notificacionesCreadas = await crearNotificacionesOperativas(tareas, zonaHoraria);
+    const notificacionesCreadas = await crearNotificacionesOperativas(tareas, zonaHoraria, comprobarBloqueo);
     if (!await tieneFeature('emailsOperativos')) {
         return {
             notificacionesCreadas,
@@ -217,28 +221,23 @@ const procesarAlertasTareas = async ({ nombreOrganizacion, zonaHoraria = 'Americ
         };
     }
     const alertasCorreo = await obtenerAlertasTareas(tareas, zonaHoraria);
-    const correos = await enviarCorreosTareas(alertasCorreo, nombreOrganizacion, zonaHoraria);
+    const correos = await enviarCorreosTareas(alertasCorreo, nombreOrganizacion, zonaHoraria, comprobarBloqueo);
     if (correos.enviadas > 0) {
         await incrementarEmailsOperativos({ cantidad: correos.enviadas });
     }
     return { notificacionesCreadas, correos };
 };
 
-const procesarAlertasTodasOrganizaciones = async () => {
+const procesarAlertasTodasOrganizaciones = async ({ comprobarBloqueo = async () => {}, alProgreso = () => {} } = {}) => {
     const organizaciones = await Organizacion.find({ estado: 'Activa', 'plan.estado': { $in: ['Activo', 'Prueba'] } }).select('_id nombre zonaHoraria');
     const resultados = [];
 
     for (const organizacion of organizaciones) {
+        await comprobarBloqueo();
         try {
             const resultado = await ejecutarConOrganizacion(
                 organizacion._id,
-                async () => {
-                    const [alertas, categoriasAnimales] = await Promise.all([
-                        procesarAlertasTareas({ nombreOrganizacion: organizacion.nombre, zonaHoraria: organizacion.zonaHoraria }),
-                        sincronizarCategoriasAnimales()
-                    ]);
-                    return { ...alertas, categoriasAnimales };
-                }
+                () => procesarAlertasTareas({ nombreOrganizacion: organizacion.nombre, zonaHoraria: organizacion.zonaHoraria, comprobarBloqueo })
             );
             resultados.push({
                 organizacionId: organizacion._id,
@@ -246,6 +245,7 @@ const procesarAlertasTodasOrganizaciones = async () => {
                 ...resultado
             });
         } catch (error) { resultados.push({ organizacionId: organizacion._id, error: error.message }); }
+        alProgreso();
     }
 
     return resultados;

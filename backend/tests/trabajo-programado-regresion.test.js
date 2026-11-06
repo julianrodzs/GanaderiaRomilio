@@ -20,10 +20,11 @@ for (const servicio of ['alertasCorreo-service', 'resumenEmail-service', 'trabaj
     });
 }
 
-const prepararTrabajo = (t, { alertas = [], resumenes = [], bloqueado = false, fallo } = {}) => {
+const prepararTrabajo = (t, { alertas = [], categorias = [], resumenes = [], bloqueado = false, fallo, falloCategorias } = {}) => {
     const TrabajoProgramado = require('../models/TrabajoProgramado');
     const alertasServicio = require('../services/alertasCorreo-service');
     const resumenesServicio = require('../services/resumenEmail-service');
+    const categoriasServicio = require('../services/categoriasProgramadas-service');
     const escrituras = [];
     t.mock.method(TrabajoProgramado, 'findOneAndUpdate', async (filtro, cambio) => {
         escrituras.push({ filtro, cambio });
@@ -35,15 +36,19 @@ const prepararTrabajo = (t, { alertas = [], resumenes = [], bloqueado = false, f
         return alertas;
     });
     t.mock.method(resumenesServicio, 'procesarResumenesTodasOrganizaciones', async () => resumenes);
+    const procesarCategorias = t.mock.method(categoriasServicio, 'procesarCategoriasTodasOrganizaciones', async () => {
+        if (falloCategorias) throw falloCategorias;
+        return categorias;
+    });
     const archivo = require.resolve('../services/trabajoProgramado-service');
     delete require.cache[archivo];
     const trabajos = require(archivo);
     t.after(() => { delete require.cache[archivo]; });
-    return { trabajos, escrituras, procesarAlertas };
+    return { trabajos, escrituras, procesarAlertas, procesarCategorias };
 };
 
 test('alertas exitosas conservan totales y liberan el bloqueo como Completado', async (t) => {
-    const { trabajos, escrituras } = prepararTrabajo(t, { alertas: [
+    const { trabajos, escrituras } = prepararTrabajo(t, { categorias: [{ organizacionId: 'a', escaneados: 3, actualizados: 3 }], alertas: [
         { organizacionId: 'a', notificacionesCreadas: 2, correos: { enviadas: 1, errores: [] }, categoriasAnimales: { actualizados: 3 } },
         { organizacionId: 'b', correos: { enviadas: 0, desactivadoPorPlan: true } }
     ] });
@@ -102,12 +107,74 @@ test('otro cron en curso se omite sin ejecutar ni liberar su bloqueo', async (t)
     assert.equal(escrituras.length, 1);
 });
 
-test('un error global se propaga y libera el bloqueo como Error', async (t) => {
+test('un error global de alertas conserva la fase de categorias y libera el bloqueo como Error', async (t) => {
     const fallo = new Error('Fallo global de consulta');
     const { trabajos, escrituras } = prepararTrabajo(t, { fallo });
-    await assert.rejects(trabajos.ejecutarAlertasProgramadas(), fallo);
+    await assert.rejects(trabajos.ejecutarAlertasProgramadas(), (error) => {
+        assert.equal(error.code, 'JOB_PARTIAL_FAILURE');
+        assert.equal(error.resultado.categorias.status, 'Completado');
+        assert.equal(error.resultado.alertas.errores[0].mensaje, fallo.message);
+        return true;
+    });
     assert.equal(escrituras.at(-1).cambio.$set.estado, 'Error');
-    assert.equal(escrituras.at(-1).cambio.$set.ultimoResultado, null);
+    assert.equal(escrituras.at(-1).cambio.$set.ultimoResultado.alertas.status, 'Error');
+});
+
+test('las alertas y los resumenes opt-in se ejecutan incluso con fallo total de categorias', async (t) => {
+    const { trabajos, procesarAlertas } = prepararTrabajo(t, { falloCategorias: new Error('Fallo de categorias'),
+        alertas: [{ organizacionId: 'a', correos: { enviadas: 2 } }], resumenes: [{ organizacionId: 'a', envios: [{ enviado: true }] }] });
+    await assert.rejects(trabajos.ejecutarAlertasProgramadas({ incluirResumenes: true }), (error) => {
+        assert.equal(error.resultado.categorias.status, 'Error');
+        assert.equal(error.resultado.alertas.status, 'Completado');
+        assert.equal(error.resultado.correosEnviados, 3);
+        assert.equal(error.resultado.resumenes.status, 'Completado');
+        assert.equal(procesarAlertas.mock.callCount(), 1);
+        return true;
+    });
+});
+
+test('el mismo comando incluye resumenes por defecto y permite desactivarlos explicitamente', async (t) => {
+    const { trabajos } = prepararTrabajo(t, { resumenes: [{ organizacionId: 'a', envios: [{ enviado: true }] }] });
+    const normal = await trabajos.ejecutarAlertasProgramadas({ incluirResumenes: false });
+    assert.equal(normal.resumenes.status, 'Desactivado');
+    const completo = await trabajos.ejecutarAlertasProgramadas();
+    assert.equal(completo.resumenes.status, 'Completado');
+    assert.equal(completo.resumenes.enviadas, 1);
+});
+
+test('duracion y memoria se registran independientemente por fase', async (t) => {
+    const { trabajos } = prepararTrabajo(t);
+    const resultado = await trabajos.ejecutarAlertasProgramadas();
+    for (const fase of [resultado.categorias, resultado.alertas]) {
+        assert.ok(fase.duracionMs >= 0);
+        for (const campo of ['rss', 'heapUsed', 'heapTotal']) assert.ok(fase.memoriaMb.pico[campo] >= fase.memoriaMb.inicio[campo]);
+    }
+});
+
+test('el fallo exclusivo del resumen cuenta la organizacion afectada y conserva categorias/alertas', async (t) => {
+    const { trabajos } = prepararTrabajo(t, { resumenes: [{ organizacionId: 'a', envios: [], errores: [{ mensaje: 'Proveedor rechazado' }] }] });
+    await assert.rejects(trabajos.ejecutarAlertasProgramadas(), (error) => {
+        assert.equal(error.resultado.organizacionesConError, 1);
+        assert.equal(error.resultado.categorias.status, 'Completado');
+        assert.equal(error.resultado.alertas.status, 'Completado');
+        assert.equal(error.resultado.resumenes.status, 'Error');
+        return true;
+    });
+});
+
+test('los endpoints cron conservan el JSON parcial al responder 500', async (t) => {
+    const { trabajos } = prepararTrabajo(t);
+    const resultado = { ejecutado: true, categorias: { status: 'Error' }, alertas: { status: 'Completado' } };
+    const fallar = async () => { throw Object.assign(new Error('Fallo parcial sintetico'), { resultado }); };
+    t.mock.method(trabajos, 'ejecutarAlertasProgramadas', fallar);
+    t.mock.method(trabajos, 'ejecutarResumenesEmailProgramados', fallar);
+    const id = require.resolve('../routes/cronRoutes'); delete require.cache[id]; t.after(() => { delete require.cache[id]; });
+    const router = require(id);
+    for (const ruta of router.stack.filter((capa) => capa.route)) {
+        const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+        await ruta.route.stack.at(-1).handle({}, res);
+        assert.equal(res.code, 500); assert.deepEqual(res.body.resultado, resultado);
+    }
 });
 
 test('resumenes Premium exitosos conservan el conteo real de envios', async (t) => {

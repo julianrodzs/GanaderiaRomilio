@@ -68,6 +68,7 @@ const animalSchema = new Schema(
         registroGenealogico: { type: String, trim: true },
         observacionesGenealogicas: { type: String, trim: true },
         fechaNacimiento: { type: Date },
+        fechaProximoCambioCategoria: { type: Date },
         fechaDesteteEstimada: { type: Date },
         fechaDestete: { type: Date },
         pesoNacimiento: { type: Number, min: 0 },
@@ -113,6 +114,7 @@ const animalSchema = new Schema(
 );
 
 animalSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+animalSchema.plugin(require('./plugins/categoria-plugin'));
 animalSchema.pre('validate', function () {
     if (this.isNew && this.madre && !this.madreGeneticaId && !this.madreGeneticaExterna?.nombre) this.madreGeneticaId = this.madre;
     if (this.isNew && this.madre && !this.madreGestanteId) this.madreGestanteId = this.madre;
@@ -125,6 +127,9 @@ animalSchema.index(
     { unique: true, partialFilterExpression: { diio: { $type: 'string' } } }
 );
 animalSchema.index({ estado: 1 });
+animalSchema.index({ organizacionId: 1, fincaId: 1, fechaProximoCambioCategoria: 1 }, {
+    name: 'agenda_categoria_activa', partialFilterExpression: { estado: 'Activo' }
+});
 animalSchema.index({ estadoSanitario: 1 });
 animalSchema.index({ fechaFinRetiroCarne: 1 });
 animalSchema.index({ sexo: 1 });
