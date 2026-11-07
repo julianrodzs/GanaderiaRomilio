@@ -5,9 +5,40 @@
 .metodo-fieldset legend { padding: 0 8px; font-weight: 700; }
 .metodo-check { display: flex !important; align-items: center; gap: 10px; margin: 20px 0; }
 .metodo-check input { width: 18px !important; height: 18px; min-height: 18px; margin: 0; padding: 0; }
-.metodo-modal { width: min(960px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; }
+.modal-panel.metodo-modal { box-sizing: border-box; width: min(100%, 800px); min-width: 0; max-height: calc(100dvh - 40px); padding: 24px; gap: 20px; overflow-y: auto; overflow-x: hidden; }
+.metodo-modal > .panel-title { align-items: flex-start; gap: 16px; min-width: 0; }
+.metodo-modal > .panel-title h2 { min-width: 0; font-size: 24px; line-height: 1.25; overflow-wrap: anywhere; }
+.metodo-modal > .panel-title .boton-link { flex-shrink: 0; min-height: 40px; }
+.metodo-modal .form-grid, .metodo-formulario .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 20px; min-width: 0; }
+.metodo-modal label, .metodo-formulario label { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: #304b39; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.metodo-formulario .metodo-check { flex-direction: row; font-size: 14px; }
+.metodo-modal input:not([type=checkbox]):not([type=radio]), .metodo-modal select, .metodo-modal textarea,
+.metodo-formulario input:not([type=checkbox]):not([type=radio]), .metodo-formulario select, .metodo-formulario textarea { box-sizing: border-box; display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; padding: 11px 12px; border: 1px solid #aabbaf; border-radius: 4px; background: #fff; color: #142c1e; font: inherit; font-weight: 500; line-height: 1.4; }
+.metodo-modal select, .metodo-formulario select { text-overflow: ellipsis; }
+.metodo-modal textarea, .metodo-formulario textarea { min-height: 96px; resize: vertical; }
+.metodo-modal :is(input, select, textarea, button):focus-visible,
+.metodo-formulario :is(input, select, textarea, button):focus-visible { outline: 2px solid #348655; outline-offset: 2px; }
+.metodo-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; min-width: 0; }
+.metodo-acciones button { flex: 1 1 180px; min-width: 0; min-height: 46px; padding: 11px 16px; border: 1px solid #93aa9a; border-radius: 4px; background: #f2f6f3; color: #21452e; font: inherit; font-size: 14px; font-weight: 600; line-height: 1.4; cursor: pointer; white-space: normal; overflow-wrap: anywhere; }
+.metodo-acciones button:hover:not(:disabled) { background: #e4eee7; border-color: #527e60; }
+.metodo-acciones button[aria-pressed=true] { border-color: #123e27; background: #123e27; color: #fff; }
+.metodo-acciones button[aria-pressed=true]:hover:not(:disabled) { background: #205535; }
+.metodo-modal button:disabled { cursor: wait; opacity: .6; }
+.metodo-modal .modal-actions { flex-wrap: wrap; gap: 12px; padding-top: 20px; margin: 20px 0 0; border-top: 1px solid #d4ded7; }
+.metodo-modal .modal-actions button { min-width: 112px; min-height: 44px; padding: 11px 18px; border-radius: 4px; font-size: 14px; line-height: 1.4; }
+.metodo-modal .modal-actions .boton-secundario { border: 1px solid #aabbaf; background: #f2f6f3; color: #21452e; cursor: pointer; }
+.metodo-modal .modal-actions .boton-secundario:hover:not(:disabled) { background: #e4eee7; }
 .metodo-timeline { list-style: none; padding: 0 0 0 18px; border-left: 2px solid #a5bcac; margin: 24px 0; }
+.metodo-timeline:empty { display: none; }
 .metodo-timeline li { display: grid; gap: 6px; padding: 0 0 22px; overflow-wrap: anywhere; }
 .metodo-timeline time { color: #506557; font-size: 13px; }
-.metodo-seguimiento { border-top: 1px solid #bfccc3; padding-top: 20px; margin-top: 20px; }
-@media (max-width: 600px) { .metodo-fieldset { padding: 12px; } .metodo-modal { padding: 18px; } }
+.metodo-seguimiento { min-width: 0; border-top: 1px solid #bfccc3; padding-top: 20px; margin: 0; }
+@media (max-width: 600px) {
+  .metodo-fieldset { padding: 12px; }
+  .modal-panel.metodo-modal { padding: 18px; }
+  .metodo-modal > .panel-title h2 { font-size: 22px; }
+  .metodo-modal .form-grid, .metodo-formulario .form-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .metodo-acciones button { flex-basis: 100%; }
+  .metodo-modal input:not([type=checkbox]):not([type=radio]), .metodo-modal select, .metodo-modal textarea { font-size: 16px; }
+  .metodo-modal .modal-actions button { flex: 1 1 100px; }
+}

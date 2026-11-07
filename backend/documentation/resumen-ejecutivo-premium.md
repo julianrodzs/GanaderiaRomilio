@@ -3,14 +3,28 @@
 ## Que recibe el productor
 
 1. Tareas: supervision de fincas autorizadas para Administrador/Encargado y conteos personales separados. Otros roles solo reciben sus tareas. Las vencidas son un subconjunto de pendientes/en proceso; no se suman dos veces. Cinco urgentes como maximo, ordenadas por vencimiento, con finca, DIIO/lote y responsable con nombre y rol empresarial vigente.
-2. Radar: partos estimados y tareas IATF/TE para hoy y los seis dias siguientes. Hasta cinco hembras identificadas. El retiro de carne cuenta animales activos bloqueados al instante del corte, segun la misma fecha final usada para validar ventas. Se respetan los permisos de Sanidad/Reproduccion; Contador no recibe datos clinicos o reproductivos.
-3. Inventario: foto actual, altas/bajas y variacion por especie. Se omiten especies sin activos ni movimientos. Gestaciones confirmadas activas deduplicadas por hembra y animales activos con pertenencia vigente a lotes de ENGORDE activos. No se infiere gestacion por tener una tarea.
+2. Radar: partos estimados y tareas IATF/TE para hoy y los seis dias siguientes. Partos separados en bovinos/porcinos y con/sin confirmacion de gestacion; hasta cinco hembras identificadas con especie, fecha y confirmacion. El retiro de carne cuenta animales activos bloqueados al instante del corte, segun la misma fecha final usada para validar ventas. Se respetan los permisos de Sanidad/Reproduccion; Contador no recibe datos clinicos o reproductivos.
+3. Inventario: foto actual, altas/bajas y variacion por especie. Se omiten especies sin activos ni movimientos. Se muestran hembras en seguimiento reproductivo, separando bovinos/porcinos y gestaciones confirmadas de estimadas pendientes de confirmar, deduplicadas por hembra. Se cuentan animales activos en lotes de ENGORDE activos. Una tarea no acredita gestacion.
 4. Finanzas: solo Administrador/Contador, con el permiso revisado al procesar el destinatario. CRC siempre; USD solo con actividad. Ingresos, egresos, flujo neto y Top 3 por naturaleza/moneda, con porcentaje sobre su propio total. Se prefieren categorias normalizadas, con respaldo al nombre original si la normalizada es Otros/vacia. Se excluyen partidas fuera de consolidacion, anuladas y transferencias internas. Flujo de caja no es utilidad contable.
 5. Comparativo: solo cuando hay dos o mas fincas activas autorizadas. Las columnas tambien dependen del contenido activado y los permisos; nunca se introduce una columna financiera a un rol operativo.
 
 HTML inline, texto plano humano, valores escapados y enlace HTTPS a FRONTEND_URL. El correo no incorpora fotos privadas ni informacion de otras organizaciones. Es una vista de supervision, no un reporte contable ni un diagnostico veterinario.
 
 ## Ventanas y fuentes
+
+### Correccion de reproduccion - 2026-11-06
+
+El radar y el contador original compartian un filtro `gestacionConfirmada: true`. Las tareas de parto se generan con fechaPartoEstimada aunque esa bandera este ausente/falsa. Esto podia mostrar una tarea proxima y, al mismo tiempo, cero partos y cero gestaciones en el resumen. Tambien quedaban fuera diagnosticos positivos guardados en resultadoDiagnosticoGestacion/historialDiagnosticos y ciclos legados sin estado/finca explicitos.
+
+Ahora el resumen consulta RegistroReproductivo, no los titulos de las tareas. Una fecha de parto en el ultimo ciclo activo entra como estimacion en radar, sin convertirla en confirmacion clinica. Se reconoce PREÑADA/PRENADA del diagnostico actual o, si no existe, del ultimo diagnostico del historial; el diagnostico negativo/dudoso prevalece sobre una bandera anterior. Sin diagnostico, la bandera positiva sigue siendo valida. Un estado legado Gestante/Proxima a parto se muestra como seguimiento sin confirmacion cuando no hay evidencia explicita.
+
+Se evalua el ultimo ciclo verificable de cada hembra antes de comprobar actividad/resultado, para no rescatar un positivo viejo tras un cierre, parto o diagnostico negativo posterior. No se cuentan ciclos cerrados, cancelados, no prenados, desactivados para seguimiento ni con resultado final; tampoco machos ni animales vendidos/muertos. La especie se obtiene del animal, evitando clasificar como bovina una cerda cuyo ciclo legado conserva ese default.
+
+Un ciclo sin finca se admite solo si su organizacion y su hembra activa pertenecen al alcance autorizado. Si tiene finca explicita debe coincidir con la hembra. Se conservan aislamiento de organizacion/fincas y permisos de reproduccion. Los subtotales de ambas especies se suman por finca, sin sobrescribir uno con otro.
+
+Las fechas civiles y los instantes mantienen su contrato anterior. Una confirmacion sin fecha de parto entra al inventario reproductivo, no inventa un parto dentro del radar. Esta correccion es solo de lectura/presentacion: no modifica diagnosticos ni registros existentes, no requiere migracion ni indices nuevos. Se despliega el mismo commit en API y cron. Un correo ya enviado no cambia ni se reenvia por actualizar codigo: se vera en el siguiente periodo configurado.
+
+Verificacion de la correccion: ocho casos nuevos con MongoDB real temporal, incluido el parto del 09/11 y un diagnostico porcino legado, cierres posteriores, negativas/dudas, fechas civiles/instantes/limite de siete dias, tenant/finca/sexo/estado, consolidacion y tareas sin ciclo. Backend 458/458 PASS y compilacion frontend salida 0. No se uso Atlas ni se enviaron correos reales.
 
 - Diario: intervalo movil de 24 horas anteriores al corte. Semanal: 168 horas. Se muestra inicio, fin y zona de la organizacion (America/Costa_Rica por defecto). Las consultas de hechos usan inicio incluido y fin excluido.
 - Nacimientos/compras/ventas/muertes se obtienen de fechas de Animal, no del conteo de EventoAnimal: importar o crear una compra puede generar eventos redundantes. Un animal comprado no se considera nacimiento propio solo por tener fecha de nacimiento.

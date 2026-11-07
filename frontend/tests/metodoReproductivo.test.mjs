@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { buildSync } from 'esbuild';
@@ -25,6 +26,22 @@ test('el acceso sin servicio permite diagnostico sin inventar un selector de sem
 });
 test('los metodos historicos siguen visibles antes de migrar', () => {
     assert.equal(metodoDeRegistro({ origenGestacion: 'MONTA_NATURAL' }), 'MONTA_NATURAL'); assert.equal(metodoDeRegistro({ campanaIATF: 'campana' }), 'IATF'); assert.equal(metodoDeRegistro({}), 'DESCONOCIDO');
+});
+
+test('historial reproductivo presenta acciones de servicio y diagnostico como modos accesibles', () => {
+    const props = { registro: { estadoCiclo: 'Activo', metodo: 'MONTA_NATURAL' }, animales: [], usuarios: [], onCerrar() {}, onActualizar() {} };
+    const html = renderToStaticMarkup(React.createElement(modulo.exports.HistorialMetodo, props));
+    assert.match(html, /class="metodo-acciones" role="group"/);
+    assert.equal((html.match(/aria-pressed="false"/g) || []).length, 2);
+    assert.match(html, /Registrar servicio \/ repaso/); assert.match(html, /Registrar diagnóstico/);
+    const lectura = renderToStaticMarkup(React.createElement(modulo.exports.HistorialMetodo, { ...props, soloLectura: true }));
+    assert.doesNotMatch(lectura, /class="metodo-acciones"/);
+});
+
+test('los estilos de ambos formularios no dependen de las reglas genericas del modal', () => {
+    const css = readFileSync(new URL('../src/Components/MetodoReproductivo.css', import.meta.url), 'utf8');
+    for (const regla of ['.modal-panel.metodo-modal', '.metodo-modal label', 'min-width: 0', 'padding: 11px 12px', 'grid-template-columns: minmax(0, 1fr)', 'button[aria-pressed=true]', ':focus-visible', '.metodo-timeline:empty']) assert.ok(css.includes(regla), regla);
+    assert.match(render(), /class="form-card metodo-formulario"/);
 });
 test('la transferencia real se ejecuta en su origen y el calendario puede completarse como tarea', () => {
     assert.equal(esTareaEspecializada({ categoriaAutomatica: 'Transferencia de embriones', claveAutomatica: 'te:123' }), true);

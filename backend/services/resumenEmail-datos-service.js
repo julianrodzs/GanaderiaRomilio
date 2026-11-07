@@ -1,7 +1,7 @@
 const { Types } = require('mongoose');
 const Animal = require('../models/Animal');
 const Movimiento = require('../models/MovimientoFinanciero');
-const { RegistroReproductivo: Registro } = require('../models/RegistroReproductivo');
+const { obtenerReproduccionResumen } = require('./resumenEmail-reproduccion-service');
 const Pertenencia = require('../models/PertenenciaLote');
 const Lote = require('../models/Lote');
 const Historial = require('../models/HistorialFincaAnimal');
@@ -177,22 +177,22 @@ const recopilarResumen = async ({ usuarioId, rol, frecuencia, modulos: solicitad
     const verReproduccion = rolTienePermiso(rol, 'reproduccion.ver');
     const verSanidad = rolTienePermiso(rol, 'sanidad.ver');
     if ((modulos.resumenGanadero || modulos.radarOperativo) && verReproduccion) {
-        const gestaciones = await Registro.aggregate([
-            { $match: { ...filtro, gestacionConfirmada: true, estadoCiclo: 'Activo', fechaPartoReal: null } },
-            { $lookup: { from: Animal.collection.name, localField: 'animal', foreignField: '_id', as: 'hembra' } },
-            { $unwind: '$hembra' }, { $match: { 'hembra.organizacionId': organizacionId, 'hembra.estado': 'Activo', 'hembra.sexo': 'Hembra', $expr: { $eq: ['$fincaId', '$hembra.fincaId'] } } },
-            { $sort: { fechaPartoEstimada: 1, _id: 1 } },
-            { $group: { _id: '$animal', fincaId: { $first: '$fincaId' }, fecha: { $first: '$fechaPartoEstimada' }, diio: { $first: '$hembra.diio' }, nombre: { $first: '$hembra.nombre' } } },
-            { $set: { dia: diaExpresion('$fecha', zonaHoraria) } },
-            { $facet: { total: [{ $count: 'cantidad' }], proximas: [{ $match: { dia: { $gte: hoy, $lt: hastaDia } } },
-                { $group: { _id: '$fincaId', cantidad: { $sum: 1 } } }],
-                detalle: [{ $match: { dia: { $gte: hoy, $lt: hastaDia } } }, { $sort: { dia: 1, _id: 1 } }, { $limit: 5 }, { $project: { diio: 1, nombre: 1, dia: 1 } }] } }
-        ]);
-        const g = gestaciones[0] || { total: [], proximas: [], detalle: [] };
-        if (resultado.productivo) resultado.productivo.gestaciones = g.total[0]?.cantidad || 0;
+        const g = await obtenerReproduccionResumen({ organizacionId, fincaIds: ids, zonaHoraria, hoy, hastaDia });
+        const porEspecie = Object.fromEntries(['Bovino', 'Porcino'].map((especie) => {
+            const fila = g.totales.find((r) => r._id === especie);
+            const proximas = g.proximas.filter((r) => r._id.especie === especie);
+            const total = fila?.total || 0, confirmadas = fila?.confirmadas || 0;
+            return [especie, { total, confirmadas, sinConfirmar: total - confirmadas,
+                partos: proximas.reduce((n, r) => n + r.cantidad, 0), partosConfirmados: proximas.reduce((n, r) => n + r.confirmadas, 0) }];
+        }));
+        if (resultado.productivo) {
+            resultado.productivo.gestaciones = Object.values(porEspecie).reduce((n, r) => n + r.confirmadas, 0);
+            resultado.productivo.gestacionesSeguimiento = Object.values(porEspecie).reduce((n, r) => n + r.total, 0);
+            resultado.productivo.gestacionesPorEspecie = porEspecie;
+        }
         if (modulos.radarOperativo) {
-            resultado.radar = { partos: g.proximas.reduce((s, r) => s + r.cantidad, 0), hembras: g.detalle };
-            for (const r of g.proximas) porFinca.get(String(r._id)).partos = r.cantidad;
+            resultado.radar = { partos: g.proximas.reduce((s, r) => s + r.cantidad, 0), hembras: g.detalle, partosPorEspecie: porEspecie };
+            for (const r of g.proximas) porFinca.get(String(r._id.finca)).partos += r.cantidad;
             resultado.radar.campanas = await Tarea.countDocuments({ ...filtro, estado: { $in: ['Pendiente', 'En proceso'] },
                 categoriaAutomatica: { $in: ['IATF', 'TE_DONANTE', 'TETF', 'Transferencia de embriones'] },
                 ...(!['Administrador', 'Encargado'].includes(rol) ? { asignadoA: usuarioId } : {}),

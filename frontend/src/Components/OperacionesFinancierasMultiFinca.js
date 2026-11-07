@@ -8,6 +8,7 @@ import {
   obtenerOperacionesFinancierasMultiFinca
 } from '../services/api';
 import { ContenidoPaginado } from './PaginacionTabla';
+import './OperacionesFinancierasMultiFinca.css';
 
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
 const baseTransferencia = { fincaDestino: '', fecha: fechaHoy(), monto: '', moneda: 'CRC', descripcion: '', metodoPago: '', observaciones: '' };
@@ -101,7 +102,7 @@ const OperacionesFinancierasMultiFinca = ({ onCerrar, onActualizado }) => {
       {error && <div className="alerta-formulario">{error}</div>}
       {mensaje && <p className="form-message">{mensaje}</p>}
       <div className="operaciones-multifinca-grid">
-        <form className="finanzas-panel" onSubmit={registrarTransferencia}>
+        <form className="finanzas-panel" aria-label="Transferencia entre fincas" onSubmit={registrarTransferencia}>
           <div className="panel-title compacto"><div><p className="eyebrow">Movimiento interno</p><h3>Transferencia entre fincas</h3></div></div>
           <p className="texto-ayuda">La salida y la entrada quedan visibles por finca, pero se eliminan del resultado consolidado.</p>
           <div className="form-grid">
@@ -116,7 +117,7 @@ const OperacionesFinancierasMultiFinca = ({ onCerrar, onActualizado }) => {
           <button className="boton-primario" disabled={guardando} type="submit">Registrar transferencia</button>
         </form>
 
-        <form className="finanzas-panel" onSubmit={registrarGasto}>
+        <form className="finanzas-panel" aria-label="Gasto compartido" onSubmit={registrarGasto}>
           <div className="panel-title compacto"><div><p className="eyebrow">Distribución</p><h3>Gasto compartido</h3></div></div>
           <div className="form-grid">
             <label>Fecha<input required type="date" value={gasto.fecha} onChange={(e) => setGasto((actual) => ({ ...actual, fecha: e.target.value }))} /></label>
@@ -129,14 +130,30 @@ const OperacionesFinancierasMultiFinca = ({ onCerrar, onActualizado }) => {
             <label>Moneda<select value={gasto.moneda} onChange={(e) => setGasto((actual) => ({ ...actual, moneda: e.target.value }))}><option>CRC</option><option>USD</option></select></label>
           </div>
           <label>Descripción<input required value={gasto.descripcion} onChange={(e) => setGasto((actual) => ({ ...actual, descripcion: e.target.value }))} /></label>
-          <fieldset className="distribucion-fincas"><legend>Fincas participantes</legend>{fincas.map((finca) => <label key={finca._id}><input type="checkbox" checked={seleccionadas.includes(finca._id)} onChange={() => alternarFinca(finca._id)} /><span>{finca.codigo} · {finca.nombre}</span>{seleccionadas.includes(finca._id) && gasto.modo !== 'IGUAL' && <input required min="0.01" step="0.01" type="number" value={valores[finca._id] || ''} onChange={(e) => setValores((actual) => ({ ...actual, [finca._id]: e.target.value }))} placeholder={gasto.modo === 'PORCENTAJE' ? '%' : 'Monto'} />}</label>)}</fieldset>
+          <fieldset className="distribucion-fincas" disabled={guardando}>
+            <legend>Fincas participantes</legend>
+            {fincas.map((finca) => (
+              <div className="multifinca-participante" key={finca._id}>
+                <label className="multifinca-seleccion">
+                  <input type="checkbox" checked={seleccionadas.includes(finca._id)} onChange={() => alternarFinca(finca._id)} />
+                  <span>{finca.codigo} · {finca.nombre}</span>
+                </label>
+                {seleccionadas.includes(finca._id) && gasto.modo !== 'IGUAL' && (
+                  <label className="multifinca-valor">
+                    {gasto.modo === 'PORCENTAJE' ? 'Porcentaje (%)' : `Monto (${gasto.moneda})`}
+                    <input required min="0.01" step="0.01" type="number" value={valores[finca._id] || ''} onChange={(e) => setValores((actual) => ({ ...actual, [finca._id]: e.target.value }))} />
+                  </label>
+                )}
+              </div>
+            ))}
+          </fieldset>
           <button className="boton-primario" disabled={guardando} type="submit">Distribuir gasto</button>
         </form>
       </div>
 
       <section className="finanzas-panel"><div className="panel-title compacto"><div><p className="eyebrow">Trazabilidad</p><h3>Operaciones multi-finca recientes</h3></div></div>
         <ContenidoPaginado datos={movimientos} clavePaginacion="finanzas-multifinca">
-          {(pagina) => <div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Fecha</th><th>Finca</th><th>Tipo</th><th>Naturaleza</th><th>Descripción</th><th>Monto</th><th>Acciones</th></tr></thead><tbody>{pagina.map((item) => { const grupo = String(item.grupoConsolidacion || ''); const esAnulacion = item.referenciaModelo === 'AnulacionOperacionMultiFinca'; const anulado = gruposAnulados.has(grupo); return <tr key={item._id}><td>{new Date(item.fecha).toLocaleDateString('es-CR')}</td><td>{item.fincaId?.codigo || '--'}</td><td>{esAnulacion ? 'Anulación' : item.alcanceFinanciero === 'TRANSFERENCIA_INTERNA' ? 'Transferencia interna' : 'Gasto compartido'}</td><td>{item.naturaleza}</td><td>{item.descripcion}</td><td>{dinero(item.monto, item.moneda)}</td><td>{!esAnulacion && primeraFilaGrupo.has(item._id) ? (anulado ? <span className="estado-badge cancelado">Anulada</span> : <button className="boton-secundario compacto peligro" type="button" disabled={guardando} onClick={() => anularGrupo(grupo)}>Anular grupo</button>) : '--'}</td></tr>; })}</tbody></table></div>}
+          {(pagina) => <div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Fecha</th><th>Finca</th><th>Tipo</th><th>Naturaleza</th><th>Descripción</th><th>Monto</th><th>Acciones</th></tr></thead><tbody>{!pagina.length && <tr><td colSpan={7} className="multifinca-sin-movimientos">No hay operaciones multi-finca registradas.</td></tr>}{pagina.map((item) => { const grupo = String(item.grupoConsolidacion || ''); const esAnulacion = item.referenciaModelo === 'AnulacionOperacionMultiFinca'; const anulado = gruposAnulados.has(grupo); return <tr key={item._id}><td>{new Date(item.fecha).toLocaleDateString('es-CR')}</td><td>{item.fincaId?.codigo || '--'}</td><td>{esAnulacion ? 'Anulación' : item.alcanceFinanciero === 'TRANSFERENCIA_INTERNA' ? 'Transferencia interna' : 'Gasto compartido'}</td><td>{item.naturaleza}</td><td>{item.descripcion}</td><td>{dinero(item.monto, item.moneda)}</td><td>{!esAnulacion && primeraFilaGrupo.has(item._id) ? (anulado ? <span className="estado-badge cancelado">Anulada</span> : <button className="boton-secundario compacto peligro" type="button" disabled={guardando} onClick={() => anularGrupo(grupo)}>Anular grupo</button>) : '--'}</td></tr>; })}</tbody></table></div>}
         </ContenidoPaginado>
       </section>
     </section>

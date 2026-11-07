@@ -5,6 +5,9 @@ const dinero = (n, moneda = 'CRC') => moneda === 'USD'
     ? `$${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0))}`
     : `₡${numero(n)}`;
 const signo = (n) => `${n > 0 ? '+' : ''}${numero(n)}`;
+const especieVisible = (resumen, especie, datos) => datos.total > 0 || datos.partos > 0
+    || resumen.inventario?.some((r) => r.especie === especie && r.activos > 0);
+const etiquetaEspecie = (especie) => especie === 'Porcino' ? 'Porcinos' : 'Bovinos';
 const enlacePanel = (valor = process.env.FRONTEND_URL) => {
     let url;
     try { url = new URL(valor); } catch { throw new Error('FRONTEND_URL debe ser una URL válida para el resumen.'); }
@@ -47,7 +50,14 @@ const crearContenido = ({ usuario, organizacion, resumen, frecuencia }) => {
     }
     if (resumen.radar) {
         const r = resumen.radar, texto = [];
-        if (r.partos !== undefined) texto.push(`Partos estimados próximos 7 días: ${numero(r.partos)}.`, ...(r.hembras || []).map((a) => `- ${[a.diio, a.nombre].filter(Boolean).join(' ') || 'Animal registrado'}: ${a.dia}`));
+        if (r.partos !== undefined) {
+            texto.push(`Partos estimados próximos 7 días: ${numero(r.partos)}.`);
+            for (const [especie, d] of Object.entries(r.partosPorEspecie || {})) {
+                if (especieVisible(resumen, especie, d)) texto.push(`${etiquetaEspecie(especie)}: ${numero(d.partos)} ${d.partos === 1 ? 'parto estimado' : 'partos estimados'}; ${numero(d.partosConfirmados)} con gestación confirmada y ${numero(d.partos - d.partosConfirmados)} pendientes de confirmación.`);
+            }
+            texto.push(...(r.hembras || []).map((a) => `- ${a.especie ? `${a.especie} | ` : ''}${[a.diio, a.nombre].filter(Boolean).join(' ') || 'Animal registrado'}: ${a.dia}${a.confirmada !== undefined ? ` | ${a.confirmada ? 'Gestación confirmada' : 'Pendiente de confirmar gestación'}` : ''}`));
+            if (Object.values(r.partosPorEspecie || {}).some((d) => d.partos > d.partosConfirmados)) texto.push('La fecha de parto estimada no equivale a un diagnóstico positivo de gestación.');
+        }
         if (r.retiroCarne !== undefined) texto.push(`Animales con retiro de carne vigente al corte: ${numero(r.retiroCarne)}.`);
         if (r.campanas !== undefined) texto.push(`Tareas programadas de campañas IATF / TE próximas 7 días: ${numero(r.campanas)}.`);
         agregar('Radar operativo', texto.map((s) => `<p style="margin:8px 0;">${h(s)}</p>`).join(''), texto);
@@ -55,7 +65,12 @@ const crearContenido = ({ usuario, organizacion, resumen, frecuencia }) => {
     if (resumen.inventario) {
         const texto = resumen.inventario.map((d) => `${d.especie}: ${numero(d.activos)} activos al corte; variación ${signo(d.variacion)}. Altas: ${numero(d.nacimientos)} nacimientos, ${numero(d.compras)} compras, ${numero(d.recibidos)} traslados recibidos. Bajas: ${numero(d.ventas)} ventas, ${numero(d.muertes)} muertes, ${numero(d.enviados)} traslados enviados.`);
         if (!texto.length) texto.push('Sin animales activos registrados.');
-        if (resumen.productivo?.gestaciones !== undefined) texto.push(`Hembras con gestación confirmada activa: ${numero(resumen.productivo.gestaciones)}.`);
+        if (resumen.productivo?.gestacionesPorEspecie) {
+            texto.push(`Hembras en seguimiento de gestación: ${numero(resumen.productivo.gestacionesSeguimiento)}.`);
+            for (const [especie, d] of Object.entries(resumen.productivo.gestacionesPorEspecie)) {
+                if (especieVisible(resumen, especie, d)) texto.push(`${etiquetaEspecie(especie)}: ${numero(d.confirmadas)} ${d.confirmadas === 1 ? 'gestación confirmada' : 'gestaciones confirmadas'} y ${numero(d.sinConfirmar)} en seguimiento sin confirmación.`);
+            }
+        } else if (resumen.productivo?.gestaciones !== undefined) texto.push(`Hembras con gestación confirmada activa: ${numero(resumen.productivo.gestaciones)}.`);
         if (resumen.productivo) texto.push(`Animales en lotes de engorde activos: ${numero(resumen.productivo.engorde)}.`);
         texto.push('Foto actual al corte y movimientos del período. Los traslados entre fincas incluidas se compensan en la variación consolidada.');
         agregar('Inventario y movimiento del período', texto.map((s) => `<p style="margin:8px 0;">${h(s)}</p>`).join(''), texto);

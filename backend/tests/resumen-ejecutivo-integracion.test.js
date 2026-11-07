@@ -23,6 +23,7 @@ const Pertenencia = require('../models/PertenenciaLote');
 const { ejecutarConOrganizacion } = require('../context/organizacion-context');
 const { recopilarResumen, debeEnviarResumen, procesarResumenesTodasOrganizaciones } = require('../services/resumenEmail-service');
 const { crearContenido, enlacePanel } = require('../services/resumenEmail-plantilla-service');
+const { crearDefinicionesTareasBovinas } = require('../services/reproduccionBovina-service');
 
 const id = () => new mongoose.Types.ObjectId();
 const org = id(), finca = id(), segunda = id(), oculta = id(), ajenaOrg = id(), admin = id(), encargado = id();
@@ -154,6 +155,119 @@ test('Mongo real: traslado interno se compensa y nacimiento se atribuye a su fin
     assert.equal(r.fincas[1].inventario.recibidos, 1); assert.equal(r.fincas[1].inventario.nacimientos, 0);
     const restringido = await recopilar();
     assert.equal(restringido.inventario[0].activos, 0); assert.equal(restringido.inventario[0].variacion, 0);
+});
+
+test('Mongo real: tarea de parto legado aparece en radar sin inventar confirmacion; cerdas y vacas separadas', async () => {
+    const vaca = animal({ diio: '188000568005', nombre: 'ADELA' }), cerda = animal({ especie: 'Porcino', diio: '3001', nombre: 'Cerda' });
+    await Animal.collection.insertMany([vaca, cerda]);
+    const legado = base({ animal: vaca._id, fechaPartoEstimada: new Date('2026-11-09'), estado: 'Gestante', gestacionConfirmada: false, asignadoA: encargado });
+    delete legado.fincaId;
+    const porcino = base({ animal: cerda._id, especie: 'Bovino', fechaPartoEstimada: new Date('2026-11-11'), estadoCiclo: 'Activo', resultadoDiagnosticoGestacion: 'PREÑADA', gestacionConfirmada: false });
+    await Registro.collection.insertMany([legado, porcino]);
+    await Tarea.collection.insertMany(crearDefinicionesTareasBovinas({ registro: legado, animal: vaca, usuarioId: admin }).map((t) => base(t)));
+    const antes = await Registro.collection.find({ organizacionId: org }).toArray();
+    const r = await recopilar({ ahora: new Date('2026-11-06T12:00:00Z') });
+    assert.ok(r.tareas.urgentes.some((t) => t.titulo.includes('188000568005')));
+    assert.equal(r.radar.partos, 2);
+    assert.equal(r.productivo.gestacionesSeguimiento, 2); assert.equal(r.productivo.gestaciones, 1);
+    assert.equal(r.productivo.gestacionesPorEspecie.Bovino.sinConfirmar, 1);
+    assert.equal(r.productivo.gestacionesPorEspecie.Porcino.confirmadas, 1);
+    assert.equal(r.radar.partosPorEspecie.Bovino.partos, 1); assert.equal(r.radar.partosPorEspecie.Porcino.partos, 1);
+    assert.equal(r.radar.hembras.find((h) => h.diio === '3001').especie, 'Porcino');
+    const c = contenido(r);
+    for (const texto of [c.text, c.html]) {
+        assert.match(texto, /Partos estimados próximos 7 días: 2/);
+        assert.match(texto, /Bovinos: 0 gestaciones confirmadas y 1 en seguimiento sin confirmación/);
+        assert.match(texto, /Porcinos: 1 gestación confirmada y 0 en seguimiento sin confirmación/);
+        assert.match(texto, /Pendiente de confirmar gestación/);
+    }
+    assert.deepEqual(await Registro.collection.find({ organizacionId: org }).toArray(), antes, 'El correo no modifica historiales ni banderas clinicas');
+});
+
+test('Mongo real: diagnostico mas reciente negativo descarta ciclo; no rescata duplicado positivo anterior', async () => {
+    const hembras = Array.from({ length: 9 }, () => animal());
+    await Animal.collection.insertMany(hembras);
+    const ciclo = (a, d = {}) => base({ animal: a._id, estadoCiclo: 'Activo', gestacionConfirmada: true, fechaPartoEstimada: new Date('2026-11-09'), ...d });
+    await Registro.collection.insertMany([
+        ciclo(hembras[0], { createdAt: new Date('2026-01-01') }), ciclo(hembras[0], { resultadoDiagnosticoGestacion: 'VACIA' }),
+        ciclo(hembras[1], { estadoCiclo: 'Cerrado' }), ciclo(hembras[2], { estadoCiclo: 'Cancelado' }),
+        ciclo(hembras[3], { estadoCiclo: 'No preñada' }), ciclo(hembras[4], { activoParaAlertas: false }),
+        ciclo(hembras[5], { fechaPartoReal: new Date('2026-11-03') }),
+        ciclo(hembras[6], { resultado: { tipo: 'ABORTO' } }),
+        ciclo(hembras[7], { historialDiagnosticos: [{ resultado: 'PREÑADA' }, { resultado: 'VACIA' }] }),
+        ciclo(hembras[8], { resultadoDiagnosticoGestacion: 'DUDOSA' })
+    ]);
+    const r = await recopilar();
+    assert.equal(r.radar.partos, 1);
+    assert.equal(r.productivo.gestaciones, 0); assert.equal(r.productivo.gestacionesSeguimiento, 1);
+    assert.equal(r.productivo.gestacionesPorEspecie.Bovino.sinConfirmar, 1);
+});
+
+test('Mongo real: confirmacion por historial sin bandera ni fecha se cuenta pero no inventa parto en radar', async () => {
+    const vaca = animal(), cerda = animal({ especie: 'Porcino' });
+    await Animal.collection.insertMany([vaca, cerda]);
+    await Registro.collection.insertMany([
+        base({ animal: vaca._id, historialDiagnosticos: [{ resultado: 'PREÑADA' }], estadoCiclo: 'Activo' }),
+        base({ animal: cerda._id, resultadoDiagnosticoGestacion: 'PREÑADA', estadoCiclo: 'Activo', fechaPartoEstimada: 'fecha ilegible' })
+    ]);
+    const r = await recopilar();
+    assert.equal(r.productivo.gestaciones, 2); assert.equal(r.radar.partos, 0);
+    assert.equal(r.productivo.gestacionesPorEspecie.Bovino.confirmadas, 1); assert.equal(r.productivo.gestacionesPorEspecie.Porcino.confirmadas, 1);
+});
+
+test('Mongo real: un ciclo nuevo cerrado, con parto o negativo no revive una gestacion vieja activa', async () => {
+    const hembras = Array.from({ length: 3 }, () => animal());
+    await Animal.collection.insertMany(hembras);
+    const anteriores = hembras.map((a) => base({ animal: a._id, createdAt: new Date('2026-01-01'), estadoCiclo: 'Activo', gestacionConfirmada: true, fechaPartoEstimada: new Date('2026-11-09') }));
+    await Registro.collection.insertMany([...anteriores,
+        base({ animal: hembras[0]._id, estadoCiclo: 'Cerrado' }),
+        base({ animal: hembras[1]._id, estadoCiclo: 'Activo', fechaPartoReal: new Date('2026-11-03') }),
+        base({ animal: hembras[2]._id, estadoCiclo: 'No preñada', resultadoDiagnosticoGestacion: 'VACIA' })
+    ]);
+    const r = await recopilar();
+    assert.equal(r.productivo.gestacionesSeguimiento, 0); assert.equal(r.radar.partos, 0);
+});
+
+test('Mongo real: radar respeta dias civiles, instantes locales y limite exclusivo de siete dias', async () => {
+    const fechas = ['2026-11-06T00:00:00Z', '2026-11-12T00:00:00Z', '2026-11-13T00:00:00Z', '2026-11-06T05:00:00Z'];
+    const hembras = fechas.map(() => animal());
+    await Animal.collection.insertMany(hembras);
+    await Registro.collection.insertMany(hembras.map((a, i) => base({ animal: a._id, fechaPartoEstimada: new Date(fechas[i]), estadoCiclo: 'Activo' })));
+    const r = await recopilar({ ahora: new Date('2026-11-06T12:00:00Z') });
+    assert.equal(r.productivo.gestacionesSeguimiento, 4); assert.equal(r.radar.partos, 2);
+    assert.deepEqual(r.radar.hembras.map((h) => h.dia).sort(), ['2026-11-06', '2026-11-12']);
+});
+
+test('Mongo real: legacy sin finca no evade tenant, finca, sexo ni estado actual de la hembra', async () => {
+    const hembras = [animal(), animal({ fincaId: oculta }), animal({ organizacionId: ajenaOrg }), animal({ sexo: 'Macho' }), animal({ estado: 'Vendido' }), animal({ estado: 'Muerto' })];
+    await Animal.collection.insertMany(hembras);
+    const ciclos = hembras.map((a) => base({ animal: a._id, fechaPartoEstimada: new Date('2026-11-09'), gestacionConfirmada: true }));
+    for (const r of ciclos) delete r.fincaId;
+    ciclos.push(base({ animal: hembras[0]._id, organizacionId: ajenaOrg, fechaPartoEstimada: new Date('2026-11-09'), gestacionConfirmada: true }));
+    await Registro.collection.insertMany(ciclos);
+    const r = await recopilar();
+    assert.equal(r.productivo.gestaciones, 1); assert.equal(r.radar.partos, 1);
+    assert.equal(r.radar.hembras[0].animalId.toString(), hembras[0]._id.toString());
+    const contador = await recopilar({ rol: 'Contador' });
+    assert.equal(contador.productivo.gestacionesPorEspecie, undefined); assert.equal(contador.radar, undefined);
+});
+
+test('Mongo real: radar consolida ambas especies en una finca sin sobrescribir el subtotal', async () => {
+    const hembras = [animal(), animal({ especie: 'Porcino' }), animal({ fincaId: segunda })];
+    await Animal.collection.insertMany(hembras);
+    await Registro.collection.insertMany(hembras.map((a) => base({ animal: a._id, fincaId: a.fincaId, fechaPartoEstimada: new Date('2026-11-09'), gestacionConfirmada: true, estadoCiclo: 'Activo' })));
+    const r = await recopilar({ fincaIds: [finca, segunda] });
+    assert.equal(r.radar.partos, 3); assert.equal(r.radar.partosPorEspecie.Bovino.partos, 2); assert.equal(r.radar.partosPorEspecie.Porcino.partos, 1);
+    assert.equal(r.fincas.find((f) => f.fincaId === String(finca)).partos, 2);
+    assert.equal(r.fincas.find((f) => f.fincaId === String(segunda)).partos, 1);
+    assert.equal((await recopilar()).radar.partos, 2);
+});
+
+test('Mongo real: una tarea manual sin ciclo reproductivo nunca confirma ni pronostica una gestacion', async () => {
+    const vaca = animal(); await Animal.collection.insertOne(vaca);
+    await Tarea.collection.insertOne(base({ animal: vaca._id, titulo: 'Revisar parto estimado', asignadoA: encargado, estado: 'Pendiente', fechaProgramada: new Date('2026-11-09') }));
+    const r = await recopilar();
+    assert.equal(r.tareas.pendientes, 1); assert.equal(r.radar.partos, 0); assert.equal(r.productivo.gestacionesSeguimiento, 0);
 });
 
 test('HTML escapado, CTA validada y texto humano con intervalo y zona horaria', async () => {
