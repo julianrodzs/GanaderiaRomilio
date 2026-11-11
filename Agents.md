@@ -1,110 +1,116 @@
-# PROMPT PARA CODEX: GESTIÓN DE SUSCRIPCIONES MANUALES (SINPE / TRANSFERENCIA), RENOVACIONES Y ADAPTACIÓN DE MI PLAN
+# PROMPT PARA CODEX: CENTRO LEGAL PÚBLICO, ACEPTACIÓN DIFERENCIADA (LEY 8968 CR) Y REGISTRO DE EVIDENCIA
 
 ## 🎯 OBJETIVO
-Completar el ciclo de vida comercial de suscripciones manuales sobre el flujo de alta asistida ya existente en `frontend/src/pages/AdministracionSaas.js` y backend, permitiendo administrar pagos por **SINPE Móvil / Transferencia IBAN**, períodos cubiertos, fechas de renovación, vencimientos, períodos de gracia y cambios de plan posteriores sin depender de Stripe, manteniendo la integración de Stripe intacta como opción futura.
+Construir el **Centro Legal público** de **CIR Ganadero** dentro del frontend (`/legal` y subrutas), accesible sin iniciar sesión ni depender de una suscripción activa, e implementar el flujo de aceptación y consentimiento informado diferenciado según el rol y la situación (contratación de organización vs. incorporación de colaborador vs. consentimientos de datos personales conforme al art. 5 de la Ley N.° 8968 de Costa Rica), guardando evidencia inmutable en el backend y utilizando por ahora los **borradores existentes** para pruebas sin exponer documentos internos.
 
 ---
 
-## 🏗️ 1. MODELO DE DATOS Y ESTADO DE SUSCRIPCIÓN
-
-### A. Ampliar los metadatos de suscripción en `Organizacion`
-Asegurar que `Organizacion` contenga y gestione de forma consistente:
-- `modoFacturacion`: Enum `['MANUAL', 'STRIPE']` (default: `'MANUAL'` cuando se crea desde `AdministracionSaas` o cuando Stripe no interviene).
-- `estadoSuscripcion`: Enum `['PRUEBA', 'ACTIVA', 'POR_VENCER', 'EN_GRACIA', 'VENCIDA', 'SUSPENDIDA', 'CANCELADA']` (manteniendo compatibilidad con los estados actuales que ya valida el middleware de acceso).
-- `fechaInicioPeriodoActual`: Date.
-- `fechaFinPeriodoActual` / `fechaProximoVencimiento`: Date (obligatoria en cuentas `MANUAL` en prueba o activas).
-- `diasGracia`: Number (default: `5` días después de `fechaProximoVencimiento` antes de bloquear escrituras o marcar `VENCIDA`).
-- `notasFacturacion`: String opcional (ej. teléfono SINPE, cédula jurídica o acuerdo comercial).
-
-### B. Nuevo modelo `PagoSuscripcion` (Historial inmutable de cobros SaaS)
-- `organizacionId`: ObjectId ref `Organizacion` (indexado).
-- `plan`: Enum `['ESENCIAL', 'GESTION', 'PRO', 'PREMIUM']`.
-- `metodoPago`: Enum `['SINPE_MOVIL', 'TRANSFERENCIA_IBAN', 'EFECTIVO', 'TARJETA_MANUAL', 'STRIPE', 'OTRO']`.
-- `moneda`: Enum `['CRC', 'USD']` (sin mezclar monedas).
-- `monto`: Number (> 0).
-- `referenciaComprobante`: String (ej. número de comprobante SINPE o transferencia).
-- `mesesCubiertos`: Number (entero >= 1, o días personalizados).
-- `periodoCubiertoInicio`: Date.
-- `periodoCubiertoFin`: Date.
-- `fechaPago`: Date (default: now).
-- `registradoPor`: ObjectId ref `Usuario` (SuperAdmin).
-- `notas`: String opcional.
-- `estado`: Enum `['REGISTRADO', 'ANULADO']` (default: `'REGISTRADO'`).
-- `motivoAnulacion`, `fechaAnulacion`: opcionales.
+## ⚠️ FASE 0: INSPECCIÓN DE DOCUMENTOS EXISTENTES
+1. Revisar en el repositorio qué documentos legales/normativos existen actualmente.
+2. Clasificar cuáles corresponden a los **4 documentos públicos** y cuáles son **documentos internos/operativos** que **NO** deben publicarse en rutas públicas.
+3. Si alguno de los 4 documentos públicos está en formato Markdown/texto en el repo, integrarlo como fuente versionada (`version: '0.9-borrador'`, `estado: 'BORRADOR_PRUEBA'`, `fechaVigencia`) para que tanto el frontend como el backend compartan exactamente el mismo texto y su hash SHA-256.
 
 ---
 
-## ⚙️ 2. SERVICIOS Y ENDPOINTS DE ADMINISTRACIÓN SAAS (`AdministracionSaas`)
+## 🌐 1. CENTRO LEGAL PÚBLICO EN EL FRONTEND (`/legal`)
 
-Todas las operaciones que modifiquen `Organizacion` y `PagoSuscripcion` deben correr en transacción (`ejecutarEnTransaccion`) y registrar auditoría administrativa.
+Crear rutas públicas (accesibles sin token JWT, con sesión cerrada o con suscripción vencida, y excluidas de cualquier redirección forzada a `/login`):
 
-1. **Alta asistida con vigencia inicial (`POST /api/admin/organizaciones` o ruta actual):**
-   - Si se crea en estado `Prueba`, fijar `fechaProximoVencimiento` a `hoy + diasPrueba` (ej. 15 días por defecto, configurable en el formulario).
-   - Si se crea en estado `Activo` con un pago inicial opcional en el mismo formulario, crear el primer `PagoSuscripcion` y fijar `fechaProximoVencimiento` según los meses cubiertos (o `hoy + 1 mes` por defecto).
+| Ruta | Contenido |
+| :--- | :--- |
+| `/legal` | Índice del Centro Legal con tarjetas hacia cada documento, versión vigente, fecha de actualización y resumen de propósito. |
+| `/legal/terminos` | **Términos del Servicio** (reglas de uso de la plataforma y condiciones generales). |
+| `/legal/privacidad` | **Política de Privacidad y Protección de Datos** (información del art. 5 Ley 8968 CR y contacto para ejercer derechos ARCO: acceso, rectificación, cancelación y oposición). |
+| `/legal/suscripciones` | **Condiciones de Suscripción** (planes, pagos manuales SINPE/transferencia o pasarela, renovación, días de gracia, suspensión, cancelación y política de reembolsos). |
+| `/legal/soporte` | **Política de Soporte** (canales oficiales, horarios en `America/Costa_Rica` y alcance del soporte técnico). |
 
-2. **Registrar Pago y Renovar Suscripción (`POST /api/admin/organizaciones/:id/pagos`):**
-   - Entrada: `{ metodoPago, moneda, monto, referenciaComprobante, mesesCubiertos, planOpcional, fechaFinPersonalizada, notas }`.
-   - **Regla de cálculo de período:**
-     - Si la organización aún no ha vencido (`fechaProximoVencimiento > hoy`) y no estaba en `Prueba`, el nuevo período inicia en `fechaProximoVencimiento` actual y suma `mesesCubiertos` (para no quitarle días ya pagados al cliente).
-     - Si ya estaba vencida o estaba en `Prueba`, el nuevo período inicia en `hoy` y suma `mesesCubiertos`.
-   - Actualiza `estadoSuscripcion` a `'ACTIVA'`, actualiza `fechaInicioPeriodoActual` y `fechaProximoVencimiento` (y cambia `plan` si se indicó un cambio de plan en la misma renovación).
-   - Crea el documento `PagoSuscripcion`.
-
-3. **Anular un Pago Manual (`POST /api/admin/organizaciones/:id/pagos/:pagoId/anular`):**
-   - Marca el pago como `'ANULADO'` con motivo obligatorio (sin borrar el registro) y recalcula `fechaProximoVencimiento` con base en el último pago válido anterior (o restaura la fecha previa guardada).
-
-4. **Cambiar Plan o Estado Manualmente (`PATCH /api/admin/organizaciones/:id/suscripcion`):**
-   - Permite cambiar de plan (`ESENCIAL`, `GESTION`, `PRO`, `PREMIUM`), ajustar `fechaProximoVencimiento`, extender días de prueba o suspender/reactivar manualmente.
-   - **Validación en Downgrade:** Si se baja a un plan inferior, verificar primero si la organización supera los límites actuales del plan destino (cantidad de fincas activas, usuarios activos + invitaciones, especies o cupo de animales). Si los supera, devolver `409 Conflict` detallando qué límite excede para que el administrador lo resuelva antes, sin corromper datos existentes.
-
-5. **Listado y Resumen de Cartera SaaS (`GET /api/admin/organizaciones`):**
-   - Enriquecer el listado con: `modoFacturacion`, `estadoSuscripcion`, `fechaProximoVencimiento`, `diasParaVencer` (positivo si falta, negativo si ya venció), último pago registrado y contadores superiores de cartera:
-     - **Activas al día**
-     - **En prueba**
-     - **Por vencer (≤ 7 días)**
-     - **En gracia / Vencidas**
-     - **Ingresos registrados del mes (`CRC` y `USD` por separado)**.
+### Requisitos de diseño y UX del Centro Legal:
+1. **Páginas completas y legibles en móvil y escritorio:** Tipografía clara, índice lateral o superior de secciones, versión visible (`Versión 0.9-borrador` con aviso discreto de borrador de prueba mientras `estado === 'BORRADOR_PRUEBA'`), fecha de vigencia y metaetiqueta `<meta name="robots" content="noindex">` mientras esté en modo borrador.
+2. **Impresión y descarga limpias:** Botón **"Imprimir / Guardar PDF"** (`window.print()` con hoja de estilos `@media print` que oculte barras de navegación y botones) y botón **"Descargar copia (.txt / .md)"** con la versión y fecha incluidas.
+3. **SW / PWA (`vite.config.js`):** Verificar que `/legal` y `/legal/*` funcionen correctamente en navegación directa (SPA fallback a `index.html`).
 
 ---
 
-## ⏱️ 3. VERIFICACIÓN DIARIA DE VENCIMIENTOS EN EL CRON MATUTINO (`job:alertas`)
+## 🔗 2. PUNTOS DE ACCESO EN LA APLICACIÓN (SIN ENSUCIAR EL MENÚ PRINCIPAL)
 
-Integrar dentro del runner del cron matutino una verificación ligera y aislada de suscripciones manuales:
-1. Detectar organizaciones con `modoFacturacion: 'MANUAL'`:
-   - Si faltan `<= 5` días para `fechaProximoVencimiento` (o vence hoy): marcar indicador visual / estado `'POR_VENCER'` y enviar aviso de próximo vencimiento al administrador de la organización y resumen al `EMAIL_ADMIN` (con idempotencia por ciclo para no repetir el mismo correo todos los días).
-   - Si `hoy > fechaProximoVencimiento` pero dentro de `diasGracia`: pasar a `'EN_GRACIA'` (la organización aún puede operar pero ve un banner claro de renovación pendiente).
-   - Si `hoy > fechaProximoVencimiento + diasGracia`: pasar a `'VENCIDA'` (aplicando la política actual de suscripción inactiva/vencida sin borrar ningún dato de la finca).
+1. **Pantalla de Login (`/login`):**
+   - Debajo del formulario de inicio de sesión, mostrar enlaces discretos y accesibles: **`Términos · Privacidad · Soporte`** (más acceso a `/legal`).
+2. **Pantalla de Activación / Aceptación de Invitación (`/aceptar-invitacion`):**
+   - Mostrar acceso directo a los documentos correspondientes antes de activar la cuenta (con apertura en nueva pestaña o visor completo sin perder lo escrito en el formulario).
+3. **Dentro de la App autenticada:**
+   - **No agregar otro ítem al menú lateral principal.**
+   - Dentro de **Cuenta / Configuración → pestaña o sección "Legal y privacidad"**, mostrar:
+     - Enlaces a los 4 documentos del Centro Legal.
+     - Tabla de **"Mis aceptaciones y consentimientos registrados"** (documento, versión, fecha de aceptación) y control para activar/revocar en cualquier momento el consentimiento opcional de comunicaciones comerciales.
+4. **En `MiPlan` (`/mi-plan`):**
+   - Enlace directo a **`/legal/suscripciones`** (*"Ver condiciones de suscripción, renovación y cancelación"*) y estado de aceptación comercial de la organización.
 
 ---
 
-## 🖥️ 4. INTERFAZ DE USUARIO (FRONTEND)
+## ⚖️ 3. REGLAS DE ACEPTACIÓN Y CONSENTIMIENTO (TRES SITUACIONES SEPARADAS)
 
-### A. En `frontend/src/pages/AdministracionSaas.js` (Panel SuperAdmin)
-1. **Tarjetas de Semáforo de Cartera arriba:** Total Activas, En Prueba, Por Vencer (≤ 7 días), En Gracia/Vencidas, y total recaudado del mes en `CRC` y `USD`.
-2. **Filtros rápidos en la tabla de organizaciones:** Filtrar por estado (`Todas`, `Por vencer`, `Vencidas`, `En prueba`, `Activas`) y por plan.
-3. **Columna de Vigencia en cada organización:** Mostrar badge de estado con color, fecha de próximo vencimiento y días restantes o días de atraso.
-4. **Acciones por organización (Modales limpios):**
-   - **`[ + Registrar Pago / Renovar ]`:** Modal rápido para elegir método (`SINPE Móvil`, `Transferencia IBAN`, etc.), moneda (`CRC` / `USD`), monto, comprobante, meses (`1 mes`, `3 meses`, `6 meses`, `12 meses`) y vista previa de la nueva fecha de vencimiento.
-   - **`[ Cambiar Plan / Vigencia ]`:** Modal para hacer upgrade/downgrade de plan, extender prueba o suspender/reactivar.
-   - **`[ Historial de Pagos ]`:** Ver todos los pagos de esa organización con opción de anular con motivo si hubo error de digitación.
+**Prohibido:**
+- Prohibido pedir aceptar todo en cada login.
+- Prohibido usar una sola casilla que mezcle contrato comercial, privacidad y publicidad.
+- Prohibido marcar retroactivamente a usuarios u organizaciones existentes como aceptantes.
 
-### B. En `frontend/src/pages/MiPlan.js` (Vista del Cliente Ganadero)
-Adaptar `MiPlan.js` según `modoFacturacion` (y disponibilidad de Stripe):
-1. Si la organización usa `modoFacturacion: 'MANUAL'` (o Stripe no está habilitado):
-   - Mostrar claramente su **Plan Actual**, **Estado de Suscripción** (`Activa`, `En período de prueba`, `Próxima a vencer`, `En período de gracia` o `Vencida`) y la **Fecha de próximo vencimiento** en formato legible.
-   - Al seleccionar otro plan en las tarjetas comparativas o al tocar renovar, en lugar de intentar abrir un checkout de Stripe, mostrar un botón claro: **`Solicitar cambio o renovación por WhatsApp / SINPE`** (abriendo WhatsApp prellenado con el nombre de la organización, el plan actual y el plan o renovación solicitada, usando una variable `VITE_WHATSAPP_SOPORTE` o contacto configurado).
-   - Mostrar una tabla limpia de **"Mis Pagos Registrados"** (Fecha, Plan, Método `SINPE / Transferencia`, Comprobante, Monto y Período cubierto) para transparencia total con el productor.
-2. Si `modoFacturacion === 'STRIPE'` y Stripe está configurado, mantener el flujo actual de Stripe Checkout y Portal sin romper ninguna prueba existente.
+### Separar estrictamente estos 3 escenarios:
+
+1. **Escenario A — Contratación / Activación de una Organización (Representante / Administrador titular):**
+   - Cuando el administrador titular activa por primera vez la organización (o desde `MiPlan` / `Cuenta` si la organización fue creada antes de este cambio y aún no registra aceptación comercial):
+   - Debe marcar por separado:
+     - **Casilla 1 (Obligatoria para el representante):** *"Acepto los [Términos del Servicio](/legal/terminos) y las [Condiciones de Suscripción](/legal/suscripciones) en representación de la organización."*
+     - **Casilla 2 (Obligatoria — Ley 8968 CR):** *"He leído la [Política de Privacidad](/legal/privacidad) y otorgo mi consentimiento informado para el tratamiento de mis datos personales."*
+     - **Casilla 3 (Opcional — Nunca pre-marcada):** *"Deseo recibir comunicaciones comerciales, novedades y consejos productivos opcionales."*
+
+2. **Escenario B — Incorporación de un Colaborador (`Encargado`, `Veterinario`, `Contador`, etc. en `/aceptar-invitacion`):**
+   - A un trabajador o colaborador **NO se le hace aceptar cargos comerciales ni condiciones de pago de la empresa**.
+   - Solo se le presentan:
+     - **Casilla 1 (Obligatoria):** *"Acepto las reglas individuales de uso en los [Términos del Servicio](/legal/terminos)."*
+     - **Casilla 2 (Obligatoria — Ley 8968 CR):** *"He leído la [Política de Privacidad](/legal/privacidad) y otorgo mi consentimiento informado para el tratamiento de mis datos personales."*
+     - **Casilla 3 (Opcional — Nunca pre-marcada):** Comunicaciones opcionales.
+
+3. **Escenario C — Gestión de Consentimientos sobre Datos Personales (en `Cuenta → Legal y privacidad`):**
+   - Cualquier usuario existente o nuevo puede consultar qué versión aceptó, aceptar la versión vigente si aún no tenía registro previo, o cambiar su preferencia de comunicaciones opcionales en cualquier momento, dejando trazabilidad del cambio.
+
+---
+
+## 🗄️ 4. EVIDENCIA INMUTABLE EN BACKEND (`AceptacionLegal`)
+
+1. **Catálogo / Versionado de Documentos Legales (`config/documentosLegales.js` o colección):**
+   - Cada documento (`terminos`, `privacidad`, `suscripciones`, `soporte`) tiene `slug`, `titulo`, `version` (actualmente `'0.9-borrador'`), `estado` (`'BORRADOR_PRUEBA'` | `'VIGENTE'`), `fechaVigencia`, `contenido` y `hashSha256` calculado automáticamente sobre el texto exacto.
+   - Endpoint público `GET /api/legal/documentos` y `GET /api/legal/documentos/:slug` (sin requerir autenticación) que devuelve los 4 documentos públicos vigentes con su versión y hash.
+
+2. **Modelo `AceptacionLegal` (Colección apendizable e inmutable):**
+   - `usuarioId`: ObjectId ref `Usuario` (indexado).
+   - `organizacionId`: ObjectId ref `Organizacion` (indexado).
+   - `rolEnMomento`: String (`Administrador`, `Encargado`, `Veterinario`, etc.).
+   - `contexto`: Enum `['ACTIVACION_ORGANIZACION', 'ACEPTACION_INVITACION_COLABORADOR', 'PANEL_CUENTA', 'ACTUALIZACION_CONSENTIMIENTO']`.
+   - `tipoAceptacion`: Enum `['TERMINOS_Y_SUSCRIPCION_ORG', 'REGLAS_USO_COLABORADOR', 'CONSENTIMIENTO_PRIVACIDAD_LEY8968', 'COMUNICACIONES_OPCIONALES']`.
+   - `otorgado`: Boolean (`true` al aceptar; permite registrar `false` cuando se revoca el consentimiento opcional de comunicaciones).
+   - `documentoSlug`: Enum `['terminos', 'privacidad', 'suscripciones', 'soporte']`.
+   - `versionDocumento`: String (ej. `'0.9-borrador'`).
+   - `hashTexto`: String (SHA-256 del texto exacto presentado).
+   - `copiaTextoExacto`: String (snapshot inmutable del texto aceptado en ese momento).
+   - `fechaAceptacion`: Date (default: now).
+   - `ip`: String.
+   - `userAgent`: String.
+
+3. **Integración en `/aceptar-invitacion`:**
+   - Al consumir `POST /api/auth/aceptar-invitacion`, validar que vengan marcadas las casillas obligatorias según el rol del invitado (Representante/Administrador inicial vs. Colaborador).
+   - Si falta una casilla obligatoria, responder `400 Bad Request` indicando claramente qué aceptación falta.
+   - Guardar los registros de `AceptacionLegal` dentro de la misma transacción de activación de la invitación.
 
 ---
 
 ## 🧪 5. PRUEBAS AUTOMATIZADAS (MONGODB REAL)
 
 Agregar pruebas unitarias y de integración que verifiquen:
-1. **Renovación acumulativa justa:** Si una organización vence dentro de 5 días y se registra un pago de 1 mes por `SINPE_MOVIL`, la nueva fecha de vencimiento suma 1 mes a partir de la fecha de vencimiento vigente (no pierde los 5 días).
-2. **Renovación desde vencida o en prueba:** Si estaba vencida hace 10 días y paga 1 mes, la nueva vigencia inicia desde `hoy + 1 mes` y pasa a estado `ACTIVA`.
-3. **Anulación de pago:** Anular un pago revierte la fecha de vencimiento al estado previo y conserva el registro como `ANULADO`.
-4. **Protección en Downgrade:** Intentar bajar a `ESENCIAL` una organización que tiene 2 fincas activas o 2 especies devuelve `409` con detalle claro de los límites excedidos.
-5. **Transición automática en Cron:** El job evalúa correctamente el paso a `POR_VENCER`, `EN_GRACIA` y `VENCIDA` según las fechas.
-6. **Compatibilidad con Stripe:** Las pruebas existentes de `facturacion-service` y validación de precios de Stripe (`CL-08`) siguen pasando al 100%.
-7. Ejecutar `npm test` en backend y `npm run build` en frontend con salida `0`.
+1. **Rutas públicas sin sesión:** `GET /api/legal/documentos` y las 4 vistas `/legal/*` responden `200` sin token JWT y no exponen ningún documento interno fuera de los 4 públicos.
+2. **Separación de casillas en `/aceptar-invitacion`:**
+   - Un colaborador (`Encargado` / `Veterinario`) puede activar su invitación aceptando solo las reglas individuales de uso y privacidad (sin exigirle aceptar suscripción/cargos de la organización).
+   - El administrador inicial de una organización nueva debe aceptar términos/suscripción comercial y privacidad por separado; si omite cualquiera de las dos, recibe `400`.
+   - La casilla de comunicaciones comerciales es 100% opcional (si viene `false`, la activación pasa con `200`).
+3. **Evidencia completa:** Verificar que cada `AceptacionLegal` persistida guarde `usuarioId`, `organizacionId`, `versionDocumento` (`'0.9-borrador'`), `hashTexto`, `copiaTextoExacto`, `fechaAceptacion`, `ip` y `userAgent`.
+4. **No retroactividad:** Las organizaciones y usuarios preexistentes no reciben registros falsos de `AceptacionLegal` al migrar ni son bloqueados en su login habitual.
+5. Ejecutar `npm test`, el smoke integrado (actualizando el paso de aceptación de invitación para enviar las casillas requeridas) y `npm run build` confirmando `PASS` con salida `0`.

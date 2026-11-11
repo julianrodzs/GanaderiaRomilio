@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { obtenerOrganizacionActual } = require('../context/organizacion-context');
 const { Membresia } = require('../models/Membresia');
+const { enviarMensajeResend } = require('./resend-transporte-service');
 
 const crearTokenRecuperacion = () => crypto.randomBytes(32).toString('hex');
 const escaparHtml = (valor = '') => String(valor)
@@ -44,7 +45,7 @@ const obtenerDestinatariosAdministradores = async (organizacionId = obtenerOrgan
     return [];
 };
 
-const enviarCorreoResend = async ({ to, subject, html, text, from, claveIdempotencia }) => {
+const enviarCorreoResend = async ({ to, subject, html, text, from, claveIdempotencia, comprobarBloqueo }) => {
     const destinatarios = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
 
     if (destinatarios.length === 0) {
@@ -75,22 +76,7 @@ const enviarCorreoResend = async ({ to, subject, html, text, from, claveIdempote
         };
     }
 
-    const respuesta = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        signal: AbortSignal.timeout(30000),
-        headers: {
-            Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-            ...(claveIdempotencia ? { 'Idempotency-Key': claveIdempotencia } : {})
-        },
-        body: JSON.stringify(mensaje)
-    });
-
-    const data = await respuesta.json().catch(() => ({}));
-
-    if (!respuesta.ok) {
-        throw new Error(data.message || data.error || 'Error enviando correo con Resend');
-    }
+    const data = await enviarMensajeResend({ mensaje, apiKey: process.env.RESEND_API_KEY, claveIdempotencia, comprobarBloqueo });
 
     return {
         enviado: true,

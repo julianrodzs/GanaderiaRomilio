@@ -116,6 +116,7 @@ test('el reparto por rol incluye la finca y no crea avisos para membresía revoc
 });
 
 test('cada administrador recibe solo tareas de sus fincas y deduplicación por destinatario', async (t) => {
+    t.mock.method(require('../services/limiteCorreo-service'), 'esperarTurno', async () => {});
     const adminA = id(10), adminB = id(11), envios = [], guardadas = [];
     t.mock.method(Membresia, 'find', () => cadena([
         { organizacionId: org, fincas: [finca], usuario: { _id: adminA, correo: 'a@example.invalid' } },
@@ -149,6 +150,34 @@ test('HTML de tareas y organización escapa etiquetas, comillas y ampersand', ()
     const html = crearHtml('<Avisos>', [{ tarea: { titulo: '<a href="x">A&B</a>' }, fecha: new Date(), dias: 0 }], "Finca 'A'");
     assert.doesNotMatch(html, /<a href/); assert.match(html, /&lt;a href=&quot;x&quot;&gt;A&amp;B/);
     assert.match(html, /Finca &#39;A&#39;/);
+});
+
+test('alertas: un fallo no marca envios; repetir procesa solo el destinatario pendiente', async (t) => {
+    const estado = new Map(), peticiones = [], adminA = id(10), adminB = id(11);
+    let fallarB = true;
+    t.mock.method(require('../services/limiteCorreo-service'), 'esperarTurno', async () => {});
+    t.mock.method(Membresia, 'find', () => cadena([adminA, adminB].map((_id) => ({ organizacionId: org, fincas: [finca], usuario: { _id, correo: `${_id}@example.test` } }))));
+    t.mock.method(Finca, 'find', () => cadena([{ _id: finca }]));
+    t.mock.method(AlertaCorreo, 'findOne', async ({ clave }) => estado.get(clave) || null);
+    t.mock.method(AlertaCorreo, 'findOneAndUpdate', async ({ clave }, actualizacion) => estado.set(clave, { ...actualizacion.$set, vecesEnviada: 1 }));
+    t.mock.method(global, 'fetch', async (_, opciones) => {
+        const m = JSON.parse(opciones.body); peticiones.push({ mensaje: m, key: opciones.headers['Idempotency-Key'] });
+        const fallo = fallarB && m.to.includes(`${adminB}@example.test`);
+        if (fallo) assert.equal(estado.size, 1);
+        return { ok: !fallo, status: fallo ? 403 : 200, json: async () => fallo ? { name: 'restricted_api_key', message: 'Fallo simulado' } : { id: 'simulado' } };
+    });
+    const prev = { RESEND_API_KEY: process.env.RESEND_API_KEY, EMAIL_TEST_TO: process.env.EMAIL_TEST_TO, EMAIL_ALERTS_ENABLED: process.env.EMAIL_ALERTS_ENABLED };
+    process.env.RESEND_API_KEY = 'sin-red'; delete process.env.EMAIL_TEST_TO; delete process.env.EMAIL_ALERTS_ENABLED;
+    t.after(() => { for (const [k, v] of Object.entries(prev)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+    const alertas = [{ tarea: { _id: id(20), titulo: 'Aplicacion de prueba', fincaId: finca }, fecha: new Date(), dias: 0, asunto: 'Sanidad' }];
+    const ejecutar = () => ejecutarConOrganizacion(org, () => enviarCorreosTareas(alertas));
+    const primero = await ejecutar();
+    assert.equal(primero.enviadas, 1); assert.equal(primero.errores.length, 1); assert.equal(estado.size, 1);
+    assert.notEqual(peticiones[0].key, peticiones[1].key);
+    fallarB = false;
+    const segundo = await ejecutar();
+    assert.equal(segundo.enviadas, 1); assert.deepEqual(segundo.errores, []); assert.equal(estado.size, 2);
+    assert.equal(peticiones.length, 3); assert.equal(peticiones[1].key, peticiones[2].key);
 });
 
 for (const estado of ['Suspendido', 'Cancelado']) test(`plan ${estado} recibe 403 antes de mutar`, async () => {

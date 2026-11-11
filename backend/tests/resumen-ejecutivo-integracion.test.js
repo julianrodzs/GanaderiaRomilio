@@ -321,6 +321,26 @@ test('Mongo real: error de proveedor aisla destinatarios y no marca como enviado
     assert.ok((await Configuracion.collection.findOne({ usuario: encargado })).ultimoPeriodo);
 });
 
+test('Mongo real: resumen recupera 429 con misma clave y no se duplica al repetir el cron', async (t) => {
+    process.env.RESEND_API_KEY = 'test-sin-red';
+    t.after(() => { delete process.env.RESEND_API_KEY; });
+    const peticiones = [];
+    t.mock.method(global, 'fetch', async (url, opciones) => {
+        assert.equal(url, 'https://api.resend.com/emails'); peticiones.push(opciones);
+        return peticiones.length === 1
+            ? { ok: false, status: 429, headers: new Headers({ 'retry-after': '0.1' }), json: async () => ({ name: 'rate_limit_exceeded', message: 'Limite temporal simulado' }) }
+            : { ok: true, status: 200, json: async () => ({ id: 'resumen-recuperado' }) };
+    });
+    await Configuracion.collection.insertOne({ organizacionId: org, usuario: admin, frecuencia: 'Diario', horaPreferida: '23:59', modulos: mods });
+    const primero = await procesarResumenesTodasOrganizaciones(ahora, { modoEjecucion: 'cron_diario' });
+    assert.equal(primero[0].envios[0].enviado, true); assert.deepEqual(primero[0].errores, []);
+    assert.equal(peticiones.length, 2);
+    assert.equal(peticiones[0].headers['Idempotency-Key'], peticiones[1].headers['Idempotency-Key']);
+    assert.equal(peticiones[0].body, peticiones[1].body);
+    await procesarResumenesTodasOrganizaciones(ahora, { modoEjecucion: 'cron_diario' });
+    assert.equal(peticiones.length, 2);
+});
+
 test('Mongo real: intervalo semiabierto, USD sin actividad y fin de radar no se incluyen dos veces', async () => {
     const desde = new Date(+ahora - 86400000);
     await Movimiento.collection.insertMany([base({ fecha: desde, moneda: 'CRC', naturaleza: 'Ingreso', categoria: 'Ganado', monto: 50 }),

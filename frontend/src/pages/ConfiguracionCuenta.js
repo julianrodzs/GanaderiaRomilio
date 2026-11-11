@@ -3,6 +3,7 @@ import UpgradeMessage from '../Components/UpgradeMessage';
 import { usePlan } from '../context/PlanContext';
 import { actualizarConfiguracionEmails, actualizarPerfilUsuario, obtenerConfiguracionEmails } from '../services/api';
 import { puedeAccederModulo } from '../constants/permisosRoles';
+import LegalPrivacidadCuenta from '../legal/LegalPrivacidadCuenta';
 
 const opcionesModulos = [
   ['resumenGanadero', 'Inventario y movimientos'],
@@ -95,6 +96,7 @@ const ConfiguracionCuenta = ({ usuario }) => {
           <button className="boton-primario" type="submit" disabled={guardando}>Guardar perfil</button>
         </form>
       </section>
+      <LegalPrivacidadCuenta />
       <section className="configuracion-email">
         <h2>Notificaciones y resumen</h2>
         {!disponible ? (

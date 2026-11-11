@@ -5,7 +5,9 @@ import IniciarSesion from './Components/IniciarSesion';
 import OlvideContrasena from './Components/OlvideContrasena';
 import RestablecerContrasena from './Components/RestablecerContrasena';
 import AceptarInvitacion from './Components/AceptarInvitacion';
-import { aceptarInvitacionExistente, cambiarOrganizacionActiva, obtenerPerfilUsuario } from './services/api';
+import { cambiarOrganizacionActiva, obtenerPerfilUsuario } from './services/api';
+import CentroLegal from './legal/CentroLegal';
+import { esRutaLegal } from './legal/legal.mjs';
 import { PlanProvider } from './context/PlanContext';
 import { AparienciaProvider } from './context/AparienciaContext';
 import {
@@ -25,7 +27,7 @@ const obtenerTokenRestablecimiento = () => {
 };
 const obtenerTokenInvitacion = () => {
   const partes = window.location.pathname.split('/').filter(Boolean);
-  return partes[0] === 'aceptar-invitacion' ? partes[1] || '' : '';
+  return partes[0] === 'aceptar-invitacion' ? partes[1] || new URLSearchParams(window.location.search).get('token') || '' : '';
 };
 
 const tokenOfflineVigente = (token) => {
@@ -47,7 +49,7 @@ const limpiarAlmacenUsuario = async (sesion) => {
   }
 };
 
-function App() {
+function AppAutenticada() {
   const [vista, setVista] = useState(obtenerTokenRestablecimiento() ? 'restablecer-contrasena' : (obtenerTokenInvitacion() ? 'aceptar-invitacion' : 'login'));
   const [tokenRestablecimiento, setTokenRestablecimiento] = useState(obtenerTokenRestablecimiento());
   const [tokenInvitacion, setTokenInvitacion] = useState(obtenerTokenInvitacion());
@@ -199,17 +201,15 @@ function App() {
     };
     localStorage.setItem('ganaderiaSesion', JSON.stringify(sesionNueva));
     const invitacionPendiente = localStorage.getItem('ganaderiaInvitacionPendiente');
-    if (invitacionPendiente) {
-      try {
-        await aceptarInvitacionExistente(invitacionPendiente);
-        localStorage.removeItem('ganaderiaInvitacionPendiente');
-      } catch (error) {
-        setMensaje(error.message);
-      }
-    }
     setSesion(sesionNueva);
-    setVista('dashboard');
     setMensaje('');
+    if (invitacionPendiente) {
+      window.history.replaceState({}, '', `/aceptar-invitacion/${encodeURIComponent(invitacionPendiente)}`);
+      setTokenInvitacion(invitacionPendiente);
+      setVista('aceptar-invitacion');
+      return;
+    }
+    setVista('dashboard');
   };
 
   const cambiarFincaActiva = async (fincaId) => {
@@ -330,6 +330,11 @@ function App() {
       )}
     </div>
   );
+}
+
+// La vista pública no monta hooks, proveedores ni validaciones de sesión.
+function App({ ruta = window.location.pathname }) {
+  return esRutaLegal(ruta) ? <CentroLegal ruta={ruta} /> : <AppAutenticada />;
 }
 
 export default App;

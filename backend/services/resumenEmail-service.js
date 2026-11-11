@@ -76,6 +76,7 @@ const procesarResumenesOrganizacion = async (organizacion, ahora = new Date(), c
             });
             await comprobarBloqueo();
             const correo = await enviarCorreoResend({
+                comprobarBloqueo,
                 to: configuracion.usuario.correo,
                 claveIdempotencia: `resumen:${organizacion._id}:${configuracion.usuario._id}:${decision.periodo}`,
                 ...crearContenido({ usuario: configuracion.usuario, organizacion, resumen, frecuencia: configuracion.frecuencia })

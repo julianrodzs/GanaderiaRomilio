@@ -4,6 +4,7 @@ const organizacionSchema = new Schema(
     {
         nombre: { type: String, required: true, trim: true },
         razonSocial: { type: String, trim: true },
+        representanteLegalUsuarioId: { type: Schema.Types.ObjectId, ref: 'Usuario', default: null },
         slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
         pais: { type: String, default: 'Costa Rica', trim: true },
         zonaHoraria: { type: String, default: 'America/Costa_Rica', trim: true },

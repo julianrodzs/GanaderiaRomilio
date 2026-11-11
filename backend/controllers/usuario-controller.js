@@ -18,6 +18,8 @@ const { listarFincasAccesibles } = require('../services/accesoFinca-service');
 const { validarContrasena } = require('../services/contrasena-service');
 const { ejecutarProtegiendoAdministradores } = require('../services/membresia-seguridad-service');
 const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
+const { ejecutarConOrganizacion } = require('../context/organizacion-context');
+const legalService = require('../services/legal-service');
 
 const usuarioCtrl = {};
 const MENSAJE_RECUPERACION = 'Si el correo existe, se enviarán instrucciones para recuperar la contraseña.';
@@ -633,16 +635,7 @@ usuarioCtrl.eliminarPerfil = async (req, res) => {
 };
 
 usuarioCtrl.aceptarPrivacidad = async (req, res) => {
-    try {
-        validarDtoCerrado(req.body, new Set(['version']));
-        if (!req.body.version || String(req.body.version).length > 40) return res.status(400).json({ mensaje: 'Versión de privacidad no válida.' });
-        await Usuario.updateOne({ _id: req.usuario.id }, {
-            $set: { consentimiento: { version: String(req.body.version), aceptadoEn: new Date() } }
-        });
-        res.json({ mensaje: 'Aceptación registrada.' });
-    } catch (error) {
-        res.status(error.status || 400).json({ mensaje: error.message });
-    }
+    res.status(410).json({ code: 'LEGAL_FLOW_REQUIRED', mensaje: 'Registra la versión y las casillas desde Cuenta > Legal y privacidad.', ruta: '/api/legal/aceptaciones' });
 };
 
 usuarioCtrl.getMisOrganizaciones = async (req, res) => {
@@ -771,22 +764,15 @@ usuarioCtrl.restablecerContrasena = async (req, res) => {
     }
 };
 
-const consumirInvitacion = async (token) => Invitacion.findOneAndUpdate({
-    tokenHash: crypto.createHash('sha256').update(String(token || '')).digest('hex'),
-    estado: 'Pendiente',
-    expiraEn: { $gt: new Date() }
-}, {
-    $set: { estado: 'Aceptada', aceptadaEn: new Date() }
-}, { new: true }).select('+tokenHash');
-
-const crearMembresiaInvitada = (invitacion, usuarioId) => Membresia.create({
-    organizacionId: invitacion.organizacionId,
-    usuario: usuarioId,
-    rol: invitacion.rol,
-    estado: invitacion.estadoMembresia,
-    accesoTodasFincas: invitacion.accesoTodasFincas,
-    fincas: invitacion.fincas
-});
+const guardarLegalInvitacion = (req, invitacion, usuarioId, session) => {
+    if (!req.body.legal) throw Object.assign(new Error('Debes revisar y aceptar las casillas legales de la invitación.'), { status: 400 });
+    const escenario = legalService.escenarioInvitacion(invitacion);
+    return ejecutarConOrganizacion(invitacion.organizacionId, () => legalService.registrar({
+        entrada: req.body.legal, usuarioId, organizacionId: invitacion.organizacionId, rol: invitacion.rol, session, escenario,
+        contexto: escenario === 'ORGANIZACION' ? 'ACTIVACION_ORGANIZACION' : 'ACEPTACION_INVITACION_COLABORADOR',
+        ip: req.ip || req.socket?.remoteAddress || '', userAgent: req.get('user-agent') || ''
+    }));
+};
 
 usuarioCtrl.aceptarInvitacionNueva = async (req, res) => {
     try {
@@ -830,6 +816,7 @@ usuarioCtrl.aceptarInvitacionNueva = async (req, res) => {
                     { new: true, session, runValidators: true }
                 );
                 if (!membresia) throw new Error('No se encontró la membresía asociada a la invitación.');
+                await guardarLegalInvitacion(req, invitacion, usuario._id, session);
 
                 const consumida = await Invitacion.updateOne(
                     { _id: invitacion._id, estado: 'Pendiente' },
@@ -871,6 +858,7 @@ usuarioCtrl.aceptarInvitacionNueva = async (req, res) => {
                 accesoTodasFincas: invitacion.accesoTodasFincas,
                 fincas: invitacion.fincas
             }], { session, ordered: true });
+            await guardarLegalInvitacion(req, invitacion, usuario._id, session);
             const consumida = await Invitacion.updateOne(
                 { _id: invitacion._id, estado: 'Pendiente' },
                 { $set: { estado: 'Aceptada', aceptadaEn: new Date(), usuario: usuario._id } },
@@ -886,24 +874,29 @@ usuarioCtrl.aceptarInvitacionNueva = async (req, res) => {
 };
 
 usuarioCtrl.aceptarInvitacionExistente = async (req, res) => {
-    let invitacion;
     try {
-        invitacion = await consumirInvitacion(req.body.token);
-        if (!invitacion || !invitacion.usuario) return res.status(400).json({ mensaje: 'La invitación es inválida o ha expirado.' });
-        if (normalizarCorreo(invitacion.correo) !== normalizarCorreo(req.usuario.correo)
-            || String(invitacion.usuario) !== String(req.usuario.id)) {
-            await Invitacion.updateOne({ _id: invitacion._id }, { $set: { estado: 'Pendiente' }, $unset: { aceptadaEn: 1 } });
-            return res.status(403).json({ mensaje: 'La invitación pertenece a otro correo.' });
-        }
-        const usuario = await Usuario.findById(req.usuario.id);
-        if (usuario?.esSuperAdministrador) {
-            await Invitacion.updateOne({ _id: invitacion._id }, { $set: { estado: 'Revocada' } });
-            return res.status(404).json({ mensaje: 'Invitación no encontrada.' });
-        }
-        await crearMembresiaInvitada(invitacion, req.usuario.id);
+        await ejecutarEnTransaccion(async (session) => {
+            const invitacion = await Invitacion.findOne({
+                tokenHash: crypto.createHash('sha256').update(String(req.body.token || '')).digest('hex'),
+                estado: 'Pendiente', expiraEn: { $gt: new Date() }
+            }).session(session);
+            if (!invitacion?.usuario) throw Object.assign(new Error('La invitación es inválida o ha expirado.'), { status: 400 });
+            if (normalizarCorreo(invitacion.correo) !== normalizarCorreo(req.usuario.correo) || String(invitacion.usuario) !== String(req.usuario.id)) {
+                throw Object.assign(new Error('La invitación pertenece a otro correo.'), { status: 403 });
+            }
+            const usuario = await Usuario.findById(req.usuario.id).session(session);
+            if (!usuario || usuario.esSuperAdministrador) throw Object.assign(new Error('Invitación no encontrada.'), { status: 404 });
+            await Membresia.create([{
+                organizacionId: invitacion.organizacionId, usuario: usuario._id, rol: invitacion.rol,
+                estado: invitacion.estadoMembresia, accesoTodasFincas: invitacion.accesoTodasFincas, fincas: invitacion.fincas
+            }], { session, ordered: true });
+            await guardarLegalInvitacion(req, invitacion, usuario._id, session);
+            const consumida = await Invitacion.updateOne({ _id: invitacion._id, estado: 'Pendiente' },
+                { $set: { estado: 'Aceptada', aceptadaEn: new Date() } }, { session });
+            if (consumida.modifiedCount !== 1) throw Object.assign(new Error('La invitación ya fue utilizada.'), { status: 409 });
+        });
         res.status(201).json({ mensaje: 'Invitación aceptada.' });
     } catch (error) {
-        if (invitacion?._id) await Invitacion.updateOne({ _id: invitacion._id }, { $set: { estado: 'Pendiente' }, $unset: { aceptadaEn: 1 } }).catch(() => null);
         res.status(error?.code === 11000 ? 409 : (error.status || 400)).json({ mensaje: error?.code === 11000 ? 'Ya perteneces a esta organización.' : error.message });
     }
 };

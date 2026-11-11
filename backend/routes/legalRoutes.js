@@ -1,0 +1,10 @@
+const { Router } = require('express');
+const { auth } = require('../middleware/auth');
+const c = require('../controllers/legal-controller');
+const router = Router();
+router.get('/documentos', c.listarDocumentos);
+router.get('/documentos/:slug', c.verDocumento);
+router.get('/estado', auth, c.verEstado);
+router.post('/aceptaciones', auth, c.guardarAceptaciones);
+router.patch('/comunicaciones', auth, c.guardarComunicaciones);
+module.exports = router;

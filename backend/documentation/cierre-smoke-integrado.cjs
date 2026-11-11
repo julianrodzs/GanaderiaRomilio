@@ -44,9 +44,11 @@ async function start(){
  const {verificarModelo,limpiarIndiceEventoObsoleto}=require('../scripts/sincronizar-indices');
  for(const M of Object.values(mongoose.models)){await M.init();await verificarModelo(M);out.indices[M.modelName]=await M.collection.indexes();}
  await comprobacion('INDICES_MODELOS_PRODUCTIVOS',async()=>{
-  assert.equal(Object.keys(out.indices).length,76);
+  const modelos=Object.keys(out.indices);
+  assert.ok(modelos.length>=78,`Faltan modelos: ${modelos.length}`);
+  for(const nombre of ['AceptacionLegal','LimiteProveedorCorreo'])assert.ok(modelos.includes(nombre),`No se cargo ${nombre}`);
   const version=await mongoose.connection.db.admin().command({buildInfo:1});
-  assert.match(version.version,/^8\./);return{modelos:76,mongodb:version.version};
+  assert.match(version.version,/^8\./);return{modelos:modelos.length,mongodb:version.version};
  });
  await comprobacion('MIGRACION_INDICE_SPARSE_EN_OTRA_BASE',async()=>{
   const dbMigracion=mongoose.connection.useDb('cierre_migracion_indices');
@@ -65,8 +67,11 @@ async function start(){
   const ejecuciones=[];
   for(let i=0;i<2;i++){
    const r=spawnSync(process.execPath,['--require',path.join(__dirname,'cierre-sin-dotenv.cjs'),path.join(__dirname,'../scripts/sincronizar-indices.js')],{env,windowsHide:true,encoding:'utf8',timeout:30000});
-   assert.equal(r.error,undefined);assert.equal(r.status,0,(r.stdout||'')+(r.stderr||''));assert.match(r.stdout,/76 modelos registrados/);
-   ejecuciones.push({exit:r.status,modelos:76});
+   assert.equal(r.error,undefined);assert.equal(r.status,0,(r.stdout||'')+(r.stderr||''));
+   const modelos=Number(r.stdout.match(/(\d+) modelos registrados/)?.[1]);
+   assert.equal(modelos,Object.keys(out.indices).length);
+   for(const nombre of ['AceptacionLegal','LimiteProveedorCorreo'])assert.ok(r.stdout.includes(`${nombre}:`),`No se sincronizo ${nombre}`);
+   ejecuciones.push({exit:r.status,modelos});
   }
   await client.db('cierre_indices_cli').dropDatabase();return{ejecuciones,produccion:true,baseAislada:true};
  });
@@ -87,9 +92,17 @@ async function main(){
    const created=await ok('POST','/api/admin/organizaciones',{organizacion:{nombre:'Empresa Audit Local',slug:'audit-local'},plan:{codigo:'PREMIUM',estado:'Activo'},finca:{nombre:'Finca principal',codigo:'PRINCIPAL'},administrador:{nombre:'Admin',correo:'admin@example.test'}},201);
    const data=created;org=String(data.organizacion._id);finca=String(data.finca._id);admin=String(data.administrador.id);
    const invitationToken=mail.at(-1)?.text.match(/aceptar-invitacion\/([a-f0-9]+)/)?.[1];assert.ok(invitationToken,'No se emitió invitación');
-   const accept=await request('POST','/api/invitaciones/aceptar',{token:invitationToken,contrasena:password});
+   const documentos=await ok('GET','/api/legal/documentos');
+   assert.deepEqual(documentos.map(d=>d.slug).sort(),['privacidad','soporte','suscripciones','terminos']);
+   const legal={aceptaciones:{reglasUso:false,privacidad:true,terminosOrganizacion:true,comunicacionesOpcionales:false},documentos:documentos.map(({slug,version,hashSha256})=>({slug,version,hashSha256})),claveIdempotencia:'smoke-activacion-organizacion'};
+   const accept=await request('POST','/api/invitaciones/aceptar',{token:invitationToken,contrasena:password,legal});
    assert.equal(accept.status,200,JSON.stringify(accept.data));
-   const replay=await request('POST','/api/invitaciones/aceptar',{token:invitationToken,contrasena:password});assert.equal(replay.status,400);
+   const replay=await request('POST','/api/invitaciones/aceptar',{token:invitationToken,contrasena:password,legal});assert.equal(replay.status,400);
+   const evidencias=await require('../models/AceptacionLegal').collection.find({usuarioId:new mongoose.Types.ObjectId(admin),organizacionId:new mongoose.Types.ObjectId(org)}).toArray();
+   assert.equal(evidencias.length,4);
+   assert.deepEqual(evidencias.filter(e=>e.tipoAceptacion==='TERMINOS_Y_SUSCRIPCION_ORG').map(e=>e.documentoSlug).sort(),['suscripciones','terminos']);
+   assert.equal(evidencias.find(e=>e.tipoAceptacion==='COMUNICACIONES_OPCIONALES').otorgado,false);
+   for(const e of evidencias){const d=documentos.find(d=>d.slug===e.documentoSlug);assert.equal(e.hashTexto,d.hashSha256);assert.equal(e.copiaTextoExacto,d.contenido);assert.equal(e.estadoDocumento,'BORRADOR_PRUEBA');}
    const usuario=await require('../models/Usuario').findById(admin).select('+resetPasswordToken +resetPasswordExpires').lean();
    assert.equal(usuario.estado,'Activo');assert.equal(usuario.tokenVersion,1);assert.equal(usuario.resetPasswordToken,undefined);
    return{org,finca};

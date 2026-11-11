@@ -1,3 +1,4 @@
+const { createHash } = require('node:crypto');
 const { notificarTareaAsignada, ejecutarNotificacionSegura } = require('./tarea-notificacion-service');
 const AlertaCorreo = require('../models/AlertaCorreo');
 const { ejecutarConOrganizacion } = require('../context/organizacion-context');
@@ -104,7 +105,7 @@ const debeEnviarCorreo = async (tarea, fechaObjetivo, dias, destinatario, zonaHo
     const frecuenciaDias = critica ? FRECUENCIA_CRITICA_DIAS : vencida ? FRECUENCIA_VENCIDA_DIAS : FRECUENCIA_PROXIMA_DIAS;
 
     if (!estado || estado.fechaObjetivoKey !== fechaObjetivoKey || diasDesde(estado.ultimoEnvio, zonaHoraria) >= frecuenciaDias) {
-        return { enviar: true, clave, fechaObjetivoKey, critica, vencida };
+        return { enviar: true, clave, fechaObjetivoKey, critica, vencida, revisionEnvio: estado?.vecesEnviada || 0 };
     }
     return { enviar: false };
 };
@@ -190,13 +191,21 @@ const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zon
             }
             for (const [asunto, grupo] of Object.entries(agruparPorAsunto(pendientes))) {
                 await comprobarBloqueo();
+                grupo.sort((a, b) => a.clave.localeCompare(b.clave));
+                const html = crearHtml(asunto, grupo, nombreOrganizacion, zonaHoraria);
+                const text = crearTexto(asunto, grupo, zonaHoraria);
                 const resultado = await enviarCorreoResend({
+                    comprobarBloqueo,
+                    claveIdempotencia: `alertas:${createHash('sha256').update(JSON.stringify({
+                        organizacion: String(obtenerOrganizacionActual()), destinatario: String(membresia.usuario._id), asunto,
+                        alertas: grupo.map((a) => [a.clave, a.fechaObjetivoKey, a.revisionEnvio]), html, text
+                    })).digest('hex')}`,
                     to: process.env.NODE_ENV !== 'production' && process.env.EMAIL_TEST_TO
                         ? process.env.EMAIL_TEST_TO
                         : membresia.usuario.correo,
                     subject: `${asunto} - ${nombreOrganizacion}`,
-                    html: crearHtml(asunto, grupo, nombreOrganizacion, zonaHoraria),
-                    text: crearTexto(asunto, grupo, zonaHoraria)
+                    html,
+                    text
                 });
                 if (!resultado.enviado) continue;
                 enviadas += 1;

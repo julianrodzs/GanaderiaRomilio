@@ -44,7 +44,7 @@ const procesarSuscripcionesManuales = async ({ ahora = new Date(), comprobarBloq
                         const fin = new Intl.DateTimeFormat('es-CR', { timeZone: org.zonaHoraria || 'America/Costa_Rica', dateStyle: 'long' }).format(s.fechaProximoVencimiento);
                         const mensaje = `${org.nombre}: tu suscripción tiene vencimiento el ${fin}. Revisa Mi plan para coordinar la renovación. Período de gracia: ${s.diasGracia} días.`;
                         await comprobarBloqueo();
-                        const r = await enviarCorreoResend({ to: destinatarios, subject: 'Renovación de suscripción - CIR Ganadero', text: `${mensaje}\n${enlacePanel()}`,
+                        const r = await enviarCorreoResend({ comprobarBloqueo, to: destinatarios, subject: 'Renovación de suscripción - CIR Ganadero', text: `${mensaje}\n${enlacePanel()}`,
                             html: `<h2>CIR Ganadero</h2><p>${h(mensaje)}</p><p><a href="${h(enlacePanel())}">Ir a CIR Ganadero</a></p>`, claveIdempotencia: `vigencia:${org._id}:${ciclo}` });
                         if (r.enviado) {
                             await ejecutarEnTransaccion((session) => Organizacion.updateOne({ _id: org._id, fechaProximoVencimiento: s.fechaProximoVencimiento },
@@ -67,7 +67,7 @@ const procesarSuscripcionesManuales = async ({ ahora = new Date(), comprobarBloq
             const orden = pendientesOperador.sort((a, b) => String(a._id).localeCompare(String(b._id)));
             const texto = orden.map((o) => `${o.nombre} | ${o.estado} | Vencimiento: ${o.ciclo}`).join('\n');
             const clave = createHash('sha256').update(orden.map((o) => `${o._id}:${o.ciclo}`).join('|')).digest('hex');
-            const r = await enviarCorreoResend({ to: process.env.EMAIL_ADMIN.split(',').map((c) => c.trim()).filter(Boolean),
+            const r = await enviarCorreoResend({ comprobarBloqueo, to: process.env.EMAIL_ADMIN.split(',').map((c) => c.trim()).filter(Boolean),
                 subject: 'Cartera de renovaciones - CIR Ganadero', text: texto, html: `<h2>Cartera CIR Ganadero</h2><pre>${h(texto)}</pre>`, claveIdempotencia: `cartera:${clave}` });
             if (r.enviado) {
                 await ejecutarEnTransaccion(async (session) => {

@@ -1,5 +1,10 @@
 # Despliegue Backend en Render
 
+Centro Legal de prueba (2026-11-10): desplegar backend/frontend con el mismo catálogo,
+preparar índices aditivos con npm run indexes:legal y verificar Rewrite /* -> /index.html
+en el Static Site. No publicar documentos internos ni presentar borradores como
+condiciones aprobadas. Ver [procedimiento](backend/documentation/centro-legal.md).
+
 Configuracion del servicio Web en Render:
 
 - Root Directory: `backend`
@@ -67,6 +72,10 @@ Pasos:
 6. Usa `npm start` como start command.
 
 ## Trabajo programado de alertas
+
+Los envios ahora comparten control de velocidad entre API y cron, con reintentos
+idempotentes ante limites temporales de Resend. Desplegar ambos con el mismo commit;
+no hay variables nuevas ni migracion de indices. Ver [robustez del correo](backend/documentation/correos-resend-robustez.md).
 
 La opcion recomendada para este stack es un **Render Cron Job**, porque ejecuta el mismo codigo Node y comparte MongoDB Atlas con el backend.
 

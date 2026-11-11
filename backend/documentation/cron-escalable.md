@@ -1,5 +1,9 @@
 # Cron incremental de categorias, alertas y resumenes
 
+Robustez de correo (2026-11-10): control compartido API/cron, Retry-After, reintentos
+acotados e idempotencia. Un error transitorio recuperado no falla el job; un fallo
+definitivo conserva salida 1. Ver [detalles y despliegue](correos-resend-robustez.md).
+
 ## Alcance - 2026-11-05
 
 Ampliacion comercial: el mismo job ejecuta ahora `suscripciones` antes de categorias/alertas/resumenes, con aislamiento de errores y metricas. Mantiene el horario de las 06:00 CR. Ver `suscripciones-manuales.md` para pagos, gracia, recordatorios de vencimiento y EMAIL_ADMIN. No se agrega otro servicio cron.

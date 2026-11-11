@@ -187,12 +187,13 @@ const auth = async (req, res, next) => {
         req.fincaSoloLecturaPlan = fincaSoloLectura;
         const esMutacion = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
         const ruta = req.originalUrl?.split('?')[0];
+        const esGestionLegal = ['/api/legal/estado', '/api/legal/aceptaciones', '/api/legal/comunicaciones'].includes(ruta);
         const permiteGestionarAcceso = ['/api/usuarios/perfil', '/api/usuarios/cambiar-organizacion-activa', '/api/facturacion/checkout', '/api/facturacion/portal'].includes(ruta);
-        if (!req.planVigente && esMutacion && !permiteGestionarAcceso) {
+        if (!req.planVigente && esMutacion && !permiteGestionarAcceso && !esGestionLegal) {
             return res.status(403).json({ code: 'PLAN_SUBSCRIPTION_INACTIVE', mensaje: 'La suscripción está vencida o suspendida. Solicita la renovación desde Mi plan.' });
         }
         const cambiaSeleccionOperativa = req.originalUrl?.split('?')[0] === '/api/plan/fincas-operativas';
-        if (fincaSoloLectura && esMutacion && !cambiaSeleccionOperativa) {
+        if (fincaSoloLectura && esMutacion && !cambiaSeleccionOperativa && !esGestionLegal) {
             return res.status(403).json({
                 mensaje: 'Esta finca excede el cupo del plan actual y se encuentra en modo solo lectura.',
                 code: 'PLAN_FINCA_EXCEDENTE_LECTURA'

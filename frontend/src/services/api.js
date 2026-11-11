@@ -367,11 +367,21 @@ export const obtenerPerfilUsuario = () => request('/usuarios/perfil');
 export const actualizarPerfilUsuario = (datos) => request('/usuarios/perfil', {
   method: 'PUT', body: JSON.stringify(datos)
 });
-export const aceptarInvitacionNueva = (token, contrasena) => request('/invitaciones/aceptar', {
-  autenticada: false, method: 'POST', body: JSON.stringify({ token, contrasena })
+export const obtenerContextoInvitacion = (token) => request(`/invitaciones/contexto?token=${encodeURIComponent(token)}`, { autenticada: false });
+export const obtenerDocumentosLegales = () => request('/legal/documentos', { autenticada: false });
+export const obtenerDocumentoLegal = (slug) => request(`/legal/documentos/${encodeURIComponent(slug)}`, { autenticada: false });
+export const obtenerEstadoLegal = () => request('/legal/estado');
+export const registrarAceptacionesLegales = (datos) => request('/legal/aceptaciones', {
+  method: 'POST', body: JSON.stringify(datos)
 });
-export const aceptarInvitacionExistente = (token) => request('/usuarios/invitaciones/aceptar', {
-  method: 'POST', body: JSON.stringify({ token })
+export const actualizarComunicacionesLegales = (datos) => request('/legal/comunicaciones', {
+  method: 'PATCH', body: JSON.stringify(datos)
+});
+export const aceptarInvitacionNueva = (token, contrasena, legal) => request('/invitaciones/aceptar', {
+  autenticada: false, method: 'POST', body: JSON.stringify({ token, contrasena, legal })
+});
+export const aceptarInvitacionExistente = (token, legal) => request('/usuarios/invitaciones/aceptar', {
+  method: 'POST', body: JSON.stringify({ token, legal })
 });
 
 export const obtenerMisOrganizaciones = () => request('/usuarios/mis-organizaciones');

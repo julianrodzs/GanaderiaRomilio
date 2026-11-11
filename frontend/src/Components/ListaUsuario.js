@@ -145,6 +145,8 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
   const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Alimentacion', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
   const obtenerVistaInicial = () => usuario?.debeCambiarContrasena
     ? 'Configuración'
+    : /^\/(configuracion|cuenta)\/?$/.test(window.location.pathname) ? 'Configuración'
+    : /^\/mi-plan\/?$/.test(window.location.pathname) ? 'Mi plan'
     : modulosOrden.find((modulo) => puedeAccederModulo(rol, modulo)) || 'Mis tareas';
   const [vistaActiva, setVistaActiva] = useState(obtenerVistaInicial);
   const [tareaInicialId, setTareaInicialId] = useState('');
@@ -584,7 +586,10 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     return (
       <main className="dashboard-shell">
         {navegacion}
-        <Suspense fallback={<p role="status">Cargando suscripción...</p>}><MiPlan /></Suspense>
+        <Suspense fallback={<p role="status">Cargando suscripción...</p>}><MiPlan onAbrirLegal={() => {
+          setVistaActiva('Configuración');
+          window.setTimeout(() => document.getElementById('legal-privacidad')?.scrollIntoView(), 0);
+        }} /></Suspense>
       </main>
     );
   }

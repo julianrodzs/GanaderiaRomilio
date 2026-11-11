@@ -54,6 +54,7 @@ app.get('/', (req, res)=>{
 
 // rutas principales
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/legal', require('./routes/legalRoutes'));
 app.use('/api/invitaciones', require('./routes/invitacionRoutes'));
 app.use('/api/cron', require('./routes/cronRoutes'));
 app.use('/api/usuarios', require('./routes/usuario'));

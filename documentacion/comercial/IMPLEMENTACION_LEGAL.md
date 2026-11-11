@@ -1,6 +1,9 @@
 # Especificacion para publicacion y aceptacion legal
 
 Estado: PROPUESTA TECNICA, no implementada por este paquete documental.
+Actualización 2026-11-10: se implementa el flujo como prueba con borradores,
+conservando las condiciones de aprobación de este documento. Alcance y despliegue
+en [Centro Legal de prueba](../../backend/documentation/centro-legal.md).
 Version 0.1. Fecha: 2026-10-27.
 
 ## Estado actual y limite de este trabajo

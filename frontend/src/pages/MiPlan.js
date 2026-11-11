@@ -15,6 +15,7 @@ import { etiquetaObjetivoProductivo, OBJETIVOS_LINEA_PRODUCTIVA } from '../const
 import FacturacionPlan from '../Components/FacturacionPlan';
 import ConfiguracionApariencia from '../Components/ConfiguracionApariencia';
 import { EstadoSuscripcion } from '../Components/SuscripcionesSaas';
+import EstadoComercialLegal from '../legal/EstadoComercialLegal';
 
 const especiesProductivas = ['Bovino', 'Porcino'];
 const objetivosProductivos = OBJETIVOS_LINEA_PRODUCTIVA;
@@ -32,7 +33,7 @@ const funcionesPlan = [
   { etiqueta: 'Configuración avanzada de correos', feature: 'configuracionEmailAvanzada', planMinimo: 'Premium' }
 ];
 
-const MiPlan = () => {
+const MiPlan = ({ onAbrirLegal }) => {
   const { capacidadDisponible, plan, cargando, error, recargarPlan, puedeUsarEspecie } = usePlan();
   const [guardando, setGuardando] = useState(false);
   const [guardandoFinca, setGuardandoFinca] = useState('');
@@ -205,8 +206,8 @@ const MiPlan = () => {
     }
   };
 
-  if (cargando && !plan) return <section className="vista-tabla"><p>Cargando plan...</p></section>;
-  if (!plan) return <section className="vista-tabla"><p>{error || 'No se pudo cargar el plan.'}</p></section>;
+  if (cargando && !plan) return <section className="vista-tabla"><p>Cargando plan...</p><EstadoComercialLegal onAbrirLegal={onAbrirLegal} /></section>;
+  if (!plan) return <section className="vista-tabla"><p>{error || 'No se pudo cargar el plan.'}</p><EstadoComercialLegal onAbrirLegal={onAbrirLegal} /></section>;
 
   const esEsencial = plan.plan.codigo === 'ESENCIAL';
   const cuotaFincas = capacidadDisponible('fincas');
@@ -217,6 +218,7 @@ const MiPlan = () => {
         <div><h1>Mi plan</h1><p>{plan.plan.nombre} · ${plan.plan.precioMensualUSD} USD al mes</p></div>
         {plan.suscripcion ? <EstadoSuscripcion suscripcion={plan.suscripcion} /> : <span className={`estado-badge ${plan.plan.vigente ? 'activo' : 'estado-Aplicado'}`}>{plan.plan.estado}</span>}
       </div>
+      <EstadoComercialLegal onAbrirLegal={onAbrirLegal} />
       <FacturacionPlan codigoActual={plan.plan.codigo} />
       <ConfiguracionApariencia />
 

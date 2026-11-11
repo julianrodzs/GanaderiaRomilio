@@ -200,6 +200,7 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
             }], { session, ordered: true });
 
             organizacion.fincaPrincipal = finca._id;
+            organizacion.representanteLegalUsuarioId = usuario._id;
             await organizacion.save({ session });
 
             const [membresia] = await Membresia.create([{
@@ -245,6 +246,7 @@ const aprovisionarOrganizacion = async (entrada, creadoPor) => {
                     tokenHash,
                     expiraEn: new Date(Date.now() + 72 * 60 * 60 * 1000),
                     requiereContrasena: true,
+                    esActivacionOrganizacion: true,
                     invitadoPor: creadoPor
                 }], { session, ordered: true });
             }

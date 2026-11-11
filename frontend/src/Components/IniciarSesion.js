@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { loginUsuario } from '../services/api';
 import MarcaProducto, { estiloAcceso } from './MarcaProducto';
+import EnlacesLegales from '../legal/EnlacesLegales';
 
 const IniciarSesion = ({ onLogin, onOlvideContrasena }) => {
   const [formulario, setFormulario] = useState({
@@ -81,6 +82,7 @@ const IniciarSesion = ({ onLogin, onOlvideContrasena }) => {
           Olvidé mi contraseña
         </button>
 
+        <EnlacesLegales />
         <div className="auth-discover">
           <p>¿Aún no tienes cuenta?</p>
           <a

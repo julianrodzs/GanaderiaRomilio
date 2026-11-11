@@ -1,6 +1,10 @@
 # Documentacion comercial y legal de CIR Ganadero
 
 Estado del paquete: BORRADOR INTERNO. No publicar ni solicitar aceptacion todavia.
+Excepción para pruebas autorizada el 2026-11-10: los cuatro documentos públicos se
+integran en el Centro Legal como 0.9-borrador / BORRADOR_PRUEBA, con aviso y noindex.
+Esto no los aprueba para contratación definitiva ni publica los documentos internos.
+Ver [implementación de prueba](../../backend/documentation/centro-legal.md).
 Version de trabajo: 0.1. Fecha de preparacion: 2026-10-27.
 
 Estos archivos son borradores adaptados al producto, no un dictamen juridico ni una

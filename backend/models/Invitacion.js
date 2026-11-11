@@ -15,6 +15,7 @@ const invitacionSchema = new Schema({
     expiraEn: { type: Date, required: true, index: true },
     estado: { type: String, enum: ['Pendiente', 'Aceptada', 'Revocada', 'Expirada'], default: 'Pendiente', index: true },
     requiereContrasena: { type: Boolean, default: false },
+    esActivacionOrganizacion: { type: Boolean, default: false, immutable: true },
     aceptadaEn: { type: Date },
     invitadoPor: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true }
 }, { timestamps: true });
