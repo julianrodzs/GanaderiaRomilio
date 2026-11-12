@@ -21,15 +21,7 @@ import FeatureGate from './FeatureGate';
 import BancosForrajeros from './BancosForrajeros';
 import { useApariencia } from '../context/AparienciaContext';
 import ImagenPersonalizada from './ImagenPersonalizada';
-
-const formatearFecha = (fecha) => {
-  if (!fecha) return '--';
-  return new Date(fecha).toLocaleDateString('es-CR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-};
+import { formatearFechaCalendario as formatearFecha } from '../utils/fechasCalendario.mjs';
 
 const columnas = [
   { id: 'codigo', label: 'Codigo', accessor: (potrero) => potrero.codigo },

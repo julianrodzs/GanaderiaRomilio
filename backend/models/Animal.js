@@ -2,6 +2,9 @@ const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
 const { OBJETIVOS_PRODUCTIVOS, normalizarObjetivoProductivo } = require('../config/objetivosProductivos');
 
+const snapshotHitoSchema = new Schema({ peso: Number, fecha: Date, edadDias: Number }, { _id: false });
+const origenHitoSchema = new Schema({ pesaje: { type: Schema.Types.ObjectId, ref: 'Pesaje' }, anterior: snapshotHitoSchema, sincronizado: snapshotHitoSchema }, { _id: false });
+
 const animalSchema = new Schema(
     {
         identificadorFinca: { type: String, required: true, trim: true },
@@ -71,6 +74,8 @@ const animalSchema = new Schema(
         fechaProximoCambioCategoria: { type: Date },
         fechaDesteteEstimada: { type: Date },
         fechaDestete: { type: Date },
+        edadDesteteDias: { type: Number, min: 0, default: null },
+        hitosPesaje: { type: new Schema({ nacimiento: origenHitoSchema, destete: origenHitoSchema }, { _id: false }), select: false },
         pesoNacimiento: { type: Number, min: 0 },
         pesoDestete: { type: Number, min: 0 },
         pesoActual: { type: Number, min: 0 },

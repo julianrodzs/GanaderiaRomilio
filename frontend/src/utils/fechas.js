@@ -1,3 +1,5 @@
+import { claveFechaCalendario } from './fechasCalendario.mjs';
+
 export const formatearFechaInput = (fecha) => {
   const anio = fecha.getFullYear();
   const mes = String(fecha.getMonth() + 1).padStart(2, '0');
@@ -46,9 +48,8 @@ export const obtenerRangoReproduccion = ({ aniosAtras = 2, aniosAdelante = 1 } =
 };
 
 export const fechaEnRango = (fecha, rango) => {
-  if (!fecha) return false;
-
-  const fechaTexto = new Date(fecha).toISOString().slice(0, 10);
+  const fechaTexto = claveFechaCalendario(fecha);
+  if (!fechaTexto) return false;
 
   if (rango.fechaInicio && fechaTexto < rango.fechaInicio) return false;
   if (rango.fechaFin && fechaTexto > rango.fechaFin) return false;

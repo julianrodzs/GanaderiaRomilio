@@ -38,6 +38,7 @@ import InfoLunarFecha from '../Components/InfoLunarFecha';
 import SelectorFechaConLuna from '../Components/SelectorFechaConLuna';
 import { esTareaConInfoLunar } from '../utils/tareasLuna.mjs';
 import { etiquetaUsuarioConRol, nombreUsuario } from '../utils/usuarios';
+import { AVISO_DESTETE_REAL, esTareaDesteteBovino } from '../utils/desteteReproductivo.mjs';
 
 const tipos = [
   'Chapia',
@@ -304,6 +305,8 @@ const Tareas = ({ usuario, tareaInicialId = '', onNavegarSanidad, onNavegarRepro
 
   const guardar = async (evento) => {
     evento.preventDefault();
+    if (formulario.estado === 'Completada' && tareaSeleccionada?.estado !== 'Completada'
+      && esTareaDesteteBovino(tareaSeleccionada) && !window.confirm(`${AVISO_DESTETE_REAL}\n\n¿Confirmas que el destete ya se realizó?`)) return;
     let datos = {
       ...Object.fromEntries(Object.keys(estadoInicial).map((campo) => [campo, formulario[campo]])),
       fechaLimite: formulario.fechaLimite || null,
@@ -383,6 +386,7 @@ const Tareas = ({ usuario, tareaInicialId = '', onNavegarSanidad, onNavegarRepro
   };
 
   const completar = async (tarea) => {
+    if (esTareaDesteteBovino(tarea) && !window.confirm(`${AVISO_DESTETE_REAL}\n\n¿Confirmas que el destete ya se realizó?`)) return;
     try {
       setGuardando(true);
       if (['TE_DONANTE', 'TETF'].includes(tarea.categoriaAutomatica)) {
@@ -800,6 +804,7 @@ const Tareas = ({ usuario, tareaInicialId = '', onNavegarSanidad, onNavegarRepro
             {detalle.observaciones && <div className="detalle-observaciones"><span>Observaciones</span><p>{detalle.observaciones}</p></div>}
             {!soloLectura && !['Completada', 'Cancelada'].includes(detalle.estado) && (
               <div className="form-card tarea-completar-card">
+                {esTareaDesteteBovino(detalle) && <p role="note">{AVISO_DESTETE_REAL}</p>}
                 <label>Observaciones al completar<textarea rows="3" value={observacionesCompletar} onChange={(evento) => setObservacionesCompletar(evento.target.value)} /></label>
                 <button className="boton-primario compacto" type="button" onClick={() => completar(detalle)} disabled={guardando}>{guardando ? 'Completando...' : 'Completar tarea'}</button>
               </div>

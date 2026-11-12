@@ -51,6 +51,7 @@
     "indexes:sync": "node scripts/sincronizar-indices.js",
     "indexes:suscripciones": "node scripts/prepararIndicesSuscripciones.js",
     "indexes:legal": "node scripts/prepararIndicesLegales.js",
+    "indexes:pesajes": "node scripts/prepararIndicesPesajes.js",
     "indexes:categorias": "node scripts/crearIndiceCategorias.js",
     "migrate:banco-semen:check": "node scripts/migrar-banco-semen.js --dry-run",
     "migrate:banco-semen": "node scripts/migrar-banco-semen.js --aplicar",

@@ -540,6 +540,7 @@ const registrarPesajesLote = async (loteId, datos = {}, usuarioId, opciones = {}
             animal: item.animal,
             fecha,
             peso: item.peso,
+            tipoPesaje: item.tipoPesaje || capturaMasiva.tipoPesaje || 'REGULAR',
             etapaProductiva: item.etapaProductiva,
             observaciones: item.observaciones || capturaMasiva.observaciones
         });
@@ -552,7 +553,8 @@ const registrarPesajesLote = async (loteId, datos = {}, usuarioId, opciones = {}
                 ? captura.etapaProductiva || validacion.animal.etapaProductiva || undefined
                 : undefined,
             lote: lote._id,
-            tipoPesaje: 'Lote',
+            tipoPesaje: captura.tipoPesaje,
+            origenPesaje: 'Lote',
             registradoPor: usuarioId
         });
     }

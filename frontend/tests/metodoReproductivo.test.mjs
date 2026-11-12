@@ -28,6 +28,16 @@ test('los metodos historicos siguen visibles antes de migrar', () => {
     assert.equal(metodoDeRegistro({ origenGestacion: 'MONTA_NATURAL' }), 'MONTA_NATURAL'); assert.equal(metodoDeRegistro({ campanaIATF: 'campana' }), 'IATF'); assert.equal(metodoDeRegistro({}), 'DESCONOCIDO');
 });
 
+test('el seguimiento bovino permite reprogramar destete despues del parto sin crear otro diagnostico', () => {
+    const html = render({ registroInicial: { animal: { _id: 'madre' }, especie: 'Bovino', estadoCiclo: 'Cerrado', fechaPartoReal: '2026-10-02', fechaDestete: '2027-05-02' } });
+    assert.match(html, /Programación de destete/);
+    assert.match(html, /name="fechaDestete"[^>]*value="2027-05-02"/);
+    assert.match(html, /min="2026-10-02"/);
+    assert.doesNotMatch(html, /name="motivoCambioDestete"/);
+    assert.doesNotMatch(render({ registroInicial: { fechaPartoEstimada: '2026-10-02' } }), /name="fechaDestete"/);
+    assert.doesNotMatch(render({ especie: 'Porcino', registroInicial: { fechaPartoReal: '2026-10-02' } }), /name="fechaDestete"/);
+});
+
 test('historial reproductivo presenta acciones de servicio y diagnostico como modos accesibles', () => {
     const props = { registro: { estadoCiclo: 'Activo', metodo: 'MONTA_NATURAL' }, animales: [], usuarios: [], onCerrar() {}, onActualizar() {} };
     const html = renderToStaticMarkup(React.createElement(modulo.exports.HistorialMetodo, props));

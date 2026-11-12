@@ -1,0 +1,6 @@
+.tipo-pesaje-badge { display: inline-block; padding: 4px 8px; border: 1px solid #b6c5ba; border-radius: 4px; font-size: 12px; line-height: 1.4; background: #f0f3f0; color: #304b39; white-space: normal; }
+.tipo-pesaje-nacimiento { background: #e8f2f6; color: #1b5267; border-color: #a9c8d2; }
+.tipo-pesaje-destete { background: #e4f2e9; color: #1d5636; border-color: #a5c9b1; }
+.tipo-pesaje-entrada_engorde { background: #fff2d6; color: #725008; border-color: #dcc28a; }
+.tipo-pesaje-salida_venta { background: #f5eaf0; color: #78385a; border-color: #d4b2c3; }
+.nota-pesaje-destete { grid-column: 1 / -1; margin: 0; padding: 12px; border-left: 3px solid #4d825f; background: #edf4ef; color: #244b32; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }

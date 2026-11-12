@@ -583,7 +583,10 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
                 datosActualizacion.resultado = { tipo: 'PARTO', fecha: datosActualizacion.fechaPartoReal };
                 delete datosActualizacion.fechaPartoReal;
             }
-            servicioService.seleccionar(datosActualizacion, ['animal', 'especie', 'asignadoA', 'observaciones', 'diagnostico', 'resultado']);
+            servicioService.seleccionar(datosActualizacion, ['animal', 'especie', 'asignadoA', 'observaciones', 'diagnostico', 'resultado', 'fechaDestete', 'motivoCambioDestete']);
+            if (datosActualizacion.motivoCambioDestete !== undefined && datosActualizacion.fechaDestete === undefined) {
+                return res.status(422).json({ mensaje: 'El motivo debe acompanarse de la nueva fecha estimada de destete.' });
+            }
             if (datosActualizacion.animal && String(datosActualizacion.animal) !== String(registroAnterior.animal)) return res.status(409).json({ mensaje: 'El animal de un ciclo con servicios no puede sustituirse.' });
             if (datosActualizacion.asignadoA) await validarUsuarioAsignable(datosActualizacion.asignadoA, 'Reproduccion');
             const cambios = {};
@@ -593,10 +596,19 @@ reproduccionCtrl.updateRegistro = async (req, res) => {
                 if (datosActualizacion.resultado) await servicioService.operarCiclo(req.params.id, 'resultado', datosActualizacion.resultado, req.usuario.id, session);
                 const actual = await RegistroReproductivo.findById(req.params.id).session(session);
                 Object.assign(actual, cambios);
+                if (datosActualizacion.fechaDestete !== undefined) {
+                    await require('../services/desteteEstimado-service').reprogramarDesteteEstimado({
+                        registro: actual, fecha: datosActualizacion.fechaDestete, motivo: datosActualizacion.motivoCambioDestete,
+                        usuarioId: req.usuario.id, session
+                    });
+                }
                 return actual.save({ session });
             });
             await sincronizarAutomatizacionReproductiva({ registro: actualizado, animal: await Animal.findById(actualizado.animal), usuarioId: req.usuario.id });
             return res.json(await poblarAnimal(RegistroReproductivo.findById(req.params.id)));
+        }
+        if (datosActualizacion.motivoCambioDestete !== undefined) {
+            return res.status(422).json({ mensaje: 'La reprogramacion trazable de destete corresponde al seguimiento reproductivo nuevo.' });
         }
         let animalValidado = null;
         if (Object.prototype.hasOwnProperty.call(datosActualizacion, 'asignadoA')) {

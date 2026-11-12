@@ -9,8 +9,9 @@ import {
 } from '../services/api';
 import { ContenidoPaginado } from './PaginacionTabla';
 import './OperacionesFinancierasMultiFinca.css';
+import { hoyFechaLocal as fechaHoy } from '../utils/fechas';
+import { formatearFechaCalendario } from '../utils/fechasCalendario.mjs';
 
-const fechaHoy = () => new Date().toISOString().slice(0, 10);
 const baseTransferencia = { fincaDestino: '', fecha: fechaHoy(), monto: '', moneda: 'CRC', descripcion: '', metodoPago: '', observaciones: '' };
 const baseGasto = { fecha: fechaHoy(), montoTotal: '', moneda: 'CRC', categoria: '', producto: '', descripcion: '', proveedor: '', destinoUso: '', metodoPago: '', modo: 'IGUAL' };
 const dinero = (valor, moneda = 'CRC') => new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-CR', { style: 'currency', currency: moneda, maximumFractionDigits: moneda === 'USD' ? 2 : 0 }).format(valor || 0);
@@ -153,7 +154,7 @@ const OperacionesFinancierasMultiFinca = ({ onCerrar, onActualizado }) => {
 
       <section className="finanzas-panel"><div className="panel-title compacto"><div><p className="eyebrow">Trazabilidad</p><h3>Operaciones multi-finca recientes</h3></div></div>
         <ContenidoPaginado datos={movimientos} clavePaginacion="finanzas-multifinca">
-          {(pagina) => <div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Fecha</th><th>Finca</th><th>Tipo</th><th>Naturaleza</th><th>Descripción</th><th>Monto</th><th>Acciones</th></tr></thead><tbody>{!pagina.length && <tr><td colSpan={7} className="multifinca-sin-movimientos">No hay operaciones multi-finca registradas.</td></tr>}{pagina.map((item) => { const grupo = String(item.grupoConsolidacion || ''); const esAnulacion = item.referenciaModelo === 'AnulacionOperacionMultiFinca'; const anulado = gruposAnulados.has(grupo); return <tr key={item._id}><td>{new Date(item.fecha).toLocaleDateString('es-CR')}</td><td>{item.fincaId?.codigo || '--'}</td><td>{esAnulacion ? 'Anulación' : item.alcanceFinanciero === 'TRANSFERENCIA_INTERNA' ? 'Transferencia interna' : 'Gasto compartido'}</td><td>{item.naturaleza}</td><td>{item.descripcion}</td><td>{dinero(item.monto, item.moneda)}</td><td>{!esAnulacion && primeraFilaGrupo.has(item._id) ? (anulado ? <span className="estado-badge cancelado">Anulada</span> : <button className="boton-secundario compacto peligro" type="button" disabled={guardando} onClick={() => anularGrupo(grupo)}>Anular grupo</button>) : '--'}</td></tr>; })}</tbody></table></div>}
+          {(pagina) => <div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Fecha</th><th>Finca</th><th>Tipo</th><th>Naturaleza</th><th>Descripción</th><th>Monto</th><th>Acciones</th></tr></thead><tbody>{!pagina.length && <tr><td colSpan={7} className="multifinca-sin-movimientos">No hay operaciones multi-finca registradas.</td></tr>}{pagina.map((item) => { const grupo = String(item.grupoConsolidacion || ''); const esAnulacion = item.referenciaModelo === 'AnulacionOperacionMultiFinca'; const anulado = gruposAnulados.has(grupo); return <tr key={item._id}><td>{formatearFechaCalendario(item.fecha)}</td><td>{item.fincaId?.codigo || '--'}</td><td>{esAnulacion ? 'Anulación' : item.alcanceFinanciero === 'TRANSFERENCIA_INTERNA' ? 'Transferencia interna' : 'Gasto compartido'}</td><td>{item.naturaleza}</td><td>{item.descripcion}</td><td>{dinero(item.monto, item.moneda)}</td><td>{!esAnulacion && primeraFilaGrupo.has(item._id) ? (anulado ? <span className="estado-badge cancelado">Anulada</span> : <button className="boton-secundario compacto peligro" type="button" disabled={guardando} onClick={() => anularGrupo(grupo)}>Anular grupo</button>) : '--'}</td></tr>; })}</tbody></table></div>}
         </ContenidoPaginado>
       </section>
     </section>

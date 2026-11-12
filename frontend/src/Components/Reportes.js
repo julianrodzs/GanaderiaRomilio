@@ -39,6 +39,8 @@ import ReportesPorSecciones from './ReportesPorSecciones';
 import { clavePreferenciasReportes } from '../utils/seccionesReportes.mjs';
 import { etiquetaReporte } from '../utils/etiquetasReportes.mjs';
 import useConsultasReportes from '../hooks/useConsultasReportes';
+import { SelectorTipoPesaje, BadgeTipoPesaje } from './TipoPesaje';
+import ExportarPesajes from './ExportarPesajes';
 
 const formatearNumero = (valor) => new Intl.NumberFormat('es-CR').format(Math.round(valor || 0));
 const formatearDecimal = (valor, decimales = 2) => valor === null || valor === undefined
@@ -219,6 +221,7 @@ const Reportes = ({ usuario }) => {
     diasAbiertos: '120',
     pesoDesteteMin: '140',
     diasSinPesaje: '60',
+    tipoPesaje: 'Todos',
     productoFiltro: '',
     categoriaProducto: '',
     proveedorProducto: ''
@@ -279,7 +282,7 @@ const Reportes = ({ usuario }) => {
         consulta('finanzasCria', 'finanzas', finanzasFiltros, obtenerFinanzasCria, economica),
         consulta('sustentabilidad', 'finanzas', finanzasFiltros, obtenerSustentabilidadCria, economica),
         consulta('vacasImproductivas', 'reproduccion', filtrosImproductivas, obtenerVacasImproductivas, productiva && incluirReportesBovinos),
-        consulta('crecimiento', 'produccion', { ...filtrosGenerales, diasSinPesaje: filtros.diasSinPesaje }, obtenerReporteCrecimientoPesajes, productiva),
+        consulta('crecimiento', 'produccion', { ...filtrosGenerales, diasSinPesaje: filtros.diasSinPesaje, tipoPesaje: filtros.tipoPesaje }, obtenerReporteCrecimientoPesajes, productiva),
         consulta('ventas', 'comercializacion', filtrosGenerales, obtenerResumenVentas),
         consulta('lotes', 'produccion', filtrosGenerales, (p) => obtenerReporteLotes(p, productiva)),
         consulta('productosResumen', 'comercializacion', sinPaginacion, obtenerReporteProductosResumen),
@@ -1191,8 +1194,10 @@ const Reportes = ({ usuario }) => {
                 <div>
                   <p className="eyebrow">Crecimiento</p>
                   <h2>Análisis de pesajes históricos</h2>
+                  <ExportarPesajes filtros={{ fechaInicio: filtros.fechaInicio, fechaFin: filtros.fechaFin, especie, tipoPesaje: filtros.tipoPesaje }} />
                 </div>
                 <div className="partos-filtros">
+                  <SelectorTipoPesaje todos valor={filtros.tipoPesaje} onChange={(tipoPesaje) => setFiltros((actual) => ({ ...actual, tipoPesaje }))} />
                   <label>
                     Sin pesaje reciente
                     <select
@@ -1276,6 +1281,9 @@ const Reportes = ({ usuario }) => {
                 </article>
               </div>
 
+              <ContenidoPaginado datos={crecimientoPesajes.detalle || []} clavePaginacion="reporte-pesajes-tipos">
+                {(filas) => <div className="tabla-scroll tabla-dinamica"><table><thead><tr><th>Fecha</th><th>DIIO</th><th>Tipo de pesaje</th><th>Peso</th></tr></thead><tbody>{filas.map((p) => <tr key={p._id}><td>{formatearFecha(p.fecha)}</td><td>{p.diio}</td><td><BadgeTipoPesaje tipo={p.tipoPesaje} /></td><td>{formatearDecimal(p.peso)} kg</td></tr>)}</tbody></table></div>}
+              </ContenidoPaginado>
               <div className="evolucion-peso-grid">
                 {(crecimientoPesajes.evolucion || []).slice(0, 4).map((animal) => (
                   <article key={animal.animalId}>

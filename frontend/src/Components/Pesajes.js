@@ -11,6 +11,8 @@ import {
 import SelectorEspecie from './SelectorEspecie';
 import { ContenidoPaginado } from './PaginacionTabla';
 import { obtenerCategoriaVisible } from '../utils/categoriasAnimales';
+import { BadgeTipoPesaje, SelectorTipoPesaje, NotaPesajeDestete } from './TipoPesaje';
+import { normalizarTipoPesaje } from '../constants/tiposPesaje.mjs';
 
 const obtenerEspecieInicial = () => localStorage.getItem('ganaderiaEspecie') || 'Bovino';
 
@@ -53,6 +55,7 @@ const formatearAnimal = (animal) => {
 };
 
 const crearValorInicial = () => ({
+  tipoPesaje: 'REGULAR',
   animal: '',
   fecha: fechaHoy(),
   peso: '',
@@ -73,6 +76,7 @@ const Pesajes = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const [formulario, setFormulario] = useState(crearValorInicial);
   const [orden, setOrden] = useState({ campo: 'fecha', direccion: 'desc' });
   const [filtros, setFiltros] = useState({
+    tipoPesaje: 'Todos',
     busqueda: '',
     fechaInicio: '',
     fechaFin: '',
@@ -135,6 +139,7 @@ const Pesajes = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
       if (filtros.potrero !== 'Todos' && potreroAnimal !== filtros.potrero) return false;
       if (filtros.sexo !== 'Todos' && animal?.sexo !== filtros.sexo) return false;
       if (filtros.categoria !== 'Todos' && categoria !== filtros.categoria) return false;
+      if (filtros.tipoPesaje !== 'Todos' && normalizarTipoPesaje(pesaje.tipoPesaje) !== filtros.tipoPesaje) return false;
 
       return true;
     });
@@ -173,6 +178,7 @@ const Pesajes = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
   const abrirEditar = (pesaje) => {
     setPesajeSeleccionado(pesaje);
     setFormulario({
+      tipoPesaje: normalizarTipoPesaje(pesaje.tipoPesaje),
       animal: obtenerId(pesaje.animal),
       fecha: claveFechaCivil(pesaje.fecha) || fechaHoy(),
       peso: pesaje.peso || '',
@@ -253,6 +259,8 @@ const Pesajes = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
 
         <form className="formulario-panel pesaje-formulario" onSubmit={guardarPesaje}>
           {errorFormulario && <div className="alerta-formulario">{errorFormulario}</div>}
+          <SelectorTipoPesaje valor={formulario.tipoPesaje} onChange={(tipoPesaje) => setFormulario((actual) => ({ ...actual, tipoPesaje }))} />
+          <NotaPesajeDestete tipo={formulario.tipoPesaje} />
           <label>
             Animal
             <select
@@ -338,6 +346,7 @@ const Pesajes = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
       <SelectorEspecie valor={especie} onChange={cambiarEspecie} />
 
       <div className="tabla-toolbar pesajes-toolbar">
+        <SelectorTipoPesaje todos valor={filtros.tipoPesaje} onChange={(tipoPesaje) => setFiltros((actual) => ({ ...actual, tipoPesaje }))} />
         <input
           value={filtros.busqueda}
           onChange={(evento) => setFiltros((actual) => ({ ...actual, busqueda: evento.target.value }))}
@@ -398,6 +407,7 @@ const Pesajes = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
               <th><button type="button" onClick={() => cambiarOrden('animal')}>Animal{etiquetaOrden('animal')}</button></th>
               <th>{etiquetaId}</th>
               <th><button type="button" onClick={() => cambiarOrden('fecha')}>Fecha{etiquetaOrden('fecha')}</button></th>
+              <th>Tipo de pesaje</th>
               <th><button type="button" onClick={() => cambiarOrden('peso')}>Peso{etiquetaOrden('peso')}</button></th>
               <th>Observaciones</th>
               <th>Acciones</th>
@@ -409,6 +419,7 @@ const Pesajes = ({ soloLectura = false, rolUsuario = 'Consulta' }) => {
                 <td>{pesaje.animal?.nombre || '--'}</td>
                 <td>{pesaje.animal?.diio || '--'}</td>
                 <td>{formatearFecha(pesaje.fecha)}</td>
+                <td><BadgeTipoPesaje tipo={pesaje.tipoPesaje} /></td>
                 <td>{pesaje.peso} kg</td>
                 <td>{pesaje.observaciones || '--'}</td>
                 <td>

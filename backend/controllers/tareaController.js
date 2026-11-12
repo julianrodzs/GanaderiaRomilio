@@ -25,7 +25,10 @@ const aplicarEfectosTareaCompletada = async (tarea, session) => {
     if (!ciclo?.fechaPartoReal || String(ciclo.animal) === String(tarea.animal)) return false;
     if (tarea.fechaCompletada < ciclo.fechaPartoReal) throw errorTarea('El destete no puede ser anterior al parto.');
     const resultado = await Animal.updateOne(
-        { _id: tarea.animal, madre: ciclo.animal, $or: [{ fechaDestete: null }, { fechaDestete: { $exists: false } }] },
+        { _id: tarea.animal, $and: [
+            { $or: [{ madreGestanteId: ciclo.animal }, { madreGestanteId: null, madre: ciclo.animal }] },
+            { $or: [{ fechaDestete: null }, { fechaDestete: { $exists: false } }] }
+        ] },
         { $set: { fechaDestete: tarea.fechaCompletada } }, { session }
     );
     return resultado.modifiedCount === 1;

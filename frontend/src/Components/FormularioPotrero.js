@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { obtenerCatalogoPastos, obtenerCoberturaPotrero, obtenerUsuariosAsignables } from '../services/api';
 import { etiquetaUsuarioConRol } from '../utils/usuarios';
 import InfoLunarFecha from './InfoLunarFecha';
+import { claveFechaCalendario as formatearFechaInput } from '../utils/fechasCalendario.mjs';
 
 const hoyInput = () => {
   const fecha = new Date();
@@ -21,7 +22,6 @@ const coberturaInicial = {
   descripcionCobertura: '', intervaloCorteObjetivoDias: '', fechaCambio: hoyInput()
 };
 
-const formatearFechaInput = (fecha) => (fecha ? new Date(fecha).toISOString().slice(0, 10) : '');
 const obtenerId = (valor) => String(valor?._id || valor || '');
 
 const normalizarPotrero = (potrero) => ({

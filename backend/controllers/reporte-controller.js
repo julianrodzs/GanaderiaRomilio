@@ -6,6 +6,7 @@ const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const ConteoDrone = require('../models/ConteoDrone');
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const Pesaje = require('../models/Pesaje');
+const { filtroTipoPesaje, tipoPesajeVisible } = require('../config/tiposPesaje');
 const Camada = require('../models/Camada');
 const { Tarea } = require('../models/Tarea');
 const { AplicacionSanitaria } = require('../models/AplicacionSanitaria');
@@ -996,6 +997,7 @@ const crearAnalisisPesajesAnimal = (animal, pesajes) => {
         gananciaMensualPromedio: gananciaMensualPromedio === null ? null : redondear(gananciaMensualPromedio, 2),
         evolucion: ordenados.map((pesaje) => ({
             fecha: pesaje.fecha,
+            tipoPesaje: tipoPesajeVisible(pesaje.tipoPesaje),
             peso: pesaje.peso
         }))
     };
@@ -1003,8 +1005,8 @@ const crearAnalisisPesajesAnimal = (animal, pesajes) => {
 
 reporteCtrl.getCrecimientoPesajes = async (req, res) => {
     try {
-        const { fechaInicio, fechaFin, animalId, diasSinPesaje = 60, especie } = req.query;
-        const filtroPesajes = crearFiltroFechas('fecha', fechaInicio, fechaFin);
+        const { fechaInicio, fechaFin, animalId, diasSinPesaje = 60, especie, tipoPesaje } = req.query;
+        const filtroPesajes = { ...crearFiltroFechas('fecha', fechaInicio, fechaFin), ...filtroTipoPesaje(tipoPesaje) };
         const filtroAnimales = {
             estado: { $nin: ['Muerto', 'Vendido'] },
             ...crearFiltroEspecieAnimal(especie)
@@ -1012,12 +1014,13 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
         if (animalId) filtroAnimales._id = animalId;
         const animales = await Animal.find(filtroAnimales).lean();
         const idsAnimales = animales.map((animal) => animal._id);
+        const animalesPorId = new Map(animales.map((animal) => [String(animal._id), animal]));
         filtroPesajes.animal = { $in: idsAnimales };
         const pesajes = idsAnimales.length
             ? await Pesaje.find(filtroPesajes).sort({ fecha: 1, createdAt: 1, _id: 1 }).lean()
             : [];
         const ultimosPesajesGlobales = idsAnimales.length
-            ? await Pesaje.find({ animal: { $in: idsAnimales } })
+            ? await Pesaje.find({ animal: { $in: idsAnimales }, ...filtroTipoPesaje(tipoPesaje) })
                 .setOptions({ omitirAislamientoFinca: true })
                 .sort({ fecha: -1, createdAt: -1, _id: -1 })
                 .lean()
@@ -1074,6 +1077,7 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
                 fechaFin: fechaFin || null,
                 animalId: animalId || null,
                 diasSinPesaje: Number(diasSinPesaje || 60),
+                tipoPesaje: tipoPesaje || 'Todos',
                 especie: especie || 'Todos'
             },
             resumen: {
@@ -1100,6 +1104,7 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
                 sinPesajesRecientes: animalesSinPesajesRecientes.length
             },
             mejoresCrecimientos: [...conCrecimiento].sort((a, b) => b.gananciaDiariaPromedio - a.gananciaDiariaPromedio).slice(0, 10),
+            detalle: pesajes.map((p) => ({ ...p, tipoPesaje: tipoPesajeVisible(p.tipoPesaje), diio: animalesPorId.get(String(p.animal))?.diio || animalesPorId.get(String(p.animal))?.identificadorFinca || '--' })),
             menoresCrecimientos: [...conCrecimiento].sort((a, b) => a.gananciaDiariaPromedio - b.gananciaDiariaPromedio).slice(0, 10),
             animalesSinPesajesRecientes,
             evolucion: animalId ? analisis[0]?.evolucion || [] : analisis.slice(0, 10),

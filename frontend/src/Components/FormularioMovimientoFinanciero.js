@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { catalogosFinancierosBase } from '../constants/catalogosFinancieros';
 import { obtenerCatalogosFinancieros } from '../services/api';
+import { claveFechaCalendario as formatearFechaInput } from '../utils/fechasCalendario.mjs';
+import { hoyFechaLocal } from '../utils/fechas';
 
 const estadoInicial = {
-  fecha: new Date().toISOString().slice(0, 10),
+  fecha: '',
   tipoMovimiento: 'Compra',
   naturaleza: 'Egreso',
   categoria: '',
@@ -22,11 +24,6 @@ const estadoInicial = {
   observaciones: ''
 };
 
-const formatearFechaInput = (fecha) => {
-  if (!fecha) return '';
-  return new Date(fecha).toISOString().slice(0, 10);
-};
-
 const numeroFormulario = (valor, decimales = 2) => {
   if (valor === '' || valor === null || valor === undefined) return '';
   const numero = Number(valor);
@@ -37,7 +34,7 @@ const numeroFormulario = (valor, decimales = 2) => {
 const normalizarMovimiento = (movimiento) => ({
   ...estadoInicial,
   ...movimiento,
-  fecha: formatearFechaInput(movimiento?.fecha),
+  fecha: movimiento ? formatearFechaInput(movimiento.fecha) : hoyFechaLocal(),
   cantidad: movimiento?.cantidad ?? '',
   precioUnitario: numeroFormulario(movimiento?.precioUnitario),
   monto: movimiento?.monto ?? ''

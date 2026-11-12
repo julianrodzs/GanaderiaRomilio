@@ -1,5 +1,6 @@
 const Animal = require('../models/Animal');
 const Camada = require('../models/Camada');
+const Pesaje = require('../models/Pesaje');
 
 const MS_DIA = 24 * 60 * 60 * 1000;
 const FACTORES_PORCINOS_21_DIAS = Object.freeze({
@@ -33,6 +34,7 @@ const redondear = (valor, decimales = 2) => {
 const porcentaje = (parte, total) => (total > 0 ? redondear((parte / total) * 100) : 0);
 
 const diasEntre = (inicio, fin) => {
+    if (!inicio || !fin) return null;
     const desde = new Date(inicio);
     const hasta = new Date(fin);
     if (Number.isNaN(desde.getTime()) || Number.isNaN(hasta.getTime())) return null;
@@ -266,22 +268,22 @@ const obtenerReportePesoDestete = async ({ fechaInicio, fechaFin, especie = 'Tod
     const rango = crearRangoFecha(fechaInicio, fechaFin);
     const incluirBovinos = especie !== 'Porcino';
     const incluirPorcinos = especie !== 'Bovino';
-    const filtroBovinos = {
-        $and: [
-            { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] },
-            { fechaDestete: { $ne: null, ...(rango || {}) } }
-        ]
-    };
+    const especieAnimal = especie === 'Todos' ? {} : especie === 'Bovino'
+        ? { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] } : { especie };
+    const camposAnimal = 'especie identificadorFinca diio nombre sexo fechaNacimiento fechaDestete pesoNacimiento pesoDestete madre madreGestanteId';
+    const conHito = await Pesaje.distinct('animal', { tipoPesaje: 'DESTETE' });
     const filtroPorcinos = { fechaDesteteReal: { $ne: null, ...(rango || {}) } };
-    const [animales, camadas] = await Promise.all([
-        incluirBovinos
-            ? Animal.find(filtroBovinos)
-                .select('identificadorFinca diio nombre sexo fechaNacimiento fechaDestete pesoNacimiento pesoDestete madre madreGestanteId')
+    const [legados, hitos, camadas] = await Promise.all([
+        Animal.find({ ...especieAnimal, _id: { $nin: conHito }, fechaDestete: { $ne: null, ...(rango || {}) } })
+                .select(camposAnimal)
                 .populate('madre', 'identificadorFinca diio nombre')
                 .populate('madreGestanteId', 'identificadorFinca diio nombre')
                 .sort({ fechaDestete: -1 })
-                .lean()
-            : [],
+                .lean(),
+        Pesaje.find({ tipoPesaje: 'DESTETE', ...(rango ? { fecha: rango } : {}) })
+            .populate({ path: 'animal', match: especieAnimal, select: camposAnimal,
+                populate: [{ path: 'madre', select: 'identificadorFinca diio nombre' }, { path: 'madreGestanteId', select: 'identificadorFinca diio nombre' }] })
+            .sort({ fecha: -1, createdAt: -1, _id: -1 }).lean(),
         incluirPorcinos
             ? Camada.find(filtroPorcinos)
                 .select('codigoCamada fechaNacimiento fechaDesteteReal nacidosVivos destetados pesoPromedioNacimiento pesoPromedioDestete pesoTotalDestete madre')
@@ -290,8 +292,13 @@ const obtenerReportePesoDestete = async ({ fechaInicio, fechaFin, especie = 'Tod
                 .lean()
             : []
     ]);
-    const bovinos = incluirBovinos ? resumirBovinos(animales) : null;
+    const porAnimal = new Map();
+    for (const p of hitos) if (p.animal && !porAnimal.has(String(p.animal._id))) porAnimal.set(String(p.animal._id), { ...p.animal, fechaDestete: p.fecha, pesoDestete: p.peso, pesajeDesteteId: p._id });
+    for (const a of legados) if (!porAnimal.has(String(a._id))) porAnimal.set(String(a._id), a);
+    const animales = [...porAnimal.values()].sort((a, b) => new Date(b.fechaDestete) - new Date(a.fechaDestete));
+    const bovinos = incluirBovinos ? resumirBovinos(animales.filter((a) => (a.especie || 'Bovino') === 'Bovino')) : null;
     const porcinos = incluirPorcinos ? resumirPorcinos(camadas) : null;
+    if (porcinos) porcinos.individuales = resumirBovinos(animales.filter((a) => a.especie === 'Porcino'));
 
     return {
         filtros: { fechaInicio: fechaInicio || null, fechaFin: fechaFin || null, especie },

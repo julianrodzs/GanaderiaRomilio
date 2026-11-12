@@ -20,17 +20,9 @@ import { ContenidoPaginado } from './PaginacionTabla';
 import OperacionesFinancierasMultiFinca from './OperacionesFinancierasMultiFinca';
 import { usePlan } from '../context/PlanContext';
 import { puedeRealizarAccion } from '../constants/permisosRoles';
+import { claveFechaCalendario, formatearFechaCalendario as formatearFecha } from '../utils/fechasCalendario.mjs';
 
 const tipos = ['Todos', 'Planilla', 'Inversion', 'Compra'];
-
-const formatearFecha = (fecha) => {
-  if (!fecha) return '--';
-  return new Date(fecha).toLocaleDateString('es-CR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-};
 
 const formatearMonto = (movimiento) => {
   const moneda = movimiento.moneda || 'CRC';
@@ -80,7 +72,7 @@ const columnas = [
     sortAccessor: (movimiento) => (movimiento.fecha ? new Date(movimiento.fecha).getTime() : null),
     searchAccessor: (movimiento) => [
       formatearFecha(movimiento.fecha),
-      movimiento.fecha ? new Date(movimiento.fecha).toISOString().slice(0, 10) : ''
+      claveFechaCalendario(movimiento.fecha)
     ].join(' ')
   },
   { id: 'tipoMovimiento', label: 'Tipo', accessor: (movimiento) => movimiento.tipoMovimiento },
@@ -445,7 +437,7 @@ const Finanzas = ({ rolUsuario = 'Consulta' }) => {
     return movimientos.filter((movimiento) => {
       if (tipoActivo !== 'Todos' && movimiento.tipoMovimiento !== tipoActivo) return false;
 
-      const fecha = movimiento.fecha ? new Date(movimiento.fecha).toISOString().slice(0, 10) : '';
+      const fecha = claveFechaCalendario(movimiento.fecha);
       if (!fecha) return false;
       if (rangoFechas.fechaInicio && fecha < rangoFechas.fechaInicio) return false;
       if (rangoFechas.fechaFin && fecha > rangoFechas.fechaFin) return false;

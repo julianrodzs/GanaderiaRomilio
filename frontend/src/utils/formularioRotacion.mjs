@@ -1,8 +1,4 @@
-const fechaInput = (valor) => {
-  if (!valor) return '';
-  const fecha = new Date(valor);
-  return Number.isNaN(fecha.getTime()) ? '' : fecha.toISOString().slice(0, 10);
-};
+import { claveFechaCalendario as fechaInput } from './fechasCalendario.mjs';
 
 export const hoyRotacion = (zonaHoraria = 'America/Costa_Rica', ahora = new Date()) => {
   const partes = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { ContenidoPaginado } from './PaginacionTabla';
+import { formatearFechaCalendario as fecha } from '../utils/fechasCalendario.mjs';
 
 const numero = (valor, decimales = 2) => (
   valor === null || valor === undefined
@@ -9,11 +10,8 @@ const numero = (valor, decimales = 2) => (
 
 const kg = (valor) => (valor === null || valor === undefined ? '--' : `${numero(valor)} kg`);
 const porcentaje = (valor) => `${numero(valor)}%`;
-const fecha = (valor) => valor
-  ? new Date(valor).toLocaleDateString('es-CR', { year: 'numeric', month: '2-digit', day: '2-digit' })
-  : '--';
 
-const MetricasBasicasBovinos = ({ datos }) => (
+const MetricasBasicasBovinos = ({ datos, clave = 'bovinos' }) => (
   <>
     <div className="reportes-metricas destete-metricas">
       <article><span>Destetes registrados</span><strong>{numero(datos.totalDestetados, 0)}</strong><small>Según fecha real de destete</small></article>
@@ -21,7 +19,7 @@ const MetricasBasicasBovinos = ({ datos }) => (
       <article><span>Rango observado</span><strong>{kg(datos.pesos?.minimo)} - {kg(datos.pesos?.maximo)}</strong><small>Solo pesos informados</small></article>
       <article><span>Cobertura del peso</span><strong>{porcentaje(datos.coberturaPeso)}</strong><small>{numero(datos.conPeso, 0)} de {numero(datos.totalDestetados, 0)} animales</small></article>
     </div>
-    <ContenidoPaginado datos={datos.detalle || []} clavePaginacion="reporte-destete-basico-bovinos">
+    <ContenidoPaginado datos={datos.detalle || []} clavePaginacion={`reporte-destete-basico-${clave}`}>
       {(pagina) => (
         <div className="tabla-scroll tabla-dinamica">
           <table>
@@ -76,7 +74,8 @@ export const ReportePesoDesteteBasico = ({ datos }) => {
         <span>¿Con cuánto peso se están destetando los animales?</span>
       </div>
       {bovinos && <section className="destete-reporte-bloque"><h3>Bovinos</h3><MetricasBasicasBovinos datos={bovinos} /></section>}
-      {porcinos && <section className="destete-reporte-bloque"><h3>Porcinos</h3><MetricasBasicasPorcinos datos={porcinos} /></section>}
+      {porcinos?.individuales && <section className="destete-reporte-bloque"><h3>Porcinos · Destetes individuales</h3><MetricasBasicasBovinos datos={porcinos.individuales} clave="porcinos-individuales" /></section>}
+      {porcinos && <section className="destete-reporte-bloque"><h3>Porcinos · Camadas</h3><MetricasBasicasPorcinos datos={porcinos} /></section>}
     </section>
   );
 };

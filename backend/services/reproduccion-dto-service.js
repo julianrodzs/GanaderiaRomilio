@@ -27,7 +27,7 @@ const CAMPOS_COMUNES = [
 ];
 
 const CAMPOS_CREACION = new Set([...CAMPOS_COMUNES, 'cerrarCicloAnterior', 'claveIdempotencia']);
-const CAMPOS_ACTUALIZACION = new Set(CAMPOS_COMUNES);
+const CAMPOS_ACTUALIZACION = new Set([...CAMPOS_COMUNES, 'motivoCambioDestete']);
 
 const errorDto = (mensaje, code = 'REPRODUCCION_DTO_INVALIDO') => Object.assign(
     new Error(mensaje),

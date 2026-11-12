@@ -8,6 +8,7 @@ import {
 } from '../services/api';
 import { ContenidoPaginado } from './PaginacionTabla';
 import { usePlan } from '../context/PlanContext';
+import { formatearFechaCalendario as mostrarFecha } from '../utils/fechasCalendario.mjs';
 
 const fechaInput = (fecha) => {
   const anio = fecha.getFullYear();
@@ -63,7 +64,6 @@ const usarPeriodo = () => {
 };
 
 const mostrarNumero = (valor, sufijo = '') => (valor === null || valor === undefined ? '--' : `${Number(valor).toLocaleString('es-CR', { maximumFractionDigits: 1 })}${sufijo}`);
-const mostrarFecha = (valor) => (valor ? new Date(valor).toLocaleDateString('es-CR') : '--');
 
 const TarjetasRendimiento = ({ datos }) => {
   const items = [

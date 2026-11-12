@@ -680,6 +680,12 @@ export const evaluarRiesgoCruce = ({ macho, hembra }) => {
 };
 
 export const obtenerPesajes = (filtros = {}) => request(`/pesajes${construirQuery(filtros)}`);
+export const descargarPesajes = async (filtros = {}) => {
+  const contexto = claveContextoSesion(obtenerSesion());
+  const archivo = await obtenerArchivoProtegido(`/pesajes/exportar${construirQuery(filtros)}`);
+  if (claveContextoSesion(obtenerSesion()) !== contexto) throw new Error('La finca o sesión cambió durante la exportación.');
+  return archivo;
+};
 
 export const obtenerPesajesPorAnimal = (animalId) => request(`/pesajes/animal/${animalId}`);
 
@@ -1294,12 +1300,13 @@ export const obtenerVacasImproductivas = ({
   return request(`/reportes/vacas-improductivas${query ? `?${query}` : ''}`);
 };
 
-export const obtenerReporteCrecimientoPesajes = ({ fechaInicio, fechaFin, animalId, diasSinPesaje, especie } = {}) => {
+export const obtenerReporteCrecimientoPesajes = ({ fechaInicio, fechaFin, animalId, diasSinPesaje, especie, tipoPesaje } = {}) => {
   const params = new URLSearchParams();
   if (fechaInicio) params.append('fechaInicio', fechaInicio);
   if (fechaFin) params.append('fechaFin', fechaFin);
   if (animalId) params.append('animalId', animalId);
   if (diasSinPesaje) params.append('diasSinPesaje', diasSinPesaje);
+  if (tipoPesaje) params.append('tipoPesaje', tipoPesaje);
   if (especie) params.append('especie', especie);
   const query = params.toString();
 

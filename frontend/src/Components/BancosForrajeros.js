@@ -13,8 +13,8 @@ import InfoLunarFecha from './InfoLunarFecha';
 import TablaDinamica from './TablaDinamica';
 import { cargarOpcional } from '../utils/cargarOpcional';
 import { etiquetaUsuarioConRol, nombreUsuario } from '../utils/usuarios';
+import { formatearFechaCalendario as fechaTexto } from '../utils/fechasCalendario.mjs';
 
-const fechaTexto = (valor) => valor ? new Date(valor).toLocaleDateString('es-CR') : '--';
 const hoyInput = () => {
   const fecha = new Date();
   return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;

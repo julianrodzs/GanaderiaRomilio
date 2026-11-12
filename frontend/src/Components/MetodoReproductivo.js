@@ -4,6 +4,8 @@ import { etiquetaUsuarioConRol } from '../utils/usuarios';
 import { crearClaveIdempotencia, operarMetodoReproductivo, obtenerTE } from '../services/api';
 import { usePlan } from '../context/PlanContext';
 import './MetodoReproductivo.css';
+import { claveFechaCalendario } from '../utils/fechasCalendario.mjs';
+import { prepararCambioDestete } from '../utils/desteteReproductivo.mjs';
 
 export const metodoDeRegistro = (r) => r.metodo || (r.campanaIATF || r.tipoInseminacion === 'IATF' || r.origenGestacion === 'IATF' ? 'IATF' : r.tipoRegistro === 'Monta' || r.origenGestacion === 'MONTA_NATURAL' ? 'MONTA_NATURAL' : r.tipoRegistro === 'Inseminación' || r.origenGestacion === 'IA_CONVENCIONAL' ? 'IA_CONVENCIONAL' : r.origenGestacion === 'TRANSFERENCIA_EMBRIONES' ? 'TRANSFERENCIA_EMBRIONES' : 'DESCONOCIDO');
 export const EtiquetaMetodo = ({ registro }) => <span className={`metodo-badge metodo-${metodoDeRegistro(registro)}`}>{catalogo[metodoDeRegistro(registro)]?.nombre || 'Desconocido'}</span>;
@@ -78,9 +80,16 @@ export function FormularioMetodoReproductivo({ animales, registroInicial, especi
   const [resultado, setResultado] = useState({ tipo: 'PARTO', fecha: hoy() });
   const [observaciones, setObservaciones] = useState(registroInicial?.observaciones || '');
   const editar = Boolean(registroInicial);
+  const [fechaDestete, setFechaDestete] = useState(claveFechaCalendario(registroInicial?.fechaDestete));
+  const [motivoDestete, setMotivoDestete] = useState('');
+  const [errorDestete, setErrorDestete] = useState('');
+  const permiteDestete = editar && especie === 'Bovino' && Boolean(registroInicial.fechaPartoReal)
+    && ['Activo', 'Cerrado'].includes(registroInicial.estadoCiclo || 'Activo');
+  const desteteCambiado = fechaDestete !== claveFechaCalendario(registroInicial?.fechaDestete);
   return <section className="form-page"><div className="panel-title"><div><p className="eyebrow">Reproducción</p><h2>{editar ? 'Editar seguimiento reproductivo' : 'Nuevo registro reproductivo'}</h2></div><button type="button" className="boton-link" onClick={onCancelar}>Volver</button></div>
-    <form className="form-card metodo-formulario" onSubmit={(e) => { e.preventDefault(); onGuardar({ animal, asignadoA, especie, observaciones, ...(!editar ? { metodo: servicio.metodo, claveIdempotencia: claveRegistro, ...(servicio.metodo !== 'DESCONOCIDO' ? { servicio: limpiarServicio(servicio) } : {}) } : {}), ...(conDiagnostico ? { diagnostico: limpia(diagnostico) } : {}), ...(conResultado ? { resultado } : {}) }); }}>
+    <form className="form-card metodo-formulario" onSubmit={(e) => { e.preventDefault(); try { const cambioDestete = permiteDestete ? prepararCambioDestete(registroInicial, fechaDestete, motivoDestete) : {}; setErrorDestete(''); onGuardar({ animal, asignadoA, especie, observaciones, ...(!editar ? { metodo: servicio.metodo, claveIdempotencia: claveRegistro, ...(servicio.metodo !== 'DESCONOCIDO' ? { servicio: limpiarServicio(servicio) } : {}) } : {}), ...(conDiagnostico ? { diagnostico: limpia(diagnostico) } : {}), ...(conResultado ? { resultado } : {}), ...cambioDestete }); } catch (err) { setErrorDestete(err.message); } }}>
       {error && <div role="alert" className="alerta-formulario">{error}</div>}
+      {errorDestete && <div role="alert" className="alerta-formulario">{errorDestete}</div>}
       <div className="form-grid"><label>{servicio.metodo === 'TRANSFERENCIA_EMBRIONES' ? 'Receptora' : 'Hembra'}<select value={animal} onChange={(e) => setAnimal(e.target.value)} required disabled={editar}><option value="">Seleccionar hembra</option>{opcionesAnimales(animales.filter((a) => a.sexo === 'Hembra' && a.especie === especie && (a.estado === 'Activo' || a._id === animal)))}</select></label>
         <label>Responsable del seguimiento<select value={asignadoA} onChange={(e) => setAsignadoA(e.target.value)} required><option value="">Seleccionar responsable</option>{usuariosAsignables.map((u) => <option key={u._id} value={u._id}>{etiquetaUsuarioConRol(u)}</option>)}</select></label></div>
       {!editar && <CamposServicio datos={servicio} setDatos={setServicio} animales={animales.filter((a) => a._id !== animal)} especie={especie} usuarios={usuariosAsignables} semenDisponible={semenDisponible} />}
@@ -88,6 +97,10 @@ export function FormularioMetodoReproductivo({ animales, registroInicial, especi
       {conDiagnostico && <CamposDiagnostico datos={diagnostico} setDatos={setDiagnostico} />}
       <label className="metodo-check"><input type="checkbox" checked={conResultado} onChange={(e) => setConResultado(e.target.checked)} />Registrar resultado</label>
 {conResultado && <div className="form-grid"><label>Resultado<select value={resultado.tipo} onChange={(e) => setResultado({ ...resultado, tipo: e.target.value })}>{['PARTO', 'PERDIDA_GESTACIONAL', 'REABSORCION', 'ABORTO', 'OTRO'].map((v) => <option key={v} value={v}>{({ PARTO: 'Parto', REABSORCION: 'Reabsorción', PERDIDA_GESTACIONAL: 'Pérdida gestacional', ABORTO: 'Aborto', OTRO: 'Otro' })[v]}</option>)}</select></label><label>Fecha real<input type="date" value={resultado.fecha} onChange={(e) => setResultado({ ...resultado, fecha: e.target.value })} required /></label></div>}
+      {permiteDestete && <fieldset className="metodo-fieldset"><legend>Programación de destete</legend><div className="form-grid">
+        <label>Destete estimado<input type="date" name="fechaDestete" value={fechaDestete} min={claveFechaCalendario(registroInicial.fechaPartoReal)} onChange={(e) => setFechaDestete(e.target.value)} required /></label>
+        {desteteCambiado && <label>Motivo del cambio<input name="motivoCambioDestete" value={motivoDestete} onChange={(e) => setMotivoDestete(e.target.value)} minLength={3} maxLength={1000} required /></label>}
+      </div></fieldset>}
       <label>Observaciones<textarea value={observaciones} onChange={(e) => setObservaciones(e.target.value)} /></label>
       <div className="modal-actions"><button type="button" className="boton-link" onClick={onCancelar}>Cancelar</button><button className="boton-primario compacto" disabled={guardando || (!editar && servicio.metodo === 'DESCONOCIDO' && !conDiagnostico && !conResultado)}>Guardar registro</button></div>
     </form></section>;

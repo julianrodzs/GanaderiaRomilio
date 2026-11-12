@@ -1,5 +1,6 @@
 const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
+const { TIPOS_PESAJE, ORIGENES_PESAJE } = require('../config/tiposPesaje');
 
 const pesajeSchema = new Schema(
     {
@@ -7,7 +8,8 @@ const pesajeSchema = new Schema(
         lote: { type: Schema.Types.ObjectId, ref: 'Lote', default: null },
         fecha: { type: Date, required: true, default: Date.now },
         peso: { type: Number, required: true, min: 0.01 },
-        tipoPesaje: { type: String, enum: ['Individual', 'Lote', 'Importacion'], default: 'Individual' },
+        tipoPesaje: { type: String, enum: TIPOS_PESAJE, default: 'REGULAR' },
+        origenPesaje: { type: String, enum: ORIGENES_PESAJE, default: 'Individual' },
         etapaProductiva: {
             type: String,
             enum: ['Fase 1', 'Fase 2', 'Fase 3', 'Desarrollo', 'Engorde'],
@@ -28,6 +30,16 @@ const pesajeSchema = new Schema(
 );
 
 pesajeSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+pesajeSchema.pre('init', function compatibilidadTipoAnterior(datos) {
+    if (ORIGENES_PESAJE.includes(datos.tipoPesaje)) {
+        datos.origenPesaje ||= datos.tipoPesaje;
+        datos.tipoPesaje = 'REGULAR';
+    }
+});
+pesajeSchema.index({ organizacionId: 1, fincaId: 1, tipoPesaje: 1, fecha: -1 });
+pesajeSchema.index({ organizacionId: 1, animal: 1, tipoPesaje: 1 }, {
+    unique: true, partialFilterExpression: { tipoPesaje: { $in: ['DESTETE', 'NACIMIENTO'] } }
+});
 pesajeSchema.index({ animal: 1, fecha: -1 });
 pesajeSchema.index({ organizacionId: 1, animal: 1, fecha: -1, createdAt: -1 });
 pesajeSchema.index(

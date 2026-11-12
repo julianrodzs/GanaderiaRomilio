@@ -93,7 +93,7 @@ const registrarPesajeImportado = async ({ animal, fecha, peso, etapaProductiva, 
         if (observaciones) pesaje.observaciones = observaciones;
         pesaje.editadoPor = opciones.usuarioId;
         pesaje.fechaEdicion = new Date();
-        pesaje.tipoPesaje = 'Importacion';
+        pesaje.origenPesaje = 'Importacion';
         await pesaje.save({ session });
         resultado.actualizados += 1;
     } else {
@@ -102,7 +102,8 @@ const registrarPesajeImportado = async ({ animal, fecha, peso, etapaProductiva, 
             lote: animal.loteActual || null,
             fecha: validacion.fecha,
             peso: validacion.peso,
-            tipoPesaje: 'Importacion',
+            tipoPesaje: 'REGULAR',
+            origenPesaje: 'Importacion',
             etapaProductiva: etapaProductiva || animal.etapaProductiva,
             observaciones,
             registradoPor: opciones.usuarioId,

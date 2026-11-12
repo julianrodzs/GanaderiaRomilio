@@ -45,7 +45,7 @@ try {
       requests.push({ url: req.url, method: req.method, body: cuerpo ? JSON.parse(cuerpo) : null });
       const datos = req.url === '/api/fincas' ? [{ _id: 'principal', codigo: 'PRINCIPAL', nombre: 'Finca principal', estado: 'Activa', esActiva: true }, { _id: 'secundaria', codigo: 'SECUNDARIA', nombre: 'Finca de nombre extenso para comprobar que la seleccion de participantes no desborde', estado: 'Activa' }]
         : req.url === '/api/finanzas/catalogos' ? { categorias: ['Alimentación', 'Sanidad'], destinosUso: ['Finca'] }
-          : req.url === '/api/finanzas/multi-finca' ? [] : {};
+          : req.url === '/api/finanzas/multi-finca' ? [{ _id: 'movimiento-fecha', fecha: '2026-11-07T00:00:00.000Z', fincaId: { codigo: 'PRINCIPAL' }, naturaleza: 'Egreso', descripcion: 'Prueba de fecha civil', monto: 1500, moneda: 'CRC' }] : {};
       res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(datos));
     }
     if (req.url === '/fixture.js') { res.setHeader('Content-Type', 'text/javascript'); return res.end(bundle.outputFiles.find((f) => f.path.endsWith('.js')).contents); }
@@ -63,8 +63,11 @@ try {
   socket.addEventListener('message', ({ data }) => { const m = JSON.parse(data), p = pending.get(m.id); if (p) { clearTimeout(p.timer); pending.delete(m.id); m.error ? p.reject(Error(JSON.stringify(m.error))) : p.resolve(m.result); } });
   await cdp('Page.enable'); await cdp('Runtime.enable');
   for (const ancho of [1440, 1024, 820, 390, 320]) {
+    await cdp('Emulation.setTimezoneOverride', { timezoneId: ancho > 820 ? 'America/Costa_Rica' : 'Pacific/Kiritimati' });
     await cdp('Emulation.setDeviceMetricsOverride', { width: ancho, height: 1100, deviceScaleFactor: 1, mobile: false });
     await cdp('Page.navigate', { url: `http://127.0.0.1:${server.address().port}` }); await until("document.querySelectorAll('input[type=checkbox]').length===2");
+    await until("document.querySelector('tbody').textContent.includes('07/11/2026')");
+    assert.equal(await evaluate("document.querySelector('tbody tr td').textContent"), '07/11/2026');
     const inicial = await medidas(); assert.ok(inicial.pagina <= ancho + 1 && inicial.campos && inicial.casillas, JSON.stringify(inicial));
     assert.equal(inicial.columnas, ancho > 1100 ? 2 : 1); assert.deepEqual(inicial.controles, ancho <= 600 ? [1, 1] : [2, 2]);
     await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((r) => writeFileSync(path.join(os.tmpdir(), `cir-multifinca-${ancho}.png`), Buffer.from(r.data, 'base64')));
@@ -83,7 +86,7 @@ try {
     }
     if (ancho === 320) { await campo(1, 'Distribución', 'MONTO'); await until("document.querySelector('label.multifinca-valor').textContent.includes('Monto (CRC)')"); assert.ok((await medidas()).campos); }
   }
-  console.log(JSON.stringify({ resultado: 'PASS', viewports: [1440, 1024, 820, 390, 320], modos: ['IGUAL', 'PORCENTAJE', 'MONTO'], guardadoSimulado: true, capturas: os.tmpdir() }));
+  console.log(JSON.stringify({ resultado: 'PASS', viewports: [1440, 1024, 820, 390, 320], zonasHorarias: ['America/Costa_Rica', 'Pacific/Kiritimati'], fechaCivil: '07/11/2026', modos: ['IGUAL', 'PORCENTAJE', 'MONTO'], guardadoSimulado: true, capturas: os.tmpdir() }));
 } finally {
   for (const p of pending.values()) clearTimeout(p.timer);
   if (socket) { try { await cdp('Browser.close'); } catch {} socket.close(); }

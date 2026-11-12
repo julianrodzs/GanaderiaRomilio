@@ -1,116 +1,89 @@
-# PROMPT PARA CODEX: CENTRO LEGAL PÚBLICO, ACEPTACIÓN DIFERENCIADA (LEY 8968 CR) Y REGISTRO DE EVIDENCIA
+Actúa como un Arquitecto de Software Senior Full-Stack (Node.js, Express, Mongoose, React). Vamos a incorporar **Categorías / Tipos de Pesaje (`tipoPesaje`)** desde el **Plan Esencial** para ambas especies (**Bovino** y **Porcino**), conectando automáticamente el **Peso al Destete** con la ficha del animal en Inventario, su Bitácora y los Reportes existentes.
 
-## 🎯 OBJETIVO
-Construir el **Centro Legal público** de **CIR Ganadero** dentro del frontend (`/legal` y subrutas), accesible sin iniciar sesión ni depender de una suscripción activa, e implementar el flujo de aceptación y consentimiento informado diferenciado según el rol y la situación (contratación de organización vs. incorporación de colaborador vs. consentimientos de datos personales conforme al art. 5 de la Ley N.° 8968 de Costa Rica), guardando evidencia inmutable en el backend y utilizando por ahora los **borradores existentes** para pruebas sin exponer documentos internos.
-
----
-
-## ⚠️ FASE 0: INSPECCIÓN DE DOCUMENTOS EXISTENTES
-1. Revisar en el repositorio qué documentos legales/normativos existen actualmente.
-2. Clasificar cuáles corresponden a los **4 documentos públicos** y cuáles son **documentos internos/operativos** que **NO** deben publicarse en rutas públicas.
-3. Si alguno de los 4 documentos públicos está en formato Markdown/texto en el repo, integrarlo como fuente versionada (`version: '0.9-borrador'`, `estado: 'BORRADOR_PRUEBA'`, `fechaVigencia`) para que tanto el frontend como el backend compartan exactamente el mismo texto y su hash SHA-256.
+Antes de modificar archivos, inspecciona los modelos y servicios actuales de `Pesaje`, `Animal` (Inventario), `Bitacora` (o historial/eventos del animal) y `Reportes` (tanto en `backend/` como en `frontend/`).
 
 ---
 
-## 🌐 1. CENTRO LEGAL PÚBLICO EN EL FRONTEND (`/legal`)
+### 1. Categorías de Pesaje (`tipoPesaje`) en el Modelo y API (Desde Plan Esencial)
 
-Crear rutas públicas (accesibles sin token JWT, con sesión cerrada o con suscripción vencida, y excluidas de cualquier redirección forzada a `/login`):
+1. **Modelo de Pesaje (`Pesaje`):**
+   - Añade el campo `tipoPesaje` con los siguientes valores permitidos (enum):
+     - `'REGULAR'` (Control / Regular — **valor por defecto** para retrocompatibilidad con los pesajes ya existentes)
+     - `'NACIMIENTO'` (Peso al nacimiento)
+     - `'DESTETE'` (Peso al destete)
+     - `'ENTRADA_ENGORDE'` (Entrada a engorde / ceba)
+     - `'SALIDA_VENTA'` (Salida / Pre-venta)
+   - Añade un índice compuesto que incluya `{ organizacionId, fincaId, tipoPesaje, fecha }` para agilizar las consultas y reportes.
+   - Asegura que esta funcionalidad esté disponible desde el **Plan Esencial** (`ESENCIAL`, `GESTION`, `PRO`, `PREMIUM`) sin bloqueos de plan.
 
-| Ruta | Contenido |
-| :--- | :--- |
-| `/legal` | Índice del Centro Legal con tarjetas hacia cada documento, versión vigente, fecha de actualización y resumen de propósito. |
-| `/legal/terminos` | **Términos del Servicio** (reglas de uso de la plataforma y condiciones generales). |
-| `/legal/privacidad` | **Política de Privacidad y Protección de Datos** (información del art. 5 Ley 8968 CR y contacto para ejercer derechos ARCO: acceso, rectificación, cancelación y oposición). |
-| `/legal/suscripciones` | **Condiciones de Suscripción** (planes, pagos manuales SINPE/transferencia o pasarela, renovación, días de gracia, suspensión, cancelación y política de reembolsos). |
-| `/legal/soporte` | **Política de Soporte** (canales oficiales, horarios en `America/Costa_Rica` y alcance del soporte técnico). |
-
-### Requisitos de diseño y UX del Centro Legal:
-1. **Páginas completas y legibles en móvil y escritorio:** Tipografía clara, índice lateral o superior de secciones, versión visible (`Versión 0.9-borrador` con aviso discreto de borrador de prueba mientras `estado === 'BORRADOR_PRUEBA'`), fecha de vigencia y metaetiqueta `<meta name="robots" content="noindex">` mientras esté en modo borrador.
-2. **Impresión y descarga limpias:** Botón **"Imprimir / Guardar PDF"** (`window.print()` con hoja de estilos `@media print` que oculte barras de navegación y botones) y botón **"Descargar copia (.txt / .md)"** con la versión y fecha incluidas.
-3. **SW / PWA (`vite.config.js`):** Verificar que `/legal` y `/legal/*` funcionen correctamente en navegación directa (SPA fallback a `index.html`).
+2. **Ficha del Animal en `Inventario` (`Animal`):**
+   - Verifica qué campos existen actualmente para nacimiento y destete en el modelo `Animal` (ej. `pesoNacimiento`, `pesoDestete`, `fechaDestete`, `edadDesteteDias`). Si falta alguno de estos campos (`pesoDestete`, `fechaDestete`, `edadDesteteDias`), agrégalo al esquema de `Animal` soportando tanto **Bovinos** como **Porcinos**.
 
 ---
 
-## 🔗 2. PUNTOS DE ACCESO EN LA APLICACIÓN (SIN ENSUCIAR EL MENÚ PRINCIPAL)
+### 2. Conexión Automática con Inventario y Bitácora al Registrar / Editar / Eliminar un Pesaje
 
-1. **Pantalla de Login (`/login`):**
-   - Debajo del formulario de inicio de sesión, mostrar enlaces discretos y accesibles: **`Términos · Privacidad · Soporte`** (más acceso a `/legal`).
-2. **Pantalla de Activación / Aceptación de Invitación (`/aceptar-invitacion`):**
-   - Mostrar acceso directo a los documentos correspondientes antes de activar la cuenta (con apertura en nueva pestaña o visor completo sin perder lo escrito en el formulario).
-3. **Dentro de la App autenticada:**
-   - **No agregar otro ítem al menú lateral principal.**
-   - Dentro de **Cuenta / Configuración → pestaña o sección "Legal y privacidad"**, mostrar:
-     - Enlaces a los 4 documentos del Centro Legal.
-     - Tabla de **"Mis aceptaciones y consentimientos registrados"** (documento, versión, fecha de aceptación) y control para activar/revocar en cualquier momento el consentimiento opcional de comunicaciones comerciales.
-4. **En `MiPlan` (`/mi-plan`):**
-   - Enlace directo a **`/legal/suscripciones`** (*"Ver condiciones de suscripción, renovación y cancelación"*) y estado de aceptación comercial de la organización.
+1. **Cuando se crea o edita un pesaje con `tipoPesaje: 'DESTETE'`:**
+   - **Sincronización con la Ficha del Animal (`Inventario`):**
+     - Actualiza en el documento del animal (`Animal`):
+       - `pesoDestete = pesaje.peso` (en kg).
+       - `fechaDestete = pesaje.fecha`.
+       - `edadDesteteDias`: si el animal tiene `fechaNacimiento`, calcula los días transcurridos entre `fechaNacimiento` y `pesaje.fecha` (si no tiene `fechaNacimiento` o es inválida, déjalo en `null`).
+     - Actualiza también `pesoActual` (y fecha de último pesaje) si este pesaje es el más reciente del animal.
+     - Si el sistema recalcula la categoría/etapa productiva del animal al destetarse, ejecuta la actualización correspondiente sin romper la categoría si ya estaba en una etapa posterior.
+     - **Unicidad lógica de destete por animal:** si el animal ya tenía otro registro de `Pesaje` anterior marcado como `'DESTETE'`, actualiza ese registro o asegúrate de que la ficha refleje el pesaje de destete vigente (o muestra/maneja la actualización limpiamente para no duplicar destetes incoherentes).
+   - **Registro automático en la `Bitácora` del animal:**
+     - Crea (o actualiza si se edita el pesaje) el evento correspondiente en la Bitácora / Historial del animal indicando claramente el hito de **Destete**:
+       - Incluye fecha, peso al destete (kg), edad al destete en días (si tiene `fechaNacimiento`) y ganancia diaria de peso pre-destete (GDP desde nacimiento hasta destete, si cuenta con `pesoNacimiento` y `fechaNacimiento`).
+       - Vincula el evento al `pesajeId` para trazabilidad y para evitar eventos huérfanos o duplicados si se edita o elimina el pesaje.
 
----
+2. **Cuando se crea o edita un pesaje con `tipoPesaje: 'NACIMIENTO'`:**
+   - Si el animal no tenía `pesoNacimiento` en su ficha (o se actualiza el pesaje de nacimiento), sincroniza `pesoNacimiento` en el documento `Animal`.
 
-## ⚖️ 3. REGLAS DE ACEPTACIÓN Y CONSENTIMIENTO (TRES SITUACIONES SEPARADAS)
-
-**Prohibido:**
-- Prohibido pedir aceptar todo en cada login.
-- Prohibido usar una sola casilla que mezcle contrato comercial, privacidad y publicidad.
-- Prohibido marcar retroactivamente a usuarios u organizaciones existentes como aceptantes.
-
-### Separar estrictamente estos 3 escenarios:
-
-1. **Escenario A — Contratación / Activación de una Organización (Representante / Administrador titular):**
-   - Cuando el administrador titular activa por primera vez la organización (o desde `MiPlan` / `Cuenta` si la organización fue creada antes de este cambio y aún no registra aceptación comercial):
-   - Debe marcar por separado:
-     - **Casilla 1 (Obligatoria para el representante):** *"Acepto los [Términos del Servicio](/legal/terminos) y las [Condiciones de Suscripción](/legal/suscripciones) en representación de la organización."*
-     - **Casilla 2 (Obligatoria — Ley 8968 CR):** *"He leído la [Política de Privacidad](/legal/privacidad) y otorgo mi consentimiento informado para el tratamiento de mis datos personales."*
-     - **Casilla 3 (Opcional — Nunca pre-marcada):** *"Deseo recibir comunicaciones comerciales, novedades y consejos productivos opcionales."*
-
-2. **Escenario B — Incorporación de un Colaborador (`Encargado`, `Veterinario`, `Contador`, etc. en `/aceptar-invitacion`):**
-   - A un trabajador o colaborador **NO se le hace aceptar cargos comerciales ni condiciones de pago de la empresa**.
-   - Solo se le presentan:
-     - **Casilla 1 (Obligatoria):** *"Acepto las reglas individuales de uso en los [Términos del Servicio](/legal/terminos)."*
-     - **Casilla 2 (Obligatoria — Ley 8968 CR):** *"He leído la [Política de Privacidad](/legal/privacidad) y otorgo mi consentimiento informado para el tratamiento de mis datos personales."*
-     - **Casilla 3 (Opcional — Nunca pre-marcada):** Comunicaciones opcionales.
-
-3. **Escenario C — Gestión de Consentimientos sobre Datos Personales (en `Cuenta → Legal y privacidad`):**
-   - Cualquier usuario existente o nuevo puede consultar qué versión aceptó, aceptar la versión vigente si aún no tenía registro previo, o cambiar su preferencia de comunicaciones opcionales en cualquier momento, dejando trazabilidad del cambio.
+3. **Cuando se cambia el `tipoPesaje` de `'DESTETE'` a otro tipo o se elimina ese pesaje:**
+   - Revisa si existe otro pesaje con `tipoPesaje: 'DESTETE'` para ese animal; si no existe ninguno creado desde pesajes y el destete provenía de ese pesaje, limpia o recalcula `pesoDestete`, `fechaDestete` y `edadDesteteDias` en la ficha del animal y actualiza/elimina el evento asociado en la Bitácora.
 
 ---
 
-## 🗄️ 4. EVIDENCIA INMUTABLE EN BACKEND (`AceptacionLegal`)
+### 3. Formulario de Pesajes y Ficha del Animal en Frontend
 
-1. **Catálogo / Versionado de Documentos Legales (`config/documentosLegales.js` o colección):**
-   - Cada documento (`terminos`, `privacidad`, `suscripciones`, `soporte`) tiene `slug`, `titulo`, `version` (actualmente `'0.9-borrador'`), `estado` (`'BORRADOR_PRUEBA'` | `'VIGENTE'`), `fechaVigencia`, `contenido` y `hashSha256` calculado automáticamente sobre el texto exacto.
-   - Endpoint público `GET /api/legal/documentos` y `GET /api/legal/documentos/:slug` (sin requerir autenticación) que devuelve los 4 documentos públicos vigentes con su versión y hash.
-
-2. **Modelo `AceptacionLegal` (Colección apendizable e inmutable):**
-   - `usuarioId`: ObjectId ref `Usuario` (indexado).
-   - `organizacionId`: ObjectId ref `Organizacion` (indexado).
-   - `rolEnMomento`: String (`Administrador`, `Encargado`, `Veterinario`, etc.).
-   - `contexto`: Enum `['ACTIVACION_ORGANIZACION', 'ACEPTACION_INVITACION_COLABORADOR', 'PANEL_CUENTA', 'ACTUALIZACION_CONSENTIMIENTO']`.
-   - `tipoAceptacion`: Enum `['TERMINOS_Y_SUSCRIPCION_ORG', 'REGLAS_USO_COLABORADOR', 'CONSENTIMIENTO_PRIVACIDAD_LEY8968', 'COMUNICACIONES_OPCIONALES']`.
-   - `otorgado`: Boolean (`true` al aceptar; permite registrar `false` cuando se revoca el consentimiento opcional de comunicaciones).
-   - `documentoSlug`: Enum `['terminos', 'privacidad', 'suscripciones', 'soporte']`.
-   - `versionDocumento`: String (ej. `'0.9-borrador'`).
-   - `hashTexto`: String (SHA-256 del texto exacto presentado).
-   - `copiaTextoExacto`: String (snapshot inmutable del texto aceptado en ese momento).
-   - `fechaAceptacion`: Date (default: now).
-   - `ip`: String.
-   - `userAgent`: String.
-
-3. **Integración en `/aceptar-invitacion`:**
-   - Al consumir `POST /api/auth/aceptar-invitacion`, validar que vengan marcadas las casillas obligatorias según el rol del invitado (Representante/Administrador inicial vs. Colaborador).
-   - Si falta una casilla obligatoria, responder `400 Bad Request` indicando claramente qué aceptación falta.
-   - Guardar los registros de `AceptacionLegal` dentro de la misma transacción de activación de la invitación.
+1. **Formulario de Crear / Editar Pesaje (Individual y Lote/Masivo si aplica):**
+   - Agrega el selector **"Tipo de pesaje"** con etiquetas legibles en español:
+     - `Control / Regular` (`REGULAR`)
+     - `Peso al nacimiento` (`NACIMIENTO`)
+     - `Peso al destete` (`DESTETE`)
+     - `Entrada a engorde / ceba` (`ENTRADA_ENGORDE`)
+     - `Salida / Pre-venta` (`SALIDA_VENTA`)
+   - Cuando el usuario seleccione **`Peso al destete`**, muestra una breve nota informativa en el formulario: *"Actualizará automáticamente el peso y fecha de destete en la ficha del animal y registrará el evento en su bitácora."*
+2. **Listado de Pesajes y Ficha del Animal:**
+   - Muestra un badge estilizado con el tipo de pesaje (`Regular`, `Nacimiento`, `Destete`, `Entrada a engorde`, `Salida / Venta`) en la tabla de pesajes y en el historial de pesajes dentro de la ficha del animal.
+   - En la ficha del animal (tanto para **Bovinos** como para **Porcinos**), muestra los datos de destete (`Peso al destete`, `Fecha de destete`, `Edad al destete`) cuando estén registrados.
 
 ---
 
-## 🧪 5. PRUEBAS AUTOMATIZADAS (MONGODB REAL)
+### 4. Ajuste de los Reportes Existentes (Destete para Ambas Especies + Filtro por Tipo de Pesaje)
 
-Agregar pruebas unitarias y de integración que verifiquen:
-1. **Rutas públicas sin sesión:** `GET /api/legal/documentos` y las 4 vistas `/legal/*` responden `200` sin token JWT y no exponen ningún documento interno fuera de los 4 públicos.
-2. **Separación de casillas en `/aceptar-invitacion`:**
-   - Un colaborador (`Encargado` / `Veterinario`) puede activar su invitación aceptando solo las reglas individuales de uso y privacidad (sin exigirle aceptar suscripción/cargos de la organización).
-   - El administrador inicial de una organización nueva debe aceptar términos/suscripción comercial y privacidad por separado; si omite cualquiera de las dos, recibe `400`.
-   - La casilla de comunicaciones comerciales es 100% opcional (si viene `false`, la activación pasa con `200`).
-3. **Evidencia completa:** Verificar que cada `AceptacionLegal` persistida guarde `usuarioId`, `organizacionId`, `versionDocumento` (`'0.9-borrador'`), `hashTexto`, `copiaTextoExacto`, `fechaAceptacion`, `ip` y `userAgent`.
-4. **No retroactividad:** Las organizaciones y usuarios preexistentes no reciben registros falsos de `AceptacionLegal` al migrar ni son bloqueados en su login habitual.
-5. Ejecutar `npm test`, el smoke integrado (actualizando el paso de aceptación de invitación para enviar las casillas requeridas) y `npm run build` confirmando `PASS` con salida `0`.
+**Importante:** Ya contamos con reportes de destete y de pesajes en el módulo de `Reportes`. **No crees una pantalla duplicada desde cero**; adapta los reportes existentes bajo estas reglas:
+
+1. **Reporte de Destete existente (se mantiene en su sección aparte actual):**
+   - Haz que el reporte de destete funcione para **ambas especies (`Bovino` y `Porcino`)** respetando el filtro de especie activo en `Reportes`.
+   - Alimenta este reporte basándose en los pesajes con `tipoPesaje: 'DESTETE'` (manteniendo retrocompatibilidad con animales que ya tuvieran `pesoDestete` cargado en su ficha de `Animal` antes de este cambio, sin duplicar al mismo animal).
+2. **Reporte General de Pesajes:**
+   - Añade un **filtro por Tipo de Pesaje (`tipoPesaje`)**:
+     - `Todos (excepto Destete)` o `Todos`
+     - `Control / Regular`
+     - `Peso al nacimiento`
+     - `Entrada a engorde / ceba`
+     - `Salida / Pre-venta`
+     - `Peso al destete`
+   - Mantén el bloque/reporte especializado de **Destete** por separado tal como ya está estructurado hoy en `Reportes`, mientras que en el reporte general de pesajes el usuario puede filtrar por cualquiera de las categorías de pesaje (y ver la columna de `Tipo de pesaje` formateada con badges limpios, nunca el enum crudo como `ENTRADA_ENGORDE`).
+   - Incluye la columna `Tipo de pesaje` con formato legible en las exportaciones a Excel/PDF del reporte de pesajes.
+
+---
+
+### 5. Pruebas y Verificación
+1. Agrega o actualiza pruebas en el backend verificando:
+   - Creación de pesaje con `tipoPesaje: 'DESTETE'` en un **Bovino** y en un **Porcino** (en una organización con plan `ESENCIAL`), comprobando que se actualizan `pesoDestete`, `fechaDestete` y `edadDesteteDias` en `Animal` y se crea el registro en `Bitácora`.
+   - Edición y eliminación de un pesaje de destete manteniendo la consistencia en la ficha del animal.
+   - Filtrado por `tipoPesaje` en el endpoint de pesajes/reportes y funcionamiento del reporte de destete para ambas especies.
+2. Verifica que el build de `frontend` y los tests de `backend` pasen sin errores.

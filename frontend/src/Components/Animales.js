@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import FotoAnimal from './FotoAnimal';
+import { BadgeTipoPesaje } from './TipoPesaje';
 import { EtiquetaMetodo } from './MetodoReproductivo';
 import {
   actualizarAnimal,
@@ -1185,7 +1186,7 @@ const Animales = ({
                 <strong>{formatearFecha(animalDetalle.fechaDestete)}</strong>
               </article>
               <article>
-                <span>Tiempo destete</span>
+                <span>Edad al destete</span>
                 <strong>{calcularDiasDestete(animalDetalle)}</strong>
               </article>
               <article>
@@ -1434,6 +1435,7 @@ const Animales = ({
                       <tr>
                         <th>Fecha</th>
                         <th>Finca</th>
+                        <th>Tipo de pesaje</th>
                         <th>Peso</th>
                         <th>Diferencia</th>
                         <th>Observaciones</th>
@@ -1444,6 +1446,7 @@ const Animales = ({
                         <tr key={pesaje._id}>
                           <td>{formatearFecha(pesaje.fecha)}</td>
                           <td>{pesaje.fincaId?.nombre || pesaje.fincaId?.codigo || 'Sin finca histórica'}</td>
+                          <td><BadgeTipoPesaje tipo={pesaje.tipoPesaje} /></td>
                           <td>{formatearPeso(pesaje.peso)}</td>
                           <td>
                             <span className={pesaje.diferencia >= 0 ? 'peso-diferencia positiva' : 'peso-diferencia negativa'}>

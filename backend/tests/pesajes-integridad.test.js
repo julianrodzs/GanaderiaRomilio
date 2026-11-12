@@ -52,7 +52,8 @@ test('GMD mantiene pérdidas reales y no divide entre fechas iguales', () => {
 test('los modelos conservan la proyeccion de peso y la trazabilidad del pesaje', () => {
     assert.ok(Animal.schema.path('fechaUltimoPesaje'));
     assert.ok(Pesaje.schema.path('lote'));
-    assert.deepEqual(Pesaje.schema.path('tipoPesaje').enumValues, ['Individual', 'Lote', 'Importacion']);
+    assert.deepEqual(Pesaje.schema.path('tipoPesaje').enumValues, ['REGULAR', 'NACIMIENTO', 'DESTETE', 'ENTRADA_ENGORDE', 'SALIDA_VENTA']);
+    assert.deepEqual(Pesaje.schema.path('origenPesaje').enumValues, ['Individual', 'Lote', 'Importacion']);
     assert.ok(Pesaje.schema.path('editadoPor'));
     assert.ok(Pesaje.schema.path('fechaEdicion'));
 });
