@@ -147,9 +147,14 @@ const obtenerNotificacionesUsuario = async (usuarioId, filtros = {}) => {
     if (filtros.tipo) consulta.tipo = filtros.tipo;
     if (filtros.moduloOrigen) consulta.moduloOrigen = filtros.moduloOrigen;
 
+    let listado = Notificacion.find(consulta);
+    if (filtros.resumen === true || filtros.resumen === 'true') {
+        listado = listado.select('_id titulo mensaje leida createdAt moduloOrigen entidadTipo entidadId url naturaleza tipo');
+    } else {
+        listado = listado.populate('actor', 'nombre apellido correo rol');
+    }
     const [items, total] = await Promise.all([
-        Notificacion.find(consulta)
-            .populate('actor', 'nombre apellido correo rol')
+        listado
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(limit),

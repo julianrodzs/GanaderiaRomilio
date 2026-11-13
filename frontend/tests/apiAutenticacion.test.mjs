@@ -119,6 +119,15 @@ test('las peticiones privadas conservan el token y la finca de origen', async ()
   assert.equal(escenario.consultasOffline(), 0);
 });
 
+test('solo lecturas frecuentes revalidan cache; login y escrituras conservan no-store', async () => {
+  const escenario = preparar({ inicial: sesion() });
+  await escenario.api.obtenerAnimales();
+  await escenario.api.obtenerPerfilUsuario();
+  await escenario.api.actualizarPerfilUsuario({ nombre: 'Prueba' });
+  await escenario.api.loginUsuario({ correo: 'prueba@example.test', contrasena: 'fixture' });
+  assert.deepEqual(escenario.peticiones.map(({ opciones }) => opciones.cache), ['no-cache', 'no-cache', 'no-store', 'no-store']);
+});
+
 test('una lectura tardia se descarta al cambiar finca, organizacion, usuario o token', async () => {
   for (const siguiente of [
     sesion({ fincaId: 'finca-2' }), sesion({ organizacion: { _id: 'org-2' } }),

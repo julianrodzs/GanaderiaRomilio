@@ -1,5 +1,6 @@
 import React, { lazy, Suspense } from 'react';
 import { useEffect, useState } from 'react';
+import { iniciarPollingVisible } from '../utils/pollingVisible.mjs';
 import Animales from './Animales';
 import Compras from './Compras';
 import ConteoDrone from './ConteoDrone';
@@ -140,7 +141,8 @@ const formatearMonedas = (monedas, campo, hayMovimientos) => {
 
 const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, onLogout }) => {
   const { dashboard: imagenDashboard } = useApariencia();
-  const { tieneFeature } = usePlan();
+  const { tieneFeature, plan } = usePlan();
+  const planCargado = Boolean(plan);
   const rol = usuario?.rol || 'Consulta';
   const modulosOrden = ['Dashboard', 'Tareas', 'Mis tareas', 'Inventario', 'Pesajes', 'Potreros', 'Alimentacion', 'Sanidad', 'Reproduccion', 'Compras', 'Ventas', 'Finanzas', 'Reportes', 'Drone', 'Usuarios'];
   const obtenerVistaInicial = () => usuario?.debeCambiarContrasena
@@ -185,7 +187,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
   });
 
   useEffect(() => {
-    if (!puedeAccederModulo(rol, 'Dashboard')) {
+    if (!planCargado || vistaActiva !== 'Dashboard' || !puedeAccederModulo(rol, 'Dashboard')) {
       return;
     }
 
@@ -199,7 +201,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
           ? 'Todos'
           : perfil.engordePorcino ? 'Porcino' : 'Bovino';
         const [animales, potreros, planes, reproduccion, productividadBovina, productividadPorcina, eficienciaEngorde, sustentabilidadMes, lotes, alimentacionHoy] = await Promise.all([
-          obtenerAnimales(),
+          obtenerAnimales({ vista: 'dashboard' }),
           obtenerPotreros(),
           obtenerPlanesSanitarios(),
           obtenerRegistrosReproductivos(),
@@ -273,7 +275,7 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
     };
 
     cargarMetricas();
-  }, [rol, sesion, tieneFeature]);
+  }, [rol, sesion, tieneFeature, planCargado, vistaActiva]);
 
   useEffect(() => {
     if (!puedeAccederModulo(rol, vistaActiva)) {
@@ -305,23 +307,19 @@ const ListaUsuario = ({ usuario, sesion, onCambiarFinca, onCambiarOrganizacion, 
       setEstadoConexion((actual) => ({ ...actual, sincronizando: false }));
     };
 
-    const alRecuperarConexion = () => sincronizar();
     const alPerderConexion = () => actualizarEstadoConexion();
 
-    window.addEventListener('online', alRecuperarConexion);
     window.addEventListener('offline', alPerderConexion);
     window.addEventListener('ganaderiaOfflineCambios', actualizarEstadoConexion);
     window.addEventListener('ganaderiaOfflineSincronizado', actualizarEstadoConexion);
     actualizarEstadoConexion();
-    sincronizar();
-    const intervalo = window.setInterval(sincronizar, 60_000);
+    const detenerPolling = iniciarPollingVisible(sincronizar, { intervaloMs: 120_000 });
 
     return () => {
-      window.removeEventListener('online', alRecuperarConexion);
       window.removeEventListener('offline', alPerderConexion);
       window.removeEventListener('ganaderiaOfflineCambios', actualizarEstadoConexion);
       window.removeEventListener('ganaderiaOfflineSincronizado', actualizarEstadoConexion);
-      window.clearInterval(intervalo);
+      detenerPolling();
     };
   }, []);
 

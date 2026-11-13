@@ -2,9 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const { auth, authPlataforma } = require('./middleware/auth');
 const { auditoriaPeticiones } = require('./middleware/auditoria');
+const { compresionHttp, cachePrivadaRevalidada, medirRespuestasHttp } = require('./middleware/rendimientoHttp');
 const app = express();
 
 app.set('trust proxy', 1);
+app.set('etag', 'weak');
 
 // configuracion
 app.set('port', process.env.PORT || 4000);
@@ -12,8 +14,12 @@ app.set('port', process.env.PORT || 4000);
 // middlewares
 app.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    exposedHeaders: ['ETag'],
     credentials: true
 }));
+app.use(medirRespuestasHttp);
+app.use(compresionHttp);
+app.use(cachePrivadaRevalidada);
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');

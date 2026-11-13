@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { iniciarPollingVisible } from '../utils/pollingVisible.mjs';
 import {
   marcarNotificacionLeida,
   marcarTodasNotificacionesLeidas,
@@ -19,41 +20,56 @@ const tiempoRelativo = (fecha) => {
 
 const CampanaNotificaciones = ({ onAbrirCentro, onNavegar }) => {
   const contenedorRef = useRef(null);
+  const abiertaRef = useRef(false);
+  const peticionRef = useRef(null);
+  const montadaRef = useRef(true);
   const [abierta, setAbierta] = useState(false);
   const [cantidad, setCantidad] = useState(0);
   const [notificaciones, setNotificaciones] = useState([]);
   const [error, setError] = useState('');
 
-  const cargar = async () => {
-    try {
-      const [respuesta, conteo] = await Promise.all([
-        obtenerNotificaciones({ limit: 8 }),
-        obtenerCantidadNotificacionesNoLeidas()
-      ]);
-      setNotificaciones(respuesta.items || []);
-      setCantidad(conteo.cantidad || 0);
-      setError('');
-    } catch (err) {
-      setError(err.message);
+  const cargar = async (incluirLista = abiertaRef.current) => {
+    if (peticionRef.current) {
+      const anteriorIncluiaLista = peticionRef.current.incluyeLista;
+      await peticionRef.current.promesa;
+      if (!incluirLista || anteriorIncluiaLista || !montadaRef.current) return;
     }
+    const peticion = { incluyeLista: incluirLista };
+    peticion.promesa = (async () => {
+      try {
+        const [respuesta, conteo] = await Promise.all([
+          incluirLista ? obtenerNotificaciones({ limit: 8, resumen: true }) : Promise.resolve(null),
+          obtenerCantidadNotificacionesNoLeidas()
+        ]);
+        if (!montadaRef.current) return;
+        if (respuesta) setNotificaciones(respuesta.items || []);
+        setCantidad(conteo.cantidad || 0);
+        setError('');
+      } catch (err) {
+        if (montadaRef.current) setError(err.message);
+      } finally {
+        if (peticionRef.current === peticion) peticionRef.current = null;
+      }
+    })();
+    peticionRef.current = peticion;
+    return peticion.promesa;
   };
 
   useEffect(() => {
-    cargar();
-    const intervalo = window.setInterval(cargar, 45000);
-    const alEnfocar = () => cargar();
-    window.addEventListener('focus', alEnfocar);
-    window.addEventListener('ganaderiaNotificacionesActualizadas', alEnfocar);
+    montadaRef.current = true;
+    const detener = iniciarPollingVisible(() => cargar(), {
+      intervaloMs: 120_000,
+      eventos: ['ganaderiaNotificacionesActualizadas']
+    });
     return () => {
-      window.clearInterval(intervalo);
-      window.removeEventListener('focus', alEnfocar);
-      window.removeEventListener('ganaderiaNotificacionesActualizadas', alEnfocar);
+      montadaRef.current = false;
+      detener();
     };
   }, []);
 
   useEffect(() => {
     const cerrarFuera = (evento) => {
-      if (!contenedorRef.current?.contains(evento.target)) setAbierta(false);
+      if (!contenedorRef.current?.contains(evento.target)) { abiertaRef.current = false; setAbierta(false); }
     };
     document.addEventListener('mousedown', cerrarFuera);
     return () => document.removeEventListener('mousedown', cerrarFuera);
@@ -68,6 +84,7 @@ const CampanaNotificaciones = ({ onAbrirCentro, onNavegar }) => {
       )));
     }
     setAbierta(false);
+    abiertaRef.current = false;
     onNavegar?.(notificacion);
   };
 
@@ -86,8 +103,9 @@ const CampanaNotificaciones = ({ onAbrirCentro, onNavegar }) => {
         aria-label={`Notificaciones${cantidad ? `, ${cantidad} no leídas` : ''}`}
         aria-expanded={abierta}
         onClick={() => {
-          setAbierta((valor) => !valor);
-          if (!abierta) cargar();
+          abiertaRef.current = !abiertaRef.current;
+          setAbierta(abiertaRef.current);
+          if (abiertaRef.current) cargar(true);
         }}
       >
         <span aria-hidden="true">&#128276;</span>
@@ -119,7 +137,7 @@ const CampanaNotificaciones = ({ onAbrirCentro, onNavegar }) => {
               </button>
             ))}
           </div>
-          <button className="notificaciones-ver-todas" type="button" onClick={() => { setAbierta(false); onAbrirCentro?.(); }}>
+          <button className="notificaciones-ver-todas" type="button" onClick={() => { abiertaRef.current = false; setAbierta(false); onAbrirCentro?.(); }}>
             Ver todas
           </button>
         </section>

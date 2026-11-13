@@ -59,7 +59,9 @@ const request = async (ruta, opciones = {}) => {
   }
 
   const respuesta = await fetch(`${API_URL}${ruta}`, {
-    cache: 'no-store',
+    // Revalidar siempre: el servidor vuelve a comprobar permisos antes del 304.
+    cache: autenticada && metodo === 'GET' && /^\/(animales|pesajes|potreros|notificaciones|plan\/actual|usuarios\/perfil)(\/|\?|$)/.test(ruta)
+      ? 'no-cache' : 'no-store',
     ...fetchOpciones,
     headers: headersBase,
   });

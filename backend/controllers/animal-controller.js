@@ -218,6 +218,12 @@ const crearEventosInventario = async ({ animal, animalAnterior = null, usuarioId
 
 animalCtrl.getAnimales = async (req, res) => {
     try {
+        if (req.query.vista === 'dashboard') {
+            const animales = await Animal.find(crearFiltroEspecie(req.query.especie))
+                .select('_id estado especie sexo fechaNacimiento categoria')
+                .sort({ _id: 1 }).lean();
+            return res.json(animales.map((animal) => ({ ...animal, categoria: obtenerCategoriaAnimal(animal) || animal.categoria })));
+        }
         const encontrados = await Animal.find(crearFiltroEspecie(req.query.especie))
             .populate('potreroActual')
             .populate('loteActual', 'codigo nombre proposito estado')

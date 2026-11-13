@@ -55,6 +55,36 @@ const fixture = async (especie = 'Bovino', extras = {}) => {
 };
 test.beforeEach(() => fixture());
 
+test('HTTP real: ETag de inventario revalida datos y permisos antes de responder 304', async () => {
+    const headers = { Authorization: `Bearer ${token}`, 'X-Finca-Id': String(finca), 'Cache-Control': 'max-age=0' };
+    const ruta = base + '/api/animales?vista=dashboard';
+    const primero = await nativeFetch(ruta, { headers }); assert.equal(primero.status, 200);
+    const datos = await primero.json(); assert.equal(datos.length, 1); assert.equal(datos[0].diio, undefined);
+    assert.equal(datos[0].sexo, 'Hembra'); assert.ok(primero.headers.get('etag'));
+    const condicional = { ...headers, 'If-None-Match': primero.headers.get('etag') };
+    const segundo = await nativeFetch(ruta, { headers: condicional }); assert.equal(segundo.status, 304); assert.equal(await segundo.text(), '');
+    const otraFinca = await nativeFetch(ruta, { headers: { ...condicional, 'X-Finca-Id': String(id()) } }); assert.ok([403, 404].includes(otraFinca.status));
+    await Usuario.updateOne({ _id: usuario._id }, { $set: { estado: 'Inactivo' } });
+    const revocado = await nativeFetch(ruta, { headers: condicional }); assert.ok([401, 403].includes(revocado.status));
+    assert.equal(revocado.headers.get('cache-control'), 'no-store');
+});
+
+test('HTTP real: la campana obtiene resumen sin metadata; el centro conserva el detalle', async (t) => {
+    const Notificacion = require('../models/Notificacion');
+    await contexto(() => Notificacion.create({ destinatario: usuario._id, actor: usuario._id,
+        naturaleza: 'Operativa', tipo: 'Tarea', titulo: 'Revisar animal', mensaje: 'Tarea asignada',
+        entidadTipo: 'Tarea', entidadId: id(), url: '/tareas', moduloOrigen: 'Tareas', metadata: { detalle: 'x'.repeat(12000) } }));
+    const completo = comprobar(await pedir('GET', '/api/notificaciones?limit=8'));
+    const resumen = comprobar(await pedir('GET', '/api/notificaciones?limit=8&resumen=true'));
+    assert.equal(resumen.items[0].metadata, undefined); assert.equal(resumen.items[0].actor, undefined);
+    assert.equal(completo.items[0].metadata.detalle.length, 12000);
+    for (const campo of ['_id', 'titulo', 'mensaje', 'leida', 'url', 'entidadId', 'moduloOrigen']) {
+        assert.deepEqual(resumen.items[0][campo], completo.items[0][campo]);
+    }
+    t.diagnostic(JSON.stringify({ notificacionSinteticaAntesBytes: Buffer.byteLength(JSON.stringify(completo)),
+        notificacionResumenBytes: Buffer.byteLength(JSON.stringify(resumen)) }));
+});
+
 for (const especie of ['Bovino', 'Porcino']) test(`Esencial ${especie}: DESTETE sincroniza ficha, edad, peso actual, bitacora y reporte sin duplicar`, async () => {
     if (especie === 'Porcino') await fixture(especie);
     const p = comprobar(await pedir('POST', '/api/pesajes', { animal: animal._id, fecha: '2026-07-20', peso: 230, tipoPesaje: 'DESTETE' }), 201);
