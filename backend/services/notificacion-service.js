@@ -2,6 +2,7 @@ const Notificacion = require('../models/Notificacion');
 const { prepararLecturaLean } = require('./lecturaLean-service');
 const { obtenerFincaActual, obtenerOrganizacionActual } = require('../context/organizacion-context');
 const { Membresia } = require('../models/Membresia');
+const { DIAS_NOTIFICACIONES, DIA_MS, despuesDeDias } = require('./retencionDatos-service');
 
 let emisorTiempoReal = null;
 
@@ -174,16 +175,26 @@ const obtenerCantidadNoLeidas = (usuarioId) => Notificacion.countDocuments({
     leida: false
 });
 
-const marcarComoLeida = async (notificacionId, usuarioId) => Notificacion.findOneAndUpdate(
-    { _id: normalizarId(notificacionId), ...filtroDestinatario(usuarioId) },
-    { $set: { leida: true, fechaLectura: new Date() } },
-    { new: true }
-).populate('actor', 'nombre apellido correo rol');
+const marcarComoLeida = async (notificacionId, usuarioId) => {
+    const ahora = new Date();
+    return Notificacion.findOneAndUpdate(
+        { _id: normalizarId(notificacionId), ...filtroDestinatario(usuarioId) },
+        [{ $set: {
+            leida: true,
+            fechaLectura: { $ifNull: ['$fechaLectura', ahora] },
+            expiraEn: { $ifNull: ['$expiraEn', { $add: [{ $ifNull: ['$fechaLectura', ahora] }, DIAS_NOTIFICACIONES * DIA_MS] }] }
+        } }],
+        { new: true }
+    ).populate('actor', 'nombre apellido correo rol');
+};
 
-const marcarTodasComoLeidas = async (usuarioId) => Notificacion.updateMany(
-    { ...filtroDestinatario(usuarioId), leida: false },
-    { $set: { leida: true, fechaLectura: new Date() } }
-);
+const marcarTodasComoLeidas = async (usuarioId) => {
+    const ahora = new Date();
+    return Notificacion.updateMany(
+        { ...filtroDestinatario(usuarioId), leida: false },
+        { $set: { leida: true, fechaLectura: ahora, expiraEn: despuesDeDias(ahora, DIAS_NOTIFICACIONES) } }
+    );
+};
 
 const existeDedupKey = (destinatario, dedupKey) => Notificacion.exists({ ...filtroDestinatario(destinatario), dedupKey: `${resolverFincaNotificacion()}:${dedupKey}` });
 

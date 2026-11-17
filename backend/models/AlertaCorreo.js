@@ -1,5 +1,6 @@
 const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
+const { DIAS_ALERTAS_CORREO } = require('../services/retencionDatos-service');
 
 const alertaCorreoSchema = new Schema(
     {
@@ -18,5 +19,7 @@ const alertaCorreoSchema = new Schema(
 
 alertaCorreoSchema.plugin(aplicarAislamientoOrganizacion);
 alertaCorreoSchema.index({ organizacionId: 1, clave: 1 }, { unique: true });
+// Los avisos que siguen enviandose conservan su ventana de idempotencia.
+alertaCorreoSchema.index({ updatedAt: 1 }, { expireAfterSeconds: DIAS_ALERTAS_CORREO * 86400 });
 
 module.exports = model('AlertaCorreo', alertaCorreoSchema);

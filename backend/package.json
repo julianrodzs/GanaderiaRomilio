@@ -52,6 +52,8 @@
     "indexes:suscripciones": "node scripts/prepararIndicesSuscripciones.js",
     "indexes:legal": "node scripts/prepararIndicesLegales.js",
     "indexes:pesajes": "node scripts/prepararIndicesPesajes.js",
+    "retencion:check": "node scripts/prepararRetencionDatos.js",
+    "retencion:apply": "node scripts/prepararRetencionDatos.js --apply",
     "indexes:categorias": "node scripts/crearIndiceCategorias.js",
     "migrate:banco-semen:check": "node scripts/migrar-banco-semen.js --dry-run",
     "migrate:banco-semen": "node scripts/migrar-banco-semen.js --aplicar",
@@ -79,6 +81,7 @@
     "pdfkit": "^0.20.2",
     "proxy-addr": "2.0.8",
     "stripe": "^23.0.0",
+    "validator": "^13.15.35",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "overrides": {

@@ -10,6 +10,7 @@ const { crearContenido } = require('./resumenEmail-plantilla-service');
 const { listarFincasAccesibles } = require('./accesoFinca-service');
 const { normalizarModulosResumen } = require('./permisosResumenEmail-service');
 const { HORA_RESUMEN_EMAIL } = require('../config/horarioResumenEmail');
+const { MATCH_USUARIO_CON_CORREO } = require('./correo-validacion-service');
 
 const obtenerPartesLocales = (fecha, zonaHoraria) => {
     const partes = new Intl.DateTimeFormat('en-CA', {
@@ -46,11 +47,11 @@ const debeEnviarResumen = (configuracion, fecha = new Date(), zonaHoraria = 'Ame
 const procesarResumenesOrganizacion = async (organizacion, ahora = new Date(), comprobarBloqueo = async () => {}, opciones = {}) => {
     if (!await tieneFeature('configuracionEmailAvanzada', organizacion._id)) return [];
     const configuraciones = ConfiguracionEmail.find({ frecuencia: { $ne: 'Desactivado' } })
-        .populate({ path: 'usuario', model: Usuario, match: { estado: 'Activo' }, select: 'nombre correo estado' }).cursor({ batchSize: 100 });
+        .populate({ path: 'usuario', model: Usuario, match: MATCH_USUARIO_CON_CORREO, select: 'nombre correo estado sinAccesoCorreo' }).cursor({ batchSize: 100 });
     const resultados = [];
     for await (const configuracion of configuraciones) {
         await comprobarBloqueo();
-        if (!configuracion.usuario) continue;
+        if (!configuracion.usuario || configuracion.usuario.sinAccesoCorreo === true) continue;
         let enviado = false;
         try {
             const membresia = await Membresia.findOne({

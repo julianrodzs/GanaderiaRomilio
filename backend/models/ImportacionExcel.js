@@ -1,5 +1,6 @@
 const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
+const { despuesDeDias, DIAS_PURGA_PREVIEW, ESTADOS_IMPORTACION_TEMPORAL } = require('../services/retencionDatos-service');
 
 const importacionExcelSchema = new Schema(
     {
@@ -42,6 +43,7 @@ const importacionExcelSchema = new Schema(
         iniciadoEn: Date,
         finalizadoEn: Date,
         expiraEn: { type: Date, index: true },
+        purgarEn: { type: Date, select: false },
         errorFinal: Schema.Types.Mixed
     },
     {
@@ -50,6 +52,14 @@ const importacionExcelSchema = new Schema(
 );
 
 importacionExcelSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+importacionExcelSchema.pre('validate', function () {
+    if (this.expiraEn && ESTADOS_IMPORTACION_TEMPORAL.includes(this.estado)) {
+        this.purgarEn = despuesDeDias(this.expiraEn, DIAS_PURGA_PREVIEW);
+    }
+});
+importacionExcelSchema.index({ purgarEn: 1 }, {
+    expireAfterSeconds: 0, partialFilterExpression: { estado: { $in: ESTADOS_IMPORTACION_TEMPORAL } }
+});
 importacionExcelSchema.index({ organizacionId: 1, fincaId: 1, hashArchivo: 1 });
 
 module.exports = model('ImportacionExcel', importacionExcelSchema);

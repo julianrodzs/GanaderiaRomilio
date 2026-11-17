@@ -1,61 +1,60 @@
-Actúa como un Arquitecto de Software Senior Full-Stack (Node.js/Express, Mongoose, React). Vamos a ejecutar la **Fase 1 de Optimización de Ancho de Banda y Memoria RAM (512 MB en Render)** basándonos en los hallazgos de tu diagnóstico.
+Actúa como un Arquitecto de Software Senior Full-Stack (Node.js/Express, Mongoose, React). Ahora que la Fase 1 (Fotos privadas y Memoria RAM) quedó completada y verificada, vamos a implementar la **Fase 2: Higiene de Base de Datos (TTL/Retención), Limpieza de R2 en Apariencia, Protección de Correos y Cierre de Sesión Completo**.
 
-**REGLA DE ORO DE COMPATIBILIDAD:**
-NO cambies la forma ni el contrato de respuesta JSON de los endpoints de listado (`/api/animales`, `/api/pesajes`, `/api/finanzas`, `/api/tareas`) ni introduzcas paginación obligatoria que rompa los buscadores/filtros locales del frontend o el almacenamiento de `IndexedDB` del Modo Offline. Todas las optimizaciones deben ser 100% transparentes para la UI actual.
-
----
-
-### 1. Eliminar las Descargas Repetidas de Fotos Privadas de Animales (Ancho de Banda de Render)
-
-**Problema detectado:** `api.js (línea 100)` pide los archivos protegidos (`/api/archivos/r2/:id`) con `cache: 'no-store'` y `useArchivoProtegido.js (línea 7)` descarga el blob en cada montaje y lo revoca al desmontar, provocando descargas repetidas del archivo original desde Render en cada cambio de pantalla o modal.
-
-**Implementa lo siguiente:**
-1. En `frontend/src/hooks/useArchivoProtegido.js` (y `frontend/src/services/api.js`):
-   - Implementa una **caché en memoria de sesión (LRU acotada, ej. máximo 150 entradas o ~50 MB)** indexada por `contexto (organización/finca/usuario) + url`, junto con **deduplicación de peticiones en vuelo** (si dos componentes piden la misma foto al mismo tiempo, comparten la misma promesa).
-   - No revoques el `objectURL` al desmontar un componente individual si sigue en la caché de sesión; solo revócalo cuando una entrada sea expulsada del LRU, cuando se invalide explícitamente (al actualizar/eliminar la foto de un animal) o al cerrar sesión (`logout`).
-   - En `api.js`, cambia `cache: 'no-store'` por una política que respete la caché privada del navegador o el `ETag` del backend cuando corresponda.
-   - Expón un helper para limpiar/invalidar esta caché de blobs al cerrar sesión (`App.js` / `offlineStorage.js`) y cuando se cambie o elimine la foto de un animal.
-2. En `backend/routes/archivoRoutes.js`:
-   - Añade soporte de `ETag` (basado en el `_id` / `updatedAt` / `clave` / `tamano` de `ArchivoMultimedia`) y manejo de `If-None-Match` ANTES de descargar el stream desde Cloudflare R2: si el cliente envía un `If-None-Match` válido, responde inmediatamente `304 Not Modified` sin pedir el objeto a R2 ni transmitir bytes por Render.
+Mantén el mismo rigor técnico, sin romper contratos de API ni flujos existentes.
 
 ---
 
-### 2. Reducción de Consumo de RAM yTamaño de Respuestas en Consultas del Backend
+### 1. Retención y Limpieza Automática en MongoDB (Evitar crecimiento infinito en Atlas)
 
-1. **Lecturas con `.lean()` y proyecciones seguras en `.populate()`:**
-   - **`backend/controllers/pesaje-controller.js` (líneas 19–24, 52–56, 132–154):**
-     - Usa `.lean()` en las consultas de listado e historial de pesajes (manteniendo la estructura y transformaciones/`id` que espere el frontend).
-     - En `.populate('animal')`, verifica primero todos los campos de `animal` que consumen el frontend y las exportaciones/reportes, y proyecta únicamente los campos necesarios (sin traer subdocumentos o metadatos innecesarios).
-   - **`backend/controllers/movimientoFinanciero-controller.js` (línea 72):**
-     - Usa `.lean()` en el listado de movimientos financieros y proyecta solo los campos necesarios en los `.populate()` de `animal` y `potrero`, conservando exactamente el formato de salida actual.
-   - **`backend/controllers/tareaController.js` (línea 103):**
-     - Usa `.lean()` en los listados de lectura de tareas (`listarTareas`, `misTareas`, etc.) manteniendo intacto el formato de respuesta.
-   - **`backend/services/notificacion-service.js` (línea 136):**
-     - Añade `.lean()` en la consulta de listado de notificaciones.
-
-2. **Optimización de las 3 Consultas que Cargan Historiales Completos en RAM:**
-   - **`backend/controllers/reporte-controller.js` (alrededor de la línea 671 — Finanzas de cría):**
-     - Evita cargar en memoria simultáneamente todos los documentos históricos de `MovimientoFinanciero` más los del período. Calcula los acumulados/totales fuera del período mediante una agregación en MongoDB (`$match` + `$group`) o proyecciones mínimas `.select(...)` con `.lean()`, reduciendo drásticamente los objetos en RAM y conservando el resultado exacto del reporte.
-   - **`backend/controllers/reporte-controller.js` (alrededor de la línea 1019 — Crecimiento de pesajes):**
-     - Evita descargar todo el historial de pesajes de todos los animales a Node.js para encontrar el último pesaje en JavaScript. Utiliza una agregación en MongoDB (`$match` + `$sort` + `$group` con `$first`/`$last`) o consulta optimizada con proyección mínima para obtener únicamente los datos requeridos por animal.
-   - **`backend/services/alertasCorreo-service.js` (líneas 49–55 y 113–120):**
-     - Filtra directamente en la consulta de MongoDB las tareas pendientes cuya fecha de vencimiento entre dentro del horizonte de alerta (vencidas o próximas en los siguientes 7 días) y usa `.lean()`, en lugar de cargar todas las tareas futuras en memoria y descartarlas en JavaScript.
+1. **`Notificacion` (`backend/models/Notificacion.js`):**
+   - Queremos que las notificaciones **ya leídas** (`leida: true`) no se acumulen para siempre.
+   - Añade un campo `expiraEn` (Date) que se fije automáticamente (p. ej. a **90 días** en el futuro) cuando una notificación se marca como `leida: true` (tanto en marcado individual como masivo), con un índice TTL `{ expiraEn: 1 }, { expireAfterSeconds: 0 }`. Las notificaciones no leídas mantienen `expiraEn: null` (no expiran).
+2. **`AlertaCorreo` (`backend/models/AlertaCorreo.js`):**
+   - Añade retención automática mediante TTL (p. ej. **120 días** después de `createdAt` o `enviadoEn`) para no acumular registros históricos de avisos indefinidamente, conservando sobradamente la ventana necesaria de idempotencia.
+3. **`ImportacionExcel` (`backend/models/ImportacionExcel.js`):**
+   - Las importaciones en vista previa o expiradas guardan `filas`, `errores` y `resultados` pesados.
+   - Configura limpieza automática (TTL sobre `expiraEn` para previsualizaciones no confirmadas/expiradas tras p. ej. **7 días**, o al confirmar/expirar limpia los arreglos pesados de filas crudas dejando solo el resumen de auditoría de la importación confirmada).
+4. **`Invitacion` (`backend/models/Invitacion.js`):**
+   - Asegúrate de que las invitaciones no aceptadas y ya vencidas se limpien automáticamente tras un período prudente posterior a `expiraEn` (p. ej. 30 días después de vencer) o mediante un índice TTL específico de purga.
+5. **Nota sobre `Auditoria`:**
+   - **NO** pongas TTL destructivo automático en `Auditoria` (para preservar la trazabilidad legal/operativa inmutable).
 
 ---
 
-### 3. Control de Concurrencia Global para Importaciones y Exportaciones Pesadas (Protección de 512 MB RAM)
+### 2. Limpieza de Archivos Huérfanos en Cloudflare R2 (`apariencia-service.js`)
 
-1. Crea una utilidad ligera en `backend/utils/` (o `backend/services/`) para controlar la concurrencia global en el proceso de Node.js de operaciones pesadas en memoria (**Importación de Excel** y **Exportaciones de Excel/PDF** en pesajes, consolidado multifinca y cierres):
-   - Permite un máximo configurable por variable de entorno (por defecto `MAX_CONCURRENT_HEAVY_JOBS = 2`) ejecutándose al mismo tiempo.
-   - Si llega una tercera operación simultánea, ponla en una cola de espera breve (hasta `15 segundos` por defecto); si no se libera un cupo en ese tiempo, responde con HTTP `429` (o `503`) y un mensaje claro: `"El servidor está procesando otros archivos pesados en este momento. Por favor intenta nuevamente en unos segundos."`
-   - Asegúrate de liberar siempre el cupo en un bloque `finally`.
+1. En `backend/services/apariencia-service.js` (líneas 109–149):
+   - Cuando se reemplace o restaure el logo de la organización o la imagen de una finca, elimina de Cloudflare R2 el objeto anterior (si existía y pertenecía a esa organización) de forma segura (en modo best-effort: si la eliminación en R2 falla, registra el warning pero no abortes el guardado del nuevo logo).
 
 ---
 
-### 4. Verificación
-1. Ejecuta la suite de pruebas del backend y añade tests unitarios/integración para:
-   - Respuesta `304 Not Modified` en `GET /api/archivos/r2/:id` sin llamar a R2 cuando coincide el `ETag`.
-   - Caché y deduplicación en `useArchivoProtegido`.
-   - Resultados idénticos en los reportes optimizados (`Finanzas de cría` y `Crecimiento de pesajes`) y en `alertasCorreo-service`.
-   - Funcionamiento del limitador de concurrencia de trabajos pesados.
-2. Ejecuta el build del frontend para confirmar que no hay errores.
+### 3. Política de Correo y Exclusión de Cuentas `sinAccesoCorreo`
+
+1. En `backend/controllers/usuario-controller.js` (alrededor de las líneas 269–285) y modelo `Usuario`:
+   - Cuando se cree un usuario con `sinAccesoCorreo: true` (cuenta operativa con contraseña temporal sin correo real verificable), persiste explícitamente un indicador en el usuario/membresía (ej. `sinAccesoCorreo: true` o `correoVerificado: false` / exclusión de envíos automáticos).
+   - En `alertasCorreo-service.js`, `resumenEmail-service.js` y `suscripcionesProgramadas-service.js`, excluye siempre de los envíos automáticos a cualquier usuario marcado con `sinAccesoCorreo: true`.
+2. En `backend/services/correoElectronico-service.js` (y modelo `Usuario`):
+   - Añade una validación central de formato de correo electrónico (sintaxis estándar y rechazo de dominios vacíos o cadenas malformadas) antes de intentar enviar al proveedor (Resend), registrando un aviso claro sin consumir llamadas ni reintentos contra la API de correo si la dirección es sintácticamente inválida.
+
+---
+
+### 4. Cierre de Sesión (`logout`) Completo y Rate Limit en Contexto de Invitación
+
+1. **Limpieza de datos secundarios al cerrar o expirar sesión (`frontend/`):**
+   - En el flujo de cierre de sesión manual y por expiración (`App.js`, `AparienciaContext.js`, `offlineStorage.js`):
+     - Limpia las claves de caché de apariencia `ganaderiaApariencia:*` en `localStorage` correspondientes a la sesión saliente.
+     - Limpia las acciones pendientes en `sessionStorage` que contengan identificadores de animales, lotes o fincas de la sesión anterior (`Lotes.js`, etc.).
+     - Asegúrate de que el evento de cierre de sesión en una pestaña notifique a las demás pestañas abiertas (vía evento `storage` o `BroadcastChannel`) para desmontar la sesión y limpiar las cachés en memoria (`archivoProtegidoCache`, contextos).
+2. **Rate Limit en `GET /api/invitaciones/contexto` (`backend/routes/invitacionRoutes.js`):**
+   - Aplica un limitador de velocidad por IP (usando `rateLimit.js`) a la ruta pública `GET /api/invitaciones/contexto` para proteger la consulta a MongoDB frente a escaneos automatizados.
+
+---
+
+### 5. Verificación
+1. Ejecuta todos los tests de backend y frontend, añadiendo pruebas para:
+   - Asignación de `expiraEn` al marcar notificaciones como leídas y limpieza de payloads pesados en `ImportacionExcel`.
+   - Eliminación del objeto anterior en R2 al reemplazar/restaurar logo o imagen de finca.
+   - Exclusión de usuarios con `sinAccesoCorreo: true` y rechazo de emails con formato inválido antes de llamar al transporte.
+   - Limpieza de `localStorage` (`ganaderiaApariencia:*`), `sessionStorage` y sincronización entre pestañas en `logout`.
+   - Rate limit en `GET /api/invitaciones/contexto`.
+2. Verifica que `npm run build` en frontend pase sin errores.

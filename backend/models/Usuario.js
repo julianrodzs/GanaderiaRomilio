@@ -1,10 +1,13 @@
 const { Schema, model } = require('mongoose');
+const { correoValido } = require('../services/correo-validacion-service');
 
 const usuarioSchema = new Schema(
     {
         nombre: { type: String, required: true, trim: true },
         apellido: { type: String, trim: true },
-        correo: { type: String, required: true, unique: true, lowercase: true, trim: true },
+        correo: { type: String, required: true, unique: true, lowercase: true, trim: true,
+            validate: { validator: correoValido, message: 'El correo electronico no tiene un formato valido.' } },
+        sinAccesoCorreo: { type: Boolean, default: false },
         contrasena: { type: String, required: true, select: false },
         telefono: { type: String, trim: true },
         rol: {

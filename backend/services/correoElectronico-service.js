@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { obtenerOrganizacionActual } = require('../context/organizacion-context');
 const { Membresia } = require('../models/Membresia');
 const { enviarMensajeResend } = require('./resend-transporte-service');
+const { correoValido, MATCH_USUARIO_CON_CORREO } = require('./correo-validacion-service');
 
 const crearTokenRecuperacion = () => crypto.randomBytes(32).toString('hex');
 const escaparHtml = (valor = '') => String(valor)
@@ -31,7 +32,7 @@ const obtenerDestinatariosAdministradores = async (organizacionId = obtenerOrgan
         estado: 'Activo'
     }).populate({
         path: 'usuario',
-        match: { estado: 'Activo' },
+        match: MATCH_USUARIO_CON_CORREO,
         select: 'correo nombre apellido'
     });
     const correosAdministradores = membresias
@@ -54,6 +55,12 @@ const enviarCorreoResend = async ({ to, subject, html, text, from, claveIdempote
             modo: 'sin_destinatarios',
             mensaje: 'No hay destinatarios configurados para este correo'
         };
+    }
+
+    if (destinatarios.some((correo) => !correoValido(correo))) {
+        // No registrar direcciones ni contenido del correo en logs operativos.
+        console.warn('Correo no enviado: hay destinatarios con formato invalido.');
+        return { enviado: false, modo: 'correo_invalido', mensaje: 'Hay destinatarios con formato de correo invalido.' };
     }
 
     const mensaje = {

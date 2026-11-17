@@ -1,5 +1,6 @@
 const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
+const { despuesDeDias, DIAS_NOTIFICACIONES } = require('../services/retencionDatos-service');
 
 const notificacionSchema = new Schema(
     {
@@ -15,6 +16,7 @@ const notificacionSchema = new Schema(
         url: { type: String, trim: true },
         leida: { type: Boolean, default: false, index: true },
         fechaLectura: { type: Date, default: null },
+        expiraEn: { type: Date, default: null, select: false },
         dedupKey: { type: String, trim: true },
         metadata: { type: Schema.Types.Mixed }
     },
@@ -22,6 +24,14 @@ const notificacionSchema = new Schema(
 );
 
 notificacionSchema.plugin(aplicarAislamientoOrganizacion, { finca: true });
+notificacionSchema.pre('validate', function () {
+    if (!this.leida) this.expiraEn = null;
+    else if (!this.expiraEn) {
+        this.fechaLectura = this.fechaLectura || new Date();
+        this.expiraEn = despuesDeDias(this.fechaLectura, DIAS_NOTIFICACIONES);
+    }
+});
+notificacionSchema.index({ expiraEn: 1 }, { expireAfterSeconds: 0, partialFilterExpression: { leida: true } });
 notificacionSchema.index({ destinatario: 1, createdAt: -1 });
 notificacionSchema.index({ destinatario: 1, leida: 1, createdAt: -1 });
 notificacionSchema.index(

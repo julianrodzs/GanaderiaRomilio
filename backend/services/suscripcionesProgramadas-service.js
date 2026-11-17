@@ -9,6 +9,7 @@ const { auditar } = require('./suscripcionManual-service');
 const { enviarCorreoResend } = require('./correoElectronico-service');
 const { escaparHtml: h } = require('./htmlSeguro-service');
 const { enlacePanel } = require('./resumenEmail-plantilla-service');
+const { MATCH_USUARIO_CON_CORREO } = require('./correo-validacion-service');
 
 const procesarSuscripcionesManuales = async ({ ahora = new Date(), comprobarBloqueo = async () => {}, alProgreso = () => {} } = {}) => {
     const resultados = [], pendientesOperador = [];
@@ -38,8 +39,8 @@ const procesarSuscripcionesManuales = async ({ ahora = new Date(), comprobarBloq
                 if (avisar && org.avisoCarteraCiclo !== ciclo) pendientesOperador.push({ _id: org._id, nombre: org.nombre, ciclo, estado: s.estadoSuscripcion });
                 if (avisar && org.avisoVencimientoCiclo !== ciclo) {
                     const miembros = await Membresia.find({ organizacionId: org._id, estado: 'Activo', rol: 'Administrador' })
-                        .populate({ path: 'usuario', model: Usuario, match: { estado: 'Activo' }, select: 'correo' }).lean();
-                    const destinatarios = [...new Set(miembros.map((m) => m.usuario?.correo).filter(Boolean))];
+                        .populate({ path: 'usuario', model: Usuario, match: MATCH_USUARIO_CON_CORREO, select: 'correo sinAccesoCorreo' }).lean();
+                    const destinatarios = [...new Set(miembros.filter((m) => m.usuario?.sinAccesoCorreo !== true).map((m) => m.usuario?.correo).filter(Boolean))];
                     if (destinatarios.length) {
                         const fin = new Intl.DateTimeFormat('es-CR', { timeZone: org.zonaHoraria || 'America/Costa_Rica', dateStyle: 'long' }).format(s.fechaProximoVencimiento);
                         const mensaje = `${org.nombre}: tu suscripción tiene vencimiento el ${fin}. Revisa Mi plan para coordinar la renovación. Período de gracia: ${s.diasGracia} días.`;

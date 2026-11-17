@@ -78,5 +78,9 @@ const rateLimitInvitacion = crearRateLimitCapas({
     accion: 'invitacion', ventanaMs: 60 * 60 * 1000, maxIp: 30, maxCuenta: 3,
     obtenerCuenta: (req) => normalizarCorreo(req.body?.correo), mensaje: MENSAJE
 });
+const rateLimitContextoInvitacion = crearRateLimitCapas({
+    accion: 'contexto_invitacion', ventanaMs: 15 * 60 * 1000, maxIp: 30,
+    obtenerCuenta: () => null, mensaje: MENSAJE
+});
 
-module.exports = { consumirClave, crearRateLimitCapas, rateLimitInvitacion, rateLimitLogin, rateLimitRecuperacion };
+module.exports = { consumirClave, crearRateLimitCapas, rateLimitInvitacion, rateLimitContextoInvitacion, rateLimitLogin, rateLimitRecuperacion };

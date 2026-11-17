@@ -7,6 +7,7 @@ const {
 const Animal = require('../models/Animal');
 const CatalogoFinanciero = require('../models/CatalogoFinanciero');
 const ImportacionExcel = require('../models/ImportacionExcel');
+const { limpiarPayloadImportacion } = require('../services/retencionDatos-service');
 const Lote = require('../models/Lote');
 const Potrero = require('../models/Potrero');
 const Pesaje = require('../models/Pesaje');
@@ -138,7 +139,7 @@ importarCtrl.confirmarExcel = async (req, res) => {
         );
         await ImportacionExcel.updateMany(
             { estado: 'Pendiente', expiraEn: { $lte: new Date() } },
-            { $set: { estado: 'Expirada', finalizadoEn: new Date() } }
+            { $set: { estado: 'Expirada', finalizadoEn: new Date() }, $unset: limpiarPayloadImportacion() }
         );
         const importacion = await ImportacionExcel.findOneAndUpdate(
             { _id: importacionId, usuario: req.usuario?.id, estado: 'Pendiente', expiraEn: { $gt: new Date() } },
@@ -165,7 +166,8 @@ importarCtrl.confirmarExcel = async (req, res) => {
                 }
             );
             await ImportacionExcel.updateOne({ _id: importacion._id, estado: 'Procesando' }, {
-                $set: { estado: 'Aplicada', resultado: respuesta.resultado, confirmadaAt: new Date(), finalizadoEn: new Date() }
+                $set: { estado: 'Aplicada', resultado: respuesta.resultado, confirmadaAt: new Date(), finalizadoEn: new Date() },
+                $unset: { ...limpiarPayloadImportacion(), purgarEn: '' }
             });
         } catch (error) {
             await ImportacionExcel.updateOne({ _id: importacion._id, estado: 'Procesando' }, {

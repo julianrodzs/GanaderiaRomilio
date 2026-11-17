@@ -7,6 +7,7 @@ const { Tarea } = require('../models/Tarea');
 const Usuario = require('../models/Usuario');
 const { crearNotificacion } = require('./notificacion-service');
 const { enviarCorreoResend } = require('./correoElectronico-service');
+const { MATCH_USUARIO_CON_CORREO } = require('./correo-validacion-service');
 const { Membresia } = require('../models/Membresia');
 const { listarFincasAccesibles } = require('./accesoFinca-service');
 const { obtenerOrganizacionActual } = require('../context/organizacion-context');
@@ -184,12 +185,12 @@ const crearHtml = (titulo, alertas, nombreOrganizacion, zonaHoraria) => `
 const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zonaHoraria = 'America/Costa_Rica', comprobarBloqueo = async () => {}) => {
     if (process.env.EMAIL_ALERTS_ENABLED === 'false') return { enviadas: 0, grupos: 0, desactivado: true };
     const membresias = await Membresia.find({ organizacionId: obtenerOrganizacionActual(), estado: 'Activo', rol: 'Administrador' })
-        .populate({ path: 'usuario', model: Usuario, match: { estado: 'Activo' }, select: '_id correo' });
+        .populate({ path: 'usuario', model: Usuario, match: MATCH_USUARIO_CON_CORREO, select: '_id correo sinAccesoCorreo' });
     let enviadas = 0;
     let alertasEnviadas = 0;
     const errores = [];
     for (const membresia of membresias) {
-        if (!membresia.usuario?.correo) continue;
+        if (!membresia.usuario?.correo || membresia.usuario.sinAccesoCorreo === true) continue;
         try {
             const fincas = new Set((await listarFincasAccesibles(membresia)).map((finca) => String(finca._id)));
             const pendientes = [];

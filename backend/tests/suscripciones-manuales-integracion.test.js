@@ -146,6 +146,10 @@ test('fallo de auditoria revierte pago y organizacion dentro de la misma transac
 });
 
 test('una alta con permiso anterior al downgrade se rechaza y libera la reserva', async () => {
+    // Este caso prueba cambio de plan, no vencimiento de la fecha fija de la fixture.
+    await Organizacion.updateOne({ _id: org._id }, { $set: {
+        fechaInicioPeriodoActual: new Date(), fechaProximoVencimiento: new Date(Date.now() + 30 * DIA)
+    } });
     const anterior = await ejecutarConOrganizacion(org._id, () => obtenerPlanActual());
     await cambiarSuscripcion(org._id, { plan: 'PRO' }, admin, ahora);
     const { reservarCuotaPlan } = require('../services/plan-service');

@@ -1,4 +1,5 @@
 import { limpiarCacheArchivosProtegidos } from './archivoProtegidoCache.mjs';
+import { limpiarDatosSecundariosSesion } from './sesionLimpieza.mjs';
 
 const DB_NAME = 'ganaderia-romilio-offline';
 const DB_VERSION = 3;
@@ -413,6 +414,7 @@ export const obtenerCambiosPendientesUsuario = async (sesion) => {
 };
 
 export const limpiarDatosOfflineUsuario = async (sesion) => {
+  limpiarDatosSecundariosSesion();
   limpiarCacheArchivosProtegidos();
   const usuarioId = normalizarId(sesion?.usuario?._id || sesion?.usuario?.id);
   if (!usuarioId) return;
@@ -430,6 +432,7 @@ export const limpiarDatosOfflineUsuario = async (sesion) => {
 };
 
 export const limpiarTodosDatosOffline = () => new Promise((resolve, reject) => {
+  limpiarDatosSecundariosSesion();
   limpiarCacheArchivosProtegidos();
   if (!('indexedDB' in window)) {
     resolve(true);

@@ -7,6 +7,7 @@ import RestablecerContrasena from './Components/RestablecerContrasena';
 import AceptarInvitacion from './Components/AceptarInvitacion';
 import { cambiarOrganizacionActiva, obtenerPerfilUsuario } from './services/api';
 import { limpiarCacheArchivosProtegidos } from './services/archivoProtegidoCache.mjs';
+import { limpiarDatosSecundariosSesion, observarCierreSesion } from './services/sesionLimpieza.mjs';
 import CentroLegal from './legal/CentroLegal';
 import { esRutaLegal } from './legal/legal.mjs';
 import { PlanProvider } from './context/PlanContext';
@@ -43,6 +44,7 @@ const tokenOfflineVigente = (token) => {
 };
 
 const limpiarAlmacenUsuario = async (sesion) => {
+  limpiarDatosSecundariosSesion();
   limpiarCacheArchivosProtegidos();
   try {
     await limpiarDatosOfflineUsuario(sesion);
@@ -58,6 +60,14 @@ function AppAutenticada() {
   const [sesion, setSesion] = useState(null);
   const [mensaje, setMensaje] = useState('');
   const [validandoSesion, setValidandoSesion] = useState(true);
+
+  useEffect(() => observarCierreSesion((anterior) => {
+    // Desmontar inmediatamente; IndexedDB se limpia despues sin mantener pantallas privadas.
+    setSesion(null);
+    setVista('login');
+    setMensaje('La sesion se cerro en otra pestana.');
+    limpiarAlmacenUsuario(anterior || sesion).catch(() => {});
+  }), [sesion]);
 
   useEffect(() => {
     const validarSesion = async () => {
@@ -140,11 +150,11 @@ function AppAutenticada() {
     };
 
     const manejarSesionExpirada = async (evento) => {
-      await limpiarAlmacenUsuario(evento.detail?.sesion).catch(() => {});
       localStorage.removeItem('ganaderiaSesion');
       setSesion(null);
       setVista('login');
       setMensaje('Tu sesion expiro o no es valida. Inicia sesion nuevamente.');
+      await limpiarAlmacenUsuario(evento.detail?.sesion).catch(() => {});
     };
 
     window.addEventListener('ganaderiaSesionExpirada', manejarSesionExpirada);

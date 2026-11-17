@@ -20,6 +20,7 @@ const { ejecutarProtegiendoAdministradores } = require('../services/membresia-se
 const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
 const { ejecutarConOrganizacion } = require('../context/organizacion-context');
 const legalService = require('../services/legal-service');
+const { correoValido } = require('../services/correo-validacion-service');
 
 const usuarioCtrl = {};
 const MENSAJE_RECUPERACION = 'Si el correo existe, se enviarán instrucciones para recuperar la contraseña.';
@@ -231,6 +232,9 @@ usuarioCtrl.crearUsuario = async (req, res) => {
         const { nombre, apellido, correo, contrasena, telefono, rol, estado, estadoMembresia, accesoTodasFincas, fincas, sinAccesoCorreo } = req.body;
 
         if (!correo) return res.status(400).json({ mensaje: 'El correo es requerido' });
+        if (typeof correo !== 'string' || !correoValido(correo.trim())) {
+            return res.status(400).json({ mensaje: 'El correo electronico no tiene un formato valido.' });
+        }
         const correoNormalizado = normalizarCorreo(correo);
         const usuarioExistente = await Usuario.findOne({ correo: correoNormalizado });
 
@@ -276,7 +280,7 @@ usuarioCtrl.crearUsuario = async (req, res) => {
                 const usuarioGuardado = await new Usuario({
                     nombre, apellido, correo: correoNormalizado,
                     contrasena: await hashContrasena(contrasena), telefono,
-                    rol: rol || 'Encargado', estado: 'Activo', debeCambiarContrasena: true
+                    rol: rol || 'Encargado', estado: 'Activo', debeCambiarContrasena: true, sinAccesoCorreo: true
                 }).save();
                 try {
                     const membresia = await Membresia.create({

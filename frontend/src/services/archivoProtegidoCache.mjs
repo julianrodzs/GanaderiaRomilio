@@ -72,4 +72,5 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     if (evento.key === 'ganaderiaSesion' || evento.key === null) limpiarCacheArchivosProtegidos();
   });
   window.addEventListener('ganaderiaSesionExpirada', () => limpiarCacheArchivosProtegidos());
+  window.addEventListener('ganaderiaSesionLimpiada', () => limpiarCacheArchivosProtegidos());
 }

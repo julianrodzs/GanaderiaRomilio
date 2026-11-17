@@ -1,7 +1,7 @@
 const ArchivoMultimedia = require('../models/ArchivoMultimedia');
 const Finca = require('../models/Finca');
 const Organizacion = require('../models/Organizacion');
-const { obtenerConfiguracionR2, subirImagenR2 } = require('./almacenamientoR2-service');
+const { obtenerConfiguracionR2, subirImagenR2, eliminarImagenR2 } = require('./almacenamientoR2-service');
 
 const IMAGENES_PREDETERMINADAS = Object.freeze({
     logo: '',
@@ -96,6 +96,7 @@ const asegurarFinca = async (fincaId, organizacionId) => {
 const crearArchivo = async ({ archivo, organizacionId, fincaId = null, uso, usuarioId }) => {
     const almacenamiento = await subirImagenR2({ archivo, organizacionId, fincaId, uso });
     return ArchivoMultimedia.create({
+        organizacionId,
         fincaId,
         uso,
         ...almacenamiento,
@@ -106,9 +107,36 @@ const crearArchivo = async ({ archivo, organizacionId, fincaId = null, uso, usua
     });
 };
 
+const limpiarImagenSinReferencias = async (archivoId, organizacionId) => {
+    if (!archivoId) return;
+    try {
+        const anterior = await ArchivoMultimedia.findOne({
+            _id: archivoId, organizacionId, activo: true, visibilidad: 'PUBLICO',
+            uso: { $in: ['LOGO_ORGANIZACION', 'DASHBOARD_FINCA', 'POTREROS_FINCA'] }
+        }).lean();
+        if (!anterior || !anterior.clave.startsWith(`organizaciones/${organizacionId}/`)) return;
+        const logoEnUso = await Organizacion.exists({ _id: organizacionId, 'branding.logo': anterior._id });
+        const imagenEnUso = await Finca.exists({ organizacionId, $or: [
+            { 'imagenes.dashboard': anterior._id }, { 'imagenes.potreros': anterior._id }
+        ] });
+        if (logoEnUso || imagenEnUso) return;
+        await eliminarImagenR2(anterior.clave);
+        await ArchivoMultimedia.updateOne({ _id: anterior._id, organizacionId }, { $set: { activo: false } });
+    } catch (error) {
+        console.warn('No se pudo limpiar una imagen de apariencia reemplazada; se conserva su metadata para revision.', {
+            archivoId: String(archivoId), codigo: error.code || 'R2_CLEANUP_FAILED'
+        });
+    }
+};
+
 const subirLogoOrganizacion = async ({ archivo, organizacionId, usuarioId }) => {
     const nuevo = await crearArchivo({ archivo, organizacionId, uso: 'LOGO_ORGANIZACION', usuarioId });
-    await Organizacion.findOneAndUpdate({ _id: organizacionId }, { $set: { 'branding.logo': nuevo._id } });
+    let anterior;
+    try {
+        anterior = await Organizacion.findOneAndUpdate({ _id: organizacionId }, { $set: { 'branding.logo': nuevo._id } }, { new: false });
+        if (!anterior) throw Object.assign(new Error('Organizacion no encontrada.'), { status: 404 });
+    } catch (error) { await limpiarImagenSinReferencias(nuevo._id, organizacionId); throw error; }
+    await limpiarImagenSinReferencias(anterior.branding?.logo, organizacionId);
     return obtenerConfiguracionApariencia({ organizacionId });
 };
 
@@ -124,21 +152,31 @@ const subirImagenFinca = async ({ tipo, archivo, fincaId, organizacionId, usuari
     }
     const finca = await asegurarFinca(fincaId, organizacionId);
     const nuevo = await crearArchivo({ archivo, organizacionId, fincaId: finca._id, uso: definicion.uso, usuarioId });
-    await Finca.findByIdAndUpdate(finca._id, { $set: { [definicion.campo]: nuevo._id } });
+    let anterior;
+    try {
+        anterior = await Finca.findOneAndUpdate({ _id: finca._id, organizacionId }, { $set: { [definicion.campo]: nuevo._id } }, { new: false });
+        if (!anterior) throw Object.assign(new Error('Finca no encontrada.'), { status: 404 });
+    } catch (error) { await limpiarImagenSinReferencias(nuevo._id, organizacionId); throw error; }
+    await limpiarImagenSinReferencias(anterior.imagenes?.[tipo], organizacionId);
     return obtenerConfiguracionApariencia({ organizacionId });
 };
 
 const reutilizarDashboardEnPotreros = async ({ fincaId, organizacionId }) => {
     const finca = await asegurarFinca(fincaId, organizacionId);
-    finca.imagenes = finca.imagenes || {};
-    finca.imagenes.potreros = finca.imagenes.dashboard || null;
-    await finca.save();
+    // No reutilizar una referencia que otra peticion acaba de reemplazar.
+    const anterior = await Finca.findOneAndUpdate({ _id: finca._id, organizacionId,
+        'imagenes.dashboard': finca.imagenes?.dashboard || null,
+        'imagenes.potreros': finca.imagenes?.potreros || null
+    }, { $set: { 'imagenes.potreros': finca.imagenes?.dashboard || null } }, { new: false });
+    if (!anterior) throw Object.assign(new Error('Las imagenes cambiaron. Actualiza la pagina e intenta nuevamente.'), { status: 409 });
+    await limpiarImagenSinReferencias(anterior.imagenes?.potreros, organizacionId);
     return obtenerConfiguracionApariencia({ organizacionId });
 };
 
 const restaurarImagen = async ({ alcance, tipo, fincaId, organizacionId }) => {
     if (alcance === 'organizacion' && tipo === 'logo') {
-        await Organizacion.findOneAndUpdate({ _id: organizacionId }, { $set: { 'branding.logo': null } });
+        const anterior = await Organizacion.findOneAndUpdate({ _id: organizacionId }, { $set: { 'branding.logo': null } }, { new: false });
+        await limpiarImagenSinReferencias(anterior?.branding?.logo, organizacionId);
         return obtenerConfiguracionApariencia({ organizacionId });
     }
     const definicion = CAMPOS_FINCA[tipo];
@@ -146,12 +184,14 @@ const restaurarImagen = async ({ alcance, tipo, fincaId, organizacionId }) => {
         const error = new Error('Imagen solicitada no válida.'); error.status = 400; throw error;
     }
     const finca = await asegurarFinca(fincaId, organizacionId);
-    await Finca.findByIdAndUpdate(finca._id, { $set: { [definicion.campo]: null } });
+    const anterior = await Finca.findOneAndUpdate({ _id: finca._id, organizacionId }, { $set: { [definicion.campo]: null } }, { new: false });
+    await limpiarImagenSinReferencias(anterior?.imagenes?.[tipo], organizacionId);
     return obtenerConfiguracionApariencia({ organizacionId });
 };
 
 module.exports = {
     IMAGENES_PREDETERMINADAS,
+    limpiarImagenSinReferencias,
     obtenerAparienciaActual,
     obtenerConfiguracionApariencia,
     restaurarImagen,
