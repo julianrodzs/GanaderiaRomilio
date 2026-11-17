@@ -1,3 +1,5 @@
+import { limpiarCacheArchivosProtegidos } from './archivoProtegidoCache.mjs';
+
 const DB_NAME = 'ganaderia-romilio-offline';
 const DB_VERSION = 3;
 const DB_REGISTRY_KEY = 'ganaderiaOfflineDatabases';
@@ -411,6 +413,7 @@ export const obtenerCambiosPendientesUsuario = async (sesion) => {
 };
 
 export const limpiarDatosOfflineUsuario = async (sesion) => {
+  limpiarCacheArchivosProtegidos();
   const usuarioId = normalizarId(sesion?.usuario?._id || sesion?.usuario?.id);
   if (!usuarioId) return;
   await Promise.all(Object.values(STORES).map(async (storeName) => {
@@ -427,6 +430,7 @@ export const limpiarDatosOfflineUsuario = async (sesion) => {
 };
 
 export const limpiarTodosDatosOffline = () => new Promise((resolve, reject) => {
+  limpiarCacheArchivosProtegidos();
   if (!('indexedDB' in window)) {
     resolve(true);
     return;

@@ -2,11 +2,12 @@ const pesajeCtrl = {};
 
 const Pesaje = require('../models/Pesaje');
 const Animal = require('../models/Animal');
+const { prepararLecturaLean } = require('../services/lecturaLean-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 const { Membresia } = require('../models/Membresia');
 const { listarFincasAccesibles } = require('../services/accesoFinca-service');
 const { ejecutarEnTransaccion } = require('../services/mongo-transaccion-service');
-const { filtroTipoPesaje, origenPesaje } = require('../config/tiposPesaje');
+const { filtroTipoPesaje, origenPesaje, ORIGENES_PESAJE } = require('../config/tiposPesaje');
 const {
     actualizarPesoActualAnimal,
     crearErrorPesaje,
@@ -16,12 +17,23 @@ const {
     validarDatosPesaje
 } = require('../services/pesaje-integridad-service');
 
-const poblarPesaje = (query) => query
-    .populate('animal')
-    .populate('lote', 'codigo nombre')
-    .populate('fincaId', 'nombre codigo')
-    .populate('registradoPor', 'nombre apellido correo rol')
-    .populate('editadoPor', 'nombre apellido correo rol');
+const REFERENCIAS_PESAJE = [
+    // El contrato entrega la ficha publica completa; no recortar campos usados offline.
+    { path: 'animal', select: '-hitosPesaje' },
+    { path: 'lote', select: 'codigo nombre' },
+    { path: 'fincaId', select: 'nombre codigo' },
+    { path: 'registradoPor', select: 'nombre apellido correo rol' },
+    { path: 'editadoPor', select: 'nombre apellido correo rol' }
+];
+const poblarPesaje = (query) => REFERENCIAS_PESAJE.reduce((actual, ref) => actual.populate(ref.path, ref.select), query);
+const prepararPesajeLectura = (pesaje) => {
+    if (!pesaje) return pesaje;
+    if (ORIGENES_PESAJE.includes(pesaje.tipoPesaje)) {
+        pesaje.origenPesaje ||= pesaje.tipoPesaje;
+        pesaje.tipoPesaje = 'REGULAR';
+    }
+    return prepararLecturaLean(Pesaje, pesaje, { populate: REFERENCIAS_PESAJE.map((ref) => ref.path === 'animal' ? { path: 'animal' } : ref) });
+};
 
 const prepararDatosPersistencia = (datos, validacion) => ({
     ...datos,
@@ -45,15 +57,15 @@ const obtenerFiltroPesajes = async (especie, filtros = {}) => {
     const filtro = especie === 'Bovino'
         ? { $or: [{ especie: 'Bovino' }, { especie: { $exists: false } }] }
         : { especie };
-    const animales = await Animal.find(filtro).select('_id');
+    const animales = await Animal.find(filtro).select('_id').lean();
     return { ...filtroPesajes, animal: { $in: animales.filter((animal) => !filtros.animal || String(animal._id) === filtros.animal).map((animal) => animal._id) } };
 };
 
 pesajeCtrl.getPesajes = async (req, res) => {
     try {
         const filtro = await obtenerFiltroPesajes(req.query.especie, req.query);
-        const pesajes = await poblarPesaje(Pesaje.find(filtro).sort({ fecha: -1, createdAt: -1, _id: -1 }));
-        res.json(pesajes);
+        const pesajes = await poblarPesaje(Pesaje.find(filtro).sort({ fecha: -1, createdAt: -1, _id: -1 })).lean();
+        res.json(pesajes.map(prepararPesajeLectura));
     } catch (error) {
         res.status(error.status || 500).json({ mensaje: error.message });
     }
@@ -101,7 +113,7 @@ pesajeCtrl.createPesaje = async (req, res) => {
 
 pesajeCtrl.getPesaje = async (req, res) => {
     try {
-        const pesaje = await poblarPesaje(Pesaje.findById(req.params.id));
+        const pesaje = prepararPesajeLectura(await poblarPesaje(Pesaje.findById(req.params.id)).lean());
         if (!pesaje) return res.status(404).json({ mensaje: 'Pesaje no encontrado' });
         res.json(pesaje);
     } catch (error) {
@@ -115,7 +127,7 @@ pesajeCtrl.exportarPesajes = async (req, res) => {
         if (!['xlsx', 'pdf'].includes(formato)) throw crearErrorPesaje('Formato no permitido.', 422);
         const filtro = await obtenerFiltroPesajes(req.query.especie, req.query);
         if (req.query.soloActivos === 'true') {
-            const activos = await Animal.find({ estado: { $nin: ['Muerto', 'Vendido'] } }).select('_id');
+            const activos = await Animal.find({ estado: { $nin: ['Muerto', 'Vendido'] } }).select('_id').lean();
             const ids = activos.map((a) => a._id).filter((id) => !filtro.animal || (filtro.animal.$in ? filtro.animal.$in.some((v) => String(v) === String(id)) : String(filtro.animal) === String(id)));
             filtro.animal = { $in: ids };
         }
@@ -131,7 +143,7 @@ pesajeCtrl.exportarPesajes = async (req, res) => {
 
 pesajeCtrl.getPesajesPorAnimal = async (req, res) => {
     try {
-        const animal = await Animal.findById(req.params.animalId).select('_id organizacionId');
+        const animal = await Animal.findById(req.params.animalId).select('_id organizacionId').lean();
         if (!animal) return res.status(404).json({ mensaje: 'Animal no encontrado' });
         const membresia = await Membresia.findById(req.usuario?.membresiaId);
         if (!membresia || String(membresia.organizacionId) !== String(animal.organizacionId)) {
@@ -150,8 +162,8 @@ pesajeCtrl.getPesajesPorAnimal = async (req, res) => {
             })
                 .setOptions({ omitirAislamientoFinca: true })
                 .sort({ fecha: -1, createdAt: -1, _id: -1 })
-        );
-        res.json(pesajes);
+        ).lean();
+        res.json(pesajes.map(prepararPesajeLectura));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener pesajes del animal', error: error.message });
     }

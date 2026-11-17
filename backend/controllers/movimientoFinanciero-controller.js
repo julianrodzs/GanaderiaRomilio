@@ -1,4 +1,5 @@
 const MovimientoFinanciero = require('../models/MovimientoFinanciero');
+const { prepararLecturaLean } = require('../services/lecturaLean-service');
 const { normalizarMovimientoFinanciero } = require('../services/normalizacionFinanciera-service');
 const { nombreUsuario, notificarAccionSegura } = require('../services/notificacion-service');
 const { sanitizarMovimientoManual } = require('../services/movimientoFinanciero-dto');
@@ -32,7 +33,7 @@ const notificarMovimiento = (req, movimiento, tipo, titulo, verbo) => notificarA
 
 const poblarReferencias = (query) => query
     .populate('potrero')
-    .populate('animal');
+    .populate('animal', '-hitosPesaje');
 
 const normalizarTipoMovimiento = (tipoMovimiento = '') => {
     const tipo = tipoMovimiento.trim().toLowerCase();
@@ -73,9 +74,11 @@ movimientoFinancieroCtrl.getMovimientos = async (req, res) => {
     try {
         const movimientos = await poblarReferencias(
             MovimientoFinanciero.find().sort({ fecha: -1 })
-        );
+        ).lean();
 
-        res.json(movimientos.map(presentarMovimientoFinanciero));
+        res.json(movimientos.map((movimiento) => presentarMovimientoFinanciero(prepararLecturaLean(MovimientoFinanciero, movimiento, {
+            populate: [{ path: 'potrero' }, { path: 'animal' }]
+        }))));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener movimientos financieros', error: error.message });
     }

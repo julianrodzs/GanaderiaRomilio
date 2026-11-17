@@ -1,7 +1,7 @@
 // React y HTTP reales sobre loopback; sin credenciales, Atlas ni correos.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import net from 'node:net';
 import os from 'node:os';
@@ -31,17 +31,23 @@ try {
     import{PlanProvider,usePlan}from'./src/context/PlanContext.js';
     import FeatureGate from'./src/Components/FeatureGate.js';
     import Campana from'./src/Components/CampanaNotificaciones.js';
+    import FotoAnimal from'./src/Components/FotoAnimal.js';
+    import{limpiarCacheArchivosProtegidos}from'./src/services/archivoProtegidoCache.mjs';
     import{obtenerAnimales}from'./src/services/api.js';
     localStorage.setItem('ganaderiaSesion',JSON.stringify({token:'fixture',usuario:{_id:'u'},organizacion:{_id:'o'},fincaId:'A'}));
     window.leerAnimales=obtenerAnimales;window.cargasDashboard=0;window.montajesModulo=0;
+    window.invalidarFotos=limpiarCacheArchivosProtegidos;window.urlsRevocadas=[];
+    const revocar=URL.revokeObjectURL.bind(URL);URL.revokeObjectURL=url=>{window.urlsRevocadas.push(url);revocar(url)};
     function Modulo(){useEffect(()=>{window.montajesModulo++},[]);return <p>Modulo cargado</p>}
     function Prueba(){const{plan,tieneFeature,recargarPlan}=usePlan();window.recargarPlan=recargarPlan;
+      const[foto,setFoto]=React.useState(false);window.mostrarFoto=setFoto;
       useEffect(()=>{if(plan)window.cargasDashboard++},[Boolean(plan),tieneFeature]);
-      return <><button onClick={()=>recargarPlan()}>Actualizar plan</button><Campana/><FeatureGate feature="analiticaProductiva"><Modulo/></FeatureGate></>}
+      return <><button onClick={()=>recargarPlan()}>Actualizar plan</button><Campana/><FeatureGate feature="analiticaProductiva"><Modulo/></FeatureGate>{foto&&<><FotoAnimal animal={{nombre:'Luna',fotoPrincipal:{url:'/api/archivos/r2/foto'}}}/><FotoAnimal detalle animal={{nombre:'Luna',fotoPrincipal:{url:'/api/archivos/r2/foto'}}}/></>}</>}
     createRoot(document.getElementById('root')).render(<PlanProvider><Prueba/></PlanProvider>);
   `, resolveDir: root, loader: 'jsx' }, bundle: true, write: false, outfile: 'fixture.js', loader: { '.js': 'jsx', '.css': 'empty' }, define: { 'import.meta.env': JSON.stringify({ DEV: false, VITE_API_URL: '/api' }) } });
   const app = express(); app.use(compresionHttp, cachePrivadaRevalidada);
-  let revision = 0, autorizado = true;
+  let revision = 0, autorizado = true, descargasFotos = 0;
+  const imagen = readFileSync(path.join(root, 'public/logo192.png'));
   app.use('/api', (req, res, next) => {
     res.once('finish', () => respuestas.push({ ruta: req.originalUrl, status: res.statusCode, condicional: Boolean(req.get('if-none-match')), finca: req.get('X-Finca-Id') }));
     if (!autorizado) return res.status(401).json({ mensaje: 'Acceso revocado' });
@@ -52,6 +58,11 @@ try {
   app.get('/api/notificaciones/no-leidas/count', (req, res) => res.json({ cantidad: 3 }));
   app.get('/api/notificaciones', (req, res) => res.json({ items: [{ _id: 'n', titulo: 'Tarea', mensaje: 'Revisar animal', createdAt: '2026-11-13', leida: false }] }));
   app.get('/api/animales', (req, res) => res.json([{ _id: 'a', nombre: `Animal finca ${req.get('X-Finca-Id')}`, revision }]));
+  app.get('/api/archivos/r2/foto', (req, res) => {
+    res.set('ETag', '"foto-inmutable"'); res.set('Cache-Control', 'private, no-cache'); res.vary('Authorization'); res.vary('X-Finca-Id');
+    if (req.fresh) return res.status(304).end();
+    descargasFotos++; return res.type('png').send(imagen);
+  });
   app.post('/fixture/revision', (req, res) => { revision++; res.json({}); });
   app.post('/fixture/revocar', (req, res) => { autorizado = false; res.json({}); });
   app.get('/fixture.js', (req, res) => res.type('js').send(bundle.outputFiles[0].text));
@@ -77,15 +88,32 @@ try {
   assert.ok(respuestas.some((r) => r.ruta === '/api/plan/actual' && r.status === 304 && r.condicional));
   await evaluar('window.leerAnimales()'); await evaluar('window.leerAnimales()');
   assert.equal(respuestas.filter((r) => r.ruta === '/api/animales').at(-1).status, 304);
+  await evaluar('window.mostrarFoto(true)'); await hasta('document.querySelector(".foto-animal img")?.naturalWidth>0');
+  const fotoOriginal = await evaluar('document.querySelector(".foto-animal img").src');
+  assert.equal(respuestas.filter((r) => r.ruta === '/api/archivos/r2/foto').length, 1);
+  await evaluar('window.mostrarFoto(false)'); await hasta('!document.querySelector(".foto-animal img")');
+  assert.equal(await evaluar('window.urlsRevocadas.length'), 0);
+  await evaluar('window.mostrarFoto(true)'); await hasta('document.querySelector(".foto-animal img")?.naturalWidth>0');
+  assert.equal(await evaluar('document.querySelector(".foto-animal img").src'), fotoOriginal);
+  assert.equal(respuestas.filter((r) => r.ruta === '/api/archivos/r2/foto').length, 1);
+  await evaluar('window.mostrarFoto(false)'); await hasta('!document.querySelector(".foto-animal img")');
+  await evaluar('window.invalidarFotos();window.mostrarFoto(true)'); await hasta('document.querySelector(".foto-animal img")?.naturalWidth>0');
+  assert.equal(respuestas.filter((r) => r.ruta === '/api/archivos/r2/foto').at(-1).status, 304);
+  assert.equal(descargasFotos, 1);
   await evaluar('fetch("/fixture/revision",{method:"POST"})');
   assert.equal((await evaluar('window.leerAnimales()'))[0].revision, 1);
   assert.equal(respuestas.filter((r) => r.ruta === '/api/animales').at(-1).status, 200);
   await evaluar('window.recargarPlan()');
   assert.equal(await evaluar('window.cargasDashboard'), 1);
   assert.equal(await evaluar('window.montajesModulo'), 1);
+  const fotoAntesCambio = await evaluar('document.querySelector(".foto-animal img").src');
   await evaluar('localStorage.setItem("ganaderiaSesion",JSON.stringify({...JSON.parse(localStorage.getItem("ganaderiaSesion")),fincaId:"B"}))');
   assert.equal((await evaluar('window.leerAnimales()'))[0].nombre, 'Animal finca B');
   assert.equal(respuestas.filter((r) => r.ruta === '/api/animales').at(-1).status, 200);
+  await evaluar('window.mostrarFoto(false)'); await hasta('!document.querySelector(".foto-animal img")');
+  await evaluar('window.mostrarFoto(true)'); await hasta('document.querySelector(".foto-animal img")?.naturalWidth>0');
+  assert.notEqual(await evaluar('document.querySelector(".foto-animal img").src'), fotoAntesCambio);
+  assert.equal(respuestas.filter((r) => r.ruta === '/api/archivos/r2/foto').at(-1).finca, 'B');
   await evaluar('document.querySelector(".notificaciones-boton").click()');
   await hasta('document.querySelector(".notificacion-item")');
   assert.equal(respuestas.filter((r) => r.ruta.includes('resumen=true')).length, 1);
@@ -99,7 +127,8 @@ try {
   assert.equal(await evaluar('localStorage.getItem("ganaderiaSesion")'), null);
   console.log(JSON.stringify({ resultado: 'PASS', etagRealNavegador: true, cambiaFincaSinFiltracion: true,
     revocacion401: true, planSinRecargaDashboard: true, peticionesOcultasPorEventos: 0,
-    listaCampanaSoloAlAbrir: true, respuestas }));
+    listaCampanaSoloAlAbrir: true, fotoReal: { bytesOriginal: imagen.length, descargas: descargasFotos,
+      revalidacion304: true, remontaSinDescarga: true }, respuestas }));
 } finally {
   for (const p of pendientes.values()) { clearTimeout(p.timer); p.reject(Error('Cierre de fixture')); } pendientes.clear();
   socket?.close(); if (browser && browser.exitCode === null && browser.pid) browser.kill();

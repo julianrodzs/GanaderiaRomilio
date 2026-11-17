@@ -1,4 +1,5 @@
 const { Tarea } = require('../models/Tarea');
+const { prepararLecturaLean } = require('../services/lecturaLean-service');
 const Animal = require('../models/Animal');
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const { rolTienePermiso } = require('../config/permisosRoles');
@@ -111,9 +112,9 @@ tareaCtrl.getTareas = async (req, res) => {
             ...await construirFiltroBusquedaTareas(req.query.busqueda)
         })
             .populate(POPULATE_TAREA)
-            .sort({ fechaProgramada: 1, prioridad: 1 });
+            .sort({ fechaProgramada: 1, prioridad: 1 }).lean();
 
-        res.json(tareas);
+        res.json(tareas.map((tarea) => prepararLecturaLean(Tarea, tarea, { populate: POPULATE_TAREA })));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener tareas', error: error.message });
     }
@@ -129,9 +130,9 @@ tareaCtrl.getMisTareas = async (req, res) => {
 
         const tareas = await Tarea.find(filtros)
             .populate(POPULATE_TAREA)
-            .sort({ fechaProgramada: 1, prioridad: 1 });
+            .sort({ fechaProgramada: 1, prioridad: 1 }).lean();
 
-        res.json(tareas);
+        res.json(tareas.map((tarea) => prepararLecturaLean(Tarea, tarea, { populate: POPULATE_TAREA })));
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener mis tareas', error: error.message });
     }

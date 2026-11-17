@@ -6,6 +6,7 @@ const MovimientoFinanciero = require('../models/MovimientoFinanciero');
 const ConteoDrone = require('../models/ConteoDrone');
 const { RegistroReproductivo } = require('../models/RegistroReproductivo');
 const Pesaje = require('../models/Pesaje');
+const { sumarInversionHistorica } = require('../services/reportes-rendimiento-service');
 const { filtroTipoPesaje, tipoPesajeVisible } = require('../config/tiposPesaje');
 const Camada = require('../models/Camada');
 const { Tarea } = require('../models/Tarea');
@@ -36,7 +37,6 @@ const {
     calcularTotalCompraAnimal,
     construirContratoSustentabilidad,
     crearMapaMonedas,
-    esMovimientoInversionOperativa,
     normalizarMoneda,
     sumarMovimientosPorMoneda
 } = require('../services/finanzas-calculos-service');
@@ -668,9 +668,9 @@ reporteCtrl.getFinanzasCria = async (req, res) => {
         const inicioMovimientosInventario = new Date(inicio.getTime() + 1);
         const alcance = { organizacionId: req.organizacionId, fincaId: req.fincaId };
 
-        const [movimientos, movimientosPeriodo, poblacionInicial, poblacionFinal, nacimientos, compras, ventas, muertes, traslados] = await Promise.all([
-            MovimientoFinanciero.find().lean(),
-            MovimientoFinanciero.find(filtroPeriodo).lean(),
+        const [inversionOperativaHistorica, movimientosPeriodo, poblacionInicial, poblacionFinal, nacimientos, compras, ventas, muertes, traslados] = await Promise.all([
+            sumarInversionHistorica(),
+            MovimientoFinanciero.find(filtroPeriodo).select('naturaleza tipoMovimiento categoria moneda monto').lean(),
             obtenerPoblacionAFecha({ ...alcance, fecha: inicio }),
             obtenerPoblacionAFecha({ ...alcance, fecha: fin }),
             obtenerAnimalesConHechoPeriodo({ ...alcance, campo: 'fechaNacimiento', fechaInicio: inicioMovimientosInventario, fechaFin: fin }),
@@ -681,7 +681,6 @@ reporteCtrl.getFinanzasCria = async (req, res) => {
                 .setOptions({ omitirAislamientoFinca: true }).lean()
         ]);
 
-        const inversionOperativaHistorica = sumarMovimientosPorMoneda(movimientos, esMovimientoInversionOperativa);
         const gastosOperativosPeriodo = sumarMovimientosPorMoneda(movimientosPeriodo, esMovimientoGastoOperativo);
         const ingresosPeriodo = sumarMovimientosPorMoneda(movimientosPeriodo, esMovimientoIngreso);
         const monedas = crearMapaMonedas((moneda) => ({
@@ -1012,7 +1011,7 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
             ...crearFiltroEspecieAnimal(especie)
         };
         if (animalId) filtroAnimales._id = animalId;
-        const animales = await Animal.find(filtroAnimales).lean();
+        const animales = await Animal.find(filtroAnimales).select('diio identificadorFinca nombre sexo especie categoria estado fechaNacimiento pesoNacimiento').lean();
         const idsAnimales = animales.map((animal) => animal._id);
         const animalesPorId = new Map(animales.map((animal) => [String(animal._id), animal]));
         filtroPesajes.animal = { $in: idsAnimales };
@@ -1020,13 +1019,15 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
             ? await Pesaje.find(filtroPesajes).sort({ fecha: 1, createdAt: 1, _id: 1 }).lean()
             : [];
         const ultimosPesajesGlobales = idsAnimales.length
-            ? await Pesaje.find({ animal: { $in: idsAnimales }, ...filtroTipoPesaje(tipoPesaje) })
-                .setOptions({ omitirAislamientoFinca: true })
-                .sort({ fecha: -1, createdAt: -1, _id: -1 })
-                .lean()
+            ? await Pesaje.aggregate([
+                { $match: { animal: { $in: idsAnimales }, ...filtroTipoPesaje(tipoPesaje) } },
+                { $project: { animal: 1, fecha: 1, createdAt: 1 } },
+                { $sort: { animal: 1, fecha: -1, createdAt: -1, _id: -1 } },
+                { $group: { _id: '$animal', fecha: { $first: '$fecha' } } }
+            ]).option({ omitirAislamientoFinca: true })
             : [];
         const ultimoGlobalPorAnimal = ultimosPesajesGlobales.reduce((mapa, pesaje) => {
-            const id = String(pesaje.animal || '');
+            const id = String(pesaje._id || '');
             if (id && !mapa.has(id)) mapa.set(id, pesaje);
             return mapa;
         }, new Map());
@@ -1061,7 +1062,7 @@ reporteCtrl.getCrecimientoPesajes = async (req, res) => {
                 ? new Set(['Ternero', 'Ternera'])
                 : new Set(['Ternero', 'Ternera', 'Lechón', 'Lechona']);
         const crecimientoCrias = analisis.filter((item) => categoriasCrias.has(item.categoria)).map((item) => {
-            const animal = animales.find((animalItem) => animalItem._id.toString() === item.animalId.toString());
+            const animal = animalesPorId.get(item.animalId.toString());
             const pesoNacimiento = animal?.pesoNacimiento;
             if (pesoNacimiento === null || pesoNacimiento === undefined || item.pesoActual === null) return null;
             return {

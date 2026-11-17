@@ -46,13 +46,22 @@ const tituloAlerta = (tarea, vencida) => {
     return vencida ? 'Tarea vencida' : 'Tarea próxima';
 };
 
-const obtenerTareasParaRecordatorio = () => Tarea.find({
+const filtroHorizonteAlertas = (zonaHoraria, futuras = false, ahora = new Date()) => {
+    const limite = new Date(`${claveDiaEnZona(ahora, zonaHoraria)}T00:00:00.000Z`);
+    limite.setUTCDate(limite.getUTCDate() + DIAS_ANTICIPACION);
+    const fecha = { $convert: { input: { $ifNull: ['$fechaLimite', '$fechaProgramada'] }, to: 'date', onError: null, onNull: null } };
+    const civil = { $eq: [{ $dateToString: { date: fecha, format: '%H:%M:%S.%L', timezone: 'UTC' } }, '00:00:00.000'] };
+    const clave = { $dateToString: { date: fecha, format: '%Y-%m-%d', timezone: { $cond: [civil, 'UTC', zonaHoraria] } } };
+    return { $expr: { $and: [
+        { $ne: [fecha, null] },
+        { [futuras ? '$gt' : '$lte']: [clave, limite.toISOString().slice(0, 10)] }
+    ] } };
+};
+const consultaRecordatorios = (zonaHoraria, futuras = false, ahora) => Tarea.find({
     estado: { $nin: ['Completada', 'Cancelada'] },
-    $or: [
-        { fechaLimite: { $exists: true, $ne: null } },
-        { fechaProgramada: { $exists: true, $ne: null } }
-    ]
+    ...filtroHorizonteAlertas(zonaHoraria, futuras, ahora)
 }).populate({ path: 'asignadoA', model: Usuario, select: 'nombre apellido correo rol estado' }).lean();
+const obtenerTareasParaRecordatorio = (zonaHoraria = 'America/Costa_Rica', ahora) => consultaRecordatorios(zonaHoraria, false, ahora);
 
 const crearNotificacionesOperativas = async (tareas, zonaHoraria = 'America/Costa_Rica', comprobarBloqueo = async () => {}) => {
     let creadas = 0;
@@ -111,7 +120,7 @@ const debeEnviarCorreo = async (tarea, fechaObjetivo, dias, destinatario, zonaHo
 };
 
 const obtenerAlertasTareas = async (tareasPrecargadas = null, zonaHoraria = 'America/Costa_Rica') => {
-    const tareas = tareasPrecargadas || await obtenerTareasParaRecordatorio();
+    const tareas = tareasPrecargadas || await obtenerTareasParaRecordatorio(zonaHoraria);
     const alertas = [];
     for (const tarea of tareas) {
         const fecha = fechaObjetivoTarea(tarea);
@@ -221,8 +230,15 @@ const enviarCorreosTareas = async (alertas, nombreOrganizacion = 'la finca', zon
 
 const procesarAlertasTareas = async ({ nombreOrganizacion, zonaHoraria = 'America/Costa_Rica', comprobarBloqueo = async () => {} } = {}) => {
     if (!await tieneFeature('centroAlertas')) return { notificacionesCreadas: 0, correos: { enviadas: 0, desactivadoPorPlan: true } };
-    const tareas = await obtenerTareasParaRecordatorio();
-    const notificacionesCreadas = await crearNotificacionesOperativas(tareas, zonaHoraria, comprobarBloqueo);
+    const corteHorizonte = new Date();
+    const tareas = await obtenerTareasParaRecordatorio(zonaHoraria, corteHorizonte);
+    let notificacionesCreadas = await crearNotificacionesOperativas(tareas, zonaHoraria, comprobarBloqueo);
+    // La reconciliacion de asignaciones futuras se conserva sin cargarlas todas en RAM.
+    const futuras = consultaRecordatorios(zonaHoraria, true, corteHorizonte)
+        .select('_id titulo fincaId asignadoA creadoPor asignacionVersion createdAt prioridad fechaProgramada fechaLimite tipo moduloOrigen categoriaAutomatica').cursor({ batchSize: 100 });
+    try {
+        for await (const tarea of futuras) notificacionesCreadas += await crearNotificacionesOperativas([tarea], zonaHoraria, comprobarBloqueo);
+    } finally { await futuras.close(); }
     if (!await tieneFeature('emailsOperativos')) {
         return {
             notificacionesCreadas,
@@ -263,6 +279,8 @@ const procesarAlertasTodasOrganizaciones = async ({ comprobarBloqueo = async () 
 const enviarAlertasCorreo = procesarAlertasTodasOrganizaciones;
 
 module.exports = {
+    obtenerTareasParaRecordatorio,
+    filtroHorizonteAlertas,
     crearHtml,
     enviarCorreosTareas,
     crearNotificacionesOperativas,

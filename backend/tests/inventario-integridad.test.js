@@ -297,7 +297,7 @@ test('el historial de pesos omite el filtro de finca actual pero respeta fincas 
         Pesaje.find = originales.pesajeFind;
     });
 
-    Animal.findById = () => ({ select: () => Promise.resolve({ _id: 'animal-1', organizacionId: 'org-1' }) });
+    Animal.findById = () => ({ select() { return this; }, lean: async () => ({ _id: 'animal-1', organizacionId: 'org-1' }) });
     Membresia.findById = async () => ({ organizacionId: 'org-1', accesoTodasFincas: true, fincas: [] });
     Finca.find = () => ({
         setOptions() { return this; },
@@ -316,6 +316,7 @@ test('el historial de pesos omite el filtro de finca actual pero respeta fincas 
             setOptions(opciones) { opcionesCapturadas = opciones; return this; },
             sort() { return this; },
             populate() { return this; },
+            lean: async () => pesajesEsperados,
             then(resolve) { resolve(pesajesEsperados); }
         };
         return consulta;

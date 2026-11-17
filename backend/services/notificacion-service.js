@@ -1,4 +1,5 @@
 const Notificacion = require('../models/Notificacion');
+const { prepararLecturaLean } = require('./lecturaLean-service');
 const { obtenerFincaActual, obtenerOrganizacionActual } = require('../context/organizacion-context');
 const { Membresia } = require('../models/Membresia');
 
@@ -148,8 +149,10 @@ const obtenerNotificacionesUsuario = async (usuarioId, filtros = {}) => {
     if (filtros.moduloOrigen) consulta.moduloOrigen = filtros.moduloOrigen;
 
     let listado = Notificacion.find(consulta);
-    if (filtros.resumen === true || filtros.resumen === 'true') {
-        listado = listado.select('_id titulo mensaje leida createdAt moduloOrigen entidadTipo entidadId url naturaleza tipo');
+    const seleccion = filtros.resumen === true || filtros.resumen === 'true'
+        ? '_id titulo mensaje leida createdAt moduloOrigen entidadTipo entidadId url naturaleza tipo' : undefined;
+    if (seleccion) {
+        listado = listado.select(seleccion);
     } else {
         listado = listado.populate('actor', 'nombre apellido correo rol');
     }
@@ -157,11 +160,13 @@ const obtenerNotificacionesUsuario = async (usuarioId, filtros = {}) => {
         listado
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
-            .limit(limit),
+            .limit(limit).lean(),
         Notificacion.countDocuments(consulta)
     ]);
 
-    return { items, total, page, limit, pages: Math.max(Math.ceil(total / limit), 1) };
+    return { items: items.map((item) => prepararLecturaLean(Notificacion, item, {
+        seleccion, populate: seleccion ? [] : [{ path: 'actor', select: 'nombre apellido correo rol' }]
+    })), total, page, limit, pages: Math.max(Math.ceil(total / limit), 1) };
 };
 
 const obtenerCantidadNoLeidas = (usuarioId) => Notificacion.countDocuments({

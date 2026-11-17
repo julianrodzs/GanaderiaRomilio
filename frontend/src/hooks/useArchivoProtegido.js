@@ -1,35 +1,36 @@
 import { useEffect, useState } from 'react';
-import { obtenerArchivoProtegido } from '../services/api';
+import { contextoArchivosProtegidos, obtenerUrlArchivoProtegido } from '../services/api';
 
 const useArchivoProtegido = (ruta) => {
-  const [url, setUrl] = useState('');
+  const contexto = contextoArchivosProtegidos();
+  const [estado, setEstado] = useState({ ruta: '', contexto: '', url: '' });
 
   useEffect(() => {
     let activa = true;
-    let urlTemporal = '';
+    let liberar = () => {};
 
     if (!ruta) {
-      setUrl('');
+      setEstado({ ruta, contexto, url: '' });
       return undefined;
     }
 
-    obtenerArchivoProtegido(ruta)
-      .then((blob) => {
-        if (!activa) return;
-        urlTemporal = URL.createObjectURL(blob);
-        setUrl(urlTemporal);
+    obtenerUrlArchivoProtegido(ruta)
+      .then((recurso) => {
+        liberar = recurso.liberar;
+        if (!activa) { liberar(); return; }
+        setEstado({ ruta, contexto, url: recurso.url });
       })
       .catch(() => {
-        if (activa) setUrl('');
+        if (activa) setEstado({ ruta, contexto, url: '' });
       });
 
     return () => {
       activa = false;
-      if (urlTemporal) URL.revokeObjectURL(urlTemporal);
+      liberar();
     };
-  }, [ruta]);
+  }, [ruta, contexto]);
 
-  return url;
+  return estado.ruta === ruta && estado.contexto === contexto ? estado.url : '';
 };
 
 export default useArchivoProtegido;

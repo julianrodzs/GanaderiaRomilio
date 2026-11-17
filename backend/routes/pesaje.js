@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const router = Router();
+const { conTrabajoPesado } = require('../services/trabajosPesados-service');
 const { autorizarPermiso } = require('../middleware/auth');
 const puedeVer = autorizarPermiso('pesajes.ver');
 const puedeGestionar = autorizarPermiso('pesajes.gestionar');
@@ -19,7 +20,7 @@ router.route('/')
     .get(puedeVer, getPesajes)
     .post(puedeGestionar, createPesaje);
 
-router.get('/exportar', puedeVer, exportarPesajes);
+router.get('/exportar', puedeVer, conTrabajoPesado(exportarPesajes));
 router.get('/animal/:animalId', puedeVer, getPesajesPorAnimal);
 
 router.route('/:id')

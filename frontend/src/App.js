@@ -6,6 +6,7 @@ import OlvideContrasena from './Components/OlvideContrasena';
 import RestablecerContrasena from './Components/RestablecerContrasena';
 import AceptarInvitacion from './Components/AceptarInvitacion';
 import { cambiarOrganizacionActiva, obtenerPerfilUsuario } from './services/api';
+import { limpiarCacheArchivosProtegidos } from './services/archivoProtegidoCache.mjs';
 import CentroLegal from './legal/CentroLegal';
 import { esRutaLegal } from './legal/legal.mjs';
 import { PlanProvider } from './context/PlanContext';
@@ -42,6 +43,7 @@ const tokenOfflineVigente = (token) => {
 };
 
 const limpiarAlmacenUsuario = async (sesion) => {
+  limpiarCacheArchivosProtegidos();
   try {
     await limpiarDatosOfflineUsuario(sesion);
   } catch (error) {
@@ -223,6 +225,7 @@ function AppAutenticada() {
       if (!continuar) return;
     }
     const actualizada = { ...sesion, finca, fincaActiva: finca, fincaId: finca._id };
+    limpiarCacheArchivosProtegidos();
     localStorage.setItem('ganaderiaSesion', JSON.stringify(actualizada));
     setSesion(actualizada);
     window.dispatchEvent(new CustomEvent('ganaderiaFincaCambiada', { detail: { finca } }));
@@ -243,6 +246,7 @@ function AppAutenticada() {
         validadaEn: new Date().toISOString()
       };
       localStorage.setItem('ganaderiaSesion', JSON.stringify(siguiente));
+      limpiarCacheArchivosProtegidos();
       setSesion(siguiente);
       window.dispatchEvent(new CustomEvent('ganaderiaOrganizacionCambiada', { detail: { organizacion: data.organizacion } }));
     } catch (error) {

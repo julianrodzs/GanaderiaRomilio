@@ -59,11 +59,14 @@ const formatearFechaInput = (fecha) => {
   return new Date(fecha).toISOString().slice(0, 10);
 };
 
-const camposEditablesAnimal = (animal = {}) => Object.fromEntries(
-  Object.keys(estadoInicial)
-    .filter((campo) => Object.prototype.hasOwnProperty.call(animal, campo))
-    .map((campo) => [campo, animal[campo]])
-);
+const camposEditablesAnimal = (animal) => {
+  const datos = animal ?? {};
+  return Object.fromEntries(
+    Object.keys(estadoInicial)
+      .filter((campo) => Object.prototype.hasOwnProperty.call(datos, campo))
+      .map((campo) => [campo, datos[campo]])
+  );
+};
 
 const normalizarAnimal = (animal) => ({
   ...estadoInicial,

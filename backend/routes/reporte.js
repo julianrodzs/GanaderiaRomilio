@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const router = Router();
+const { conTrabajoPesado } = require('../services/trabajosPesados-service');
 const { obtenerReporteLotes, obtenerReporteLotesAnalitica } = require('../controllers/reporteLotes-controller');
 const { autorizarPermiso } = require('../middleware/auth');
 const puedeVer = autorizarPermiso('reportes.ver');
@@ -65,7 +66,7 @@ router.get('/reproduccion/metodos', requireFeature('analiticaProductiva', { codi
 router.get('/multi-finca/te', reportesMultiFinca, require('../controllers/te-controller').consolidado);
 router.get('/multi-finca/metodos-reproductivos', reportesMultiFinca, (req, res, next) => { req.consolidadoMetodos = true; next(); }, require('../controllers/metodoReproductivo-controller').indicadores);
 router.get('/multi-finca', reportesMultiFinca, getReporteMultiFinca);
-router.get('/multi-finca/exportar', reportesMultiFinca, exportarReporte);
+router.get('/multi-finca/exportar', reportesMultiFinca, conTrabajoPesado(exportarReporte));
 router.get('/multi-finca/detalle', reportesMultiFinca, getDetalleMetrica);
 router.get('/multi-finca/metas', reportesMultiFinca, getMetas);
 router.post('/multi-finca/metas', reportesMultiFinca, autorizarPermiso('reportes.configurar'), guardarMeta);
@@ -73,7 +74,7 @@ router.delete('/multi-finca/metas/:id', reportesMultiFinca, autorizarPermiso('re
 router.get('/multi-finca/cierres', getCierres);
 router.post('/multi-finca/cierres', reportesMultiFinca, autorizarPermiso('reportes.configurar'), crearCierre);
 router.post('/multi-finca/cierres/:id/regenerar', reportesMultiFinca, autorizarPermiso('reportes.configurar'), regenerarCierre);
-router.get('/multi-finca/cierres/:id/exportar', exportarCierre);
+router.get('/multi-finca/cierres/:id/exportar', conTrabajoPesado(exportarCierre));
 router.get('/multi-finca/cierres/:id', getCierre);
 router.get('/lotes', obtenerReporteLotes);
 router.get('/lotes/analitica', analiticaProductiva, obtenerReporteLotesAnalitica);

@@ -1,26 +1,61 @@
-Actúa como un Ingeniero Senior de Performance y Backend (Node.js/Express + React). En Render detectamos que el Static Site del frontend solo ha consumido 15 MB en el mes, pero el Web Service del backend (`GanaderiaRomilio`) ha consumido **4.4 GB de Outbound Bandwidth (HTTP Responses)** con un solo usuario en pruebas, y además mantiene un consumo constante de ~0.6 MB/hora durante toda la madrugada cuando queda una pestaña abierta.
+Actúa como un Arquitecto de Software Senior Full-Stack (Node.js/Express, Mongoose, React). Vamos a ejecutar la **Fase 1 de Optimización de Ancho de Banda y Memoria RAM (512 MB en Render)** basándonos en los hallazgos de tu diagnóstico.
 
-Realiza una auditoría completa del backend y del frontend para encontrar y corregir esta fuga de ancho de banda:
+**REGLA DE ORO DE COMPATIBILIDAD:**
+NO cambies la forma ni el contrato de respuesta JSON de los endpoints de listado (`/api/animales`, `/api/pesajes`, `/api/finanzas`, `/api/tareas`) ni introduzcas paginación obligatoria que rompa los buscadores/filtros locales del frontend o el almacenamiento de `IndexedDB` del Modo Offline. Todas las optimizaciones deben ser 100% transparentes para la UI actual.
 
-### 1. Diagnóstico (infórmame qué encontraste)
-1. Busca todos los `setInterval`, `setTimeout` recurrentes, listeners de `online`/`focus`, Service Workers o hooks `useEffect` en `frontend/src` que hagan llamadas periódicas a la API (ej. notificaciones, `/auth/me`, sincronización offline, alertas, dashboard, etc.).
-2. Revisa qué endpoints del backend pueden estar devolviendo payloads grandes en cada llamada (por ejemplo: campos Base64 como `logo`, `foto`, `imagen`, historiales completos no paginados en `/animales`, `/fincas`, `/notificaciones`, `/auth/me`, o descargas completas para caché offline).
-3. Verifica si `backend/server.js` (o `app.js`) tiene instalado y activo el middleware `compression` (gzip/brotli).
+---
 
-### 2. Correcciones obligatorias a implementar
-1. **Compresión HTTP en el Backend (`compression`):**
-   - Instala y configura `compression` en Express antes de todas las rutas para comprimir con Gzip todas las respuestas JSON/texto mayores a 1 KB.
-2. **Frenar el consumo en segundo plano (Polling inteligente en Frontend):**
-   - En cualquier polling periódico del frontend (notificaciones, sincronización offline, verificación de estado, etc.):
-     - **No ejecutes peticiones si la pestaña está oculta** (`document.visibilityState === 'hidden'`).
-     - Aumenta los intervalos excesivamente cortos a un tiempo razonable y evita recargar catálogos completos de animales/pesajes si no hubo cambios.
-   - Revisa que no exista ningún `useEffect` con dependencias mal declaradas que provoque peticiones repetidas en bucle.
-3. **Adelgazar respuestas pesadas (Proyección de campos y Base64):**
-   - Asegúrate de que los endpoints que se consultan frecuentemente (`/auth/me`, `/notificaciones`, listados de `/animales`, sincronización offline) no envíen campos pesados innecesarios en cada llamada ni re-descarguen toda la base de datos si no ha cambiado.
-   - Agrega cabeceras `ETag` / condicionales o verifica que Express mantenga `etag` activo para que las respuestas sin cambios devuelvan `304 Not Modified` (0 bytes de body) en lugar de enviar todo el JSON de nuevo.
+### 1. Eliminar las Descargas Repetidas de Fotos Privadas de Animales (Ancho de Banda de Render)
 
-### 3. Verificación
-- Ejecuta las pruebas de backend y el build de frontend para asegurar que nada se rompa.
-- Al finalizar, dame un resumen exacto de:
-  1. Cuál era el endpoint o intervalo responsable de los 0.6 MB/hora en la madrugada y de los 4.4 GB acumulados.
-  2. Cuánto pesaba antes vs. cuánto pesa ahora cada respuesta tras tus cambios.
+**Problema detectado:** `api.js (línea 100)` pide los archivos protegidos (`/api/archivos/r2/:id`) con `cache: 'no-store'` y `useArchivoProtegido.js (línea 7)` descarga el blob en cada montaje y lo revoca al desmontar, provocando descargas repetidas del archivo original desde Render en cada cambio de pantalla o modal.
+
+**Implementa lo siguiente:**
+1. En `frontend/src/hooks/useArchivoProtegido.js` (y `frontend/src/services/api.js`):
+   - Implementa una **caché en memoria de sesión (LRU acotada, ej. máximo 150 entradas o ~50 MB)** indexada por `contexto (organización/finca/usuario) + url`, junto con **deduplicación de peticiones en vuelo** (si dos componentes piden la misma foto al mismo tiempo, comparten la misma promesa).
+   - No revoques el `objectURL` al desmontar un componente individual si sigue en la caché de sesión; solo revócalo cuando una entrada sea expulsada del LRU, cuando se invalide explícitamente (al actualizar/eliminar la foto de un animal) o al cerrar sesión (`logout`).
+   - En `api.js`, cambia `cache: 'no-store'` por una política que respete la caché privada del navegador o el `ETag` del backend cuando corresponda.
+   - Expón un helper para limpiar/invalidar esta caché de blobs al cerrar sesión (`App.js` / `offlineStorage.js`) y cuando se cambie o elimine la foto de un animal.
+2. En `backend/routes/archivoRoutes.js`:
+   - Añade soporte de `ETag` (basado en el `_id` / `updatedAt` / `clave` / `tamano` de `ArchivoMultimedia`) y manejo de `If-None-Match` ANTES de descargar el stream desde Cloudflare R2: si el cliente envía un `If-None-Match` válido, responde inmediatamente `304 Not Modified` sin pedir el objeto a R2 ni transmitir bytes por Render.
+
+---
+
+### 2. Reducción de Consumo de RAM yTamaño de Respuestas en Consultas del Backend
+
+1. **Lecturas con `.lean()` y proyecciones seguras en `.populate()`:**
+   - **`backend/controllers/pesaje-controller.js` (líneas 19–24, 52–56, 132–154):**
+     - Usa `.lean()` en las consultas de listado e historial de pesajes (manteniendo la estructura y transformaciones/`id` que espere el frontend).
+     - En `.populate('animal')`, verifica primero todos los campos de `animal` que consumen el frontend y las exportaciones/reportes, y proyecta únicamente los campos necesarios (sin traer subdocumentos o metadatos innecesarios).
+   - **`backend/controllers/movimientoFinanciero-controller.js` (línea 72):**
+     - Usa `.lean()` en el listado de movimientos financieros y proyecta solo los campos necesarios en los `.populate()` de `animal` y `potrero`, conservando exactamente el formato de salida actual.
+   - **`backend/controllers/tareaController.js` (línea 103):**
+     - Usa `.lean()` en los listados de lectura de tareas (`listarTareas`, `misTareas`, etc.) manteniendo intacto el formato de respuesta.
+   - **`backend/services/notificacion-service.js` (línea 136):**
+     - Añade `.lean()` en la consulta de listado de notificaciones.
+
+2. **Optimización de las 3 Consultas que Cargan Historiales Completos en RAM:**
+   - **`backend/controllers/reporte-controller.js` (alrededor de la línea 671 — Finanzas de cría):**
+     - Evita cargar en memoria simultáneamente todos los documentos históricos de `MovimientoFinanciero` más los del período. Calcula los acumulados/totales fuera del período mediante una agregación en MongoDB (`$match` + `$group`) o proyecciones mínimas `.select(...)` con `.lean()`, reduciendo drásticamente los objetos en RAM y conservando el resultado exacto del reporte.
+   - **`backend/controllers/reporte-controller.js` (alrededor de la línea 1019 — Crecimiento de pesajes):**
+     - Evita descargar todo el historial de pesajes de todos los animales a Node.js para encontrar el último pesaje en JavaScript. Utiliza una agregación en MongoDB (`$match` + `$sort` + `$group` con `$first`/`$last`) o consulta optimizada con proyección mínima para obtener únicamente los datos requeridos por animal.
+   - **`backend/services/alertasCorreo-service.js` (líneas 49–55 y 113–120):**
+     - Filtra directamente en la consulta de MongoDB las tareas pendientes cuya fecha de vencimiento entre dentro del horizonte de alerta (vencidas o próximas en los siguientes 7 días) y usa `.lean()`, en lugar de cargar todas las tareas futuras en memoria y descartarlas en JavaScript.
+
+---
+
+### 3. Control de Concurrencia Global para Importaciones y Exportaciones Pesadas (Protección de 512 MB RAM)
+
+1. Crea una utilidad ligera en `backend/utils/` (o `backend/services/`) para controlar la concurrencia global en el proceso de Node.js de operaciones pesadas en memoria (**Importación de Excel** y **Exportaciones de Excel/PDF** en pesajes, consolidado multifinca y cierres):
+   - Permite un máximo configurable por variable de entorno (por defecto `MAX_CONCURRENT_HEAVY_JOBS = 2`) ejecutándose al mismo tiempo.
+   - Si llega una tercera operación simultánea, ponla en una cola de espera breve (hasta `15 segundos` por defecto); si no se libera un cupo en ese tiempo, responde con HTTP `429` (o `503`) y un mensaje claro: `"El servidor está procesando otros archivos pesados en este momento. Por favor intenta nuevamente en unos segundos."`
+   - Asegúrate de liberar siempre el cupo en un bloque `finally`.
+
+---
+
+### 4. Verificación
+1. Ejecuta la suite de pruebas del backend y añade tests unitarios/integración para:
+   - Respuesta `304 Not Modified` en `GET /api/archivos/r2/:id` sin llamar a R2 cuando coincide el `ETag`.
+   - Caché y deduplicación en `useArchivoProtegido`.
+   - Resultados idénticos en los reportes optimizados (`Finanzas de cría` y `Crecimiento de pesajes`) y en `alertasCorreo-service`.
+   - Funcionamiento del limitador de concurrencia de trabajos pesados.
+2. Ejecuta el build del frontend para confirmar que no hay errores.

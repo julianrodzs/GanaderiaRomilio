@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { createHash } = require('node:crypto');
 const { Router } = require('express');
 const { autorizarPermiso } = require('../middleware/auth');
 const ConteoDrone = require('../models/ConteoDrone');
@@ -20,9 +21,16 @@ router.get('/r2/:id', async (req, res, next) => {
         if (archivo.fincaId && !req.usuario?.accesoTodasFincas && !autorizadas.has(String(archivo.fincaId))) {
             return res.status(404).json({ mensaje: 'Archivo no encontrado' });
         }
+        const etag = createHash('sha256').update(JSON.stringify([
+            String(archivo._id), archivo.updatedAt || null, archivo.clave, archivo.tamanoBytes
+        ])).digest('hex');
+        res.setHeader('ETag', `"${etag}"`);
+        res.setHeader('Cache-Control', 'private, no-cache');
+        res.vary('Authorization');
+        res.vary('X-Finca-Id');
+        if (req.fresh) return res.status(304).end();
         const objeto = await obtenerImagenR2(archivo.clave);
         res.setHeader('Content-Type', objeto.ContentType || archivo.mimeType || 'application/octet-stream');
-        res.setHeader('Cache-Control', 'private, max-age=300, must-revalidate');
         if (typeof objeto.Body?.pipe === 'function') return objeto.Body.pipe(res);
         const bytes = await objeto.Body?.transformToByteArray?.();
         if (!bytes) return res.status(404).json({ mensaje: 'Archivo no encontrado' });

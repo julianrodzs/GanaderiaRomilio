@@ -1,10 +1,11 @@
 const { Schema, model } = require('mongoose');
 const { aplicarAislamientoOrganizacion } = require('./plugins/organizacion-plugin');
+const { HORA_RESUMEN_EMAIL } = require('../config/horarioResumenEmail');
 
 const configuracionEmailSchema = new Schema({
     usuario: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true, index: true },
     frecuencia: { type: String, enum: ['Desactivado', 'Diario', 'Semanal'], default: 'Desactivado' },
-    horaPreferida: { type: String, default: '06:00', match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+    horaPreferida: { type: String, default: HORA_RESUMEN_EMAIL, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
     diaSemana: { type: Number, min: 0, max: 6, default: 1 },
     modulos: {
         resumenGanadero: { type: Boolean, default: true },

@@ -2,6 +2,7 @@ const { Router } = require('express');
 const multer = require('multer');
 const { autorizarPermiso } = require('../middleware/auth');
 const { requirePlanVigente } = require('../middleware/plan');
+const { conTrabajoPesado } = require('../services/trabajosPesados-service');
 
 const { descargarPlantilla, previewExcel, confirmarExcel } = require('../controllers/importar-controller');
 
@@ -27,9 +28,9 @@ const upload = multer({
     }
 });
 
-router.get('/plantilla', puedeImportar, descargarPlantilla);
-router.post('/excel', puedeImportar, upload.single('archivo'), previewExcel);
-router.post('/excel/confirmar', puedeImportar, confirmarExcel);
+router.get('/plantilla', puedeImportar, conTrabajoPesado(descargarPlantilla));
+router.post('/excel', puedeImportar, conTrabajoPesado(upload.single('archivo'), previewExcel));
+router.post('/excel/confirmar', puedeImportar, conTrabajoPesado(confirmarExcel));
 
 router.use((error, req, res, next) => {
     if (!(error instanceof multer.MulterError) && !String(error?.message || '').includes('Solo se permiten')) return next(error);

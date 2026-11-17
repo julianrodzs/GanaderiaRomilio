@@ -19,7 +19,7 @@ const ConfiguracionCuenta = ({ usuario }) => {
   const opcionesModulosDisponibles = opcionesModulos.filter(([clave]) => (clave !== 'finanzas' || puedeVerFinanzas)
     && (clave !== 'radarOperativo' || puedeAccederModulo(usuario?.rol, 'Sanidad') || puedeAccederModulo(usuario?.rol, 'Reproduccion')));
   const [formulario, setFormulario] = useState({
-    frecuencia: 'Desactivado', horaPreferida: '06:00', diaSemana: 1,
+    frecuencia: 'Desactivado', diaSemana: 1,
     modulos: { resumenGanadero: true, finanzas: puedeVerFinanzas, tareasPendientes: true, radarOperativo: true }
   });
   const [mensaje, setMensaje] = useState('');
@@ -62,7 +62,8 @@ const ConfiguracionCuenta = ({ usuario }) => {
     evento.preventDefault(); setGuardando(true); setMensaje('');
     try {
       const respuesta = await actualizarConfiguracionEmails({
-        ...formulario,
+        frecuencia: formulario.frecuencia,
+        diaSemana: formulario.diaSemana,
         modulos: {
           ...formulario.modulos,
           finanzas: puedeVerFinanzas && formulario.modulos?.finanzas === true
@@ -104,7 +105,7 @@ const ConfiguracionCuenta = ({ usuario }) => {
         ) : (
           <form onSubmit={guardar} className="configuracion-email-form">
             <label>Frecuencia<select value={formulario.frecuencia} onChange={(e) => setFormulario((actual) => ({ ...actual, frecuencia: e.target.value }))}><option>Desactivado</option><option>Diario</option><option>Semanal</option></select></label>
-            {formulario.modoEjecucion !== 'cron_diario' ? <label>Hora preferida<input type="time" value={formulario.horaPreferida} onChange={(e) => setFormulario((actual) => ({ ...actual, horaPreferida: e.target.value }))} /></label> : <p className="form-message">Envío en la corrida diaria programada de la organización.</p>}
+            <p className="form-message">Hora de envío: 6:00 a. m. (Costa Rica).</p>
             {formulario.frecuencia === 'Semanal' && <label>Día de envío<select value={formulario.diaSemana} onChange={(e) => setFormulario((actual) => ({ ...actual, diaSemana: Number(e.target.value) }))}><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select></label>}
             <fieldset><legend>Contenido</legend>{opcionesModulosDisponibles.map(([clave, etiqueta]) => <label key={clave} className="checkbox-line"><input type="checkbox" checked={Boolean(formulario.modulos?.[clave])} onChange={(e) => setFormulario((actual) => ({ ...actual, modulos: { ...actual.modulos, [clave]: e.target.checked } }))} />{etiqueta}</label>)}</fieldset>
             {mensaje && <p className="form-message">{mensaje}</p>}

@@ -22,6 +22,7 @@ const crearRespuesta = () => ({
 test('el crecimiento histórico filtra animales y pesajes por especie', async () => {
     const findAnimalOriginal = Animal.find;
     const findPesajeOriginal = Pesaje.find;
+    const aggregatePesajeOriginal = Pesaje.aggregate;
     let filtroAnimales;
     let filtroPesajes;
     let consultaHistoricaMultiFinca = false;
@@ -29,6 +30,7 @@ test('el crecimiento histórico filtra animales y pesajes por especie', async ()
     Animal.find = (filtro) => {
         filtroAnimales = filtro;
         return {
+            select() { return this; },
             lean: async () => [{
                 _id: 'porcino-1',
                 especie: 'Porcino',
@@ -56,6 +58,13 @@ test('el crecimiento histórico filtra animales y pesajes por especie', async ()
         };
         return consulta;
     };
+    Pesaje.aggregate = (pipeline) => {
+        assert.deepEqual(pipeline[0].$match.animal.$in, ['porcino-1']);
+        return { option: async (opciones) => {
+            consultaHistoricaMultiFinca = opciones.omitirAislamientoFinca === true;
+            return [{ _id: 'porcino-1', fecha: '2026-09-20' }];
+        } };
+    };
 
     try {
         const res = crearRespuesta();
@@ -71,6 +80,7 @@ test('el crecimiento histórico filtra animales y pesajes por especie', async ()
     } finally {
         Animal.find = findAnimalOriginal;
         Pesaje.find = findPesajeOriginal;
+        Pesaje.aggregate = aggregatePesajeOriginal;
     }
 });
 

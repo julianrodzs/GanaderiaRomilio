@@ -24,6 +24,14 @@ test('el resumen diario respeta hora local y se envía una sola vez por período
     assert.equal(debeEnviarResumen({ ...configuracion, ultimoPeriodo: decision.periodo }, despues, 'America/Costa_Rica').enviar, false);
 });
 
+test('las horas personalizadas antiguas no adelantan ni retrasan el horario fijo', () => {
+    for (const horaPreferida of ['00:00', '18:00', '23:59']) {
+        const configuracion = { frecuencia: 'Diario', horaPreferida, ultimoPeriodo: '' };
+        assert.equal(debeEnviarResumen(configuracion, new Date('2026-11-13T11:59:00Z'), 'America/Costa_Rica').enviar, false);
+        assert.equal(debeEnviarResumen(configuracion, new Date('2026-11-13T12:00:00Z'), 'America/Costa_Rica').enviar, true);
+    }
+});
+
 test('el resumen semanal solo vence el día configurado y usa una clave semanal estable', () => {
     const lunes = new Date('2026-10-05T13:00:00Z');
     const martes = new Date('2026-10-06T13:00:00Z');

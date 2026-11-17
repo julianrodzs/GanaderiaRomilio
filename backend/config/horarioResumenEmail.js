@@ -1,0 +1,4 @@
+const HORA_RESUMEN_EMAIL = '06:00';
+const ZONA_HORARIA_CRON_EMAIL = 'America/Costa_Rica';
+
+module.exports = { HORA_RESUMEN_EMAIL, ZONA_HORARIA_CRON_EMAIL };

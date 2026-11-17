@@ -1,4 +1,5 @@
 import { obtenerContextoOffline } from './offlineStorage';
+import { cacheArchivosProtegidos, limpiarCacheArchivosProtegidos } from './archivoProtegidoCache.mjs';
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:4000/api' : '');
 export const crearClaveIdempotencia = () => globalThis.crypto?.randomUUID?.()
   || `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -97,28 +98,57 @@ const request = async (ruta, opciones = {}) => {
 
 export const capturarContextoPeticion = () => ({ ...obtenerContextoOffline() });
 
-export const obtenerArchivoProtegido = async (ruta) => {
+export const contextoArchivosProtegidos = () => {
+  if (typeof localStorage === 'undefined') return '';
+  const sesion = obtenerSesion();
+  return sesion?.token ? claveContextoSesion(sesion) : '';
+};
+
+const obtenerRecursoProtegido = async (ruta) => {
   if (!ruta) throw new Error('Ruta de archivo requerida');
-  const token = obtenerTokenSesion();
+  if (!API_URL) throw new Error('VITE_API_URL no configurado');
+  if (typeof ruta !== 'string' || !ruta.startsWith('/') || ruta.startsWith('//')) throw new Error('Ruta de archivo protegida no valida.');
+  const sesionInicio = obtenerSesion();
+  const contexto = sesionInicio?.token ? claveContextoSesion(sesionInicio) : '';
+  const token = sesionInicio?.token || '';
   const rutaProtegida = ruta.startsWith('/uploads/')
     ? ruta.replace('/uploads/', '/archivos/')
     : ruta;
   const rutaApi = rutaProtegida.startsWith('/api/') ? rutaProtegida.slice(4) : rutaProtegida;
-  const fincaId = obtenerFincaSesion();
-  const respuesta = await fetch(`${API_URL}${rutaApi}`, {
-    cache: 'no-store',
-    headers: token ? {
-      Authorization: `Bearer ${token}`,
-      ...(fincaId ? { 'X-Finca-Id': fincaId } : {})
-    } : {}
-  });
+  const esImagenProtegida = rutaApi.startsWith('/archivos/');
+  const cargar = async () => {
+    const fincaId = obtenerFincaSesion(sesionInicio);
+    const respuesta = await fetch(`${API_URL}${rutaApi}`, {
+      cache: esImagenProtegida ? 'no-cache' : 'no-store',
+      headers: token ? {
+        Authorization: `Bearer ${token}`,
+        ...(fincaId ? { 'X-Finca-Id': fincaId } : {})
+      } : {}
+    });
+    if (contextoArchivosProtegidos() !== contexto) {
+      throw Object.assign(new Error('La sesion o finca cambio durante la descarga.'), { code: 'REQUEST_CONTEXT_CHANGED' });
+    }
+    if (!respuesta.ok) {
+      if ([401, 403].includes(respuesta.status)) limpiarCacheArchivosProtegidos();
+      else if (respuesta.status === 404) limpiarCacheArchivosProtegidos(rutaApi);
+      const data = await respuesta.json().catch(() => ({}));
+      throw new Error(data.mensaje || 'No se pudo abrir el archivo');
+    }
+    const blob = await respuesta.blob();
+    if (contextoArchivosProtegidos() !== contexto) {
+      throw Object.assign(new Error('La sesion o finca cambio durante la descarga.'), { code: 'REQUEST_CONTEXT_CHANGED' });
+    }
+    return blob;
+  };
+  // Los Excel/PDF son resultados dinamicos: nunca reutilizar una exportacion anterior.
+  if (!esImagenProtegida) return { blob: await cargar(), url: '', usuarios: 0, cacheada: false, vigente: true };
+  return cacheArchivosProtegidos.obtener(contexto, rutaApi, cargar);
+};
 
-  if (!respuesta.ok) {
-    const data = await respuesta.json().catch(() => ({}));
-    throw new Error(data.mensaje || 'No se pudo abrir el archivo');
-  }
-
-  return respuesta.blob();
+export const obtenerArchivoProtegido = async (ruta) => (await obtenerRecursoProtegido(ruta)).blob;
+export const obtenerUrlArchivoProtegido = async (ruta) => {
+  const recurso = await obtenerRecursoProtegido(ruta);
+  return { url: cacheArchivosProtegidos.obtenerUrl(recurso), liberar: () => cacheArchivosProtegidos.liberar(recurso) };
 };
 
 export const obtenerPlanActual = () => request('/plan/actual');
@@ -167,13 +197,19 @@ export const subirImagenFinca = (fincaId, tipo, imagen) => enviarImagenAparienci
 export const reutilizarImagenDashboard = (fincaId) => request(`/apariencia/fincas/${fincaId}/reutilizar-dashboard`, { method: 'PATCH' });
 export const restaurarImagenApariencia = ({ alcance, tipo, fincaId }) => request(`/apariencia/${alcance}/${tipo}${fincaId ? `?fincaId=${encodeURIComponent(fincaId)}` : ''}`, { method: 'DELETE' });
 
-export const subirFotoPrincipalAnimal = (animalId, imagen) => {
+export const subirFotoPrincipalAnimal = async (animalId, imagen) => {
   const formData = new FormData();
   formData.append('imagen', imagen);
-  return request(`/animales/${animalId}/foto`, { method: 'POST', body: formData });
+  const animal = await request(`/animales/${animalId}/foto`, { method: 'POST', body: formData });
+  limpiarCacheArchivosProtegidos();
+  return animal;
 };
 
-export const eliminarFotoPrincipalAnimal = (animalId) => request(`/animales/${animalId}/foto`, { method: 'DELETE' });
+export const eliminarFotoPrincipalAnimal = async (animalId) => {
+  const animal = await request(`/animales/${animalId}/foto`, { method: 'DELETE' });
+  limpiarCacheArchivosProtegidos();
+  return animal;
+};
 
 export const obtenerLotes = (filtros = {}) => request(`/lotes${construirQuery(filtros)}`);
 export const obtenerLote = (id) => request(`/lotes/${id}`);

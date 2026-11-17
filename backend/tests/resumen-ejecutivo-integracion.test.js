@@ -279,9 +279,9 @@ test('HTML escapado, CTA validada y texto humano con intervalo y zona horaria', 
     for (const url of ['javascript:alert(1)', 'https://user:pass@example.test', 'http://example.test']) assert.throws(() => enlacePanel(url));
 });
 
-test('cron diario ignora hora posterior; continuo la respeta; semanal no ignora dia ni periodo', () => {
+test('cron y continuo usan horario fijo aunque exista hora antigua; semanal conserva dia y periodo', () => {
     const cfg = { frecuencia: 'Diario', horaPreferida: '18:00' };
-    assert.equal(debeEnviarResumen(cfg, ahora, 'America/Costa_Rica').enviar, false);
+    assert.equal(debeEnviarResumen(cfg, ahora, 'America/Costa_Rica').enviar, true);
     const d = debeEnviarResumen(cfg, ahora, 'America/Costa_Rica', { modoEjecucion: 'cron_diario' });
     assert.equal(d.enviar, true);
     assert.equal(debeEnviarResumen({ ...cfg, ultimoPeriodo: d.periodo }, ahora, 'America/Costa_Rica', { modoEjecucion: 'cron_diario' }).enviar, false);

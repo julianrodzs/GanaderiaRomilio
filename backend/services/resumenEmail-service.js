@@ -9,6 +9,7 @@ const { recopilarResumen, normalizarFincaIds } = require('./resumenEmail-datos-s
 const { crearContenido } = require('./resumenEmail-plantilla-service');
 const { listarFincasAccesibles } = require('./accesoFinca-service');
 const { normalizarModulosResumen } = require('./permisosResumenEmail-service');
+const { HORA_RESUMEN_EMAIL } = require('../config/horarioResumenEmail');
 
 const obtenerPartesLocales = (fecha, zonaHoraria) => {
     const partes = new Intl.DateTimeFormat('en-CA', {
@@ -34,7 +35,7 @@ const debeEnviarResumen = (configuracion, fecha = new Date(), zonaHoraria = 'Ame
     if (!configuracion || configuracion.frecuencia === 'Desactivado') return { enviar: false };
     const partes = obtenerPartesLocales(fecha, zonaHoraria);
     const minutosActuales = Number(partes.hour) * 60 + Number(partes.minute);
-    const [hora, minuto] = String(configuracion.horaPreferida || '06:00').split(':').map(Number);
+    const [hora, minuto] = HORA_RESUMEN_EMAIL.split(':').map(Number);
     const ignorarHora = opciones.modoEjecucion === 'cron_diario' || process.env.CRON_RESUMEN_IGNORE_HOUR === 'true';
     if (!ignorarHora && minutosActuales < hora * 60 + minuto) return { enviar: false };
     if (configuracion.frecuencia === 'Semanal' && numeroDia[partes.weekday] !== Number(configuracion.diaSemana)) return { enviar: false };
